@@ -1,0 +1,57 @@
+Items to be extracted
+
+Referer: 
+
+Project Name : ( This will be selected by user before uploading the documents to be Analysed by AI)
+
+Surname: (Required)
+Names : (required)
+ID Number : ( Required)
+Cell Number: (Required)
+WhatsApp Number : (Optional)
+Email Address: ( Optional)
+NCRDC N0: according to Credit report ( Optional)
+Debt review Date: (Optional)
+Service Fee: (Optional)
+Date : (Required)
+Last Update ( Required ( This will be today or now))
+Next Update : ( required ( this will let us know if the file is over-due) it can be entered Manually)
+Category: Payroll or non Payroll (single or Joint)
+
+This info we will get from DHS the system should login into DHS get this info
+
+
+NCRDC No:
+DHS Status:
+Debt Counsellor Name:
+Trading Name: 
+DC Email: 
+Last Known Contact email: 
+
+this info we will get after tranfer request has been declined
+
+After Care Fees ( These are fees owed to DC and must be paid before they can transfer the file )
+
+Legal Fees ( These are fees that are supposed to be paid to resigned the court order)
+
+Legal Fees Status ( This is the status of legal fees)
+
+Legal fees payment( Who paid the legal fees)
+
+
+Legal fees inv Issue date = when was the invoice for legal fees issued
+
+Fees Consent = How much was consented ( the amount of money that the consumer will paid excluding service fees after debt review has been removed
+
+Total Fees ( total fees including Service fees)
+
+File to be Completed = when is the file expected to be finished 
+
+Closed Accounts = number of closed accounts on the credit report (Required) 
+
+Open Accounts = Number of Open Accounts on the credit report ( Required)
+
+Prescribed Accounts = number of prescribed accounts on the credit report ( Optional) 
+
+Insurance notes : advice on insurance replacements on all accounts listed on the credit report 
+

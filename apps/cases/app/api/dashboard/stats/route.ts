@@ -1,0 +1,182 @@
+import { NextResponse } from 'next/server';
+import { prisma } from '@zenowethu/database';
+import { auth, logger } from '@zenowethu/shared-lib';
+
+export async function GET(request: Request) {
+    try {
+        // Check authentication
+        const session = await auth();
+        if (!session?.user) {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Build project filter (Inherited Access + Admin Bypass)
+        // Check multiple flags for robustness
+        const userRole = (session.user as any).role || 'MEMBER';
+        const isAdmin = userRole === 'ADMIN' || (session.user as any).isAdmin === true;
+        const isStaff = (session.user as any).userType === 'STAFF';
+        const isPartner = (session.user as any).userType === 'B2B_PARTNER';
+
+        let projectFilter: any = {};
+
+        // 1. Admins and Staff see everything
+        if (isAdmin || isStaff) {
+            projectFilter = {}; // No filter
+        } else {
+            // 2. Others (Partners/Members) are restricted
+            // Get explicit memberships
+            const userProducts = await prisma.projectMember.findMany({
+                where: { userId: session.user.id },
+                select: { projectId: true }
+            });
+            const rootProjectIds = userProducts.map((up: { projectId: string }) => up.projectId);
+
+            // Also include their assigned B2B partner project if they have one
+            if ((session.user as any).b2bPartnerId) {
+                rootProjectIds.push((session.user as any).b2bPartnerId);
+            }
+
+            if (rootProjectIds.length > 0) {
+                // Expand to include sub-projects
+                const allProjects = await prisma.project.findMany({
+                    select: { id: true, parentId: true }
+                });
+
+                const getDescendantIds = (rootIds: string[]): string[] => {
+                    const descendants = new Set<string>();
+                    const queue = [...rootIds];
+                    while (queue.length > 0) {
+                        const currId = queue.shift()!;
+                        const children = allProjects.filter(p => p.parentId === currId);
+                        children.forEach(child => {
+                            if (!descendants.has(child.id)) {
+                                descendants.add(child.id);
+                                queue.push(child.id);
+                            }
+                        });
+                    }
+                    return Array.from(descendants);
+                };
+
+                const descendantIds = getDescendantIds(rootProjectIds);
+                const allAllowedIds = Array.from(new Set([...rootProjectIds, ...descendantIds]));
+
+                // For Partners, we allow cases they created OR cases in allowed projects
+                if (isPartner) {
+                    projectFilter = {
+                        OR: [
+                            { createdById: session.user.id },
+                            {
+                                projects: {
+                                    some: { projectId: { in: allAllowedIds } }
+                                }
+                            }
+                        ]
+                    };
+                } else {
+                    projectFilter = {
+                        projects: {
+                            some: { projectId: { in: allAllowedIds } }
+                        }
+                    };
+                }
+            } else {
+                // No projects assigned.
+                if (isPartner) {
+                    // Partners still see what they created
+                    projectFilter = { createdById: session.user.id };
+                } else {
+                    // Fallback to match nothing if no creation power
+                    projectFilter = { id: 'NON_EXISTENT' };
+                }
+            }
+        }
+
+        // Helper to run a count or calculation safely
+        const safeQuery = async (queryFn: () => Promise<number>, label: string) => {
+            try {
+                return await queryFn();
+            } catch (err: any) {
+                logger.error(`[Dashboard Stats] Error in ${label}:`, err.message);
+                return 0;
+            }
+        };
+
+        // Get current date boundaries
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Run queries in parallel to mitigate network latency bottlenecks
+        const [
+            totalActiveCases,
+            newLeadsToday,
+            overdueCases,
+            myCasesCount,
+            assignedCasesCount,
+            pendingInvoicesCount
+        ] = await Promise.all([
+            safeQuery(() => prisma.case.count({ where: projectFilter }), 'totalActiveCases'),
+            safeQuery(() => prisma.case.count({
+                where: {
+                    createdAt: { gte: today, lt: tomorrow },
+                    status: 'NEW_LEAD',
+                    ...projectFilter
+                }
+            }), 'newLeadsToday'),
+            safeQuery(() => prisma.case.count({
+                where: {
+                    nextUpdate: { lt: today },
+                    status: { notIn: ['COMPLETED', 'CLOSED', 'CANCELLED'] },
+                    ...projectFilter
+                }
+            }), 'overdueCases'),
+            safeQuery(() => prisma.case.count({
+                where: {
+                    createdById: session.user.id
+                }
+            }), 'myCasesCount'),
+            safeQuery(() => prisma.case.count({
+                where: {
+                    assignedToId: session.user.id
+                }
+            }), 'assignedCasesCount'),
+            safeQuery(async () => {
+                return await prisma.case.count({
+                    where: {
+                        acquisitionType: 'B2C',
+                        r350Status: { in: ['PENDING', 'TOLD'] },
+                        status: { notIn: ['COMPLETED', 'CLOSED', 'CANCELLED'] },
+                        ...projectFilter
+                    }
+                });
+            }, 'pendingInvoices')
+        ]);
+
+        const slaBreaches = overdueCases;
+        const pendingInvoices = (pendingInvoicesCount || 0) * 350;
+
+        return NextResponse.json({
+            totalActiveCases,
+            newLeadsToday,
+            pendingInvoices,
+            slaBreaches,
+            overdueCases,
+            myCasesCount,
+            assignedCasesCount });
+    } catch (error: any) {
+        logger.error('Error fetching dashboard stats:', error);
+        return NextResponse.json({
+            totalActiveCases: 0,
+            newLeadsToday: 0,
+            pendingInvoices: 0,
+            slaBreaches: 0,
+            overdueCases: 0,
+            myCasesCount: 0,
+            assignedCasesCount: 0,
+            error: error.message
+        });
+    }
+}
+

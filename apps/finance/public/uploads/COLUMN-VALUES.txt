@@ -1,0 +1,15 @@
+DHS Column Values Read
+Timestamp: 2026-01-05T16:51:18.800Z
+Row Index: 1
+Total Columns: 10
+
+Column [0]: "Preview              Withdraw"
+Column [1]: "Preview"
+Column [2]: "Withdraw"
+Column [3]: "6410120815084"
+Column [4]: "Dikeledi Koaho"
+Column [5]: "Female"
+Column [6]: "C"
+Column [7]: "NCRDC2548"
+Column [8]: ""
+Column [9]: "Declined (Click to View Reason)"

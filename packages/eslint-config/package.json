@@ -1,0 +1,11 @@
+{
+  "name": "@zenowethu/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.mjs",
+  "type": "module",
+  "peerDependencies": {
+    "eslint": ">=9",
+    "eslint-config-next": "*"
+  }
+}

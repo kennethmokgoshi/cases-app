@@ -1,0 +1,564 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { logger } from '@zenowethu/shared-lib';
+
+type Document = {
+    id: string;
+    type: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    mimeType: string;
+    uploadedAt: string;
+    analyzedAt: string | null;
+    extractedData: string | null;
+};
+
+const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
+    'ID': { label: 'ID Document', color: 'bg-blue-500/20 text-blue-300', icon: '🪪' },
+    'POA': { label: 'Power of Attorney', color: 'bg-purple-500/20 text-purple-300', icon: '📝' },
+    'CREDIT_REPORT': { label: 'Credit Report', color: 'bg-green-500/20 text-green-300', icon: '📊' },
+    'ZENOWETHU_POA': { label: 'Zenowethu POA', color: 'bg-cyan-500/20 text-cyan-300', icon: '📋' },
+    'PAYSLIP': { label: 'Payslip', color: 'bg-emerald-500/20 text-emerald-300', icon: '💸' },
+    'BANK_STATEMENT': { label: 'Bank Statement', color: 'bg-indigo-500/20 text-indigo-300', icon: '🏦' },
+    'COMBINED': { label: 'Combined File', color: 'bg-orange-500/20 text-orange-300', icon: '📦' },
+    'OTHER': { label: 'Other Document', color: 'bg-gray-500/20 text-gray-300', icon: '📄' } };
+
+export function DocumentsTab({ caseId }: { caseId: string }) {
+    const { data: session } = useSession();
+    const isAdmin = session?.user?.isAdmin === true;
+    const [documents, setDocuments] = useState<Document[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
+    const [extracting, setExtracting] = useState(false);
+    const [reanalyzing, setReanalyzing] = useState<string | null>(null); // Track specific doc ID being re-analyzed
+    const [uploadType, setUploadType] = useState('OTHER');
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [extractionProgress, setExtractionProgress] = useState(0);
+    const [extractionMessage, setExtractionMessage] = useState('');
+    const [mounted, setMounted] = useState(false);
+
+    // Track client-side hydration
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    useEffect(() => {
+        fetchDocuments();
+    }, [caseId]);
+
+    const fetchDocuments = async () => {
+        try {
+            const res = await fetch(`/api/cases/${caseId}/documents`);
+            const data = await res.json();
+            if (data.documents) {
+                setDocuments(data.documents);
+            }
+        } catch (e) {
+            logger.error('Error fetching documents:', e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('type', uploadType);
+
+            const res = await fetch(`/api/cases/${caseId}/documents`, {
+                method: 'POST',
+                body: formData });
+
+            if (!res.ok) throw new Error('Upload failed');
+
+            setSuccess('Document uploaded successfully');
+            fetchDocuments();
+        } catch (e) {
+            setError('Failed to upload document');
+        } finally {
+            setUploading(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleExtract = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setExtracting(true);
+        setExtractionProgress(5);
+        setExtractionMessage('Uploading file...');
+        setError('');
+        setSuccess('');
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('caseId', caseId);
+
+            const response = await fetch('/api/documents/extract', {
+                method: 'POST',
+                body: formData });
+
+            if (!response.ok) throw new Error('Failed to start extraction');
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) throw new Error('No reader available');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    let update;
+                    try {
+                        update = JSON.parse(line);
+                    } catch (e) {
+                        logger.error('Error parsing line:', e);
+                        continue;
+                    }
+
+                    if (update.type === 'progress') {
+                        setExtractionMessage(update.message);
+                        if (update.progress) setExtractionProgress(update.progress);
+                    } else if (update.type === 'error') {
+                        throw new Error(update.message);
+                    } else if (update.type === 'result') {
+                        setSuccess(update.data.message || 'Extraction complete');
+                        fetchDocuments();
+                    }
+                }
+            }
+        } catch (e: any) {
+            setError(e.message || 'Failed to extract documents');
+        } finally {
+            setExtracting(false);
+            setExtractionProgress(0);
+            setExtractionMessage('');
+            e.target.value = '';
+        }
+    };
+    const handleSplitExisting = async (docId: string) => {
+        setExtracting(true);
+        setExtractionProgress(5);
+        setExtractionMessage('Initializing split...');
+        setError('');
+        setSuccess('');
+
+        try {
+            const formData = new FormData();
+            formData.append('documentId', docId);
+            formData.append('caseId', caseId);
+
+            const response = await fetch('/api/documents/extract', {
+                method: 'POST',
+                body: formData });
+
+            if (!response.ok) throw new Error('Failed to start extraction');
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) throw new Error('No reader available');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    let update;
+                    try {
+                        update = JSON.parse(line);
+                    } catch (e) {
+                        logger.error('Error parsing line:', e);
+                        continue;
+                    }
+
+                    if (update.type === 'progress') {
+                        setExtractionMessage(update.message);
+                        if (update.progress) setExtractionProgress(update.progress);
+                    } else if (update.type === 'error') {
+                        throw new Error(update.message);
+                    } else if (update.type === 'result') {
+                        setSuccess(update.data.message || 'Extraction complete');
+                        fetchDocuments();
+                    }
+                }
+            }
+        } catch (e: any) {
+            setError(e.message || 'Failed to extract documents');
+        } finally {
+            setExtracting(false);
+            setExtractionProgress(0);
+            setExtractionMessage('');
+        }
+    };
+
+    const handleBatchReanalyze = async (mode: 'SEPARATE' | 'COMBINED') => {
+        setReanalyzing('BATCH');
+        setError('');
+        setSuccess('');
+
+        try {
+            // Find relevant documents
+            let payload: any = { caseId, mode };
+
+            if (mode === 'SEPARATE') {
+                const idDoc = documents.find(d => d.type === 'ID');
+                const poaDoc = documents.find(d => d.type === 'POA');
+                const creditDoc = documents.find(d => d.type === 'CREDIT_REPORT');
+                const payslipDoc = documents.find(d => d.type === 'PAYSLIP');
+                const bankDoc = documents.find(d => d.type === 'BANK_STATEMENT');
+
+                if (!idDoc && !poaDoc && !creditDoc && !payslipDoc && !bankDoc) throw new Error('No relevant documents (ID, POA, Credit Report, Payslip, Bank Statement) found to analyze.');
+
+                payload.documentIds = [idDoc?.id, poaDoc?.id, creditDoc?.id, payslipDoc?.id, bankDoc?.id].filter(Boolean);
+
+                if (!confirm(`Re-analyse ${payload.documentIds.length} documents together? This will overwrite existing data.`)) {
+                    setReanalyzing(null);
+                    return;
+                }
+            } else {
+                // Combined mode
+                const combinedDoc = documents.find(d => d.type === 'COMBINED');
+                if (!combinedDoc) throw new Error('No Combined PDF found. Please upload one first.');
+
+                payload.documentId = combinedDoc.id;
+                payload.extractOnly = true; // DO NOT SPLIT
+
+                if (!confirm(`Re-analyse Combined PDF? This will re-extract data without splitting/creating new files.`)) {
+                    setReanalyzing(null);
+                    return;
+                }
+            }
+
+            const res = await fetch('/api/documents/reanalyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload) });
+
+            let data;
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                data = await res.json();
+            } else {
+                // Handle text/html errors (timeouts/server crash)
+                const text = await res.text();
+                throw new Error(`Server Error (${res.status}): ${text.substring(0, 50)}...`);
+            }
+
+            if (!res.ok) throw new Error(data.error || `Request failed with status ${res.status}`);
+
+            setSuccess(data.message || 'Analysis complete');
+
+            // Check for ID Verification warnings
+            if (data.idVerification && !data.idVerification.isVerified) {
+                // Show specific warning
+                setError(`⚠️ ${data.idVerification.warning || 'ID Mismatch detected'}`);
+                // Keep success message as well but maybe as a secondary info or just let error override visual priority
+                // Actually, let's append to success or handle as a separate alert state if we had one.
+                // For now, setting Error makes it visible in red box which is good for "verification failed".
+            }
+
+            fetchDocuments();
+        } catch (e: any) {
+            setError(e.message || 'Failed to analyze');
+        } finally {
+            setReanalyzing(null);
+        }
+    };
+
+    const handleDelete = async (docId: string) => {
+        if (!confirm('Are you sure you want to delete this document?')) return;
+
+        try {
+            const res = await fetch(`/api/cases/${caseId}/documents?documentId=${docId}`, {
+                method: 'DELETE' });
+            if (!res.ok) throw new Error('Delete failed');
+            setSuccess('Document deleted');
+            fetchDocuments();
+        } catch (e) {
+            setError('Failed to delete document');
+        }
+    };
+
+    const handleUpdateType = async (docId: string, newType: string) => {
+        try {
+            const res = await fetch(`/api/cases/${caseId}/documents?documentId=${docId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: newType }) });
+
+            if (!res.ok) throw new Error('Failed to update document type');
+
+            setSuccess(`Document type updated to ${DOC_TYPE_LABELS[newType].label}`);
+            fetchDocuments();
+        } catch (e) {
+            setError('Failed to update document type');
+        }
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    const getDocTypeInfo = (type: string) => DOC_TYPE_LABELS[type] || DOC_TYPE_LABELS['OTHER'];
+
+    if (loading) {
+        return (
+            <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6">
+                <div className="animate-pulse space-y-4">
+                    <div className="h-6 bg-white/10 rounded w-1/4"></div>
+                    <div className="h-20 bg-white/10 rounded"></div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6">
+            <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-white">📁 Documents</h3>
+                <div className="flex gap-2">
+                    <div className="relative group">
+                        <button
+                            disabled={!!reanalyzing || extracting}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 cursor-pointer transition-colors flex items-center gap-2"
+                        >
+                            {reanalyzing ? 'Processing...' : '🤖 Re-analyse with AI'}
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        <div className="absolute right-0 top-full mt-1 w-56 bg-zeno-navy border border-white/10 rounded-lg shadow-xl overflow-hidden hidden group-hover:block z-50">
+                            <button
+                                onClick={() => handleBatchReanalyze('SEPARATE')}
+                                className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+                            >
+                                <div className="font-medium">Separate Documents</div>
+                                <div className="text-xs text-gray-500">Analyses ID, POA & Credit Report together</div>
+                            </button>
+                            <button
+                                onClick={() => handleBatchReanalyze('COMBINED')}
+                                className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors border-t border-white/5"
+                            >
+                                <div className="font-medium">Combined Document</div>
+                                <div className="text-xs text-gray-500">Analyses single merged PDF</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Upload & Split Button */}
+                    <label className="relative">
+                        <span className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zeno-cyan/20 text-zeno-cyan hover:bg-zeno-cyan/30 cursor-pointer transition-colors flex items-center gap-1">
+                            {extracting ? '⏳ Processing...' : '📄 AI Upload & Split'}
+                        </span>
+                        <input type="file" accept=".pdf" onChange={handleExtract} disabled={extracting} className="sr-only" />
+                    </label>
+
+                    {/* Split Existing Button */}
+                    <div className="relative group">
+                        <button
+                            disabled={extracting}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 cursor-pointer transition-colors flex items-center gap-2"
+                        >
+                            ✂️ Split Existing
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+
+                        <div className="absolute right-0 top-full mt-1 w-64 bg-zeno-navy border border-white/10 rounded-lg shadow-xl overflow-hidden hidden group-hover:block z-50">
+                            <div className="bg-white/5 px-4 py-2 text-[10px] uppercase font-bold text-gray-500">
+                                Select Document to Split
+                            </div>
+
+                            <div className="max-h-60 overflow-y-auto">
+                                {documents.filter(d => d.type === 'COMBINED' || d.type === 'OTHER').map((doc) => (
+                                    <button
+                                        key={doc.id}
+                                        onClick={() => handleSplitExisting(doc.id)}
+                                        className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors border-t border-white/5"
+                                    >
+                                        <div className="font-medium truncate">{doc.fileName}</div>
+                                        <div className="text-xs text-gray-500">
+                                            {getDocTypeInfo(doc.type).label} • {formatFileSize(doc.fileSize)}
+                                        </div>
+                                    </button>
+                                ))}
+
+                                {documents.filter(d => d.type === 'COMBINED' || d.type === 'OTHER').length === 0 && (
+                                    <div className="px-4 py-4 text-center text-xs text-gray-500 italic">
+                                        No suitable documents found
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Extraction Progress Bar */}
+                {extracting && (
+                    <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="bg-zeno-navy/50 rounded-lg border border-zeno-cyan/20 p-4">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-medium text-zeno-cyan flex items-center gap-2">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zeno-cyan opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-zeno-cyan"></span>
+                                    </span>
+                                    {extractionMessage || 'Processing documents...'}
+                                </span>
+                                <span className="text-xs font-bold text-gray-400">{extractionProgress}%</span>
+                            </div>
+                            <div className="w-full bg-white/5 rounded-full h-2.5 overflow-hidden border border-white/5">
+                                <div
+                                    className="bg-gradient-to-r from-zeno-cyan to-blue-500 h-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                                    style={{ width: `${extractionProgress}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Messages */}
+            {error && <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>}
+            {success && <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">{success}</div>}
+
+            {/* Upload Section */}
+            <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/10">
+                <p className="text-sm text-gray-400 mb-3">Upload individual document:</p>
+                <div className="flex gap-3 items-center">
+                    <select
+                        value={uploadType}
+                        onChange={(e) => setUploadType(e.target.value)}
+                        className="px-3 py-2 bg-zeno-gray border border-white/20 rounded-lg text-white text-sm [color-scheme:dark] [&>option]:bg-zeno-navy [&>option]:text-white"
+                    >
+                        <option value="ID" className="bg-zeno-navy text-white">ID Document</option>
+                        <option value="POA" className="bg-zeno-navy text-white">Power of Attorney</option>
+                        <option value="CREDIT_REPORT" className="bg-zeno-navy text-white">Credit Report</option>
+                        <option value="ZENOWETHU_POA" className="bg-zeno-navy text-white">Zenowethu POA</option>
+                        <option value="PAYSLIP" className="bg-zeno-navy text-white">Payslip</option>
+                        <option value="BANK_STATEMENT" className="bg-zeno-navy text-white">Bank Statement</option>
+                        <option value="OTHER" className="bg-zeno-navy text-white">Other Document</option>
+                    </select>
+                    <label className="flex-1">
+                        <span className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-sm cursor-pointer transition-colors inline-flex items-center gap-2">
+                            {uploading ? '⏳ Uploading...' : '📤 Choose File'}
+                        </span>
+                        <input type="file" accept=".pdf,image/*" onChange={handleUpload} disabled={uploading} className="sr-only" />
+                    </label>
+                </div>
+            </div>
+
+            {/* Documents List */}
+            <div className="space-y-3">
+                {documents.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center py-8">No documents uploaded yet.</p>
+                ) : (
+                    documents.map((doc) => {
+                        const typeInfo = getDocTypeInfo(doc.type);
+                        const extractedInfo = doc.extractedData ? JSON.parse(doc.extractedData) : null;
+
+                        return (
+                            <div
+                                key={doc.id}
+                                className="flex items-center gap-4 p-4 bg-zeno-navy/30 rounded-lg border border-white/5 hover:border-white/10 transition-colors"
+                            >
+                                <div className="text-2xl">{typeInfo.icon}</div>
+                                <div className="flex-1 min-w-0 group relative">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className={`text-xs px-2 py-0.5 rounded ${typeInfo.color}`}>
+                                            {typeInfo.label}
+                                        </span>
+                                        {/* Type Edit Dropdown */}
+                                        <div className="relative inline-block text-left opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button className="text-gray-400 hover:text-white p-1">
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                            </button>
+                                            <div className="absolute left-0 top-full mt-1 w-40 bg-zeno-navy border border-white/10 rounded shadow-lg z-50 hidden group-hover:block">
+                                                {Object.keys(DOC_TYPE_LABELS).map((typeKey) => (
+                                                    <button
+                                                        key={typeKey}
+                                                        onClick={() => handleUpdateType(doc.id, typeKey)}
+                                                        className="block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-white/10 hover:text-white"
+                                                    >
+                                                        {DOC_TYPE_LABELS[typeKey].label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {extractedInfo?.confidence && (
+                                            <span className="text-xs text-gray-500">
+                                                {Math.round(extractedInfo.confidence * 100)}% confidence
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-white text-sm truncate">{doc.fileName}</p>
+                                    <p className="text-gray-500 text-xs">
+                                        {formatFileSize(doc.fileSize)} • {mounted ? new Date(doc.uploadedAt).toLocaleDateString() : ''}
+                                        {extractedInfo?.pageCount && ` • ${extractedInfo.pageCount} pages`}
+                                    </p>
+                                </div>
+                                {/* Re-analyse Button for supported types */}
+                                {
+                                    /* Individual Re-analyse button removed as per request */
+                                }
+
+                                <div className="flex gap-2">
+                                    <a
+                                        href={doc.fileUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-1.5 text-xs font-medium rounded bg-zeno-cyan/20 text-zeno-cyan hover:bg-zeno-cyan/30 transition-colors"
+                                    >
+                                        View
+                                    </a>
+                                    <a
+                                        href={doc.fileUrl}
+                                        download={doc.fileName}
+                                        className="px-3 py-1.5 text-xs font-medium rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
+                                    >
+                                        Download
+                                    </a>
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => handleDelete(doc.id)}
+                                            disabled={!!reanalyzing}
+                                            className="px-3 py-1.5 text-xs font-medium rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+        </div>
+    );
+}
+

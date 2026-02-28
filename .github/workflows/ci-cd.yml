@@ -1,0 +1,122 @@
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ──────────────────────────────────────────────
+  # CI: Lint + Typecheck + Unit Tests
+  # Runs on every push and pull_request
+  # No secrets required — unit tests use Zod schemas only (no DB, no API keys)
+  # ──────────────────────────────────────────────
+  ci:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @zenowethu/database run db:generate
+
+      - name: Lint (all apps + packages)
+        run: pnpm turbo lint
+
+      - name: Typecheck (all apps + packages)
+        run: pnpm turbo typecheck
+
+      - name: Run all tests (all apps + packages)
+        run: pnpm turbo test
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests (cases app)
+        run: pnpm --filter cases run test:e2e
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+      - name: E2E tests (insurance app)
+        run: pnpm --filter insurance run test:e2e
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+      - name: E2E tests (legal app)
+        run: pnpm --filter legal run test:e2e
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+      - name: E2E tests (forensic-audit app)
+        run: pnpm --filter forensic-audit run test:e2e
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+      - name: E2E tests (finance app)
+        run: pnpm --filter finance run test:e2e
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+  # ──────────────────────────────────────────────
+  # CD: Deploy to Contabo VPS
+  # Runs only on push to main, after CI passes
+  # Required GitHub secrets:
+  #   VPS_HOST   — server IP address
+  #   VPS_USER   — SSH username (e.g. root)
+  #   VPS_SSH_KEY — private SSH key contents
+  # ──────────────────────────────────────────────
+  deploy:
+    name: Deploy to VPS
+    needs: [ci]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/zenowethu
+            git pull origin main
+            docker compose up -d --build
+            docker compose exec -T db pnpm --filter @zenowethu/database run db:migrate --name prod --deploy || true
+            docker system prune -f

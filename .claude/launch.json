@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cases",
+      "runtimeExecutable": "C:\Users\Kenneth\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.13.1-win-x64\pnpm.cmd",
+      "runtimeArgs": ["--filter", "cases", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "insurance",
+      "runtimeExecutable": "C:\Users\Kenneth\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.13.1-win-x64\pnpm.cmd",
+      "runtimeArgs": ["--filter", "insurance", "dev"],
+      "port": 3001
+    },
+    {
+      "name": "legal",
+      "runtimeExecutable": "C:\Users\Kenneth\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.13.1-win-x64\pnpm.cmd",
+      "runtimeArgs": ["--filter", "legal", "dev"],
+      "port": 3002
+    },
+    {
+      "name": "forensic-audit",
+      "runtimeExecutable": "C:\Users\Kenneth\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.13.1-win-x64\pnpm.cmd",
+      "runtimeArgs": ["--filter", "forensic-audit", "dev"],
+      "port": 3003
+    },
+    {
+      "name": "finance",
+      "runtimeExecutable": "C:\Users\Kenneth\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.13.1-win-x64\pnpm.cmd",
+      "runtimeArgs": ["--filter", "finance", "dev"],
+      "port": 3004
+    }
+  ]
+}

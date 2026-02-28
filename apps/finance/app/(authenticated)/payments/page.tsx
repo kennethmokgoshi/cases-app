@@ -1,0 +1,287 @@
+'use client';
+
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { AllocatePaymentModal } from '@/components/payments/AllocatePaymentModal';
+import { logger } from '@zenowethu/shared-lib';
+
+type Payment = {
+    id: string;
+    amount: number;
+    date: string;
+    method: string;
+    reference: string | null;
+    status: string;
+    category: string;
+    notes: string | null;
+    client: { firstName: string; lastName: string; idNumber: string } | null;
+    case: { fileNumber: string } | null;
+    recordedBy: { firstName: string; lastName: string } | null;
+    batch: { fileName: string; status: string } | null;
+};
+
+function formatZAR(amount: number) {
+    return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount);
+}
+
+function MethodBadge({ method }: { method: string }) {
+    const colors: Record<string, string> = {
+        EFT: 'bg-blue-500/20 text-blue-400',
+        CASH: 'bg-emerald-500/20 text-emerald-400',
+        DEBIT_ORDER: 'bg-purple-500/20 text-purple-400',
+        CHEQUE: 'bg-yellow-500/20 text-yellow-400' };
+    return (
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[method] ?? 'bg-gray-500/20 text-gray-400'}`}>
+            {method.replace(/_/g, ' ')}
+        </span>
+    );
+}
+
+function PaymentsContent() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const [payments, setPayments] = useState<Payment[]>([]);
+    const [total, setTotal] = useState(0);
+    const [allocatingPayment, setAllocatingPayment] = useState<Payment | null>(null);
+    const [page, setPage] = useState(1);
+    const [pages, setPages] = useState(1);
+    const [loading, setLoading] = useState(true);
+
+    const [search, setSearch] = useState(searchParams.get('search') || '');
+    const [method, setMethod] = useState(searchParams.get('method') || '');
+    const [from, setFrom] = useState(searchParams.get('from') || '');
+    const [to, setTo] = useState(searchParams.get('to') || '');
+
+    const fetchPayments = useCallback(async (pg = 1) => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            params.set('page', String(pg));
+            if (search) params.set('search', search);
+            if (method) params.set('method', method);
+            if (from) params.set('from', from);
+            if (to) params.set('to', to);
+
+            const res = await fetch(`/api/finance/payments?${params}`);
+            if (res.ok) {
+                const data = await res.json();
+                setPayments(data.payments);
+                setTotal(data.total);
+                setPages(data.pages);
+                setPage(pg);
+            }
+        } catch (err) {
+            logger.error(err);
+        } finally {
+            setLoading(false);
+        }
+    }, [search, method, from, to]);
+
+    useEffect(() => { fetchPayments(1); }, [fetchPayments]);
+
+    const exportCSV = () => {
+        const params = new URLSearchParams();
+        params.set('limit', '10000');
+        if (search) params.set('search', search);
+        if (method) params.set('method', method);
+        if (from) params.set('from', from);
+        if (to) params.set('to', to);
+        window.open(`/api/finance/payments?${params}&format=csv`, '_blank');
+    };
+
+    return (
+        <>
+        <div className="max-w-7xl mx-auto">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+                <div>
+                    <Link href="/" className="text-cyan-400 hover:text-cyan-300 text-sm mb-2 inline-block">← Dashboard</Link>
+                    <h1 className="text-3xl font-bold text-white">Payments</h1>
+                    <p className="text-gray-400 text-sm mt-1">{total.toLocaleString()} total records</p>
+                </div>
+                <Link
+                    href="/payments/record"
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-sm font-semibold transition-colors self-start sm:self-auto"
+                >
+                    + Record Payment
+                </Link>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-[var(--color-bg-secondary)] rounded-xl p-4 mb-6 border border-white/5 flex flex-wrap gap-3 items-end">
+                <div className="flex-1 min-w-[200px]">
+                    <label className="text-xs text-gray-500 mb-1 block">Search</label>
+                    <input
+                        type="text"
+                        placeholder="Client name, ID, reference, file #..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && fetchPayments(1)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500 focus:outline-none"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Method</label>
+                    <select
+                        value={method}
+                        onChange={(e) => setMethod(e.target.value)}
+                        className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                    >
+                        <option value="">All Methods</option>
+                        <option value="EFT">EFT</option>
+                        <option value="CASH">Cash</option>
+                        <option value="DEBIT_ORDER">Debit Order</option>
+                        <option value="CHEQUE">Cheque</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs text-gray-500 mb-1 block">From</label>
+                    <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+                        className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none" />
+                </div>
+                <div>
+                    <label className="text-xs text-gray-500 mb-1 block">To</label>
+                    <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
+                        className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none" />
+                </div>
+                <button
+                    onClick={() => fetchPayments(1)}
+                    className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                    Filter
+                </button>
+                <button
+                    onClick={() => { setSearch(''); setMethod(''); setFrom(''); setTo(''); }}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm transition-colors"
+                >
+                    Clear
+                </button>
+            </div>
+
+            {/* Table */}
+            <div className="bg-[var(--color-bg-secondary)] rounded-2xl border border-white/5 overflow-hidden">
+                {loading ? (
+                    <div className="flex items-center justify-center py-16">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400" />
+                    </div>
+                ) : payments.length === 0 ? (
+                    <div className="text-center py-16 text-gray-500">
+                        <p className="text-lg mb-2">No payments found</p>
+                        <Link href="/payments/record" className="text-emerald-400 hover:underline text-sm">Record your first payment</Link>
+                    </div>
+                ) : (
+                    <>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-white/5 text-gray-400 text-xs uppercase tracking-wider">
+                                    <tr>
+                                        <th className="px-5 py-3">Date</th>
+                                        <th className="px-5 py-3">Client</th>
+                                        <th className="px-5 py-3">File #</th>
+                                        <th className="px-5 py-3">Amount</th>
+                                        <th className="px-5 py-3">Method</th>
+                                        <th className="px-5 py-3">Reference</th>
+                                        <th className="px-5 py-3">Source</th>
+                                        <th className="px-5 py-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {payments.map((p) => (
+                                        <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-5 py-3 text-gray-300 whitespace-nowrap">
+                                                {new Date(p.date).toLocaleDateString('en-ZA')}
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                {p.client ? (
+                                                    <div>
+                                                        <p className="text-white font-medium">{p.client.firstName} {p.client.lastName}</p>
+                                                        <p className="text-gray-500 text-xs">{p.client.idNumber}</p>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-red-400 text-xs">Unallocated</span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3 text-cyan-400 text-xs font-mono">
+                                                {p.case?.fileNumber ?? '—'}
+                                            </td>
+                                            <td className="px-5 py-3 text-white font-semibold">
+                                                {formatZAR(p.amount)}
+                                            </td>
+                                            <td className="px-5 py-3"><MethodBadge method={p.method} /></td>
+                                            <td className="px-5 py-3 text-gray-400 text-xs font-mono">
+                                                {p.reference ?? '—'}
+                                            </td>
+                                            <td className="px-5 py-3 text-gray-500 text-xs">
+                                                {p.batch ? (
+                                                    <span title={p.batch.fileName}>Batch</span>
+                                                ) : (
+                                                    <span>Manual</span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                {!p.client && (
+                                                    <button
+                                                        onClick={() => setAllocatingPayment(p)}
+                                                        className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 rounded text-xs font-medium transition-colors"
+                                                    >
+                                                        Allocate
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Pagination */}
+                        {pages > 1 && (
+                            <div className="flex items-center justify-between px-5 py-3 border-t border-white/5">
+                                <p className="text-xs text-gray-500">Page {page} of {pages}</p>
+                                <div className="flex gap-2">
+                                    <button
+                                        disabled={page <= 1}
+                                        onClick={() => fetchPayments(page - 1)}
+                                        className="px-3 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-white rounded text-xs transition-colors"
+                                    >
+                                        ← Prev
+                                    </button>
+                                    <button
+                                        disabled={page >= pages}
+                                        onClick={() => fetchPayments(page + 1)}
+                                        className="px-3 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-white rounded text-xs transition-colors"
+                                    >
+                                        Next →
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        </div>
+
+        {allocatingPayment && (
+            <AllocatePaymentModal
+                payment={allocatingPayment}
+                onClose={() => setAllocatingPayment(null)}
+                onSuccess={(paymentId) => {
+                    setAllocatingPayment(null)
+                    fetchPayments(page)
+                }}
+            />
+        )}
+        </>
+    );
+}
+
+export default function PaymentsPage() {
+    return (
+        <div className="p-6">
+            <Suspense fallback={<div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400" /></div>}>
+                <PaymentsContent />
+            </Suspense>
+        </div>
+    );
+}

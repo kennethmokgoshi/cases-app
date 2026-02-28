@@ -1,0 +1,500 @@
+@import "tailwindcss";
+
+@theme {
+  --font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* Zenowethu Brand Colors */
+  --color-zeno-navy: #0B1120;
+  --color-zeno-blue: #1e293b;
+  --color-zeno-cyan: #06b6d4;
+  --color-zeno-orange: #f59e0b;
+  --color-zeno-gray: #1e293b;
+  --color-zeno-dark: #0B1120;
+
+  /* Base Colors */
+  --color-white: #ffffff;
+  --color-black: #000000;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Safe area insets for notched devices (iPhone X+, etc.) */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* Theme System - 4 Themes */
+[data-theme="default"] {
+  --color-bg-primary: #0B1120;
+  /* Navy */
+  --color-bg-secondary: #1e293b;
+  /* Slate blue */
+  --color-bg-card: #1e293b;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #cbd5e1;
+  --color-accent: #06b6d4;
+  /* Cyan */
+  --color-highlight: #f59e0b;
+  /* Orange */
+  --color-border: #334155;
+}
+
+[data-theme="ocean"] {
+  --color-bg-primary: #0c4a6e;
+  /* Deep blue */
+  --color-bg-secondary: #0369a1;
+  /* Sky blue */
+  --color-bg-card: #075985;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #e0f2fe;
+  --color-accent: #22d3ee;
+  /* Bright cyan */
+  --color-highlight: #38bdf8;
+  /* Light blue */
+  --color-border: #0284c7;
+}
+
+[data-theme="sunset"] {
+  --color-bg-primary: #1c1917;
+  /* Dark stone */
+  --color-bg-secondary: #44403c;
+  /* Stone 700 */
+  --color-bg-card: #57534e;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #fef3c7;
+  --color-accent: #fb923c;
+  /* Orange */
+  --color-highlight: #fbbf24;
+  /* Amber */
+  --color-border: #78716c;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg-primary, #0B1120);
+  color: var(--color-text-primary, #ffffff);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Prevent pull-to-refresh on mobile for app-like feel */
+  overscroll-behavior-y: contain;
+  /* Safe area padding for notched devices */
+  padding-top: var(--safe-area-inset-top);
+  padding-bottom: var(--safe-area-inset-bottom);
+  /* Prevent text size adjust on orientation change */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ========================================
+   MOBILE RESPONSIVE UTILITIES
+   ======================================== */
+
+/* Touch-friendly tap targets (minimum 44x44px per Apple guidelines) */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Safe area utilities */
+.safe-top {
+  padding-top: calc(var(--safe-area-inset-top) + 1rem);
+}
+
+.safe-bottom {
+  padding-bottom: calc(var(--safe-area-inset-bottom) + 1rem);
+}
+
+.safe-left {
+  padding-left: calc(var(--safe-area-inset-left) + 1rem);
+}
+
+.safe-right {
+  padding-right: calc(var(--safe-area-inset-right) + 1rem);
+}
+
+.safe-all {
+  padding: calc(var(--safe-area-inset-top) + 1rem) calc(var(--safe-area-inset-right) + 1rem) calc(var(--safe-area-inset-bottom) + 1rem) calc(var(--safe-area-inset-left) + 1rem);
+}
+
+/* Mobile-first responsive containers */
+.container-mobile {
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 640px) {
+  .container-mobile {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-mobile {
+    padding-left: 2rem;
+    padding-right: 2rem;
+    max-width: 80rem;
+  }
+}
+
+/* Mobile overlay for sidebar */
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.mobile-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Mobile sidebar styles */
+.mobile-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 85%;
+  max-width: 320px;
+  background-color: var(--color-bg-primary);
+  z-index: 50;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-sidebar.open {
+  transform: translateX(0);
+}
+
+/* Hamburger menu button */
+.hamburger-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 8px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  gap: 5px;
+}
+
+.hamburger-btn span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background-color: white;
+  border-radius: 2px;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.hamburger-btn.open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.hamburger-btn.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-btn.open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* Hide scrollbars on mobile but allow scrolling */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Responsive typography */
+.text-responsive-sm {
+  font-size: 0.75rem;
+}
+
+.text-responsive-base {
+  font-size: 0.875rem;
+}
+
+.text-responsive-lg {
+  font-size: 1rem;
+}
+
+.text-responsive-xl {
+  font-size: 1.25rem;
+}
+
+.text-responsive-2xl {
+  font-size: 1.5rem;
+}
+
+.text-responsive-3xl {
+  font-size: 1.875rem;
+}
+
+@media (min-width: 640px) {
+  .text-responsive-sm {
+    font-size: 0.875rem;
+  }
+
+  .text-responsive-base {
+    font-size: 1rem;
+  }
+
+  .text-responsive-lg {
+    font-size: 1.125rem;
+  }
+
+  .text-responsive-xl {
+    font-size: 1.5rem;
+  }
+
+  .text-responsive-2xl {
+    font-size: 1.875rem;
+  }
+
+  .text-responsive-3xl {
+    font-size: 2.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .text-responsive-3xl {
+    font-size: 2.5rem;
+  }
+}
+
+/* Mobile-friendly table wrapper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Card layout for mobile tables */
+.mobile-card {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .mobile-card {
+    display: block;
+  }
+
+  .desktop-table {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .mobile-card {
+    display: none;
+  }
+
+  .desktop-table {
+    display: block;
+  }
+}
+
+/* Prevent zoom on input focus (iOS) */
+@media (max-width: 767px) {
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Bottom navigation bar for mobile */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--color-bg-primary);
+  border-top: 1px solid var(--color-border);
+  padding-bottom: var(--safe-area-inset-bottom);
+  z-index: 40;
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .mobile-bottom-nav {
+    display: flex;
+  }
+}
+
+/* Floating action button */
+.fab {
+  position: fixed;
+  bottom: calc(1rem + var(--safe-area-inset-bottom));
+  right: 1rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fab:active {
+  transform: scale(0.95);
+}
+
+@media (min-width: 1024px) {
+  .fab {
+    bottom: 2rem;
+    right: 2rem;
+  }
+}
+
+/* Pull-to-refresh indicator */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100%);
+  transition: transform 0.3s ease;
+  z-index: 100;
+}
+
+.pull-indicator.visible {
+  transform: translateX(-50%) translateY(1rem);
+}
+
+/* Loading skeleton for mobile */
+.skeleton {
+  background: linear-gradient(90deg,
+      var(--color-bg-secondary) 25%,
+      var(--color-bg-primary) 50%,
+      var(--color-bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 0.25rem;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ========================================
+   INSTALL PWA PROMPT
+   ======================================== */
+.install-prompt {
+  position: fixed;
+  bottom: 1rem;
+  left: 1rem;
+  right: 1rem;
+  background: linear-gradient(135deg, var(--color-bg-secondary), var(--color-bg-primary));
+  border: 1px solid var(--color-accent);
+  border-radius: 1rem;
+  padding: 1rem;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.2);
+  animation: slide-up 0.3s ease;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.install-prompt-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--color-accent);
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.install-prompt-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.install-prompt-title {
+  font-weight: 600;
+  color: white;
+  margin-bottom: 0.25rem;
+}
+
+.install-prompt-description {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.install-prompt-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.install-prompt-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.install-prompt-btn-primary {
+  background: var(--color-accent);
+  color: var(--color-bg-primary);
+}
+
+.install-prompt-btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--color-text-secondary);
+}

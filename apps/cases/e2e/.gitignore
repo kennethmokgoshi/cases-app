@@ -1,0 +1,2 @@
+# Saved browser auth state — contains session cookies, never commit
+.auth/user.json

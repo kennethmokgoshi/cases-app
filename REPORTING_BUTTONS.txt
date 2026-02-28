@@ -1,0 +1,81 @@
+Add these two reporting button links to your B2B Dashboard (after the stats grid, before "Recent Cases" section):
+
+```tsx
+{/* Reporting Action Cards - Add after stats grid */}
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {/* Team Reporting (Managers & Admins) */}
+    {(session?.user?.isManager || session?.user?.isAdmin) && (
+        <Link
+            href="/b2b-dashboard/reporting"
+            className="bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-600 rounded-xl p-6 transition-all transform hover:scale-105 group"
+        >
+            <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-white mb-1">📊 Team Reporting</h3>
+                    <p className="text-white/80 text-sm">View team performance & analytics</p>
+                </div>
+            </div>
+        </Link>
+    )}
+
+    {/* Admin Reports (Managers & System Admins) */}
+    {(session?.user?.isManager || session?.user?.isAdmin) && (
+        <Link
+            href="/b2b-dashboard/reports"
+            className="bg-gradient-to-br from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-600 rounded-xl p-6 transition-all transform hover:scale-105 group"
+        >
+            <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-white mb-1">📈 Advanced Reports</h3>
+                    <p className="text-white/80 text-sm">Advanced analytics & insights</p>
+                </div>
+            </div>
+        </Link>
+    )}
+
+    {/* Quick Submit Referral */}
+    <Link
+        href="/b2b-dashboard/cases/new"
+        className="bg-gradient-to-br from-zeno-cyan to-cyan-600 hover:from-cyan-600 hover:to-zeno-cyan rounded-xl p-6 transition-all transform hover:scale-105 group"
+    >
+        <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+            </div>
+            <div>
+                <h3 className="text-xl font-bold text-white mb-1">➕ Submit Referral</h3>
+                <p className="text-white/80 text-sm">Start a new case for a client</p>
+            </div>
+        </div>
+    </Link>
+</div>
+```
+
+**Key Features:**
+- **Purple Button** → Team Reporting (`/b2b-dashboard/reporting`) - Shows for MANAGERS & System Admins
+- **Orange Button** → Advanced Reports (`/b2b-dashboard/reports`) - Shows for MANAGERS & System Admins
+- **Cyan Button** → Submit Referral - Shows for everyone
+
+**Conditional Display:**
+- Team Reporting: `session?.user?.isManager || session?.user?.isAdmin`
+- Advanced Reports: `session?.user?.isManager || session?.user?.isAdmin`
+- Submit Referral: Everyone
+
+**User Roles:**
+- Regular B2B Users: See only Submit Referral
+- Managers (like Lesego@letsatsifinance.co.za): See ALL THREE buttons
+- System Admins: See ALL THREE buttons
+
+Insert this code in `app/b2b-dashboard/page.tsx` around line 278 (after the stats grid, before the existing action cards section).

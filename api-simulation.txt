@@ -1,0 +1,9 @@
+Where Clause: {"type":"ACQUISITION_SOURCE"}
+Found 7 projects
+- Curro Black (Type: ACQUISITION_SOURCE, ClientType: B2B)
+- Future Finance (Type: ACQUISITION_SOURCE, ClientType: B2B)
+- Letsatsi (Type: ACQUISITION_SOURCE, ClientType: B2B)
+- Shosholoza (Type: ACQUISITION_SOURCE, ClientType: B2B)
+- Dealerships (Type: ACQUISITION_SOURCE, ClientType: B2C)
+- ZDM Clients (Type: ACQUISITION_SOURCE, ClientType: B2C)
+- Refferals (Type: ACQUISITION_SOURCE, ClientType: B2C)

@@ -1,0 +1,751 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id              String             @id @default(cuid())
+  name            String
+  description     String?
+  type            String             @default("FOLDER")
+  clientType      String?
+  parentId        String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  order           Int                @default(0)
+  apiKeys         ApiKey[]
+  cases           CaseProject[]
+  parent          Project?           @relation("ProjectHierarchy", fields: [parentId], references: [id])
+  children        Project[]          @relation("ProjectHierarchy")
+  members         ProjectMember[]
+  b2bPartnerUsers User[]             @relation("B2BPartnerUsers")
+  resources       DocumentResource[] @relation("DocumentResourceToProject")
+}
+
+model ProjectMember {
+  id         String   @id @default(cuid())
+  projectId  String
+  userId     String
+  role       String   @default("MEMBER")
+  assignedAt DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model Client {
+  id             String        @id @default(cuid())
+  firstName      String
+  lastName       String
+  idNumber       String        @unique
+  email          String?
+  phone          String?
+  whatsappNumber String?
+  telegramNumber String?
+  address        String?
+  employer       String?
+  employeeNo     String?
+  grossSalary    Decimal?
+  netSalary      Decimal?
+  salaryPayDate  Int?
+  type           String        @default("Standard")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  cases          Case[]
+  LegalMatter    LegalMatter[]
+  payments       Payment[]
+}
+
+model Case {
+  id                      String                @id @default(cuid())
+  fileNumber              String                @unique
+  clientId                String
+  acquisitionType         String                @default("B2C")
+  partnerName             String?
+  partnerBranch           String?
+  r350Status              String                @default("NOT_APPLICABLE")
+  serviceFeeCollectedBy   String                @default("ZENOWETHU")
+  partnerSplitPercent     Int                   @default(0)
+  status                  String
+  statusEntryDate         DateTime              @default(now())
+  deadline                DateTime?
+  isOverdue               Boolean               @default(false)
+  daysInStatus            Int                   @default(0)
+  serviceFee              Decimal?
+  instalments             Int                   @default(1)
+  zenowethuShare          Decimal?
+  isInvoiced              Boolean               @default(false)
+  closedAccounts          Int                   @default(0)
+  openAccounts            Int                   @default(0)
+  prescribedAccounts      Int                   @default(0)
+  totalDebtAmount         Decimal?              @default(0)
+  totalMonthlyInstallment Decimal?              @default(0)
+  cb_ncrdcNo              String?
+  cb_debtCounsellor       String?
+  cb_contactNo            String?
+  cb_applicationDate      DateTime?
+  cb_status               String?
+  cb_statusDate           DateTime?
+  ncrdcNo                 String?
+  dhsStatus               String?
+  dhsDaysCounter          String?
+  debtReviewDate          DateTime?
+  debtCounsellorName      String?
+  dcTradingName           String?
+  dcEmail                 String?
+  lastKnownEmail          String?
+  dcOperatingStatus       String?
+  dcMobile                String?
+  consumerDhsStatus       String?
+  requestedDhsStatus      String?
+  dhsPreviousStatus       String?
+  previousDebtCounsellor  String?
+  dhsStatusDate           DateTime?
+  dhsApplicationDate      DateTime?
+  afterCareFees           Decimal?
+  legalFees               Decimal?
+  legalFeesStatus         String?
+  legalFeesPayment        String?
+  legalFeesInvDate        DateTime?
+  feesConsent             Decimal?
+  totalFees               Decimal?
+  affordabilityStatus     String?
+  assessmentDate          DateTime?
+  nextUpdate              DateTime?
+  fileToBeCompleted       DateTime?
+  insuranceNotes          String?
+  category                String                @default("Standard")
+  services                String?
+  todos                   String?
+  declineReason           String?
+  declineReasonAttended   Boolean               @default(false)
+  description             String?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  assignedToId            String?
+  createdById             String?
+  assignedTo              User?                 @relation("CaseAssignee", fields: [assignedToId], references: [id])
+  client                  Client                @relation(fields: [clientId], references: [id])
+  createdBy               User?                 @relation("CaseCreator", fields: [createdById], references: [id])
+  comments                CaseComment[]
+  projects                CaseProject[]
+  creditAccounts          CreditAccount[]
+  documents               Document[]
+  ForensicAudit           ForensicAudit[]
+  InsuranceAssessment     InsuranceAssessment[]
+  LegalMatter             LegalMatter[]
+  notifications           NotificationLog[]
+  payments                Payment[]
+  workflowLogs            WorkflowLog[]
+
+  @@index([status])
+  @@index([isOverdue])
+}
+
+model Document {
+  id            String    @id @default(cuid())
+  caseId        String
+  type          String
+  fileName      String
+  fileUrl       String
+  fileSize      Int
+  mimeType      String
+  uploadedAt    DateTime  @default(now())
+  analyzedAt    DateTime?
+  extractedData String?
+  uploadedById  String?
+  case          Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  uploadedBy    User?     @relation(fields: [uploadedById], references: [id])
+
+  @@index([caseId])
+  @@index([type])
+  @@index([uploadedById])
+}
+
+model CaseProject {
+  caseId    String
+  projectId String
+  isPrimary Boolean @default(false)
+  case      Case    @relation(fields: [caseId], references: [id])
+  project   Project @relation(fields: [projectId], references: [id])
+
+  @@id([caseId, projectId])
+}
+
+model WorkflowLog {
+  id         String   @id @default(cuid())
+  caseId     String
+  fromStatus String?
+  toStatus   String
+  action     String   @default("STATUS_CHANGE")
+  timestamp  DateTime @default(now())
+  userId     String?
+  notes      String?
+  case       Case     @relation(fields: [caseId], references: [id])
+  user       User?    @relation(fields: [userId], references: [id])
+}
+
+model User {
+  id                        String              @id @default(cuid())
+  username                  String              @unique
+  firstName                 String
+  lastName                  String
+  email                     String              @unique
+  password                  String
+  organization              String              @default("Zenowethu")
+  isAdmin                   Boolean             @default(false)
+  isLocked                  Boolean             @default(false)
+  emailNotificationsEnabled Boolean             @default(true)
+  createdAt                 DateTime            @default(now())
+  lastLogin                 DateTime?
+  b2bPartnerId              String?
+  phone                     String?
+  role                      String              @default("MEMBER")
+  userType                  String              @default("STAFF")
+  avatarUrl                 String?
+  resetPasswordExpires      DateTime?
+  resetPasswordToken        String?             @unique
+  AuditEvidence             AuditEvidence[]
+  casesAssigned             Case[]              @relation("CaseAssignee")
+  casesCreated              Case[]              @relation("CaseCreator")
+  comments                  CaseComment[]
+  mentions                  CommentMention[]
+  uploadedDocuments         Document[]
+  ForensicAudit             ForensicAudit[]
+  inAppNotifications        InAppNotification[]
+  sentNotifications         NotificationLog[]   @relation("SentNotifications")
+  recordedPayments          Payment[]           @relation("PaymentRecorder")
+  uploadedBatches           PaymentBatch[]
+  projectMemberships        ProjectMember[]
+  b2bPartner                Project?            @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
+  groupMemberships          UserGroupMember[]
+  workflowLogs              WorkflowLog[]
+}
+
+model CaseComment {
+  id           String           @id @default(cuid())
+  caseId       String
+  userId       String
+  content      String
+  activityType String?
+  activityData String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  isInternal   Boolean          @default(true)
+  type         String           @default("NOTE")
+  case         Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id])
+  mentions     CommentMention[]
+
+  @@index([caseId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model CommentMention {
+  id        String      @id @default(cuid())
+  commentId String
+  userId    String
+  createdAt DateTime    @default(now())
+  comment   CaseComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id])
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+model InAppNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  caseId    String?
+  commentId String?
+  linkUrl   String?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model NotificationLog {
+  id            String   @id @default(cuid())
+  caseId        String
+  channel       String
+  recipient     String
+  recipientType String
+  statusCode    String?
+  message       String
+  success       Boolean  @default(false)
+  externalId    String?
+  error         String?
+  provider      String
+  sentAt        DateTime @default(now())
+  htmlBody      String?
+  senderId      String?
+  case          Case     @relation(fields: [caseId], references: [id])
+  sender        User?    @relation("SentNotifications", fields: [senderId], references: [id])
+
+  @@index([caseId])
+  @@index([senderId])
+  @@index([sentAt])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  name        String
+  key         String    @unique
+  keyPrefix   String
+  permissions String    @default("read")
+  projectId   String?
+  rateLimit   Int       @default(1000)
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  usageCount  Int       @default(0)
+  description String?
+  createdBy   String?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project?  @relation(fields: [projectId], references: [id])
+
+  @@index([key])
+  @@index([projectId])
+  @@index([isActive])
+}
+
+model DocumentResource {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  fileUrl         String
+  fileSize        Int       @default(0)
+  mimeType        String    @default("application/octet-stream")
+  category        String
+  acquisitionType String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  projects        Project[] @relation("DocumentResourceToProject")
+}
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  category    String   @default("general")
+  description String?
+  isEncrypted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+}
+
+model UserGroup {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  members   UserGroupMember[]
+}
+
+model UserGroupMember {
+  id         String    @id @default(cuid())
+  groupId    String
+  userId     String
+  assignedAt DateTime  @default(now())
+  group      UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+model MessageTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  content     String
+  channel     String
+  category    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([channel])
+  @@index([category])
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  amount       Decimal
+  date         DateTime
+  method       String
+  reference    String?
+  category     String        @default("INSTALLMENT")
+  status       String        @default("COMPLETED")
+  notes        String?
+  clientId     String?
+  caseId       String?
+  batchId      String?
+  unmatchedId  String?
+  recordedById String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  batch        PaymentBatch? @relation(fields: [batchId], references: [id])
+  case         Case?         @relation(fields: [caseId], references: [id])
+  client       Client?       @relation(fields: [clientId], references: [id])
+  recordedBy   User?         @relation("PaymentRecorder", fields: [recordedById], references: [id])
+
+  @@index([clientId])
+  @@index([caseId])
+  @@index([batchId])
+  @@index([date])
+  @@index([status])
+}
+
+model PaymentBatch {
+  id           String    @id @default(cuid())
+  fileName     String
+  uploadedAt   DateTime  @default(now())
+  status       String    @default("PROCESSING")
+  totalAmount  Decimal   @default(0)
+  matchCount   Int       @default(0)
+  unmatchCount Int       @default(0)
+  uploadedById String
+  payments     Payment[]
+  uploadedBy   User      @relation(fields: [uploadedById], references: [id])
+
+  @@index([uploadedAt])
+}
+
+model CreditAccount {
+  id                 String                       @id @default(cuid())
+  caseId             String
+  clientId           String
+  creditorName       String
+  accountNumber      String?
+  accountType        String
+  originalAmount     Decimal?
+  outstandingBalance Decimal
+  monthlyInstalment  Decimal?
+  interestRate       Decimal?
+  termMonths         Int?
+  accountOpenDate    DateTime?
+  premiumSource      String                       @default("NOT_SET")
+  premiumAmount      Decimal?
+  premiumRate        Decimal?
+  premiumConfidence  String                       @default("LOW")
+  hasInsurance       Boolean                      @default(true)
+  insurerName        String?
+  policyNumber       String?
+  lastPaymentDate    DateTime?
+  isPrescribed       Boolean                      @default(false)
+  prescriptionDate   DateTime?
+  status             String                       @default("ACTIVE")
+  isIncluded         Boolean                      @default(true)
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  case               Case                         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  documents          CreditAccountDocument[]
+  assessmentAccounts InsuranceAssessmentAccount[]
+
+  @@index([caseId])
+  @@index([clientId])
+  @@index([accountType])
+  @@index([status])
+}
+
+model CreditAccountDocument {
+  id               String        @id @default(cuid())
+  creditAccountId  String
+  documentType     String
+  fileName         String
+  fileUrl          String
+  fileSize         Int
+  mimeType         String
+  extractionStatus String        @default("PENDING")
+  extractedData    String?
+  extractedPremium Decimal?
+  extractedAt      DateTime?
+  uploadedAt       DateTime      @default(now())
+  uploadedById     String?
+  creditAccount    CreditAccount @relation(fields: [creditAccountId], references: [id], onDelete: Cascade)
+
+  @@index([creditAccountId])
+  @@index([documentType])
+}
+
+model CreditLifeRateTable {
+  id            String    @id @default(cuid())
+  creditorName  String
+  accountType   String
+  minRate       Decimal
+  maxRate       Decimal
+  avgRate       Decimal
+  source        String?
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([creditorName, accountType])
+  @@index([accountType])
+  @@index([isActive])
+}
+
+model InsuranceAssessment {
+  id                  String                       @id @default(cuid())
+  caseId              String
+  clientId            String
+  totalCurrentPremium Decimal                      @default(0)
+  totalAccounts       Int                          @default(0)
+  replacementPremium  Decimal?
+  monthlySavings      Decimal?
+  annualSavings       Decimal?
+  savingsPercent      Decimal?
+  insurer             String?
+  policyType          String?
+  coverAmount         Decimal?
+  status              String                       @default("DRAFT")
+  acceptedAt          DateTime?
+  policyIssuedAt      DateTime?
+  consentGiven        Boolean                      @default(false)
+  consentDate         DateTime?
+  consentMethod       String?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  createdById         String?
+  cancellationLetters CancellationLetter[]
+  Case                Case                         @relation(fields: [caseId], references: [id])
+  accounts            InsuranceAssessmentAccount[]
+  policies            InsurancePolicy[]
+
+  @@index([caseId])
+  @@index([clientId])
+  @@index([status])
+}
+
+model InsuranceAssessmentAccount {
+  id              String              @id @default(cuid())
+  assessmentId    String
+  creditAccountId String
+  currentPremium  Decimal?
+  premiumSource   String              @default("ESTIMATED")
+  isIncluded      Boolean             @default(true)
+  exclusionReason String?
+  assessment      InsuranceAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  creditAccount   CreditAccount       @relation(fields: [creditAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, creditAccountId])
+  @@index([assessmentId])
+  @@index([creditAccountId])
+}
+
+model InsurancePolicy {
+  id                 String              @id @default(cuid())
+  assessmentId       String
+  policyNumber       String              @unique
+  insurer            String
+  startDate          DateTime
+  endDate            DateTime?
+  premiumAmount      Decimal
+  coverAmount        Decimal
+  coverDeath         Boolean             @default(true)
+  coverDisability    Boolean             @default(true)
+  coverRetrenchment  Boolean             @default(false)
+  status             String              @default("ACTIVE")
+  cancelledAt        DateTime?
+  cancellationReason String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  assessment         InsuranceAssessment @relation(fields: [assessmentId], references: [id])
+
+  @@index([assessmentId])
+  @@index([status])
+}
+
+model CancellationLetter {
+  id            String              @id @default(cuid())
+  assessmentId  String
+  creditorName  String
+  accountNumber String?
+  letterType    String              @default("CREDIT_LIFE_CANCELLATION")
+  letterContent String?
+  fileUrl       String?
+  status        String              @default("DRAFT")
+  sentAt        DateTime?
+  sentVia       String?
+  confirmedAt   DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  assessment    InsuranceAssessment @relation(fields: [assessmentId], references: [id])
+
+  @@index([assessmentId])
+  @@index([status])
+}
+
+model LegalMatter {
+  id                 String                   @id @default(cuid())
+  caseId             String
+  clientId           String
+  matterType         String
+  creditorName       String
+  accountNumber      String?
+  originalAmount     Decimal?
+  currentBalance     Decimal?
+  interestCharged    Decimal?
+  lastPaymentDate    DateTime?
+  prescriptionDate   DateTime?
+  isPrescribed       Boolean                  @default(false)
+  judgmentDate       DateTime?
+  judgmentAmount     Decimal?
+  judgmentCourt      String?
+  judgmentCaseNumber String?
+  debtReviewDate     DateTime?
+  debtCounsellorName String?
+  courtOrderDate     DateTime?
+  letterSent         Boolean                  @default(false)
+  letterSentDate     DateTime?
+  responseReceived   Boolean                  @default(false)
+  responseDate       DateTime?
+  responseNotes      String?
+  outcome            String?
+  outcomeDate        DateTime?
+  outcomeNotes       String?
+  amountSaved        Decimal?
+  status             String                   @default("OPEN")
+  priority           String                   @default("MEDIUM")
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  createdById        String?
+  assignedToId       String?
+  letters            LegalLetter[]
+  Case               Case                     @relation(fields: [caseId], references: [id])
+  Client             Client                   @relation(fields: [clientId], references: [id])
+  prescriptionChecks LegalPrescriptionCheck[]
+
+  @@index([caseId])
+  @@index([clientId])
+  @@index([matterType])
+  @@index([status])
+  @@index([isPrescribed])
+}
+
+model LegalLetter {
+  id               String      @id @default(cuid())
+  legalMatterId    String
+  letterType       String
+  recipientName    String
+  recipientAddress String?
+  recipientEmail   String?
+  subject          String?
+  letterContent    String?
+  fileUrl          String?
+  sentVia          String?
+  sentAt           DateTime?
+  sentById         String?
+  trackingNumber   String?
+  responseReceived Boolean     @default(false)
+  responseDate     DateTime?
+  responseContent  String?
+  status           String      @default("DRAFT")
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  legalMatter      LegalMatter @relation(fields: [legalMatterId], references: [id], onDelete: Cascade)
+
+  @@index([legalMatterId])
+  @@index([letterType])
+  @@index([status])
+}
+
+model LegalPrescriptionCheck {
+  id                    String      @id @default(cuid())
+  legalMatterId         String
+  creditorName          String
+  accountType           String?
+  lastPaymentDate       DateTime?
+  debtAge               Int?
+  isPrescribed          Boolean     @default(false)
+  prescriptionDate      DateTime?
+  daysUntilPrescription Int?
+  legalBasis            String?
+  notes                 String?
+  checkedAt             DateTime    @default(now())
+  checkedById           String?
+  legalMatter           LegalMatter @relation(fields: [legalMatterId], references: [id], onDelete: Cascade)
+
+  @@index([legalMatterId])
+  @@index([isPrescribed])
+}
+
+model AuditEvidence {
+  id            String        @id
+  auditId       String
+  fileName      String
+  fileUrl       String
+  fileType      String
+  category      String        @default("GENERAL")
+  description   String?
+  uploadedAt    DateTime      @default(now())
+  uploadedBy    String
+  uploadedById  String?
+  ForensicAudit ForensicAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  User          User?         @relation(fields: [uploadedById], references: [id])
+
+  @@index([auditId])
+  @@index([category])
+  @@index([uploadedById])
+}
+
+model ForensicAudit {
+  id                        String                     @id
+  caseId                    String
+  status                    String                     @default("PENDING")
+  auditorId                 String?
+  findings                  String?
+  recommendations           String?
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  AuditEvidence             AuditEvidence[]
+  User                      User?                      @relation(fields: [auditorId], references: [id])
+  Case                      Case                       @relation(fields: [caseId], references: [id])
+  RecklessLendingAssessment RecklessLendingAssessment?
+
+  @@index([auditorId])
+  @@index([caseId])
+  @@index([status])
+}
+
+model RecklessLendingAssessment {
+  id               String        @id
+  auditId          String        @unique
+  agreementDate    DateTime
+  declaredIncome   Decimal
+  trueIncome       Decimal?
+  declaredExpenses Decimal
+  trueExpenses     Decimal?
+  existingDebt     Decimal
+  availableSurplus Decimal?
+  instalmentAmount Decimal
+  isReckless       Boolean       @default(false)
+  reason           String?
+  assessedBy       String
+  assessedAt       DateTime      @default(now())
+  ForensicAudit    ForensicAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@zenowethu/mcp-docs-server",
+  "version": "1.0.0",
+  "description": "Local MCP server that exposes ZenoCasesSystem documentation as resources",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "PrismaClientKnownRequestError",
+  "code": "P1001",
+  "clientVersion": "5.22.0",
+  "meta": {
+    "modelName": "Client",
+    "database_host": "213.199.57.111",
+    "database_port": 5432
+  }
+}
+PrismaClientKnownRequestError: 
+Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].client.findUnique()` invocation in
+C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\.next\dev\server\chunks\[root-of-the-server]__f0aa1eaa._.js:2146:173
+
+  2143     });
+  2144 }
+  2145 // Check for duplicate ID Number
+→ 2146 const existingClientWithId = await __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].client.findUnique(
+Can't reach database server at `213.199.57.111:5432`
+
+Please make sure your database server is running at `213.199.57.111:5432`.
+    at $n.handleRequestError (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\@prisma\client\runtime\library.js:121:7315)
+    at $n.handleAndLogRequestError (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\@prisma\client\runtime\library.js:121:6623)
+    at $n.request (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\@prisma\client\runtime\library.js:121:6307)
+    at async l (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\@prisma\client\runtime\library.js:130:9633)
+    at async POST (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\.next\dev\server\chunks\[root-of-the-server]__f0aa1eaa._.js:2146:38)
+    at async AppRouteRouteModule.do (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.dev.js:5:37789)
+    at async AppRouteRouteModule.handle (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.dev.js:5:45045)
+    at async responseGenerator (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\.next\dev\server\chunks\node_modules_next_fb6937a4._.js:16104:38)
+    at async AppRouteRouteModule.handleResponse (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.dev.js:1:187851)
+    at async handleResponse (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\.next\dev\server\chunks\node_modules_next_fb6937a4._.js:16166:32)
+    at async handler (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\.next\dev\server\chunks\node_modules_next_fb6937a4._.js:16219:13)
+    at async DevServer.renderToResponseWithComponentsImpl (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\base-server.js:1413:9)
+    at async DevServer.renderPageComponent (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\base-server.js:1465:24)
+    at async DevServer.renderToResponseImpl (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\base-server.js:1515:32)
+    at async DevServer.pipeImpl (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\base-server.js:1021:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\next-server.js:394:17)
+    at async DevServer.handleRequestImpl (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\base-server.js:912:17)
+    at async C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\dev\next-dev-server.js:382:20
+    at async Span.traceAsyncFn (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\trace\trace.js:157:20)
+    at async DevServer.handleRequest (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\dev\next-dev-server.js:378:24)
+    at async invokeRender (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\lib\router-server.js:240:21)
+    at async handleRequest (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\lib\router-server.js:436:24)
+    at async requestHandlerImpl (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\lib\router-server.js:484:13)
+    at async Server.requestListener (C:\Visual Studio Code\FromGIt\cases-app-main\apps\cases\node_modules\next\dist\server\lib\start-server.js:226:13)
