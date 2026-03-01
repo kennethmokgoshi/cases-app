@@ -89,7 +89,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Install Chromium and all necessary dependencies for Puppeteer on Bullseye
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --fix-missing \
     chromium \
     fonts-liberation \
     libasound2 \
