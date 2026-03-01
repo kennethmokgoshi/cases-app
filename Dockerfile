@@ -22,11 +22,11 @@ WORKDIR /app
 # Copy workspace manifests
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/database/package.json ./packages/database/
-COPY packages/auth/package.json ./packages/auth/
-COPY packages/statuses/package.json ./packages/statuses/
-COPY packages/integrations/package.json ./packages/integrations/
+COPY packages/shared-lib/package.json ./packages/shared-lib/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/config/package.json ./packages/config/
+COPY packages/eslint-config/package.json ./packages/eslint-config/
+COPY packages/tsconfig/package.json ./packages/tsconfig/
 
 ARG APP
 COPY apps/${APP}/package.json ./apps/${APP}/
