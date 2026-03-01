@@ -33,7 +33,7 @@ COPY apps/${APP}/package.json ./apps/${APP}/
 
 # Configure pnpm to allow build scripts for critical dependencies
 # This is a security feature in pnpm 10+
-RUN pnpm config set only-built-dependencies --json '["@prisma/client", "prisma", "@sentry/cli", "sharp", "puppeteer", "esbuild", "@sentry/nextjs"]'
+RUN pnpm config set only-built-dependencies --json '["@prisma/client", "prisma", "@prisma/engines", "@sentry/cli", "sharp", "puppeteer", "esbuild", "@sentry/nextjs", "unrs-resolver"]'
 RUN pnpm install --frozen-lockfile
 
 # ── builder stage ─────────────────────────────────────────────────────────────
