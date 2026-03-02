@@ -90,7 +90,7 @@ export async function POST(
 
             await prisma.workflowLog.create({
                 data: {
-                    caseId: assessment.Case.id } fromStatus: assessment.status,
+                    caseId: assessment.Case.id, fromStatus: assessment.status,
                     toStatus: 'LETTERS_GENERATED',
                     action: 'CANCELLATION_LETTERS_GENERATED',
                     userId: session.user.id,
