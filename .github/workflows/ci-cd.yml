@@ -21,7 +21,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: "10.30.1"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,6 +34,8 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @zenowethu/database run db:generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Lint (all apps + packages)
         run: pnpm turbo lint
@@ -107,16 +109,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
-            cd /opt/zenowethu
-            git pull origin main
-            docker compose up -d --build
-            docker compose exec -T db pnpm --filter @zenowethu/database run db:migrate --name prod --deploy || true
-            docker system prune -f
+          version: "10.30.1"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        run: pnpm --filter @zenowethu/database exec prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Trigger Dokploy deployments
+        run: |
+          set -e
+          for SERVICE_ID in ${{ secrets.DOKPLOY_CASES_ID }} ${{ secrets.DOKPLOY_INSURANCE_ID }} ${{ secrets.DOKPLOY_LEGAL_ID }} ${{ secrets.DOKPLOY_FORENSIC_ID }} ${{ secrets.DOKPLOY_FINANCE_ID }}; do
+            echo "Deploying service: $SERVICE_ID"
+            curl -s -X POST "${{ secrets.DOKPLOY_URL }}/api/trpc/application.deploy?batch=1" \
+              -H "X-Api-Key: ${{ secrets.DOKPLOY_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"0\":{\"json\":{\"applicationId\":\"$SERVICE_ID\"}}}"
+            echo ""
+          done
