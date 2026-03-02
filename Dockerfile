@@ -14,8 +14,8 @@ ARG APP=cases
 FROM node:20-bullseye AS deps
 RUN apt-get update && apt-get install -y openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm — pin to exact version matching packageManager in package.json
+RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
 WORKDIR /app
 
@@ -31,9 +31,7 @@ COPY packages/tsconfig/package.json ./packages/tsconfig/
 ARG APP
 COPY apps/${APP}/package.json ./apps/${APP}/
 
-# Configure pnpm to allow build scripts for critical dependencies
-# This is a security feature in pnpm 10+
-RUN pnpm config set only-built-dependencies --json '["@prisma/client", "prisma", "@prisma/engines", "@sentry/cli", "sharp", "puppeteer", "esbuild", "@sentry/nextjs", "unrs-resolver"]'
+# pnpm v10 onlyBuiltDependencies is declared in package.json — no CLI override needed
 RUN pnpm install --frozen-lockfile
 
 # ── builder stage ─────────────────────────────────────────────────────────────
@@ -43,7 +41,7 @@ ARG CACHE_BUST=20260220000000
 ARG APP=cases
 
 RUN apt-get update && apt-get install -y openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
 WORKDIR /app
 
