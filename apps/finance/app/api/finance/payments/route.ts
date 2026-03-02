@@ -8,7 +8,8 @@ const PaymentQuerySchema = z.object({
     limit: z.coerce.number().int().min(1).max(200).default(50),
     search: z.string().default(''),
     method: z.string().default(''),
-    status: z.string().default('') } from: z.string().optional(),
+    status: z.string().default(''),
+    from: z.string().optional(),
     to: z.string().optional() });
 
 const PaymentCreateSchema = z.object({
@@ -36,14 +37,15 @@ export async function GET(request: Request) {
             limit: searchParams.get('limit'),
             search: searchParams.get('search') ?? '',
             method: searchParams.get('method') ?? '',
-            status: searchParams.get('status') ?? '' } from: searchParams.get('from') ?? undefined,
+            status: searchParams.get('status') ?? '',
+            from: searchParams.get('from') ?? undefined,
             to: searchParams.get('to') ?? undefined });
 
         if (!parsed.success) {
             return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
         }
 
-        const { page, limit, search, method, status } from, to } = parsed.data;
+        const { page, limit, search, method, status, from, to } = parsed.data;
         const skip = (page - 1) * limit;
 
         const where: any = {};
