@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { requestTransfer, closeBrowser } logger, from '@zenowethu/shared-lib';
+import { requestTransfer, closeBrowser, logger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import path from 'path';
 import fs from 'fs';

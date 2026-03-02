@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { sendStatusChangeNotification, sendManualMessage } logger, from '@zenowethu/shared-lib';
+import { sendStatusChangeNotification, sendManualMessage , logger } from '@zenowethu/shared-lib';
 import { CaseNotificationSendSchema, parseBody } from '@/lib/schemas';
 
 // GET - Get notification history for a case

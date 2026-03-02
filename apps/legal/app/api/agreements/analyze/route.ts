@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { analyzeAgreementText } logger, from '@zenowethu/shared-lib';
+import { analyzeAgreementText, logger } from '@zenowethu/shared-lib';
 import { PDFDocument } from 'pdf-lib';
 
 export async function POST(req: NextRequest) {

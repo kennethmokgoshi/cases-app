@@ -1,5 +1,5 @@
 import { prisma } from '@zenowethu/database';
-import { validateApiKey, hasPermission, apiError, apiSuccess } logger, from '@zenowethu/shared-lib';
+import { validateApiKey, hasPermission, apiError, apiSuccess, logger } from '@zenowethu/shared-lib';
 
 /**
  * GET /api/v1/cases/:id/status

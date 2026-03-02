@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory } logger, from '@zenowethu/shared-lib';
+import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory , logger } from '@zenowethu/shared-lib';
 import { SearchWithSuggestions } from '@zenowethu/ui';
 
 

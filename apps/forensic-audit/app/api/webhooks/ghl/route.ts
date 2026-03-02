@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GhlService } logger, from '@zenowethu/shared-lib';
+import { GhlService , logger } from '@zenowethu/shared-lib';
 
 /**
  * API Route for GoHighLevel Webhooks

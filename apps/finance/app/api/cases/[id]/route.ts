@@ -522,7 +522,7 @@ export async function PATCH(
                 const session = await auth();
                 await prisma.workflowLog.create({
                     data: {
-                        caseId: id } fromStatus: updatedCase.status,
+                        caseId: id, fromStatus: updatedCase.status,
                         toStatus: updatedCase.status,
                         // action: 'EDIT',
                         notes: `[EDIT] Updated description`, // Shortened to avoid huge logs
@@ -547,7 +547,7 @@ export async function PATCH(
                 for (const task of addedTasks) {
                     await prisma.workflowLog.create({
                         data: {
-                            caseId: id } fromStatus: updatedCase.status,
+                            caseId: id, fromStatus: updatedCase.status,
                             toStatus: updatedCase.status,
                             // action: 'TASK_CREATED', // Temporarily disabled due to schema/client mismatch
                             notes: `[TASK_CREATED] Created task: "${task.text}"`,
@@ -563,7 +563,7 @@ export async function PATCH(
                     if (task.done && !oldTask.done) {
                         await prisma.workflowLog.create({
                             data: {
-                                caseId: id } fromStatus: updatedCase.status,
+                                caseId: id, fromStatus: updatedCase.status,
                                 toStatus: updatedCase.status,
                                 // action: 'TASK_COMPLETED',
                                 notes: `[TASK_COMPLETED] Completed task: "${task.text}"`,
@@ -573,7 +573,7 @@ export async function PATCH(
                     } else if (!task.done && oldTask.done) {
                         await prisma.workflowLog.create({
                             data: {
-                                caseId: id } fromStatus: updatedCase.status,
+                                caseId: id, fromStatus: updatedCase.status,
                                 toStatus: updatedCase.status,
                                 // action: 'TASK_REOPENED',
                                 notes: `[TASK_REOPENED] Reopened task: "${task.text}"`,
@@ -588,7 +588,7 @@ export async function PATCH(
                 for (const task of deletedTasks) {
                     await prisma.workflowLog.create({
                         data: {
-                            caseId: id } fromStatus: updatedCase.status,
+                            caseId: id, fromStatus: updatedCase.status,
                             toStatus: updatedCase.status,
                             // action: 'TASK_DELETED',
                             notes: `[TASK_DELETED] Deleted task: "${task.text}"`,

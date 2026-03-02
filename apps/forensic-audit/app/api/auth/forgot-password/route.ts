@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import crypto from 'crypto';
-import { logger } , ForgotPasswordSchema, parseBody from '@zenowethu/shared-lib';
+import { logger , ForgotPasswordSchema, parseBody } from '@zenowethu/shared-lib';
 
 export async function POST(request: NextRequest) {
     try {
