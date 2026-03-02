@@ -26,6 +26,26 @@ import pino from 'pino';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Permissive log-function type that covers both calling conventions:
+//   logger.info('message')
+//   logger.info('message', extraArg)
+//   logger.info({ key: value }, 'message')
+// Pino v10 introduces overloads with `msg?: never` that break the second form.
+interface AppLogFn {
+    (msg: string, ...args: any[]): void;
+    (obj: object, msg?: string, ...args: any[]): void;
+}
+
+export interface AppLoggerType {
+    trace: AppLogFn;
+    debug: AppLogFn;
+    info: AppLogFn;
+    warn: AppLogFn;
+    error: AppLogFn;
+    fatal: AppLogFn;
+    child: (bindings: object) => AppLoggerType;
+}
+
 export const logger = pino({
     level: process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info'),
 
@@ -54,7 +74,7 @@ export const logger = pino({
     // Fields present on every log line
     base: {
         env: process.env.NODE_ENV,
-        ...(process.env.APP_NAME ? { app: process.env.APP_NAME } : {}) } });
+        ...(process.env.APP_NAME ? { app: process.env.APP_NAME } : {}) } }) as unknown as AppLoggerType;
 
 /**
  * Create a child logger pre-tagged with a module name.
@@ -62,6 +82,6 @@ export const logger = pino({
  *
  * @param module  e.g. 'api/cases/route', 'shared-lib/auth', 'notifications'
  */
-export const createLogger = (module: string) => logger.child({ module });
+export const createLogger = (module: string): AppLoggerType => logger.child({ module });
 
-export type AppLogger = ReturnType<typeof createLogger>;
+export type AppLogger = AppLoggerType;

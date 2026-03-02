@@ -309,11 +309,13 @@ export const ReanalyzeSchema = z.object({
 // ─── Helper: parse and return 400 on failure ─────────────────────────────────
 
 import { NextResponse } from 'next/server';
-import type { ZodSchema } from 'zod';
+import type { ZodType } from 'zod';
 
-export function parseBody<T>(schema: ZodSchema<T>, data: unknown):
+type ParseResult<T> =
     | { success: true; data: T }
-    | { success: false; response: ReturnType<typeof NextResponse.json> } {
+    | { success: false; response: NextResponse };
+
+export function parseBody<T>(schema: ZodType<T>, data: unknown): ParseResult<T> {
     const result = schema.safeParse(data);
     if (!result.success) {
         const errors = result.error.flatten().fieldErrors;
