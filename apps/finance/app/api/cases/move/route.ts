@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, CaseMoveSchema, parseBody  } from '@zenowethu/shared-lib';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
     try {
         const session = await auth();
         if (!session?.user) {
