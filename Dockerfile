@@ -19,7 +19,8 @@ RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
 WORKDIR /app
 
-# Copy workspace manifests
+# Copy workspace manifests — ALL apps needed so pnpm-lock.yaml validates correctly
+# (pnpm v10 --frozen-lockfile fails if any workspace package from the lockfile is missing)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/database/package.json ./packages/database/
 COPY packages/shared-lib/package.json ./packages/shared-lib/
@@ -28,8 +29,13 @@ COPY packages/config/package.json ./packages/config/
 COPY packages/eslint-config/package.json ./packages/eslint-config/
 COPY packages/tsconfig/package.json ./packages/tsconfig/
 
-ARG APP
-COPY apps/${APP}/package.json ./apps/${APP}/
+# Copy ALL app package.json files (not just the target) so the full workspace
+# matches the lockfile. pnpm --frozen-lockfile validates every declared workspace.
+COPY apps/cases/package.json ./apps/cases/
+COPY apps/insurance/package.json ./apps/insurance/
+COPY apps/legal/package.json ./apps/legal/
+COPY apps/forensic-audit/package.json ./apps/forensic-audit/
+COPY apps/finance/package.json ./apps/finance/
 
 # pnpm v10 onlyBuiltDependencies is declared in package.json — no CLI override needed
 RUN pnpm install --frozen-lockfile
