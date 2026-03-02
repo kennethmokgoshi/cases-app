@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, ProjectCreateSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, ProjectCreateSchema, parseBody  } from '@zenowethu/shared-lib';
 
 // Helper function to recursively fetch children
 async function getProjectWithChildren(projectId: string, depth: number = 5): Promise<unknown> {

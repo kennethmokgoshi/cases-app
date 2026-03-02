@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, ApiKeyPatchSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, ApiKeyPatchSchema, parseBody  } from '@zenowethu/shared-lib';
 
 // GET - Get single API key details
 export async function GET(

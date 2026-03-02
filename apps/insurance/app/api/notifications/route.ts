@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, NotificationReadSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, NotificationReadSchema, parseBody  } from '@zenowethu/shared-lib';
 
 // GET - Get all notifications for current user
 export async function GET(request: Request) {

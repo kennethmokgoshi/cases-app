@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, TemplateCreateSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, TemplateCreateSchema, parseBody  } from '@zenowethu/shared-lib';
 
 // GET - List all message templates
 export async function GET() {

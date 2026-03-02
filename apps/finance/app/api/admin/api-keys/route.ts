@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, ApiKeyCreateSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, ApiKeyCreateSchema, parseBody  } from '@zenowethu/shared-lib';
 import crypto from 'crypto';
 
 // Generate a secure, random API key

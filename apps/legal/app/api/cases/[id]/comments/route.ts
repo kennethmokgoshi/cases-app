@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, CaseCommentCreateSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, CaseCommentCreateSchema, parseBody  } from '@zenowethu/shared-lib';
 
 // Parse @mentions from comment text - returns array of usernames
 function parseMentions(text: string): string[] {

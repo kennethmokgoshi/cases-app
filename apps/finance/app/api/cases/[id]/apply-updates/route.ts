@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, ApplyUpdatesSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, ApplyUpdatesSchema, parseBody  } from '@zenowethu/shared-lib';
 
 interface UpdateRequest {
     updates: {

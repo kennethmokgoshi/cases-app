@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, CasePatchSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, CasePatchSchema, parseBody  } from '@zenowethu/shared-lib';
 
 
 export async function GET(

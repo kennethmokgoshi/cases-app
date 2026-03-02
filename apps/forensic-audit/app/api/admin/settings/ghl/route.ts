@@ -1,7 +1,7 @@
 'use server';
 
 import { NextResponse } from 'next/server';
-import { auth, logger, GhlSettingsSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, GhlSettingsSchema, parseBody  } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { invalidateGHLCredentialsCache } from '@zenowethu/shared-lib';
 

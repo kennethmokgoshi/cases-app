@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, ReanalyzeSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, ReanalyzeSchema, parseBody  } from '@zenowethu/shared-lib';
 import { extractDocumentsFromCombinedPdf, analyzeDocument, batchAnalyzeDocuments, verifyIdNumbers } from '@zenowethu/shared-lib';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';

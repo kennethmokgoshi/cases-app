@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, UserCreateSchema, parseBody  }from '@zenowethu/shared-lib';
+import { auth, logger, UserCreateSchema, parseBody  } from '@zenowethu/shared-lib';
 import bcrypt from 'bcryptjs';
 
 export async function GET(request: NextRequest) {
