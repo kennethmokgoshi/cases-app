@@ -48,11 +48,37 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/prefer-as-const": "warn",
       "@typescript-eslint/prefer-namespace-keyword": "warn",
       "@typescript-eslint/triple-slash-reference": "warn",
-      // react / next
+      // react/recommended error-level rules → warn
+      "react/display-name": "warn",
+      "react/jsx-key": "warn",
+      "react/no-children-prop": "warn",
+      "react/no-danger-with-children": "warn",
+      "react/no-deprecated": "warn",
+      "react/no-direct-mutation-state": "warn",
+      "react/no-find-dom-node": "warn",
+      "react/no-is-mounted": "warn",
+      "react/no-render-return-value": "warn",
+      "react/no-string-refs": "warn",
       "react/no-unescaped-entities": "warn",
+      "react/require-render-return": "warn",
+      // react-hooks
+      "react-hooks/rules-of-hooks": "warn",
       "react-hooks/exhaustive-deps": "warn",
+      // @next/next error-level rules → warn
+      "@next/next/no-html-link-for-pages": "warn",
+      "@next/next/no-sync-scripts": "warn",
+      "@next/next/inline-script-id": "warn",
+      "@next/next/no-assign-module-variable": "warn",
+      "@next/next/no-document-import-in-page": "warn",
+      "@next/next/no-duplicate-head": "warn",
+      "@next/next/no-head-import-in-document": "warn",
+      "@next/next/no-script-component-in-head": "warn",
       "@next/next/no-img-element": "warn",
+      // eslint rules enabled by typescript-eslint/eslint-recommended
+      "no-var": "warn",
       "prefer-const": "warn",
+      "prefer-rest-params": "warn",
+      "prefer-spread": "warn",
     },
   },
 ]);
