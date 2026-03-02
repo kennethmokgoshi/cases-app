@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getStatusByCode, STATUS_CATEGORIES } logger, from '@zenowethu/shared-lib';
+import { getStatusByCode, STATUS_CATEGORIES, logger } from '@zenowethu/shared-lib';
 
 type Suggestion = {
     id: string;
