@@ -1,5 +1,5 @@
 
-import { validateSAID, verifyIdNumbers } logger, from '@zenowethu/shared-lib';
+import { validateSAID, verifyIdNumbers, logger } from '@zenowethu/shared-lib';
 
 // Mocking the OpenAI response parsing logic since we can't easily import the internal function without exporting it
 // But we can test the helper functions we found.
