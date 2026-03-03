@@ -25,7 +25,7 @@ import {
     renderTemplate
 } from './templates';
 import { getGHLCredentials } from '../integrations';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 // Configuration
 const SMS_ENABLED = process.env.SMS_ENABLED === 'true';

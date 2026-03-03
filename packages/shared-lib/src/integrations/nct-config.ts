@@ -1,5 +1,5 @@
 import { prisma } from '@zenowethu/database';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 interface NCTCredentials {
     username: string;

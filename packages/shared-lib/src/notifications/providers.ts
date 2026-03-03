@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 // SMS and Email Provider Interfaces
 // Abstraction layer for different notification providers

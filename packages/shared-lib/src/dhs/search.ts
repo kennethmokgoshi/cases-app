@@ -10,7 +10,7 @@ import { getBrowser, loginToDHS, delay, DHS_CONFIG } from './browser';
 import { extractConsumerInfo } from './extraction';
 import { getDebtCounsellorInfo } from './counsellor';
 import type { DHSConsumerInfo, DHSDebtCounsellorInfo, DHSDetailedInfo } from './types';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 /**
  * Search for a consumer in DHS (for new transfer request)

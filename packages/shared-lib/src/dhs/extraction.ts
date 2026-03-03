@@ -7,7 +7,7 @@ import fs from 'fs';
 import { Page } from 'puppeteer';
 import { delay } from './browser';
 import type { DHSConsumerInfo } from './types';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 /**
  * Extract consumer information from the search results table

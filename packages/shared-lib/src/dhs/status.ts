@@ -9,7 +9,7 @@ import { getDHSCredentials } from '../integrations';
 import { getBrowser, loginToDHS, delay, DHS_CONFIG } from './browser';
 import { extractConsumerInfo, getDeclineReason } from './extraction';
 import type { DHSTransferStatus, DHSDebtCounsellorInfo, DHSTransferCheckResult } from './types';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 /**
  * Check if a transfer request exists for a consumer

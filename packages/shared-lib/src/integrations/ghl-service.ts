@@ -1,6 +1,6 @@
 import { prisma } from '@zenowethu/database';
 import { getGHLCredentials } from './ghl-config';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 export class GhlService {
     static async handleWebhook(payload: any) {

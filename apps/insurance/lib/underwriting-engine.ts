@@ -17,7 +17,7 @@ import { calculateSavings, identifyJunkCover } from './insurance-engine';
 
 export type UnderwritingDecision = 'APPROVE' | 'CONDITIONAL_APPROVE' | 'REFER' | 'DECLINE';
 export type ProductType = 'CREDIT_LIFE' | 'DISABILITY' | 'RETRENCHMENT' | 'FUNERAL';
-export type ProductDecision = 'ELIGIBLE' | 'ELIGIBLE_WITH_LOADING' | 'REFER' | 'INELIGIBLE';
+export type ProductDecision = 'ELIGIBLE' | 'ELIGIBLE_WITH_LOADING' | 'REFER' | 'INELIGIBLE' | 'DECLINE';
 
 export interface ProductEligibility {
     product: ProductType;

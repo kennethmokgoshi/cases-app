@@ -17,12 +17,12 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  turbopack: {
+    root: '../../'
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '50mb'
-    },
-    turbopack: {
-      root: '../../'
     }
   },
   async headers() {

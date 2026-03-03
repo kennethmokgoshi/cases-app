@@ -5,7 +5,7 @@
 
 import puppeteer, { Browser, Page } from 'puppeteer';
 import { getDHSCredentials } from '../integrations';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 // Helper function to wait - replaces deprecated page.waitForTimeout
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

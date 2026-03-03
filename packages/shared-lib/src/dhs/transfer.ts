@@ -8,7 +8,7 @@ import path from 'path';
 import { getDHSCredentials } from '../integrations';
 import { getBrowser, loginToDHS, delay, DHS_CONFIG } from './browser';
 import type { DHSTransferRequestResult } from './types';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '../logger';
 
 /**
  * Request a new transfer for a consumer
