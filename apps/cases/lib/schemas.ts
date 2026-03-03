@@ -311,16 +311,17 @@ export const ReanalyzeSchema = z.object({
 import { NextResponse } from 'next/server';
 
 export function parseBody<T>(
-    schema: { safeParse: (data: unknown) => { success: true; data: T } | { success: false; error: any } },
+    schema: { safeParse: (data: unknown) => any },
     data: unknown
-): { success: true; data: T } | { success: false; response: NextResponse } {
+): { success: boolean; data: T; response: NextResponse } {
     const result = schema.safeParse(data);
     if (result.success) {
-        return { success: true as const, data: result.data };
+        return { success: true, data: result.data, response: null as any };
     }
     const errors = result.error.flatten().fieldErrors;
     return {
-        success: false as const,
+        success: false,
+        data: null as any,
         response: NextResponse.json(
             { error: 'Validation failed', errors },
             { status: 400 }

@@ -4,6 +4,7 @@ import { calculateSlaDeadline , logger, CaseCreateSchema, parseBody } from '@zen
 import { sendStatusChangeNotification } from '@zenowethu/shared-lib';
 
 import { auth } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function GET(request: Request) {
     try {
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
             select: { id: true, name: true, parentId: true, type: true }
         });
 
-        const projectMap = new Map(allProjects.map(p => [p.id, p]));
+        const projectMap = new Map<string, { id: string; name: string; parentId: string | null; type: string }>(allProjects.map(p => [p.id, p]));
 
         // Helper to find all descendant IDs
         const getDescendantIds = (rootId: string): string[] => {
@@ -151,7 +152,7 @@ export async function GET(request: Request) {
 
 
         const getFullPath = (id: string): string => {
-            let curr = projectMap.get(id);
+            let curr: { id: string; name: string; parentId: string | null; type: string } | undefined = projectMap.get(id);
             if (!curr) return '';
 
             const pathParts: { name: string; type: string }[] = [];
@@ -226,6 +227,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(CaseCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
+        const body = parsed.data as z.infer<typeof CaseCreateSchema>;
         const {
             client,
             projectId,
@@ -234,7 +236,7 @@ export async function POST(request: Request) {
             partnerName = null,
             partnerBranch = null,
             partnerSplitPercent = 0,
-            services = null } = parsed.data;
+            services = null } = body;
 
         // Validate required fields
         if (!client?.firstName || !client?.lastName || !client?.idNumber || !projectId) {
@@ -521,7 +523,7 @@ export async function POST(request: Request) {
                     });
 
                     // Deduplicate managers by user ID (a user might be manager on multiple levels)
-                    const uniqueManagers = Array.from(new Map(projectMembers.map(pm => [pm.user.id, pm.user])).values());
+                    const uniqueManagers = Array.from(new Map(projectMembers.map(pm => [pm.user.id, pm.user])).values()) as { id: string; firstName: string; lastName: string; email: string }[];
 
                     if (uniqueManagers.length > 0) {
                         const creatorName = newCase.createdBy

@@ -13,15 +13,16 @@ import { generatePolicySchedule } from '../../../../../../lib/policy-pdf';
  */
 export async function POST(
     _request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return new NextResponse('Unauthorized', { status: 401 });
 
         // 1. Fetch assessment with client and accounts
         const assessment = await prisma.insuranceAssessment.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 Case: { include: { client: true } },
                 accounts: {

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { auth, logger, DhsSettingsSchema, parseBody  } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { invalidateDHSCredentialsCache } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 // GET /api/admin/settings/dhs - Get DHS credentials
 export async function GET() {
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(DhsSettingsSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof DhsSettingsSchema>;
         const { username, password } = body;
 
         if (!username) {

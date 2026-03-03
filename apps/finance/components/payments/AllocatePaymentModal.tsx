@@ -6,7 +6,8 @@ type Payment = {
   id: string
   amount: number
   reference: string | null
-  paymentDate: string
+  date?: string
+  paymentDate?: string
 }
 
 type ClientResult = {
@@ -20,14 +21,15 @@ type ClientResult = {
 interface AllocatePaymentModalProps {
   payment: Payment
   onClose: () => void
-  onAllocated: () => void
+  onAllocated?: () => void
+  onSuccess?: (paymentId: string) => void
 }
 
 function formatZAR(amount: number) {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount)
 }
 
-export function AllocatePaymentModal({ payment, onClose, onAllocated }: AllocatePaymentModalProps) {
+export function AllocatePaymentModal({ payment, onClose, onAllocated, onSuccess }: AllocatePaymentModalProps) {
   const [query, setQuery]               = useState('')
   const [results, setResults]           = useState<ClientResult[]>([])
   const [searching, setSearching]       = useState(false)
@@ -69,7 +71,8 @@ export function AllocatePaymentModal({ payment, onClose, onAllocated }: Allocate
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body) })
       if (res.ok) {
-        onAllocated()
+        if (onAllocated) onAllocated()
+        if (onSuccess) onSuccess(payment.id)
         onClose()
       } else {
         const err = await res.json()

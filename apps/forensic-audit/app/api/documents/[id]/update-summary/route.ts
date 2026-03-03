@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, DocumentSummarySchema, parseBody  } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function POST(
     request: Request,
@@ -16,7 +17,7 @@ export async function POST(
         const documentId = params.id;
         const parsed = parseBody(DocumentSummarySchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof DocumentSummarySchema>;
 
         const { openAccounts, closedAccounts, totalDebt, totalInstallment } = body;
 

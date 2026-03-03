@@ -3,6 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import crypto from 'crypto';
 import { ApiKeyCreateSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 // Generate a secure, random API key
 function generateApiKey(): string {
@@ -59,7 +60,8 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(ApiKeyCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { name, description, projectId, permissions, rateLimit, expiresAt } = parsed.data;
+        const body = parsed.data as z.infer<typeof ApiKeyCreateSchema>;
+        const { name, description, projectId, permissions, rateLimit, expiresAt } = body;
 
         // Generate the plaintext key — this is the ONLY moment it exists in plaintext
         const fullKey = generateApiKey();

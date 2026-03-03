@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, ApiKeyCreateSchema, parseBody  } from '@zenowethu/shared-lib';
 import crypto from 'crypto';
+import { z } from 'zod';
 
 // Generate a secure, random API key
 function generateApiKey(): string {
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(ApiKeyCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof ApiKeyCreateSchema>;
         const { name, description, projectId, permissions, rateLimit, expiresAt } = body;
 
         if (!name) {

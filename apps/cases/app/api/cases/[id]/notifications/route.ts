@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { sendStatusChangeNotification, sendManualMessage , logger } from '@zenowethu/shared-lib';
 import { CaseNotificationSendSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 // GET - Get notification history for a case
 export async function GET(
@@ -40,7 +41,8 @@ export async function POST(
         const { id } = await params;
         const parsed = parseBody(CaseNotificationSendSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { statusCode, channel, message, recipient } = parsed.data;
+        const body = parsed.data as z.infer<typeof CaseNotificationSendSchema>;
+        const { statusCode, channel, message, recipient } = body;
 
         // Get case with client info
         const caseData = await prisma.case.findUnique({

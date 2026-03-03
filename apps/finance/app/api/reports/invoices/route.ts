@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const from = searchParams.get('from')
     const to   = searchParams.get('to')
 
-    const where: Parameters<typeof prisma.invoice.findMany>[0]['where'] = {
+    const where: any = {
       status: { not: 'CANCELLED' } }
 
     if (from || to) {

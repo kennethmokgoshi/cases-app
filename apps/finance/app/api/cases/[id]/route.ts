@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, CasePatchSchema, parseBody  } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 
 export async function GET(
@@ -49,11 +50,11 @@ export async function GET(
         const allProjects = await prisma.project.findMany({
             select: { id: true, name: true, parentId: true, type: true }
         });
-        const projectMap = new Map(allProjects.map(p => [p.id, p]));
+        const projectMap = new Map<string, { id: string; name: string; parentId: string | null; type: string }>(allProjects.map(p => [p.id, p]));
 
         const getPath = (projectId: string): string => {
             const parts: { name: string; type: string }[] = [];
-            let curr = projectMap.get(projectId);
+            let curr: { id: string; name: string; parentId: string | null; type: string } | undefined = projectMap.get(projectId);
 
             while (curr) {
                 if (curr.type !== 'ROOT') {
@@ -115,6 +116,7 @@ export async function PATCH(
         const { id } = await params;
         const parsed = parseBody(CasePatchSchema, await request.json());
         if (!parsed.success) return parsed.response;
+        const body = parsed.data as z.infer<typeof CasePatchSchema>;
         const {
             client,
             closedAccounts,
@@ -166,7 +168,7 @@ export async function PATCH(
             services,
             description, // New field
             ...otherCaseData // Catch any other fields not explicitly destructured for case update
-        } = parsed.data;
+        } = body;
 
         // Get the current case's client
         const currentCase = await prisma.case.findUnique({
@@ -204,8 +206,8 @@ export async function PATCH(
                             email: client.email || existingByIdNumber.email,
                             address: client.address || existingByIdNumber.address,
                             employer: client.employer || existingByIdNumber.employer,
-                            grossSalary: client.grossSalary ? parseFloat(client.grossSalary) : existingByIdNumber.grossSalary,
-                            netSalary: client.netSalary ? parseFloat(client.netSalary) : existingByIdNumber.netSalary }
+                            grossSalary: client.grossSalary ? parseFloat(String(client.grossSalary)) : existingByIdNumber.grossSalary,
+                            netSalary: client.netSalary ? parseFloat(String(client.netSalary)) : existingByIdNumber.netSalary }
                     });
 
                     // 2. Find Latest Case for Existing Client
@@ -427,9 +429,9 @@ export async function PATCH(
             if (client.address !== undefined) clientUpdateData.address = client.address || null;
             if (client.employer !== undefined) clientUpdateData.employer = client.employer || null;
             if (client.employeeNo !== undefined) clientUpdateData.employeeNo = client.employeeNo || null;
-            if (client.grossSalary !== undefined) clientUpdateData.grossSalary = client.grossSalary ? parseFloat(client.grossSalary) : null;
-            if (client.netSalary !== undefined) clientUpdateData.netSalary = client.netSalary ? parseFloat(client.netSalary) : null;
-            if (client.salaryPayDate !== undefined) clientUpdateData.salaryPayDate = client.salaryPayDate ? parseInt(client.salaryPayDate) : null;
+            if (client.grossSalary !== undefined) clientUpdateData.grossSalary = client.grossSalary ? parseFloat(String(client.grossSalary)) : null;
+            if (client.netSalary !== undefined) clientUpdateData.netSalary = client.netSalary ? parseFloat(String(client.netSalary)) : null;
+            if (client.salaryPayDate !== undefined) clientUpdateData.salaryPayDate = client.salaryPayDate ? parseInt(String(client.salaryPayDate)) : null;
             if (client.type !== undefined) clientUpdateData.type = client.type || 'Standard';
         }
 
@@ -606,11 +608,11 @@ export async function PATCH(
         const allProjects = await prisma.project.findMany({
             select: { id: true, name: true, parentId: true, type: true }
         });
-        const projectMap = new Map(allProjects.map(p => [p.id, p]));
+        const projectMap = new Map<string, { id: string; name: string; parentId: string | null; type: string }>(allProjects.map(p => [p.id, p]));
 
         const getPath = (projectId: string): string => {
             const parts: { name: string; type: string }[] = [];
-            let curr = projectMap.get(projectId);
+            let curr: { id: string; name: string; parentId: string | null; type: string } | undefined = projectMap.get(projectId);
 
             while (curr) {
                 if (curr.type !== 'ROOT') {

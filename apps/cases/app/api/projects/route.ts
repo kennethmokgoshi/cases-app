@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import { ProjectCreateSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 // Helper function to recursively fetch children
 async function getProjectWithChildren(projectId: string, depth: number = 5): Promise<unknown> {
@@ -251,8 +252,8 @@ export async function POST(request: NextRequest) {
 
         const parsed = parseBody(ProjectCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
-
-        let { name, description, type, clientType, parentId, members } = parsed.data;
+        const body = parsed.data as z.infer<typeof ProjectCreateSchema>;
+        let { name, description, type, clientType, parentId, members } = body;
 
         // Determine effective parent ID first
         if (type === 'ACQUISITION_SOURCE' && !parentId) {

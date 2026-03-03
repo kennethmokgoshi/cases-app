@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { auth, logger, GhlSettingsSchema, parseBody  } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { invalidateGHLCredentialsCache } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 // GET /api/admin/settings/ghl - Get GHL credentials
 export async function GET() {
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(GhlSettingsSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof GhlSettingsSchema>;
         const { apiKey, locationId, email, password } = body;
 
         // Update settings in database

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, TemplateCreateSchema, parseBody  } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 // GET - List all message templates
 export async function GET() {
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(TemplateCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof TemplateCreateSchema>;
         const { name, description, content, channel, category } = body;
 
         if (!name || !content || !channel || !category) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, CaseMoveSchema, parseBody  } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function POST(request: Request) {
     try {
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(CaseMoveSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof CaseMoveSchema>;
         const { caseIds, targetProjectId } = body;
 
         if (!Array.isArray(caseIds) || caseIds.length === 0 || !targetProjectId) {

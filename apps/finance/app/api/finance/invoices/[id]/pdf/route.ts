@@ -84,7 +84,7 @@ export async function GET(
     // Update pdfPath in DB (fire-and-forget)
     prisma.invoice.update({ where: { id: params.id }, data: { pdfPath: relPath } }).catch(() => {})
 
-    return new Response(pdfBytes, {
+    return new Response(Buffer.from(pdfBytes), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.pdf"`,

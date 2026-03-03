@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import bcrypt from 'bcryptjs';
 import { logger , ResetPasswordSchema, parseBody } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function POST(request: NextRequest) {
     try {
         const parsed = parseBody(ResetPasswordSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { token, password } = parsed.data;
+        const body = parsed.data as z.infer<typeof ResetPasswordSchema>;
+        const { token, password } = body;
 
         if (!token || !password) {
             return NextResponse.json({ error: 'Token and new password are required' }, { status: 400 });

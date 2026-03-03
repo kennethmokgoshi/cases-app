@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, CasePatchSchema, parseBody  } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 
 export async function GET(
@@ -53,14 +54,14 @@ export async function GET(
 
         const getPath = (projectId: string): string => {
             const parts: { name: string; type: string }[] = [];
-            let curr = projectMap.get(projectId);
+            let curr: { id: string; name: string; parentId: string | null; type: string } | undefined = projectMap.get(projectId) as { id: string; name: string; parentId: string | null; type: string } | undefined;
 
             while (curr) {
                 if (curr.type !== 'ROOT') {
                     parts.unshift({ name: curr.name, type: curr.type });
                 }
                 if (curr.parentId) {
-                    curr = projectMap.get(curr.parentId);
+                    curr = projectMap.get(curr.parentId) as { id: string; name: string; parentId: string | null; type: string } | undefined;
                 } else {
                     break;
                 }
@@ -115,6 +116,7 @@ export async function PATCH(
         const { id } = await params;
         const parsed = parseBody(CasePatchSchema, await request.json());
         if (!parsed.success) return parsed.response;
+        const body = parsed.data as z.infer<typeof CasePatchSchema>;
         const {
             client,
             closedAccounts,
@@ -166,7 +168,7 @@ export async function PATCH(
             services,
             description, // New field
             ...otherCaseData // Catch any other fields not explicitly destructured for case update
-        } = parsed.data;
+        } = body;
 
         // Get the current case's client
         const currentCase = await prisma.case.findUnique({
@@ -610,14 +612,14 @@ export async function PATCH(
 
         const getPath = (projectId: string): string => {
             const parts: { name: string; type: string }[] = [];
-            let curr = projectMap.get(projectId);
+            let curr: { id: string; name: string; parentId: string | null; type: string } | undefined = projectMap.get(projectId) as { id: string; name: string; parentId: string | null; type: string } | undefined;
 
             while (curr) {
                 if (curr.type !== 'ROOT') {
                     parts.unshift({ name: curr.name, type: curr.type });
                 }
                 if (curr.parentId) {
-                    curr = projectMap.get(curr.parentId);
+                    curr = projectMap.get(curr.parentId) as { id: string; name: string; parentId: string | null; type: string } | undefined;
                 } else {
                     break;
                 }

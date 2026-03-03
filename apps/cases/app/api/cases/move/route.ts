@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import { CaseMoveSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 export async function POST(req: Request) {
     try {
@@ -19,7 +20,8 @@ export async function POST(req: Request) {
 
         const parsed = parseBody(CaseMoveSchema, await req.json());
         if (!parsed.success) return parsed.response;
-        const { caseIds, targetProjectId } = parsed.data;
+        const body = parsed.data as z.infer<typeof CaseMoveSchema>;
+        const { caseIds, targetProjectId } = body;
 
         // Verify Target Project Exists
         const targetProject = await prisma.project.findUnique({

@@ -3,12 +3,14 @@ import { prisma } from '@zenowethu/database';
 import crypto from 'crypto';
 import { ForgotPasswordSchema, parseBody } from '@/lib/schemas';
 import { logger } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function POST(request: NextRequest) {
     try {
         const parsed = parseBody(ForgotPasswordSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { email } = parsed.data;
+        const body = parsed.data as z.infer<typeof ForgotPasswordSchema>;
+        const { email } = body;
 
         const user = await prisma.user.findUnique({
             where: { email: email.toLowerCase() }

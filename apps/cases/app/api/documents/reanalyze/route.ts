@@ -6,6 +6,7 @@ import { ReanalyzeSchema, parseBody } from '@/lib/schemas';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { z } from 'zod';
 
 export async function POST(request: Request) {
     let session;
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(ReanalyzeSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        body = parsed.data;
+        body = parsed.data as z.infer<typeof ReanalyzeSchema>;
         caseId = body.caseId;
         const mode = body.mode;
 

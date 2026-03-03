@@ -68,7 +68,7 @@ export async function PATCH(
     }
 
     const input = parsed.data
-    const updateData: Prisma.InvoiceUpdateInput = {}
+    const updateData: any = {}
 
     if (input.status)    updateData.status    = input.status
     if (input.dueAt)     updateData.dueAt     = new Date(input.dueAt)
@@ -78,7 +78,7 @@ export async function PATCH(
     if (input.lineItems) {
       const vatRate  = input.vatRate ?? (existing as unknown as { vatRate: number }).vatRate ?? 0.15
       const subtotal = input.lineItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-      updateData.lineItems = input.lineItems as Prisma.InputJsonValue
+      updateData.lineItems = input.lineItems as any
       updateData.subtotal  = subtotal
       updateData.vatRate   = vatRate
       updateData.vatAmount = subtotal * vatRate

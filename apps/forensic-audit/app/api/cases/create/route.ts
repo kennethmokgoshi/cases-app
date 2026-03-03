@@ -81,7 +81,7 @@ export async function POST(request: Request) {
                             fileUrl: 's3://mock-bucket/' + doc.fileName, // Mock URL
                             fileType: 'application/pdf',
                             category: doc.type, // e.g., 'LEDGER', 'SECTION_129'
-                            uploadedBy: session.user.username || 'System'
+                            uploadedBy: session.user.email || session.user.id || 'System'
                         }
                     });
                 }

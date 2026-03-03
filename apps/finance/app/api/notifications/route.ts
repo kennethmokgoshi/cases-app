@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, NotificationReadSchema, parseBody  } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 // GET - Get all notifications for current user
 export async function GET(request: Request) {
@@ -46,7 +47,8 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(NotificationReadSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { notificationIds, markAllRead } = parsed.data;
+        const body = parsed.data as z.infer<typeof NotificationReadSchema>;
+        const { notificationIds, markAllRead } = body;
 
         if (markAllRead) {
             // Mark all as read

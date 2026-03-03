@@ -5,14 +5,15 @@ import { calculateRiskScore, inferEmploymentStatus } from '../../../../../../lib
 
 export async function GET(
     _request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return new NextResponse('Unauthorized', { status: 401 });
 
         const assessment = await prisma.insuranceAssessment.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 Case: {
                     include: {

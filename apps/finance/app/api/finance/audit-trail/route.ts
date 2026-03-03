@@ -15,17 +15,17 @@ export async function GET(request: Request) {
   const page    = Math.max(1, parseInt(searchParams.get('page') || '1'))
   const limit   = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50')))
 
-  const where: Prisma.WorkflowLogWhereInput = {}
+  const where: any = {}
 
   if (userId) where.userId = userId
 
   if (from || to) {
     where.timestamp = {}
-    if (from) (where.timestamp as Prisma.DateTimeFilter).gte = new Date(from)
+    if (from) where.timestamp.gte = new Date(from)
     if (to) {
       const d = new Date(to)
       d.setHours(23, 59, 59, 999)
-      ;(where.timestamp as Prisma.DateTimeFilter).lte = d
+      where.timestamp.lte = d
     }
   }
 

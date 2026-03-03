@@ -3,6 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import bcrypt from 'bcryptjs';
 import { UserCreateSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 export async function GET(request: NextRequest) {
     try {
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
         const parsed = parseBody(UserCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
 
+        const body = parsed.data as z.infer<typeof UserCreateSchema>;
         const {
             firstName,
             lastName,
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
             organization,
             role,
             userType,
-            b2bPartnerId } = parsed.data;
+            b2bPartnerId } = body;
 
         // Check if user already exists (case-insensitive)
         const existingUser = await prisma.user.findUnique({

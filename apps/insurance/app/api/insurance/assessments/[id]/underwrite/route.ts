@@ -7,14 +7,15 @@ import { runUnderwriting } from '../../../../../../lib/underwriting-engine';
 
 export async function POST(
     _request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return new NextResponse('Unauthorized', { status: 401 });
 
         const assessment = await prisma.insuranceAssessment.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 Case: {
                     include: {
@@ -35,7 +36,7 @@ export async function POST(
         const client = assessment.Case.client;
 
         // Run automated underwriting service
-        const result = await runAutomatedUnderwriting(params.id, session.user.id);
+        const result = await runAutomatedUnderwriting(id, session.user.id);
 
         return NextResponse.json(result);
     } catch (error: any) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import { ApplyUpdatesSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 interface UpdateRequest {
     updates: {
@@ -31,7 +32,8 @@ export async function POST(
         const { id: caseId } = await params;
         const parsed = parseBody(ApplyUpdatesSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { updates } = parsed.data;
+        const body = parsed.data as z.infer<typeof ApplyUpdatesSchema>;
+        const { updates } = body;
 
         // Fetch case to get clientId
         const caseRecord = await prisma.case.findUnique({

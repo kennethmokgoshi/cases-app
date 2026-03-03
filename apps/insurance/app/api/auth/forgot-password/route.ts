@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import crypto from 'crypto';
 import { logger, ForgotPasswordSchema, parseBody } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function POST(request: NextRequest) {
     try {
         const parsed = parseBody(ForgotPasswordSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { email } = parsed.data;
+        const body = parsed.data as z.infer<typeof ForgotPasswordSchema>;
+        const { email } = body;
         if (!email) {
             return NextResponse.json({ error: 'Email is required' }, { status: 400 });
         }

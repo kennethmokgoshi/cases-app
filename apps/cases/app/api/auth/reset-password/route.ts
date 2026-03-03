@@ -3,12 +3,14 @@ import { prisma } from '@zenowethu/database';
 import bcrypt from 'bcryptjs';
 import { ResetPasswordSchema, parseBody } from '@/lib/schemas';
 import { logger } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function POST(request: NextRequest) {
     try {
         const parsed = parseBody(ResetPasswordSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { token, password } = parsed.data;
+        const body = parsed.data as z.infer<typeof ResetPasswordSchema>;
+        const { token, password } = body;
 
         const user = await prisma.user.findFirst({
             where: {

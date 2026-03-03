@@ -5,6 +5,7 @@ import { auth, logger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { invalidateDHSCredentialsCache } from '@zenowethu/shared-lib';
 import { DhsSettingsSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 // GET /api/admin/settings/dhs - Get DHS credentials
 export async function GET() {
@@ -70,7 +71,8 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(DhsSettingsSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { username, password } = parsed.data;
+        const body = parsed.data as z.infer<typeof DhsSettingsSchema>;
+        const { username, password } = body;
 
         // Update or create username setting
         await prisma.systemSettings.upsert({

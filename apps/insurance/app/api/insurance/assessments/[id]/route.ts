@@ -4,14 +4,15 @@ import { auth, logger } from '@zenowethu/shared-lib';
 
 export async function GET(
     _request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return new NextResponse('Unauthorized', { status: 401 });
 
         const assessment = await prisma.insuranceAssessment.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 Case: {
                     include: {
@@ -46,9 +47,11 @@ export async function GET(
 
 export async function PATCH(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
+
         const session = await auth();
         if (!session?.user) return new NextResponse('Unauthorized', { status: 401 });
 
@@ -65,7 +68,7 @@ export async function PATCH(
         }
 
         const updated = await prisma.insuranceAssessment.update({
-            where: { id: params.id },
+            where: { id },
             data });
 
         return NextResponse.json(updated);

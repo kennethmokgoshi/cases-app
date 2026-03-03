@@ -33,10 +33,10 @@ export async function GET(request: Request) {
   const page      = Math.max(1, parseInt(searchParams.get('page') || '1'))
   const limit     = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
 
-  const where: Prisma.InvoiceWhereInput = {}
+  const where: any = {}
 
   if (status && ['DRAFT','SENT','PAID','OVERDUE','CANCELLED'].includes(status)) {
-    where.status = status as Prisma.EnumInvoiceStatusFilter['equals']
+    where.status = status
   }
   if (clientId) where.clientId = clientId
   if (caseId)   where.caseId   = caseId
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
           clientId:   input.clientId  ?? null,
           caseId:     input.caseId    ?? null,
           projectId:  input.projectId ?? null,
-          lineItems:  input.lineItems as Prisma.InputJsonValue,
+          lineItems:  input.lineItems as any,
           subtotal,
           vatRate:    input.vatRate,
           vatAmount,

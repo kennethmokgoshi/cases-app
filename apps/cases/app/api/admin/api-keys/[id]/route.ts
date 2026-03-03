@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import { ApiKeyPatchSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 // GET - Get single API key details
 export async function GET(
@@ -51,7 +52,8 @@ export async function PATCH(
         const { id } = await params;
         const parsed = parseBody(ApiKeyPatchSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { name, description, isActive, permissions, rateLimit, expiresAt } = parsed.data;
+        const body = parsed.data as z.infer<typeof ApiKeyPatchSchema>;
+        const { name, description, isActive, permissions, rateLimit, expiresAt } = body;
 
         const updateData: Record<string, unknown> = {};
         if (name !== undefined) updateData.name = name;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, ProjectCreateSchema, parseBody  } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 // Helper function to recursively fetch children
 async function getProjectWithChildren(projectId: string, depth: number = 5): Promise<unknown> {
@@ -250,7 +251,7 @@ export async function POST(request: NextRequest) {
 
         const parsed = parseBody(ProjectCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof ProjectCreateSchema>;
         let { name, description, type, clientType, parentId, members } = body;
 
         if (!name) {

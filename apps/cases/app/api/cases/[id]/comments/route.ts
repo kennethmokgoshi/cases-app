@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import { CaseCommentCreateSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 // Parse @mentions from comment text - returns array of usernames
 function parseMentions(text: string): string[] {
@@ -101,7 +102,8 @@ export async function POST(
         const { id } = await params;
         const parsed = parseBody(CaseCommentCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { content, activityType, activityData, type, isInternal } = parsed.data;
+        const body = parsed.data as z.infer<typeof CaseCommentCreateSchema>;
+        const { content, activityType, activityData, type, isInternal } = body;
 
         // Get the case to verify it exists and get file number for notifications
         const caseData = await prisma.case.findUnique({

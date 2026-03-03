@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const page   = Math.max(1, parseInt(searchParams.get('page') || '1'))
   const limit  = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
 
-  const where: Prisma.ForensicAuditWhereInput = {}
+  const where: any = {}
 
   if (status && ['PENDING','IN_PROGRESS','COMPLETED'].includes(status)) where.status = status
   if (search) {

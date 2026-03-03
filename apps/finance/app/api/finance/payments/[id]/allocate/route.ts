@@ -51,7 +51,7 @@ export async function PATCH(
         }
 
         // Update payment and batch counts in a transaction
-        const ops: Parameters<typeof prisma.$transaction>[0] = [
+        const ops: any[] = [
             prisma.payment.update({
                 where: { id },
                 data: {
@@ -70,7 +70,7 @@ export async function PATCH(
                     where: { id: payment.batchId },
                     data: {
                         matchCount: { increment: 1 },
-                        unmatchCount: { decrement: 1 } } }) as any
+                        unmatchCount: { decrement: 1 } } })
             );
         }
 

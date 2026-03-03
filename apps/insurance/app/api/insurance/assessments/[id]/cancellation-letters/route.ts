@@ -12,9 +12,10 @@ import { generateSubstitutionNotice } from '../../../../../../lib/substitution-n
  */
 export async function POST(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return new NextResponse('Unauthorized', { status: 401 });
 
@@ -22,7 +23,7 @@ export async function POST(
         const { newInsurerName = 'Old Mutual Credit Life (Compliant)', effectiveDate } = body;
 
         const assessment = await prisma.insuranceAssessment.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 Case: { include: { client: true } },
                 accounts: {
@@ -72,7 +73,7 @@ export async function POST(
 
             await prisma.cancellationLetter.create({
                 data: {
-                    assessmentId: params.id,
+                    assessmentId: id,
                     creditorName: acc.creditorName,
                     accountNumber: acc.accountNumber ?? undefined,
                     letterType: 'CREDIT_LIFE_CANCELLATION',
@@ -85,7 +86,7 @@ export async function POST(
         // Update assessment status to reflect letters generated
         if (results.some(r => r.status === 'created')) {
             await prisma.insuranceAssessment.update({
-                where: { id: params.id },
+                where: { id },
                 data: { status: 'LETTERS_GENERATED' } });
 
             await prisma.workflowLog.create({
@@ -110,14 +111,16 @@ export async function POST(
  */
 export async function GET(
     _request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
+
         const session = await auth();
         if (!session?.user) return new NextResponse('Unauthorized', { status: 401 });
 
         const letters = await prisma.cancellationLetter.findMany({
-            where: { assessmentId: params.id },
+            where: { assessmentId: id },
             orderBy: { createdAt: 'asc' } });
 
         return NextResponse.json(letters);

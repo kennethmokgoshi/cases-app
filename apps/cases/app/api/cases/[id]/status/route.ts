@@ -9,6 +9,7 @@ import {
 } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib';
 import { CaseStatusSchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 export async function PATCH(
     request: Request,
@@ -19,7 +20,8 @@ export async function PATCH(
         const { id } = await params;
         const parsed = parseBody(CaseStatusSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { newStatus, skipNotification } = parsed.data;
+        const body = parsed.data as z.infer<typeof CaseStatusSchema>;
+        const { newStatus, skipNotification } = body;
 
         // Get the status configuration
         const statusInfo = getStatusByCode(newStatus);

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import { DocumentSummarySchema, parseBody } from '@/lib/schemas';
+import { z } from 'zod';
 
 export async function POST(
     request: Request,
@@ -17,7 +18,8 @@ export async function POST(
         const documentId = params.id;
         const parsed = parseBody(DocumentSummarySchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { openAccounts, closedAccounts, totalDebt, totalInstallment } = parsed.data;
+        const body = parsed.data as z.infer<typeof DocumentSummarySchema>;
+        const { openAccounts, closedAccounts, totalDebt, totalInstallment } = body;
 
         // Fetch the existing document with its case
         const document = await prisma.document.findUnique({

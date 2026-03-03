@@ -4,6 +4,7 @@ import { calculateSlaDeadline, logger, CaseCreateSchema, parseBody } from '@zeno
 import { sendStatusChangeNotification } from '@zenowethu/shared-lib';
 
 import { auth } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function GET(request: Request) {
     try {
@@ -151,7 +152,7 @@ export async function GET(request: Request) {
 
 
         const getFullPath = (id: string): string => {
-            let curr = projectMap.get(id);
+            let curr: { id: string; name: string; parentId: string | null; type: string } | undefined = projectMap.get(id) as { id: string; name: string; parentId: string | null; type: string } | undefined;
             if (!curr) return '';
 
             const pathParts: { name: string; type: string }[] = [];
@@ -160,7 +161,7 @@ export async function GET(request: Request) {
                     pathParts.unshift({ name: curr.name, type: curr.type });
                 }
                 if (curr.parentId) {
-                    curr = projectMap.get(curr.parentId);
+                    curr = projectMap.get(curr.parentId) as { id: string; name: string; parentId: string | null; type: string } | undefined;
                 } else {
                     break;
                 }
@@ -226,6 +227,7 @@ export async function POST(request: Request) {
 
         const parsed = parseBody(CaseCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
+        const body = parsed.data as z.infer<typeof CaseCreateSchema>;
         const {
             client,
             projectId,
@@ -234,7 +236,7 @@ export async function POST(request: Request) {
             partnerName = null,
             partnerBranch = null,
             partnerSplitPercent = 0,
-            services = null } = parsed.data;
+            services = null } = body;
 
         // Validate required fields
         if (!client?.firstName || !client?.lastName || !client?.idNumber || !projectId) {
@@ -529,7 +531,7 @@ export async function POST(request: Request) {
                             ? `${newCase.createdBy.firstName} ${newCase.createdBy.lastName}`
                             : 'Unknown User';
 
-                        const mentionList = uniqueManagers
+                        const mentionList = (uniqueManagers as { id: string; firstName: string; lastName: string; email: string }[])
                             .map(u => `@${u.firstName} ${u.lastName}`)
                             .join(' ');
 
@@ -560,7 +562,7 @@ Please review and process this referral.`;
                         });
 
                         // 4. Create explicit in-app notifications for each manager
-                        for (const manager of uniqueManagers) {
+                        for (const manager of uniqueManagers as { id: string; firstName: string; lastName: string; email: string }[]) {
                             // Don't notify the person who created it if they happen to be a manager
                             if (manager.id === currentUserId) continue;
 

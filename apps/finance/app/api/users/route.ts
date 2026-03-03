@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, UserCreateSchema, parseBody  } from '@zenowethu/shared-lib';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 
 export async function GET(request: NextRequest) {
     try {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
 
         const parsed = parseBody(UserCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const body = parsed.data;
+        const body = parsed.data as z.infer<typeof UserCreateSchema>;
         const {
             firstName,
             lastName,

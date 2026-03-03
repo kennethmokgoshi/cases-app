@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   const page        = Math.max(1, parseInt(searchParams.get('page') || '1'))
   const limit       = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
 
-  const where: Prisma.LegalMatterWhereInput = {}
+  const where: any = {}
 
   if (status && ['OPEN','CLOSED','SETTLED'].includes(status)) where.status = status
   if (matterType) where.matterType = matterType

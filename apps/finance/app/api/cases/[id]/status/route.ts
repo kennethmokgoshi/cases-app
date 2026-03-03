@@ -8,6 +8,7 @@ import {
     findManagersForCase
 } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib';
+import { z } from 'zod';
 
 export async function PATCH(
     request: Request,
@@ -18,7 +19,8 @@ export async function PATCH(
         const { id } = await params;
         const parsed = parseBody(CaseStatusSchema, await request.json());
         if (!parsed.success) return parsed.response;
-        const { newStatus, skipNotification } = parsed.data;
+        const body = parsed.data as z.infer<typeof CaseStatusSchema>;
+        const { newStatus, skipNotification } = body;
 
         if (!newStatus) {
             return NextResponse.json({ error: 'New status is required' }, { status: 400 });

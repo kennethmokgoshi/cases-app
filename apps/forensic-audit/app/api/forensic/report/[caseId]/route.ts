@@ -87,7 +87,7 @@ export async function GET(
 
         const pdfBytes = await generateAuditReportPdf(reportData);
 
-        return new Response(pdfBytes, {
+        return new Response(Buffer.from(pdfBytes), {
             headers: {
                 'Content-Type': 'application/pdf',
                 'Content-Disposition': `attachment; filename="audit-report-${caseRecord.fileNumber}.pdf"`,
