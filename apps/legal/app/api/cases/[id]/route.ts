@@ -204,8 +204,8 @@ export async function PATCH(
                             email: client.email || existingByIdNumber.email,
                             address: client.address || existingByIdNumber.address,
                             employer: client.employer || existingByIdNumber.employer,
-                            grossSalary: client.grossSalary ? parseFloat(client.grossSalary) : existingByIdNumber.grossSalary,
-                            netSalary: client.netSalary ? parseFloat(client.netSalary) : existingByIdNumber.netSalary }
+                            grossSalary: client.grossSalary ? parseFloat(String(client.grossSalary)) : existingByIdNumber.grossSalary,
+                            netSalary: client.netSalary ? parseFloat(String(client.netSalary)) : existingByIdNumber.netSalary }
                     });
 
                     // 2. Find Latest Case for Existing Client
@@ -427,9 +427,9 @@ export async function PATCH(
             if (client.address !== undefined) clientUpdateData.address = client.address || null;
             if (client.employer !== undefined) clientUpdateData.employer = client.employer || null;
             if (client.employeeNo !== undefined) clientUpdateData.employeeNo = client.employeeNo || null;
-            if (client.grossSalary !== undefined) clientUpdateData.grossSalary = client.grossSalary ? parseFloat(client.grossSalary) : null;
-            if (client.netSalary !== undefined) clientUpdateData.netSalary = client.netSalary ? parseFloat(client.netSalary) : null;
-            if (client.salaryPayDate !== undefined) clientUpdateData.salaryPayDate = client.salaryPayDate ? parseInt(client.salaryPayDate) : null;
+            if (client.grossSalary !== undefined) clientUpdateData.grossSalary = client.grossSalary ? parseFloat(String(client.grossSalary)) : null;
+            if (client.netSalary !== undefined) clientUpdateData.netSalary = client.netSalary ? parseFloat(String(client.netSalary)) : null;
+            if (client.salaryPayDate !== undefined) clientUpdateData.salaryPayDate = client.salaryPayDate ? parseInt(String(client.salaryPayDate)) : null;
             if (client.type !== undefined) clientUpdateData.type = client.type || 'Standard';
         }
 

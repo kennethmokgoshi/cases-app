@@ -204,7 +204,8 @@ function assessProductEligibility(
         reasons.push(`${riskScore.tier} risk tier — standard terms apply.`);
     }
 
-    const effectiveRate = decision === 'INELIGIBLE' || decision === 'DECLINE'
+    const d = decision as ProductDecision;
+    const effectiveRate = d === 'INELIGIBLE' || d === 'DECLINE'
         ? 0
         : Number((baseRate * loading).toFixed(4));
 

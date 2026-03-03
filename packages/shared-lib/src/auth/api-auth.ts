@@ -10,11 +10,10 @@ export type ApiKeyData = {
     rateLimit: number;
 };
 
-type ValidationResult =
+export async function validateApiKey(request: Request): Promise<
     | { valid: true; apiKey: ApiKeyData }
-    | { valid: false; error: string; status: number };
-
-export async function validateApiKey(request: Request): Promise<ValidationResult> {
+    | { valid: false; error: string; status: number }
+> {
     const authHeader = request.headers.get('Authorization');
     const apiKeyHeader = request.headers.get('X-API-Key');
 

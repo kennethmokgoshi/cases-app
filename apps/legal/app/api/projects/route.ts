@@ -310,7 +310,7 @@ export async function POST(request: NextRequest) {
                             existing.role = 'MANAGER';
                         }
                     } else {
-                        const newMember = { userId: pm.userId, role: pm.role };
+                        const newMember = { userId: pm.userId, role: pm.role as 'MEMBER' | 'MANAGER' };
                         membersData.push(newMember);
                         existingMembersMap.set(pm.userId, newMember);
                     }
