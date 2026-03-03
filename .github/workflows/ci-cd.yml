@@ -75,7 +75,7 @@ jobs:
       - name: Seed test database
         run: |
           cd apps/cases
-          npx ts-node --project tsconfig.seed.json prisma/seed.ts
+          pnpm exec ts-node --project tsconfig.seed.json prisma/seed.ts
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
           SEED_PASSWORD: TestPassword123!
