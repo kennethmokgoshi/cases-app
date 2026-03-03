@@ -52,47 +52,52 @@ jobs:
       - name: E2E tests (cases app)
         run: pnpm --filter cases run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (insurance app)
         run: pnpm --filter insurance run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (legal app)
         run: pnpm --filter legal run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (forensic-audit app)
         run: pnpm --filter forensic-audit run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (finance app)
         run: pnpm --filter finance run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
   # ──────────────────────────────────────────────
   # CD: Deploy to Contabo VPS
