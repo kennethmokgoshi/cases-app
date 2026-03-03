@@ -80,6 +80,30 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
           SEED_PASSWORD: TestPassword123!
 
+      - name: Verify database seeding
+        run: |
+          cd apps/cases
+          pnpm exec ts-node --project tsconfig.seed.json -e "
+          import { PrismaClient } from '@prisma/client';
+          const prisma = new PrismaClient();
+          prisma.user.findUnique({ where: { email: 'kenneth@zenowethu.co.za' } })
+            .then(user => {
+              if (user) {
+                console.log('✅ Test user found:', user.email);
+                process.exit(0);
+              } else {
+                console.error('❌ Test user NOT found in database');
+                process.exit(1);
+              }
+            })
+            .catch(err => {
+              console.error('❌ Database error:', err);
+              process.exit(1);
+            });
+          "
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
