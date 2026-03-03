@@ -46,10 +46,18 @@ jobs:
       - name: Run all tests (all apps + packages)
         run: pnpm turbo test
 
+      # ──────────────────────────────────────────────
+      # E2E Tests (Conditional)
+      # Only runs when RUN_E2E_TESTS secret is set to 'true'
+      # Requires: PostgreSQL database, seeded test data, all env vars configured
+      # To enable: Add RUN_E2E_TESTS secret in GitHub repo settings
+      # ──────────────────────────────────────────────
       - name: Install Playwright browsers
+        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: npx playwright install --with-deps chromium
 
       - name: E2E tests (cases app)
+        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter cases run test:e2e
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
@@ -60,6 +68,7 @@ jobs:
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (insurance app)
+        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter insurance run test:e2e
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
@@ -70,6 +79,7 @@ jobs:
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (legal app)
+        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter legal run test:e2e
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
@@ -80,6 +90,7 @@ jobs:
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (forensic-audit app)
+        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter forensic-audit run test:e2e
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
@@ -90,6 +101,7 @@ jobs:
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
 
       - name: E2E tests (finance app)
+        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter finance run test:e2e
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
