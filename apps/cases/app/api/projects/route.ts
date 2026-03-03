@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const membersData = members || [];
+        const membersData: { userId: string; role: "MEMBER" | "MANAGER" }[] = members || [];
 
         // Inheritance: If parentId exists, fetch parent's members and merge them
         // EXCEPTION: Partners (ACQUISITION_SOURCE) do not inherit members.
