@@ -83,13 +83,13 @@ export async function POST(request: Request) {
         auditorId:       input.auditorId ?? null,
         findings:        input.findings ?? null,
         recommendations: input.recommendations ?? null,
-        status:          'PENDING' } })
+        status:          'PENDING' } as any })
 
     await prisma.workflowLog.create({
       data: {
         caseId: input.caseId,
         notes:  `[FORENSIC_AUDIT_CREATED] Created forensic audit`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(audit, { status: 201 })
   } catch (err) {

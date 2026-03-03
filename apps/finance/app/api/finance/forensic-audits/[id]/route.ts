@@ -88,7 +88,7 @@ export async function PATCH(
       data: {
         caseId: existing.caseId,
         notes:  `[FORENSIC_AUDIT_UPDATED] Updated forensic audit status to ${input.status ?? existing.status}`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(updated)
   } catch (err) {

@@ -103,7 +103,7 @@ export async function PATCH(
       data: {
         caseId: existing.caseId,
         notes:  `[INSURANCE_ASSESSMENT_UPDATED] Updated insurance assessment status to ${input.status ?? existing.status}`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(updated)
   } catch (err) {

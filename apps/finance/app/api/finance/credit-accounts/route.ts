@@ -59,8 +59,7 @@ export async function GET(request: Request) {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          case:   { select: { fileNumber: true } },
-          client: { select: { firstName: true, lastName: true, idNumber: true } } } }),
+          case:   { select: { fileNumber: true } } } }),
       prisma.creditAccount.count({ where }),
     ])
 
@@ -112,7 +111,7 @@ export async function POST(request: Request) {
       data: {
         caseId: input.caseId,
         notes:  `[CREDIT_ACCOUNT_CREATED] Added credit account: ${input.creditorName} (${input.accountType})`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(account, { status: 201 })
   } catch (err) {

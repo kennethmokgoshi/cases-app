@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       data: {
         caseId: input.caseId,
         notes:  `[INSURANCE_ASSESSMENT_CREATED] Created insurance assessment`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(assessment, { status: 201 })
   } catch (err) {

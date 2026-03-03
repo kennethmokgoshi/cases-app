@@ -115,7 +115,7 @@ export async function POST(request: Request) {
       data: {
         caseId: input.caseId,
         notes:  `[LEGAL_MATTER_CREATED] Created legal matter: ${input.matterType} - ${input.creditorName}`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(matter, { status: 201 })
   } catch (err) {

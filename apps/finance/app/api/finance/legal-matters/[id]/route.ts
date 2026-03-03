@@ -87,7 +87,7 @@ export async function PATCH(
       data: {
         caseId: existing.caseId,
         notes:  `[LEGAL_MATTER_UPDATED] Updated legal matter: ${existing.creditorName} → ${input.status ?? existing.status}`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(updated)
   } catch (err) {

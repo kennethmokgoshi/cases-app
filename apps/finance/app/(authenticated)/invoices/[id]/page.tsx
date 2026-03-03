@@ -169,15 +169,15 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
           <div className="max-w-xs ml-auto space-y-2 text-sm">
             <div className="flex justify-between text-gray-400">
               <span>Subtotal</span>
-              <span>{formatZAR(invoice.subtotal)}</span>
+              <span>{formatZAR(invoice.subtotal.toNumber())}</span>
             </div>
             <div className="flex justify-between text-gray-400">
               <span>VAT ({Math.round(Number(invoice.vatRate) * 100)}%)</span>
-              <span>{formatZAR(invoice.vatAmount)}</span>
+              <span>{formatZAR(invoice.vatAmount.toNumber())}</span>
             </div>
             <div className="flex justify-between text-base font-bold text-white border-t border-white/10 pt-2">
               <span>Total</span>
-              <span className="text-emerald-400">{formatZAR(invoice.total)}</span>
+              <span className="text-emerald-400">{formatZAR(invoice.total.toNumber())}</span>
             </div>
           </div>
         </div>

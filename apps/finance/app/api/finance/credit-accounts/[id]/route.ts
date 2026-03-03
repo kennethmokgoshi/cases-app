@@ -30,7 +30,6 @@ export async function GET(
       where: { id },
       include: {
         case:      { select: { id: true, fileNumber: true } },
-        client:    { select: { firstName: true, lastName: true, idNumber: true, email: true } },
         documents: { orderBy: { uploadedAt: 'desc' } } } })
 
     if (!account) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -83,7 +82,7 @@ export async function PATCH(
       data: {
         caseId: existing.caseId,
         notes:  `[CREDIT_ACCOUNT_UPDATED] Updated credit account: ${existing.creditorName}`,
-        userId: session.user.id } })
+        userId: session.user.id } as any })
 
     return NextResponse.json(updated)
   } catch (err) {

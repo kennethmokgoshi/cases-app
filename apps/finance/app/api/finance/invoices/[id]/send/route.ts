@@ -75,7 +75,7 @@ export async function POST(
     }
 
     // Validate lineItems JSON
-    const lineItems = invoice.lineItems as InvoiceLineItem[]
+    const lineItems = invoice.lineItems as unknown as InvoiceLineItem[]
 
     const invoiceData: InvoiceData = {
       invoiceNumber:  invoice.invoiceNumber,
