@@ -14,6 +14,22 @@ jobs:
     name: Lint, Typecheck & Test
     runs-on: ubuntu-latest
 
+    # PostgreSQL service for E2E tests
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zenowethu_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +51,7 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @zenowethu/database run db:generate
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
 
       - name: Lint (all apps + packages)
         run: pnpm turbo lint
@@ -47,69 +63,78 @@ jobs:
         run: pnpm turbo test
 
       # ──────────────────────────────────────────────
-      # E2E Tests (Conditional)
-      # Only runs when RUN_E2E_TESTS secret is set to 'true'
-      # Requires: PostgreSQL database, seeded test data, all env vars configured
-      # To enable: Add RUN_E2E_TESTS secret in GitHub repo settings
+      # E2E Tests Setup & Execution
+      # PostgreSQL service runs automatically for all CI jobs
+      # Database is migrated and seeded before E2E tests run
       # ──────────────────────────────────────────────
+      - name: Run database migrations
+        run: pnpm --filter @zenowethu/database run db:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+
+      - name: Seed test database
+        run: pnpm --filter cases run seed
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+          SEED_PASSWORD: TestPassword123!
+
       - name: Install Playwright browsers
-        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: npx playwright install --with-deps chromium
 
       - name: E2E tests (cases app)
-        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter cases run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          AUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key-placeholder' }}
+          E2E_EMAIL: kenneth@zenowethu.co.za
+          E2E_PASSWORD: TestPassword123!
 
       - name: E2E tests (insurance app)
-        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter insurance run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+          NEXTAUTH_URL: http://localhost:3001
+          NEXTAUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          AUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key-placeholder' }}
+          E2E_EMAIL: kenneth@zenowethu.co.za
+          E2E_PASSWORD: TestPassword123!
 
       - name: E2E tests (legal app)
-        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter legal run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+          NEXTAUTH_URL: http://localhost:3002
+          NEXTAUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          AUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key-placeholder' }}
+          E2E_EMAIL: kenneth@zenowethu.co.za
+          E2E_PASSWORD: TestPassword123!
 
       - name: E2E tests (forensic-audit app)
-        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter forensic-audit run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+          NEXTAUTH_URL: http://localhost:3003
+          NEXTAUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          AUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key-placeholder' }}
+          E2E_EMAIL: kenneth@zenowethu.co.za
+          E2E_PASSWORD: TestPassword123!
 
       - name: E2E tests (finance app)
-        if: ${{ secrets.RUN_E2E_TESTS == 'true' }}
         run: pnpm --filter finance run test:e2e
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/test' }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'test-secret-min-32-chars-long-for-ci-testing-purposes' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key' }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'test@example.com' }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'TestPassword123!' }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+          NEXTAUTH_URL: http://localhost:3004
+          NEXTAUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          AUTH_SECRET: test-secret-min-32-chars-long-for-ci-testing-purposes-zenowethu
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-key-placeholder' }}
+          E2E_EMAIL: kenneth@zenowethu.co.za
+          E2E_PASSWORD: TestPassword123!
 
   # ──────────────────────────────────────────────
   # CD: Deploy to Contabo VPS
