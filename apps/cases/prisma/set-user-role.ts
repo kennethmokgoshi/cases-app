@@ -49,13 +49,10 @@ async function main() {
         // Set helper flags based on role
         if (role === 'ADMIN') {
             updateData.isAdmin = true;
-            updateData.isManager = true; // Admins are implicitly managers
         } else if (role === 'MANAGER') {
-            updateData.isManager = true;
             updateData.isAdmin = false;
         } else {
             updateData.isAdmin = false;
-            updateData.isManager = false;
         }
 
         if (role === 'B2B_PARTNER') {
@@ -74,7 +71,6 @@ async function main() {
         logger.info(`✅ Success! User ${updatedUser.firstName} ${updatedUser.lastName} (${updatedUser.email}) updated.`);
         logger.info(`- Role: ${updatedUser.role}`);
         logger.info(`- Is Admin: ${updatedUser.isAdmin}`);
-        logger.info(`- Is Manager: ${updatedUser.isManager}`);
         logger.info(`- User Type: ${updatedUser.userType}`);
 
     } catch (error) {
