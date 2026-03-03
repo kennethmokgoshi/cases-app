@@ -10,12 +10,10 @@ export type ApiKeyData = {
     rateLimit: number;
 };
 
-export async function validateApiKey(request: Request): Promise<{
-    valid: boolean;
-    apiKey: ApiKeyData;
-    error: string;
-    status: number;
-}> {
+export async function validateApiKey(request: Request): Promise<
+    | { valid: true; apiKey: ApiKeyData }
+    | { valid: false; error: string; status: number }
+> {
     const authHeader = request.headers.get('Authorization');
     const apiKeyHeader = request.headers.get('X-API-Key');
 
@@ -30,7 +28,6 @@ export async function validateApiKey(request: Request): Promise<{
     if (!key) {
         return {
             valid: false,
-            apiKey: null as any,
             error: 'API key required. Provide via Authorization: Bearer <key> or X-API-Key header.',
             status: 401
         };
@@ -44,15 +41,15 @@ export async function validateApiKey(request: Request): Promise<{
     });
 
     if (!apiKeyRecord) {
-        return { valid: false, apiKey: null as any, error: 'Invalid API key.', status: 401 };
+        return { valid: false, error: 'Invalid API key.', status: 401 };
     }
 
     if (!apiKeyRecord.isActive) {
-        return { valid: false, apiKey: null as any, error: 'API key has been revoked.', status: 401 };
+        return { valid: false, error: 'API key has been revoked.', status: 401 };
     }
 
     if (apiKeyRecord.expiresAt && new Date(apiKeyRecord.expiresAt) < new Date()) {
-        return { valid: false, apiKey: null as any, error: 'API key has expired.', status: 401 };
+        return { valid: false, error: 'API key has expired.', status: 401 };
     }
 
     await prisma.apiKey.update({
@@ -73,9 +70,7 @@ export async function validateApiKey(request: Request): Promise<{
             permissions,
             projectId: apiKeyRecord.projectId,
             rateLimit: apiKeyRecord.rateLimit
-        },
-        error: null as any,
-        status: 200
+        }
     };
 }
 

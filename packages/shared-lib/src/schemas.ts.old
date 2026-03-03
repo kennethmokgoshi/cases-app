@@ -313,15 +313,14 @@ import { NextResponse } from 'next/server';
 export function parseBody<T>(
     schema: { safeParse: (data: unknown) => { success: true; data: T } | { success: false; error: any } },
     data: unknown
-): { success: boolean; data: T; response: NextResponse } {
+): { success: true; data: T } | { success: false; response: NextResponse } {
     const result = schema.safeParse(data);
     if (result.success) {
-        return { success: true, data: result.data, response: null as any };
+        return { success: true as const, data: result.data };
     }
     const errors = result.error.flatten().fieldErrors;
     return {
-        success: false,
-        data: null as any,
+        success: false as const,
         response: NextResponse.json(
             { error: 'Validation failed', errors },
             { status: 400 }
