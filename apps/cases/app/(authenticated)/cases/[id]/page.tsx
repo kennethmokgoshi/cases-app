@@ -200,6 +200,7 @@ export default function CaseDetailPage() {
 
     const [caseData, setCaseData] = useState<CaseDetail | null>(null);
     const [loading, setLoading] = useState(true);
+    const [notFound, setNotFound] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
     const [sendingNotification, setSendingNotification] = useState(false);
@@ -317,12 +318,13 @@ export default function CaseDetailPage() {
     const fetchCase = useCallback(async () => {
         if (!params.id) return;
         setLoading(true);
+        setNotFound(false);
         try {
             const response = await fetch(`/api/cases/${params.id}`);
             if (!response.ok) {
                 if (response.status === 404) {
-                    // Case not found - redirect to cases list
-                    router.push('/cases');
+                    // Case not found - show not found message
+                    setNotFound(true);
                     return;
                 }
                 throw new Error('Failed to fetch case');
@@ -331,12 +333,12 @@ export default function CaseDetailPage() {
             setCaseData(data);
         } catch (error) {
             log.error({ err: error }, 'Error fetching case:', error);
-            // On any error, redirect to cases list
-            router.push('/cases');
+            // On any error, show not found
+            setNotFound(true);
         } finally {
             setLoading(false);
         }
-    }, [params.id, router]);
+    }, [params.id]);
 
     useEffect(() => {
         fetchCase();
@@ -1112,6 +1114,18 @@ export default function CaseDetailPage() {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-gray-400">Loading case details...</div>
+            </div>
+        );
+    }
+
+    if (notFound) {
+        return (
+            <div className="flex flex-col items-center justify-center h-96 gap-4">
+                <div className="text-2xl text-gray-400">Case not found</div>
+                <div className="text-gray-500">The case you're looking for does not exist.</div>
+                <Link href="/cases" className="px-4 py-2 bg-zeno-cyan text-zeno-navy rounded-lg hover:bg-cyan-400">
+                    Back to Cases
+                </Link>
             </div>
         );
     }
