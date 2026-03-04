@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@zenowethu/database';
 import Link from 'next/link';
 
+// Force Node.js runtime (not Edge) so we can use shared-lib with Node.js modules
+export const runtime = 'nodejs';
+
 export default async function DirectorDashboard() {
   const session = await auth();
 
