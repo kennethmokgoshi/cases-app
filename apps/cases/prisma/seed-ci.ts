@@ -47,14 +47,16 @@ async function main() {
 
     for (const user of users) {
         const organization = getOrganization(user.email)
+        // Normalize email to lowercase to match auth logic
+        const emailLowerCase = user.email.toLowerCase()
         await prisma.user.upsert({
-            where: { email: user.email },
+            where: { email: emailLowerCase },
             update: { organization }, // Update organization if user exists
             create: {
                 username: user.username,
                 firstName: user.firstName,
                 lastName: user.lastName,
-                email: user.email,
+                email: emailLowerCase,
                 password: defaultPassword,
                 organization,
                 isAdmin: user.isAdmin } })
