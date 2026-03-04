@@ -102,7 +102,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         lastName: user.lastName,
                         organization: user.organization,
                         role: userRole,
-                        isAdmin: userRole === 'ADMIN',
+                        isAdmin: userRole === 'ADMIN' || (user as { isAdmin?: boolean }).isAdmin === true,
                         isManager: userRole === 'MANAGER' || userRole === 'ADMIN',
                         userType: (user as { userType?: string }).userType || 'STAFF',
                         b2bPartnerId: (user as { b2bPartnerId?: string | null }).b2bPartnerId || null,

@@ -1,8 +1,10 @@
 
+// IMPORTANT: This module uses Node.js fs/path APIs and can only run in Node.js runtime
+// Do NOT import from barrel export - import directly:
+// import { convertPdfToImages } from '@zenowethu/shared-lib/pdf-image'
+
 import puppeteer from 'puppeteer';
 import { PDFDocument } from 'pdf-lib';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { logger } from './logger';
 
 // Load PDF.js source from local public directory (avoids CDN dependency in server environments)
@@ -10,6 +12,10 @@ let _pdfJsSource: string | null = null;
 let _pdfJsWorkerSource: string | null = null;
 
 function getPdfJsSource(): string {
+    // Lazy import to avoid Edge Runtime crashes
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+
     if (!_pdfJsSource) {
         const filePath = join(process.cwd(), 'public', 'pdfjs', 'pdf.min.js');
         _pdfJsSource = readFileSync(filePath, 'utf-8');
@@ -18,6 +24,10 @@ function getPdfJsSource(): string {
 }
 
 function getPdfJsWorkerSource(): string {
+    // Lazy import to avoid Edge Runtime crashes
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+
     if (!_pdfJsWorkerSource) {
         const filePath = join(process.cwd(), 'public', 'pdfjs', 'pdf.worker.min.js');
         _pdfJsWorkerSource = readFileSync(filePath, 'utf-8');

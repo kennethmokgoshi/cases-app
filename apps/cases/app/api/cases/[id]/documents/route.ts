@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import busboy from 'busboy';
 import { Readable } from 'stream';
+
+// Server-side logger for API routes
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 // GET - List all documents for a case
 export async function GET(

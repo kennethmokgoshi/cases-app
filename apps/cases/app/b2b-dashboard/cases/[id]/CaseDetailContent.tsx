@@ -5,7 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { PDFDocument } from 'pdf-lib';
-import { logger } from '@zenowethu/shared-lib';
+
+// Client-side logger
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 type CaseDetail = {
     id: string;

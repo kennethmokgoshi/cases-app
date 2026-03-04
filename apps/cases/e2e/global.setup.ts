@@ -30,8 +30,19 @@ setup('authenticate', async ({ page }) => {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: /sign in/i }).click();
 
-    // Wait for redirect to the dashboard after successful login
-    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15_000 });
+    // Wait for redirect to the dashboard after successful login (increased timeout for slow HDD)
+    await page.waitForURL((url) => !url.pathname.includes('/login') && !url.pathname.includes('/api/auth/error'), { timeout: 60_000 });
+
+    // Give the browser a moment to ensure all cookies are set after redirect
+    await page.waitForTimeout(3000);
+
+    // Verify we're actually logged in by checking session cookie exists
+    const cookies = await page.context().cookies();
+    const sessionCookie = cookies.find(c => c.name.includes('session-token'));
+    if (!sessionCookie) {
+        throw new Error('Session cookie not found after login');
+    }
+    console.log('✓ Session cookie found:', sessionCookie.name);
 
     // Persist auth cookies + localStorage for reuse across tests
     await page.context().storageState({ path: AUTH_FILE });

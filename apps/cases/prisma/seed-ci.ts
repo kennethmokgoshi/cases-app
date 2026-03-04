@@ -31,7 +31,7 @@ async function main() {
         { username: 'mmamy@letsatsifinance.co.za', firstName: 'Mmamy', lastName: 'Matlou', email: 'mmamy@letsatsifinance.co.za', isAdmin: false },
         { username: 'sibongile@letsatsifinance.co.za', firstName: 'Sibongile', lastName: 'Mnyabiso', email: 'sibongile@letsatsifinance.co.za', isAdmin: false },
         // Zenowethu Users
-        { username: 'user8@zenowethu.co.za', firstName: 'zenowethu', lastName: 'zenowethu', email: 'user8@zenowethu.co.za', isAdmin: false },
+        { username: 'user8@zenowethu.co.za', firstName: 'zenowethu', lastName: 'zenowethu', email: 'user8@zenowethu.co.za', isAdmin: true, role: 'ADMIN' as const },
         { username: 'kenneth@zenowethu.co.za', firstName: 'Kenneth', lastName: 'Mokgoshi', email: 'kenneth@zenowethu.co.za', isAdmin: true },
         { username: 'user10@zenowethu.co.za', firstName: 'Zenowethu', lastName: 'Zenowethu', email: 'user10@zenowethu.co.za', isAdmin: false },
         { username: 'user11@zenowethu.co.za', firstName: 'Zenowethu', lastName: 'Zenowethu', email: 'user11@zenowethu.co.za', isAdmin: false },
@@ -51,7 +51,11 @@ async function main() {
         const emailLowerCase = user.email.toLowerCase()
         await prisma.user.upsert({
             where: { email: emailLowerCase },
-            update: { organization }, // Update organization if user exists
+            update: {
+                organization,
+                isAdmin: user.isAdmin,
+                ...('role' in user ? { role: user.role } : {})
+            },
             create: {
                 username: user.username,
                 firstName: user.firstName,
@@ -59,7 +63,8 @@ async function main() {
                 email: emailLowerCase,
                 password: defaultPassword,
                 organization,
-                isAdmin: user.isAdmin } })
+                isAdmin: user.isAdmin,
+                ...('role' in user ? { role: user.role } : {}) } })
     }
 
     logger.info(`Created ${users.length} users`)

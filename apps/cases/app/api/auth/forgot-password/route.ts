@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import crypto from 'crypto';
 import { ForgotPasswordSchema, parseBody } from '@/lib/schemas';
-import { logger } from '@zenowethu/shared-lib';
+
 import { z } from 'zod';
+
+// Server-side logger for API routes
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 export async function POST(request: NextRequest) {
     try {

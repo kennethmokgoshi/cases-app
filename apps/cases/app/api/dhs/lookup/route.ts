@@ -7,11 +7,19 @@
  */
 
 import { NextResponse } from 'next/server';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo , logger } from '@zenowethu/shared-lib';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo  } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { addWorkingDays } from '@zenowethu/shared-lib';
 import path, { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
+
+// Server-side logger for API routes
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 // Helper to resolve file paths from URLs
 const getFilePath = (fileUrl: string) => {

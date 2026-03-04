@@ -1,10 +1,24 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { logger } from '@zenowethu/shared-lib';
+import { auth  } from '@zenowethu/shared-lib';
+
+// Server-side logger for API routes
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 export async function GET(request: Request) {
     try {
+        // Check authentication
+        const session = await auth();
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const query = searchParams.get('q');
 

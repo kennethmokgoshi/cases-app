@@ -2,6 +2,7 @@ import { auth } from '@zenowethu/shared-lib';
 import { redirect } from 'next/navigation';
 import { prisma } from '@zenowethu/database';
 import Link from 'next/link';
+import { DashboardCasesTable } from '@/components/DashboardCasesTable';
 
 // Force Node.js runtime to allow shared-lib imports with pino logger
 export const runtime = 'nodejs';
@@ -249,7 +250,7 @@ export default async function DirectorDashboard() {
       </div>
 
       {/* Unified Activity Stream */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-8 mb-12">
         <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-zeno-cyan animate-pulse"></span>
           Unified Activity Stream
@@ -273,6 +274,9 @@ export default async function DirectorDashboard() {
           )}
         </div>
       </div>
+
+      {/* Recent Cases Table */}
+      <DashboardCasesTable />
 
     </div>
   );

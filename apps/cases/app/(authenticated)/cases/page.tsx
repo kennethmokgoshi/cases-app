@@ -4,7 +4,15 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory , logger } from '@zenowethu/shared-lib';
+import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory } from '@zenowethu/shared-lib';
+
+// Client-side logger (avoid importing server-only modules from shared-lib)
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 import { SearchWithSuggestions } from '@zenowethu/ui';
 
 

@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { SessionProvider } from '@zenowethu/ui';
-import { ThemeProvider } from "@zenowethu/ui";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Zenowethu - Case Management",
@@ -48,11 +47,9 @@ export default function RootLayout({
         className="antialiased"
         suppressHydrationWarning={true}
       >
-        <ThemeProvider>
-          <SessionProvider>
-            {children}
-          </SessionProvider>
-        </ThemeProvider>
+        <Providers>
+          {children}
+        </Providers>
         {/* Service Worker Registration */}
         <script
           dangerouslySetInnerHTML={{
@@ -61,10 +58,10 @@ export default function RootLayout({
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js').then(
                     function(registration) {
-                      logger.info('ServiceWorker registered:', registration.scope);
+                      console.log('[INFO] ServiceWorker registered:', registration.scope);
                     },
                     function(err) {
-                      logger.info('ServiceWorker registration failed:', err);
+                      console.log('[INFO] ServiceWorker registration failed:', err);
                     }
                   );
                 });

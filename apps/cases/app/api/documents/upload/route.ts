@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { sendStatusChangeNotification , logger } from '@zenowethu/shared-lib';
+import { sendStatusChangeNotification  } from '@zenowethu/shared-lib';
 import { getStatusByCode } from '@zenowethu/shared-lib';
 import {
     analyzeCombinedDocument,
@@ -13,6 +13,14 @@ import { existsSync } from 'fs';
 import busboy from 'busboy';
 import { Readable } from 'stream';
 import { auth } from '@zenowethu/shared-lib';
+
+// Server-side logger for API routes
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 
 export const maxDuration = 600; // 10 minutes

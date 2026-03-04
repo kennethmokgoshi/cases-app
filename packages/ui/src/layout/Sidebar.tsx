@@ -1,9 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Component, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
+
+/**
+ * Error boundary that silently catches useSession errors caused by
+ * missing SessionProvider (module duplication in monorepo/turbopack).
+ */
+class SessionErrorBoundary extends Component<
+    { children: ReactNode },
+    { hasError: boolean }
+> {
+    constructor(props: { children: ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+    render() {
+        if (this.state.hasError) return null;
+        return this.props.children;
+    }
+}
 import { NotificationBell } from '../NotificationBell';
 import { SearchWithSuggestions } from '../ui/SearchWithSuggestions';
 import { ThemeSwitcher } from '../ThemeSwitcher';
@@ -501,6 +522,23 @@ const ProjectTreeItem = ({ project, depth = 0, autoExpandDate, yearContext }: { 
 };
 
 export function Sidebar() {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Don't render during SSR to avoid useSession without SessionProvider
+    if (!mounted) return null;
+
+    return (
+        <SessionErrorBoundary>
+            <SidebarInner />
+        </SessionErrorBoundary>
+    );
+}
+
+function SidebarInner() {
     const { data: session } = useSession();
     const router = useRouter();
     const [projectTree, setProjectTree] = useState<ProjectNode[]>([]);

@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib';
 import { ProjectCreateSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
+
+// Server-side logger for API routes
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 // Helper function to recursively fetch children
 async function getProjectWithChildren(projectId: string, depth: number = 5): Promise<unknown> {

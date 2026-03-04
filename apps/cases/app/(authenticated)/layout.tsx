@@ -1,20 +1,26 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { TopBar } from '@zenowethu/ui';
 import { Sidebar } from '@zenowethu/ui';
 import { MobileBottomNav } from '@zenowethu/ui';
 import { PWAInstallPrompt } from '@zenowethu/ui';
 import { LayoutProvider } from "@zenowethu/ui";
 
-// Force dynamic rendering for all authenticated routes (they require auth + DB access)
-export const dynamic = 'force-dynamic';
-
 export default function AuthenticatedLayout({
     children }: {
     children: React.ReactNode;
 }) {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     return (
         <LayoutProvider>
-            <TopBar />
-            <Sidebar />
+            {mounted && <TopBar />}
+            {mounted && <Sidebar />}
             {/* Main content area with responsive margin/padding */}
             <main
                 className="flex-1 min-h-screen bg-[var(--color-bg-primary)] transition-all duration-300

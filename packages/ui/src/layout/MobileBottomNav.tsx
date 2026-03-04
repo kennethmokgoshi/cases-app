@@ -1,8 +1,30 @@
 'use client';
 
+import { useState, useEffect, Component, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+
+/**
+ * Error boundary that silently catches useSession errors caused by
+ * missing SessionProvider (e.g. from module duplication in monorepo/turbopack).
+ */
+class SessionErrorBoundary extends Component<
+    { children: ReactNode; fallback?: ReactNode },
+    { hasError: boolean }
+> {
+    constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+    render() {
+        if (this.state.hasError) return this.props.fallback ?? null;
+        return this.props.children;
+    }
+}
 
 const navItems = [
     {
@@ -49,7 +71,24 @@ const navItems = [
 ];
 
 export function MobileBottomNav() {
+    const [mounted, setMounted] = useState(false);
     const pathname = usePathname();
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Don't render during SSR to avoid useSession without SessionProvider
+    if (!mounted) return null;
+
+    return (
+        <SessionErrorBoundary>
+            <MobileBottomNavInner pathname={pathname} />
+        </SessionErrorBoundary>
+    );
+}
+
+function MobileBottomNavInner({ pathname }: { pathname: string }) {
     const { data: session } = useSession();
 
     // Don't show on login or public pages

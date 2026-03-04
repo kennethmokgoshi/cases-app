@@ -5,7 +5,14 @@ import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { DashboardSwitcher } from '@zenowethu/ui';
 import B2BClientSearch from './components/B2BClientSearch';
-import { logger } from '@zenowethu/shared-lib';
+
+// Client-side logger
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 export default function B2BLayout({
     children }: {

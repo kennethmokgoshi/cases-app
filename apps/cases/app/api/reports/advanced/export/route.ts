@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, getSLATier, getBusinessDaysBetween } from '@zenowethu/shared-lib';
+import { auth, getSLATier, getBusinessDaysBetween  } from '@zenowethu/shared-lib';
 import * as XLSX from 'xlsx';
+
+// Server-side logger for API routes
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 export async function GET(request: Request) {
     try {

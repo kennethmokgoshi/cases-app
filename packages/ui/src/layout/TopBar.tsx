@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, Component, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { BRANDING } from '@zenowethu/config';
@@ -10,7 +11,45 @@ import { DashboardSwitcher } from './DashboardSwitcher';
 import { GlobalAppSwitcher } from './GlobalAppSwitcher';
 import { useLayout } from '../providers/layout-context';
 
+/**
+ * Error boundary that silently catches useSession errors caused by
+ * missing SessionProvider (module duplication in monorepo/turbopack).
+ */
+class SessionErrorBoundary extends Component<
+    { children: ReactNode },
+    { hasError: boolean }
+> {
+    constructor(props: { children: ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+    render() {
+        if (this.state.hasError) return null;
+        return this.props.children;
+    }
+}
+
 export function TopBar() {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Don't render during SSR to avoid useSession without SessionProvider
+    if (!mounted) return null;
+
+    return (
+        <SessionErrorBoundary>
+            <TopBarInner />
+        </SessionErrorBoundary>
+    );
+}
+
+function TopBarInner() {
     const { data: session } = useSession();
     const { toggleMobileMenu, isMobileOpen } = useLayout();
 

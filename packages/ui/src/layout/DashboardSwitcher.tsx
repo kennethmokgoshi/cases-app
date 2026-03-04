@@ -6,6 +6,19 @@ import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 
 export function DashboardSwitcher() {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Don't render during SSR to avoid useSession without SessionProvider
+    if (!mounted) return null;
+
+    return <DashboardSwitcherInner />;
+}
+
+function DashboardSwitcherInner() {
     const { data: session } = useSession();
     const pathname = usePathname();
     const [isOpen, setIsOpen] = useState(false);

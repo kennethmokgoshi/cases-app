@@ -6,9 +6,8 @@ export * from './integrations';
 export * from './statuses';
 export * from './dhs';
 export * from './openai';
-// pdf-image removed from barrel export - import directly when needed (server-side only)
-// Reason: Uses Node.js fs/path which crashes Edge Runtime compilation
-// import { convertPdfToImages } from '@zenowethu/shared-lib/pdf-image' when needed
+// pdf-image NOT exported - uses Node.js APIs (fs, path, process.cwd)
+// Import directly when needed: import { convertPdfToImages } from '@zenowethu/shared-lib/src/pdf-image'
 export * from './notifications';
 export * from './schemas';
 

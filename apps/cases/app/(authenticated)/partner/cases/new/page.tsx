@@ -239,6 +239,10 @@ function NewCaseWithAIComponent() {
         cb_status: '',
         cb_statusDate: '' });
 
+    // SA ID number validation
+    const [idNumberTouched, setIdNumberTouched] = useState(false);
+    const isIdNumberInvalid = idNumberTouched && formData.idNumber.length > 0 && formData.idNumber.length !== 13;
+
     // Cell number verification from multiple documents
     const [cellVerification, setCellVerification] = useState<{
         letsatsiAgreement: string | null;
@@ -867,8 +871,8 @@ function NewCaseWithAIComponent() {
                     serviceFee: formData.serviceFee || null,
                     instalments: formData.instalments || 1,
                     affordabilityStatus: formData.affordabilityStatus || null,
-                    totalDebtAmount: formData.totalDebtAmount,
-                    totalMonthlyInstallment: formData.totalMonthlyInstallment,
+                    totalDebtAmount: formData.totalDebtAmount ? Number(formData.totalDebtAmount) : 0,
+                    totalMonthlyInstallment: formData.totalMonthlyInstallment ? Number(formData.totalMonthlyInstallment) : 0,
 
                     cb_ncrdcNo: formData.cb_ncrdcNo || null,
                     cb_debtCounsellor: formData.cb_debtCounsellor || null,
@@ -1525,8 +1529,13 @@ function NewCaseWithAIComponent() {
                                     type="text"
                                     value={formData.idNumber}
                                     onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
-                                    className={`w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none ${!formData.idNumber && 'border-red-500/50'}`}
+                                    onBlur={() => setIdNumberTouched(true)}
+                                    aria-invalid={isIdNumberInvalid || !formData.idNumber ? 'true' : undefined}
+                                    className={`w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none ${(!formData.idNumber || isIdNumberInvalid) && 'border-red-500/50'}`}
                                 />
+                                {isIdNumberInvalid && (
+                                    <p className="text-xs text-red-400 mt-1">SA ID number must be 13 digits</p>
+                                )}
                             </div>
 
                             {/* Contact Info */}
