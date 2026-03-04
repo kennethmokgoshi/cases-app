@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { logger } from '@zenowethu/shared-lib';
+
+// Client-side logger (avoid importing server-only modules from shared-lib)
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args)
+};
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
