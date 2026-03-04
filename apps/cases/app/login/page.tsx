@@ -26,7 +26,8 @@ export default function LoginPage() {
 
             if (result?.error) {
                 // If it's a specific known error, show it. Otherwise show generic.
-                if (result.error === 'CredentialsSignin') {
+                if (result.error === 'CredentialsSignin' || result.error === 'Configuration') {
+                    // NextAuth v5 returns "Configuration" for invalid credentials or config issues
                     setError('Invalid email or password');
                 } else if (result.error.includes('Email not recognised')) {
                     setError('Email not recognised');
