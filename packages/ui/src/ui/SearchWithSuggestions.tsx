@@ -4,7 +4,15 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getStatusByCode, STATUS_CATEGORIES, logger } from '@zenowethu/shared-lib';
+import { getStatusByCode, STATUS_CATEGORIES } from '@zenowethu/shared-lib/statuses';
+
+// Client-side logger (avoid importing server-only modules from shared-lib)
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
 
 type Suggestion = {
     id: string;
