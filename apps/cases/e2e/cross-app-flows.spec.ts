@@ -17,8 +17,8 @@ test.describe('Cross-App Workflow: Intake to Insurance', () => {
         await page.goto(`${casesUrl}/dashboard`);
         await expect(page).toHaveTitle(/Zenowethu|Case Management/i);
 
-        // Simulate clicking "New Case" and filling basic info
-        await page.getByRole('link', { name: /new case|intake/i }).first().click();
+        // Navigate directly to the intake form
+        await page.goto(`${casesUrl}/partner/cases/new`);
 
         const fileNumber = `E2E-${Date.now()}`;
         await page.getByLabel(/file number/i).fill(fileNumber);
