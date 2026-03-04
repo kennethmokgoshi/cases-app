@@ -83,6 +83,8 @@ export default auth((req) => {
     // 2. Auth Logic
     const isLoggedIn = !!req.auth
     const isOnLogin = pathname.startsWith('/login')
+    const isOnForgotPassword = pathname.startsWith('/forgot-password')
+    const isOnResetPassword = pathname.startsWith('/reset-password')
     const isApiAuth = pathname.startsWith('/api/auth')
     const isPublicApi = pathname.startsWith('/api/v1')
     const isSetupApi = pathname.startsWith('/api/setup')
@@ -103,8 +105,8 @@ export default auth((req) => {
             return NextResponse.redirect(new URL('/', req.url))
         }
 
-        // Redirect non-logged-in users
-        if (!isLoggedIn && !isOnLogin && !isApiAuth) {
+        // Redirect non-logged-in users (except for password recovery pages)
+        if (!isLoggedIn && !isOnLogin && !isOnForgotPassword && !isOnResetPassword && !isApiAuth) {
             if (pathname.startsWith('/api/')) {
                 return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
             }
