@@ -311,15 +311,24 @@ export default function CaseDetailPage() {
         setLoading(true);
         try {
             const response = await fetch(`/api/cases/${params.id}`);
-            if (!response.ok) throw new Error('Failed to fetch case');
+            if (!response.ok) {
+                if (response.status === 404) {
+                    // Case not found - redirect to cases list
+                    router.push('/cases');
+                    return;
+                }
+                throw new Error('Failed to fetch case');
+            }
             const data = await response.json();
             setCaseData(data);
         } catch (error) {
             log.error({ err: error }, 'Error fetching case:', error);
+            // On any error, redirect to cases list
+            router.push('/cases');
         } finally {
             setLoading(false);
         }
-    }, [params.id]);
+    }, [params.id, router]);
 
     useEffect(() => {
         fetchCase();
