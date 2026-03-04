@@ -4,7 +4,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getStatusByCode, STATUS_CATEGORIES } from '@zenowethu/shared-lib/statuses';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -12,6 +11,42 @@ const logger = {
     error: (...args: any[]) => console.error('[ERROR]', ...args),
     warn: (...args: any[]) => console.warn('[WARN]', ...args),
     debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
+};
+
+// Minimal status helpers (avoid importing from shared-lib which bundles pdf-image.ts)
+// TODO: Move these to a separate package that doesn't include Node.js modules
+const STATUS_CATEGORIES = [
+    { code: 'INTAKE', name: 'Intake', color: 'bg-blue-500' },
+    { code: 'DOCUMENTATION', name: 'Documentation', color: 'bg-yellow-500' },
+    { code: 'DHS_PROCESS', name: 'DHS Process', color: 'bg-purple-500' },
+    { code: 'LEGAL', name: 'Legal', color: 'bg-red-500' },
+    { code: 'DISPUTE', name: 'Dispute', color: 'bg-orange-500' },
+    { code: 'COMPLETION', name: 'Completion', color: 'bg-green-500' },
+    { code: 'PAYMENT', name: 'Payment', color: 'bg-cyan-500' },
+    { code: 'FOLLOW_UP', name: 'Follow Up', color: 'bg-indigo-500' },
+    { code: 'INACTIVE', name: 'Inactive', color: 'bg-gray-500' }
+];
+
+const getStatusByCode = (code: string) => {
+    // Simplified version - just return category based on status code pattern
+    let category = 'INTAKE';
+    if (code.includes('DOC') || code.includes('OUTSTANDING')) category = 'DOCUMENTATION';
+    else if (code.includes('DHS') || code.includes('APPROVED')) category = 'DHS_PROCESS';
+    else if (code.includes('COURT') || code.includes('LEGAL')) category = 'LEGAL';
+    else if (code.includes('DISPUTE')) category = 'DISPUTE';
+    else if (code.includes('COMPLETE') || code.includes('CLOSED')) category = 'COMPLETION';
+    else if (code.includes('PAYMENT') || code.includes('PAID')) category = 'PAYMENT';
+    else if (code.includes('FOLLOW')) category = 'FOLLOW_UP';
+    else if (code.includes('WITHDRAWN') || code.includes('REJECTED')) category = 'INACTIVE';
+
+    return {
+        code,
+        name: code.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+        category,
+        description: '',
+        slaEnabled: false,
+        isOverdueState: false
+    };
 };
 
 type Suggestion = {
