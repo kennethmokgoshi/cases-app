@@ -13,7 +13,7 @@ test.describe('Dashboard & Searching', () => {
 
     test('loads summary widgets with data', async ({ page }) => {
         // Verify key performance indicators load (actual dashboard shows division cards)
-        await expect(page.getByText(/insurance division|active cases|active policies/i)).toBeVisible();
+        await expect(page.getByText(/insurance division|active cases|active policies/i).first()).toBeVisible();
 
         // Check if chart containers are present
         const charts = page.locator('canvas, svg');
