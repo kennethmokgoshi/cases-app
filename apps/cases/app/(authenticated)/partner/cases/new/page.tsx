@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { ClientOnly } from './ClientOnly';
+
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
     info: (...args: any[]) => console.log('[INFO]', ...args),
@@ -100,9 +102,11 @@ const MONTHS = [
 
 export default function NewCaseWithAIPage() {
     return (
-        <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-white">Loading partner portal...</div>}>
-            <NewCaseWithAIComponent />
-        </Suspense>
+        <ClientOnly>
+            <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-white">Loading partner portal...</div>}>
+                <NewCaseWithAIComponent />
+            </Suspense>
+        </ClientOnly>
     );
 }
 
