@@ -26,6 +26,7 @@ import pino from 'pino';
 
 const isDev = process.env.NODE_ENV !== 'production';
 const isCI = process.env.CI === 'true';
+const disablePinoPretty = process.env.DISABLE_PINO_PRETTY === 'true';
 
 // Permissive log-function type that covers both calling conventions:
 //   logger.info('message')
@@ -50,8 +51,8 @@ export interface AppLoggerType {
 export const logger = pino({
     level: process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info'),
 
-    // Development: human-readable coloured output (but not in CI to avoid worker thread issues)
-    ...(isDev && !isCI && {
+    // Development: human-readable coloured output (but not in CI or E2E tests to avoid worker thread issues)
+    ...(isDev && !isCI && !disablePinoPretty && {
         transport: {
             target: 'pino-pretty',
             options: {
@@ -61,8 +62,8 @@ export const logger = pino({
                 messageFormat: '{module} › {msg}',
                 levelFirst: false } } }),
 
-    // Production or CI: structured JSON with ISO timestamp (synchronous, no worker threads)
-    ...((! isDev || isCI) && {
+    // Production, CI, or E2E: structured JSON with ISO timestamp (synchronous, no worker threads)
+    ...((! isDev || isCI || disablePinoPretty) && {
         formatters: {
             level: (label: string) => ({ level: label }) },
         timestamp: pino.stdTimeFunctions.isoTime }),
