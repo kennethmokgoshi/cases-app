@@ -194,10 +194,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run database migrations
-        run: pnpm --filter @zenowethu/database exec prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Database migrations run on the VPS during Dokploy deployment
+      # (GitHub Actions cannot reach the private database hostname)
 
       - name: Trigger Dokploy deployments
         run: |
