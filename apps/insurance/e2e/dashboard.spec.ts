@@ -30,8 +30,10 @@ test.describe('Insurance Dashboard', () => {
         await expect(page).not.toHaveURL(/\/login/);
     });
 
-    test('assessments list is accessible', async ({ page }) => {
-        await page.goto('/assessments');
+    test('reports page is accessible', async ({ page }) => {
+        // Note: /assessments route does not exist; assessments are shown
+        // on the /underwriting page. Use /reports as an additional route check.
+        await page.goto('/reports');
         await expect(page).not.toHaveURL(/\/login/);
     });
 

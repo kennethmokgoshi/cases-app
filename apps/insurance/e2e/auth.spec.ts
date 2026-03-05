@@ -42,8 +42,8 @@ test.describe('Login page', () => {
         await expect(page).toHaveURL(/\/login/);
     });
 
-    test('unauthenticated access to assessments redirects to login', async ({ page }) => {
-        await page.goto('/assessments');
+    test('unauthenticated access to underwriting redirects to login', async ({ page }) => {
+        await page.goto('/underwriting');
         await expect(page).toHaveURL(/\/login/);
     });
 });
