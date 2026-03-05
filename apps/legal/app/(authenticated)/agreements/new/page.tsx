@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { UploadCloud, FileText, CheckCircle, AlertTriangle, Play, ChevronRight, Loader2 } from "lucide-react";
-import { logger } from '@zenowethu/shared-lib';
+
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 interface AnalysisResult {
     parties: string[];

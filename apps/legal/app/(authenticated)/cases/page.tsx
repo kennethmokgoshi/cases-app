@@ -4,9 +4,14 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory, logger } from '@zenowethu/shared-lib';
+import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory } from '@zenowethu/shared-lib';
 import { SearchWithSuggestions } from '@zenowethu/ui';
 
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 type Case = {
     id: string;

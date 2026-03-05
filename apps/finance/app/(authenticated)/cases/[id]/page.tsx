@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { WORKFLOW_STATUSES, getStatusByCode, STATUS_CATEGORIES , logger } from '@zenowethu/shared-lib';
+import { WORKFLOW_STATUSES, getStatusByCode, STATUS_CATEGORIES } from '@zenowethu/shared-lib';
 import { calculateSlaDeadline } from '@zenowethu/shared-lib';
 import { SERVICES_MAP } from '@zenowethu/config';
 import { ActivityTab } from '@zenowethu/ui';
@@ -16,6 +16,12 @@ import { MoveCaseModal } from '@zenowethu/ui';
 import { EditServicesModal } from '@zenowethu/ui';
 import { CompareAnalysisModal } from '@zenowethu/ui';
 import { RichTextEditor } from '@zenowethu/ui';
+
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 type CaseDetail = {
     id: string;

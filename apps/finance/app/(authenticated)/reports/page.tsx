@@ -3,7 +3,12 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { logger } from '@zenowethu/shared-lib';
+
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 /* ─── Types ─────────────────────────────────────────────── */
 type MonthlyRevenue = { month: string; total: number; count: number };
