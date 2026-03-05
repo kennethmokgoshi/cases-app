@@ -32,7 +32,7 @@ async function main() {
         { username: 'sibongile@letsatsifinance.co.za', firstName: 'Sibongile', lastName: 'Mnyabiso', email: 'sibongile@letsatsifinance.co.za', isAdmin: false },
         // Zenowethu Users
         { username: 'user8@zenowethu.co.za', firstName: 'zenowethu', lastName: 'zenowethu', email: 'user8@zenowethu.co.za', isAdmin: true, role: 'ADMIN' as const },
-        { username: 'kenneth@zenowethu.co.za', firstName: 'Kenneth', lastName: 'Mokgoshi', email: 'kenneth@zenowethu.co.za', isAdmin: true },
+        { username: 'kenneth@zenowethu.co.za', firstName: 'Kenneth', lastName: 'Mokgoshi', email: 'kenneth@zenowethu.co.za', isAdmin: true, role: 'ADMIN' as const },
         { username: 'user10@zenowethu.co.za', firstName: 'Zenowethu', lastName: 'Zenowethu', email: 'user10@zenowethu.co.za', isAdmin: false },
         { username: 'user11@zenowethu.co.za', firstName: 'Zenowethu', lastName: 'Zenowethu', email: 'user11@zenowethu.co.za', isAdmin: false },
         { username: 'user12@zenowethu.co.za', firstName: 'Zenowethu', lastName: 'Zenowethu', email: 'user12@zenowethu.co.za', isAdmin: false },
