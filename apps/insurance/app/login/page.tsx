@@ -30,11 +30,13 @@ function LoginForm() {
             const result = await signIn('credentials', {
                 email,
                 password,
-                redirect: false });
+                redirect: false,
+                callbackUrl: '/' });
 
             if (result?.error) {
                 // If it's a specific known error, show it. Otherwise show generic.
-                if (result.error === 'CredentialsSignin') {
+                if (result.error === 'CredentialsSignin' || result.error === 'Configuration') {
+                    // NextAuth v5 returns "Configuration" for invalid credentials or config issues
                     setError('Invalid email or password');
                 } else if (result.error.includes('Email not recognised')) {
                     setError('Email not recognised');
@@ -46,7 +48,7 @@ function LoginForm() {
                     // Fallback to the error message returned (stripping "Error: " if present)
                     setError(result.error.replace('Error: ', '') || 'Invalid email or password');
                 }
-            } else {
+            } else if (result?.ok) {
                 // Full page reload ensures the session cookie is available to middleware
                 window.location.href = '/';
             }
