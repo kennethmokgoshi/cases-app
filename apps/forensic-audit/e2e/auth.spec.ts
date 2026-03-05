@@ -20,11 +20,9 @@ test.describe('Login page', () => {
     });
 
     test('shows error for invalid credentials', async ({ page }) => {
-        // Dismiss any Next.js dev overlay that might intercept clicks
-        await page.locator('nextjs-portal').evaluate(el => el.remove()).catch(() => {});
         await page.getByLabel(/email/i).fill('notauser@zenowethu.co.za');
         await page.getByLabel(/password/i).fill('wrongpassword');
-        await page.getByRole('button', { name: /sign in/i }).click({ force: true });
+        await page.getByRole('button', { name: /sign in/i }).click();
 
         await expect(page.getByText(/invalid email or password|email not recognised|authentication error/i)).toBeVisible({
             timeout: 15_000,

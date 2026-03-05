@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { logger } from '@zenowethu/shared-lib';
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 export function B2BSidebar() {
     const pathname = usePathname();

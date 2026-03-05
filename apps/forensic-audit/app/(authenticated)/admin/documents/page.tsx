@@ -3,7 +3,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { logger } from '@zenowethu/shared-lib';
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 type Project = {
     id: string;

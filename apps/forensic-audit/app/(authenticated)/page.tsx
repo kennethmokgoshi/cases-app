@@ -1,9 +1,14 @@
-import { logger } from '@zenowethu/shared-lib';
 'use client'
 
 import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 type AuditUser = { firstName: string | null; lastName: string | null; email: string | null }
 type AuditCase = { id: string; fileNumber: string; client: { firstName: string; lastName: string } | null }

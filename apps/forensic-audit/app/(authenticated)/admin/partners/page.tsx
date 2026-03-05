@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { DeleteConfirmationModal } from '@zenowethu/ui';
-import { logger } from '@zenowethu/shared-lib';
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 type Project = {
     id: string;

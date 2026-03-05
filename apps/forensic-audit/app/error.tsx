@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { logger } from '@zenowethu/shared-lib';
+const logger = {
+    info: (...args: any[]) => console.log('[INFO]', ...args),
+    warn: (...args: any[]) => console.warn('[WARN]', ...args),
+    error: (...args: any[]) => console.error('[ERROR]', ...args),
+};
 
 /**
  * Segment-level error boundary — catches any unhandled error thrown
