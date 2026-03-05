@@ -16,6 +16,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
   turbopack: {
     root: '../../'
   },

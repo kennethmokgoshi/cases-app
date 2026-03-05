@@ -44,8 +44,9 @@ function buildEmailHtml(invoice: { invoiceNumber: string; total: unknown }, mess
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
 
@@ -63,7 +64,7 @@ export async function POST(
 
   try {
     const invoice = await prisma.invoice.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         client: { select: { firstName: true, lastName: true, email: true } },
         case:   { select: { fileNumber: true } } } })
@@ -117,7 +118,7 @@ export async function POST(
 
     // Update invoice status to SENT
     await prisma.invoice.update({
-      where: { id: params.id },
+      where: { id },
       data:  { status: 'SENT', sentAt: new Date(), sentTo: input.to } })
 
     // Note: NotificationLog not used here — caseId is non-nullable on that model

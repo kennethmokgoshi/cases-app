@@ -4,16 +4,17 @@ import { prisma } from '@zenowethu/database';
 
 export async function GET(
     _request: Request,
-    { params }: { params: { caseId: string } }
+    { params }: { params: Promise<{ caseId: string }> }
 ) {
     try {
+        const { caseId } = await params;
         const session = await auth();
         if (!session?.user?.id) {
             return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
         }
 
         const audit = await prisma.forensicAudit.findFirst({
-            where: { caseId: params.caseId },
+            where: { caseId },
             orderBy: { updatedAt: 'desc' },
             include: {
                 RecklessLendingAssessment: true,

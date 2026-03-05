@@ -9,7 +9,6 @@ import { auth, logger, generateCaseStrategy } from '@zenowethu/shared-lib';
  */
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
 ) {
     try {
         const session = await auth();

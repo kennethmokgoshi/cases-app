@@ -1,8 +1,12 @@
 /**
  * Structured logger for Zenowethu Cases System
  *
- * Usage (server-side only — API routes, server components):
+ * Uses console-based logging that works in both server and client contexts.
+ * Compatible with Next.js Turbopack bundler (no native Node.js dependencies).
  *
+ * For server-only pino logging, import from '@zenowethu/shared-lib/src/logger/pino'
+ *
+ * Usage:
  *   import { createLogger } from '@zenowethu/shared-lib';
  *   const log = createLogger('api/cases/route');
  *
@@ -13,26 +17,12 @@
  *
  * Log levels (lowest → highest severity):
  *   trace | debug | info | warn | error | fatal
- *
- * Environment:
- *   - Development : pretty-printed coloured output to stdout
- *   - Production  : single-line JSON to stdout (for log aggregators)
- *
- * Override log level at runtime:
- *   LOG_LEVEL=debug  (default: debug in dev, info in prod)
  */
-
-import pino from 'pino';
-
-const isDev = process.env.NODE_ENV !== 'production';
-const isCI = process.env.CI === 'true';
-const disablePinoPretty = process.env.DISABLE_PINO_PRETTY === 'true';
 
 // Permissive log-function type that covers both calling conventions:
 //   logger.info('message')
 //   logger.info('message', extraArg)
 //   logger.info({ key: value }, 'message')
-// Pino v10 introduces overloads with `msg?: never` that break the second form.
 interface AppLogFn {
     (msg: string, ...args: any[]): void;
     (obj: object, msg?: string, ...args: any[]): void;
@@ -48,35 +38,44 @@ export interface AppLoggerType {
     child: (bindings: object) => AppLoggerType;
 }
 
-export const logger = pino({
-    level: process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info'),
+/**
+ * Console-based logger that works in both server and client contexts.
+ * Outputs structured JSON in production, readable prefixed logs in development.
+ */
+function createConsoleLogger(prefix?: string): AppLoggerType {
+    const isProd = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
 
-    // Development: human-readable coloured output (but not in CI or E2E tests to avoid worker thread issues)
-    ...(isDev && !isCI && !disablePinoPretty && {
-        transport: {
-            target: 'pino-pretty',
-            options: {
-                colorize: true,
-                translateTime: 'HH:MM:ss',
-                ignore: 'pid,hostname,env',
-                messageFormat: '{module} › {msg}',
-                levelFirst: false } } }),
+    const fmt = (method: (...args: any[]) => void, level: string) =>
+        (...args: any[]) => {
+            if (isProd) {
+                // Structured JSON output for log aggregators
+                const ts = new Date().toISOString();
+                const first = args[0];
+                if (typeof first === 'object' && first !== null && !(first instanceof Error)) {
+                    const msg = args[1] || '';
+                    method(JSON.stringify({ level, time: ts, ...(prefix ? { module: prefix } : {}), ...first, msg }));
+                } else {
+                    method(JSON.stringify({ level, time: ts, ...(prefix ? { module: prefix } : {}), msg: args.join(' ') }));
+                }
+            } else {
+                if (prefix) method(`[${prefix}]`, ...args);
+                else method(...args);
+            }
+        };
 
-    // Production, CI, or E2E: structured JSON with ISO timestamp (synchronous, no worker threads)
-    ...((! isDev || isCI || disablePinoPretty) && {
-        formatters: {
-            level: (label: string) => ({ level: label }) },
-        timestamp: pino.stdTimeFunctions.isoTime }),
+    return {
+        trace: fmt(console.debug, 'trace') as AppLogFn,
+        debug: fmt(console.debug, 'debug') as AppLogFn,
+        info: fmt(console.info, 'info') as AppLogFn,
+        warn: fmt(console.warn, 'warn') as AppLogFn,
+        error: fmt(console.error, 'error') as AppLogFn,
+        fatal: fmt(console.error, 'fatal') as AppLogFn,
+        child: (bindings: object) =>
+            createConsoleLogger(prefix ? `${prefix}:${Object.values(bindings).join(':')}` : Object.values(bindings).join(':')),
+    };
+}
 
-    // Automatic error serialisation: pass `err` or `error` as a field
-    serializers: {
-        err: pino.stdSerializers.err,
-        error: pino.stdSerializers.err },
-
-    // Fields present on every log line
-    base: {
-        env: process.env.NODE_ENV,
-        ...(process.env.APP_NAME ? { app: process.env.APP_NAME } : {}) } }) as unknown as AppLoggerType;
+export const logger: AppLoggerType = createConsoleLogger();
 
 /**
  * Create a child logger pre-tagged with a module name.

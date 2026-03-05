@@ -6,9 +6,10 @@ import type { FinancialProfile } from '@/lib/affordability-engine';
 
 export async function POST(
     request: Request,
-    { params }: { params: { caseId: string } }
+    { params }: { params: Promise<{ caseId: string }> }
 ) {
     try {
+        const { caseId } = await params;
         const session = await auth();
         if (!session?.user?.id) {
             return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -19,7 +20,7 @@ export async function POST(
 
         // Load case + client + credit accounts
         const caseRecord = await prisma.case.findUnique({
-            where: { id: params.caseId },
+            where: { id: caseId },
             include: {
                 client: true,
                 creditAccounts: {
@@ -71,7 +72,7 @@ export async function POST(
 
         // Upsert ForensicAudit record
         const existingAudit = await prisma.forensicAudit.findFirst({
-            where: { caseId: params.caseId },
+            where: { caseId: caseId },
             orderBy: { createdAt: 'desc' } });
 
         const auditStatus =
@@ -91,7 +92,7 @@ export async function POST(
             forensicAudit = await prisma.forensicAudit.create({
                 data: {
                     id: crypto.randomUUID(),
-                    caseId: params.caseId,
+                    caseId: caseId,
                     status: auditStatus,
                     auditorId: session.user.id,
                     findings: JSON.stringify(result.accountFindings),

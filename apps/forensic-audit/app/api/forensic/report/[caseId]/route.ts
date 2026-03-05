@@ -6,9 +6,10 @@ import type { AccountFinding, FullAuditResult } from '@/lib/forensic-engine';
 
 export async function GET(
     _request: Request,
-    { params }: { params: { caseId: string } }
+    { params }: { params: Promise<{ caseId: string }> }
 ) {
     try {
+        const { caseId } = await params;
         const session = await auth();
         if (!session?.user?.id) {
             return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -16,7 +17,7 @@ export async function GET(
 
         // Load audit + case + client
         const audit = await prisma.forensicAudit.findFirst({
-            where: { caseId: params.caseId },
+            where: { caseId },
             orderBy: { updatedAt: 'desc' },
             include: {
                 Case: {

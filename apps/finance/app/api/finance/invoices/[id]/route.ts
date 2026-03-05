@@ -19,14 +19,15 @@ const UpdateInvoiceSchema = z.object({
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
 
   try {
     const invoice = await prisma.invoice.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         client:    { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true, address: true } },
         case:      { select: { fileNumber: true, acquisitionType: true } },
@@ -44,8 +45,9 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
 
@@ -60,7 +62,7 @@ export async function PATCH(
   }
 
   try {
-    const existing = await prisma.invoice.findUnique({ where: { id: params.id }, select: { status: true } })
+    const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     if (existing.status === 'PAID' || existing.status === 'CANCELLED') {
@@ -85,7 +87,7 @@ export async function PATCH(
       updateData.total     = subtotal + subtotal * vatRate
     } else if (input.vatRate !== undefined) {
       // vatRate changed without new lineItems — need to recalculate
-      const inv = await prisma.invoice.findUnique({ where: { id: params.id }, select: { subtotal: true } })
+      const inv = await prisma.invoice.findUnique({ where: { id }, select: { subtotal: true } })
       if (inv) {
         const sub = Number(inv.subtotal)
         updateData.vatRate   = input.vatRate
@@ -94,7 +96,7 @@ export async function PATCH(
       }
     }
 
-    const updated = await prisma.invoice.update({ where: { id: params.id }, data: updateData })
+    const updated = await prisma.invoice.update({ where: { id }, data: updateData })
     return NextResponse.json(updated)
   } catch (err) {
     logger.error('[PATCH /api/finance/invoices/[id]]', err)
@@ -104,20 +106,21 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
 
   try {
-    const existing = await prisma.invoice.findUnique({ where: { id: params.id }, select: { status: true } })
+    const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     if (existing.status !== 'DRAFT') {
       return NextResponse.json({ error: 'Only DRAFT invoices can be deleted' }, { status: 409 })
     }
 
-    await prisma.invoice.delete({ where: { id: params.id } })
+    await prisma.invoice.delete({ where: { id } })
     return new NextResponse(null, { status: 204 })
   } catch (err) {
     logger.error('[DELETE /api/finance/invoices/[id]]', err)

@@ -16,13 +16,14 @@ const RateTablePatchSchema = z.object({
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-    const rate = await prisma.creditLifeRateTable.findUnique({ where: { id: params.id } })
+    const rate = await prisma.creditLifeRateTable.findUnique({ where: { id } })
     if (!rate) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     return NextResponse.json(rate)
@@ -34,9 +35,10 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
@@ -46,7 +48,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 422 })
     }
 
-    const existing = await prisma.creditLifeRateTable.findUnique({ where: { id: params.id } })
+    const existing = await prisma.creditLifeRateTable.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const data: Record<string, unknown> = { ...parsed.data }
@@ -55,7 +57,7 @@ export async function PATCH(
     }
 
     const updated = await prisma.creditLifeRateTable.update({
-      where: { id: params.id },
+      where: { id },
       data })
 
     return NextResponse.json(updated)
@@ -67,16 +69,17 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-    const existing = await prisma.creditLifeRateTable.findUnique({ where: { id: params.id } })
+    const existing = await prisma.creditLifeRateTable.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    await prisma.creditLifeRateTable.delete({ where: { id: params.id } })
+    await prisma.creditLifeRateTable.delete({ where: { id } })
 
     return NextResponse.json({ success: true })
   } catch (error) {

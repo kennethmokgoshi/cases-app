@@ -5,10 +5,10 @@ import { generateRescissionApplication, generateDisputeLetter, generateSection12
 
 export async function POST(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     try {
-        const id = params.id;
         const matter = await prisma.legalMatter.findUnique({
             where: { id },
             include: {
@@ -68,7 +68,7 @@ export async function POST(
         });
 
     } catch (error) {
-        logger.error({ error, matterId: params.id }, '❌ Failed to generate legal PDF');
+        logger.error({ error, matterId: id }, 'Failed to generate legal PDF');
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

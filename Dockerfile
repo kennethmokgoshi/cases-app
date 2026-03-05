@@ -74,6 +74,7 @@ ENV OPENAI_API_KEY=$OPENAI_API_KEY
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Generate Prisma client from shared schema
 RUN cd packages/database && npx prisma generate

@@ -10,9 +10,10 @@ const CompliancePatchSchema = z.object({
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
@@ -25,13 +26,13 @@ export async function PATCH(
     }
 
     const existing = await prisma.forensicAudit.findUnique({
-      where: { id: params.id } })
+      where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Audit not found' }, { status: 404 })
     }
 
     const updated = await prisma.forensicAudit.update({
-      where: { id: params.id },
+      where: { id },
       data: { status: parsed.data.status } })
 
     // Write audit trail entry
