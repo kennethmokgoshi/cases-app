@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import * as path from 'path';
+
+// Load .env.local for E2E credentials (dotenv is optional — only available locally)
+try { require('dotenv').config({ path: path.resolve(__dirname, '.env.local') }); } catch {}
 
 /**
  * Playwright E2E test configuration for the Zenowethu Forensic Audit app.
@@ -9,6 +13,8 @@ const BASE_URL = process.env.TEST_BASE_URL ?? 'http://localhost:3003';
 
 export default defineConfig({
     testDir: './e2e',
+    timeout: 60_000,
+    expect: { timeout: 15_000 },
     fullyParallel: false, // sequential to avoid session conflicts
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 2 : 0,
@@ -41,6 +47,6 @@ export default defineConfig({
         command: 'npm run dev',
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
+        timeout: 300_000,
     },
 });

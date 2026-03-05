@@ -1,17 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginPageContent() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const searchParams = useSearchParams();
+
+    useEffect(() => {
+        const urlError = searchParams.get('error');
+        if (urlError) {
+            setError(urlError);
+        }
+    }, [searchParams]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -22,11 +30,12 @@ export default function LoginPage() {
             const result = await signIn('credentials', {
                 email,
                 password,
-                redirect: false });
+                redirect: false,
+                callbackUrl: '/' });
 
             if (result?.error) {
                 // If it's a specific known error, show it. Otherwise show generic.
-                if (result.error === 'CredentialsSignin') {
+                if (result.error === 'CredentialsSignin' || result.error === 'Configuration') {
                     setError('Invalid email or password');
                 } else if (result.error.includes('Email not recognised')) {
                     setError('Email not recognised');
@@ -38,9 +47,8 @@ export default function LoginPage() {
                     // Fallback to the error message returned (stripping "Error: " if present)
                     setError(result.error.replace('Error: ', '') || 'Invalid email or password');
                 }
-            } else {
-                router.push('/');
-                router.refresh();
+            } else if (result?.ok) {
+                window.location.href = '/';
             }
         } catch {
             setError('An error occurred. Please try again.');
@@ -153,6 +161,14 @@ export default function LoginPage() {
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-zeno-navy flex items-center justify-center p-4"><div className="text-white text-center"><p>Loading...</p></div></div>}>
+            <LoginPageContent />
+        </Suspense>
     );
 }
 

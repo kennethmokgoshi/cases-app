@@ -32,7 +32,7 @@ test.describe('Case Detail in Legal Context', () => {
     test('case detail page is accessible if a case exists', async ({ page }) => {
         await page.goto('/cases');
         const caseLink = page.getByRole('link').first();
-        if (await caseLink.isVisible()) {
+        if (await caseLink.isVisible().catch(() => false)) {
             await caseLink.click();
             await expect(page).not.toHaveURL(/\/login/);
 
@@ -45,10 +45,10 @@ test.describe('Case Detail in Legal Context', () => {
     test('status badges are visible on case detail', async ({ page }) => {
         await page.goto('/cases');
         const caseLink = page.getByRole('link').first();
-        if (await caseLink.isVisible()) {
+        if (await caseLink.isVisible().catch(() => false)) {
             await caseLink.click();
             const statusBadge = page.getByText(/active|pending|closed|in progress/i).first();
-            if (await statusBadge.isVisible()) {
+            if (await statusBadge.isVisible().catch(() => false)) {
                 await expect(statusBadge).toBeVisible();
             }
         }

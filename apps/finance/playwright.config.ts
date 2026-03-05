@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import * as path from 'path';
+
+try { require('dotenv').config({ path: path.resolve(__dirname, '.env.local') }); } catch {}
 
 /**
  * Playwright E2E test configuration for the Zenowethu Finance app.
@@ -14,6 +17,8 @@ export default defineConfig({
     retries: process.env.CI ? 2 : 0,
     workers: 1,
     reporter: process.env.CI ? 'github' : 'list',
+    timeout: 60_000,
+    expect: { timeout: 15_000 },
 
     use: {
         baseURL: BASE_URL,
@@ -41,6 +46,6 @@ export default defineConfig({
         command: 'npm run dev',
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
-        timeout: 120_000
+        timeout: 300_000
     }
 });

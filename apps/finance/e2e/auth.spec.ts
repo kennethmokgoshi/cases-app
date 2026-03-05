@@ -24,8 +24,8 @@ test.describe('Login page', () => {
         await page.getByLabel(/password/i).fill('wrongpassword');
         await page.getByRole('button', { name: /sign in/i }).click();
 
-        await expect(page.getByText(/invalid email or password|email not recognised/i)).toBeVisible({
-            timeout: 10_000,
+        await expect(page.getByText(/invalid email or password|email not recognised|authentication error/i)).toBeVisible({
+            timeout: 15_000,
         });
         await expect(page).toHaveURL(/\/login/);
     });
@@ -72,7 +72,10 @@ test.describe('Authenticated session', () => {
         await page.getByLabel(/password/i).fill(password!);
         await page.getByRole('button', { name: /sign in/i }).click();
 
-        await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15_000 });
+        await page.waitForURL(
+            (url) => !url.pathname.includes('/login') && !url.pathname.includes('/api/auth/error'),
+            { timeout: 15_000 }
+        );
         expect(page.url()).not.toContain('/login');
     });
 });

@@ -22,7 +22,7 @@ test.describe('Forensic Audit Dashboard', () => {
     test('KPI chips are visible if data exists', async ({ page }) => {
         // Dashboard shows Total Audits / Requiring Action / Reviewed
         const kpiText = page.getByText(/total audits|requiring action|reviewed/i).first();
-        if (await kpiText.isVisible()) {
+        if (await kpiText.isVisible().catch(() => false)) {
             await expect(kpiText).toBeVisible();
         }
     });

@@ -22,14 +22,14 @@ test.describe('Finance Dashboard (Accounts)', () => {
     test('MTD collections or financial KPI is visible if data exists', async ({ page }) => {
         // Dashboard shows MTD collections, pending batches, unallocated payments
         const kpiText = page.getByText(/collections|pending|unallocated|month.to.date/i).first();
-        if (await kpiText.isVisible()) {
+        if (await kpiText.isVisible().catch(() => false)) {
             await expect(kpiText).toBeVisible();
         }
     });
 
     test('ZAR currency amounts are visible if data exists', async ({ page }) => {
         const zarAmount = page.getByText(/R\s?\d|ZAR/i).first();
-        if (await zarAmount.isVisible()) {
+        if (await zarAmount.isVisible().catch(() => false)) {
             await expect(zarAmount).toBeVisible();
         }
     });

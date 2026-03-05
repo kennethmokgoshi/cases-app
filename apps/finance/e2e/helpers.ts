@@ -2,7 +2,10 @@ import { Page } from '@playwright/test';
 
 /** Wait for the dashboard/home to be fully loaded after login. */
 export async function waitForDashboard(page: Page) {
-    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15_000 });
+    await page.waitForURL(
+        (url) => !url.pathname.includes('/login') && !url.pathname.includes('/api/auth/error'),
+        { timeout: 15_000 }
+    );
 }
 
 /** Navigate to the finance app root and wait for load. */
