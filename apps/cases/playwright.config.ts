@@ -1,25 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
-import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-/**
- * Playwright E2E test configuration for the Zenowethu Cases app.
- *
- * Tests run against a locally running Next.js dev server (port 3000).
- * Set TEST_BASE_URL to override (e.g. for staging).
- *
- * Required env vars for tests that log in:
- *   E2E_EMAIL    — a valid test user email
- *   E2E_PASSWORD — the test user's password
- */
-
-// Load .env.local for E2E credentials and configuration
-dotenv.config({ path: path.resolve(__dirname, '.env.local') });
-
-// Debug: Log what environment variables were loaded
-console.log('DEBUG: E2E_EMAIL =', process.env.E2E_EMAIL);
-console.log('DEBUG: E2E_PASSWORD =', process.env.E2E_PASSWORD); // Show actual value temporarily
-console.log('DEBUG: .env.local path =', path.resolve(__dirname, '.env.local'));
+// Load .env.local for E2E credentials (dotenv is optional — only available locally)
+try { require('dotenv').config({ path: path.resolve(__dirname, '.env.local') }); } catch {}
 
 const BASE_URL = process.env.TEST_BASE_URL ?? 'http://localhost:3000';
 
