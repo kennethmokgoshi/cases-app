@@ -144,16 +144,18 @@ RUN apt-get update && apt-get install -y --fix-missing \
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/apps/${APP}/public ./public
 COPY --from=builder /app/packages/database/prisma ./prisma
 
-# Set correct permissions
-RUN mkdir -p .next storage/uploads
-RUN chown -R nextjs:nodejs .next storage/uploads
-
-# Leverage output traces
+# Leverage output traces — standalone preserves monorepo directory structure
 COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/.next/static ./.next/static
+
+# Copy public and static assets into the app-specific path (where server.js expects them)
+COPY --from=builder /app/apps/${APP}/public ./apps/${APP}/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/.next/static ./apps/${APP}/.next/static
+
+# Set correct permissions
+RUN mkdir -p apps/${APP}/.next storage/uploads
+RUN chown -R nextjs:nodejs apps/${APP}/.next storage/uploads
 
 USER nextjs
 
@@ -162,4 +164,8 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# In a monorepo, standalone output preserves directory structure:
+# server.js is at apps/<APP>/server.js, not at root.
+# Use shell form so $APP_NAME is expanded at runtime.
+ENV APP_NAME=${APP}
+CMD node apps/${APP_NAME}/server.js
