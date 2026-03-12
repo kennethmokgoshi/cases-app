@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory } from '@zenowethu/shared-lib';
 
 const logger = {

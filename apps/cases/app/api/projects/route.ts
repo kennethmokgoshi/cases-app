@@ -154,8 +154,27 @@ export async function GET(request: NextRequest) {
         if (parentId) whereClause.parentId = parentId;
         if (type) whereClause.type = type;
 
+        const slim = searchParams.get('slim') === 'true';
+
         // If flat=true, return all projects matching criteria as a flat list
         if (flat) {
+            if (slim) {
+                // Slim mode: only return fields the sidebar needs
+                const projects = await prisma.project.findMany({
+                    where: whereClause,
+                    select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        parentId: true,
+                        _count: { select: { cases: true } }
+                    },
+                    orderBy: { name: 'asc' }
+                });
+
+                return NextResponse.json(projects);
+            }
+
             const projects = await prisma.project.findMany({
                 where: whereClause,
                 include: {

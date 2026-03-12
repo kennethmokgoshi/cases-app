@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '@zenowethu/shared-lib/src/logger';
 
 type Partner = {
     id: string;

@@ -1,8 +1,70 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+
+// ─── Export Dropdown ──────────────────────────────────────────────────────────
+function ExportDropdown({ reportType, onExport, label = 'Export', variant = 'primary' }: {
+    reportType: string;
+    onExport: (type: string, format: string) => void;
+    label?: string;
+    variant?: 'primary' | 'inline';
+}) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handler(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        }
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const options = [
+        { format: 'csv',   icon: '📄', label: 'CSV',        desc: 'Comma-separated values' },
+        { format: 'excel', icon: '📊', label: 'Excel',      desc: '.xlsx spreadsheet' },
+        { format: 'pdf',   icon: '📋', label: 'PDF',        desc: 'Printable document' },
+    ];
+
+    const btnClass = variant === 'primary'
+        ? 'px-4 py-2 bg-zeno-cyan text-zeno-navy font-medium rounded-lg hover:bg-cyan-400 transition-colors flex items-center gap-2'
+        : 'text-zeno-cyan hover:text-cyan-300 text-sm flex items-center gap-1';
+
+    return (
+        <div className="relative" ref={ref}>
+            <button onClick={() => setOpen(!open)} className={btnClass}>
+                <span>📥 {label}</span>
+                <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            {open && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-zeno-navy border border-white/10 rounded-xl shadow-2xl z-20 overflow-hidden">
+                    <div className="p-2 border-b border-white/5">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest px-2 font-bold">Export Format</p>
+                    </div>
+                    <div className="p-1">
+                        {options.map(opt => (
+                            <button
+                                key={opt.format}
+                                onClick={() => { onExport(reportType, opt.format); setOpen(false); }}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left"
+                            >
+                                <span className="text-lg">{opt.icon}</span>
+                                <div>
+                                    <p className="text-sm font-medium text-white">{opt.label}</p>
+                                    <p className="text-[10px] text-gray-500">{opt.desc}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 // Client-side logger
 const logger = {
@@ -71,8 +133,8 @@ function ReportsContent() {
         }
     };
 
-    const exportToCSV = (type: string) => {
-        window.open(`/api/reports/export?type=${type}&from=${dateRange.from}&to=${dateRange.to}&projectId=${selectedProjectId}`, '_blank');
+    const exportReport = (type: string, format: string = 'csv') => {
+        window.open(`/api/reports/export?type=${type}&format=${format}&from=${dateRange.from}&to=${dateRange.to}&projectId=${selectedProjectId}`, '_blank');
     };
 
     const tabs = [
@@ -168,17 +230,17 @@ function ReportsContent() {
                 <>
                     {/* Overview Tab */}
                     {activeTab === 'overview' && (
-                        <OverviewTab stats={stats} onExport={exportToCSV} />
+                        <OverviewTab stats={stats} onExport={exportReport} />
                     )}
 
                     {/* Cases Report Tab */}
                     {activeTab === 'cases' && (
-                        <CasesReportTab stats={stats} onExport={exportToCSV} />
+                        <CasesReportTab stats={stats} onExport={exportReport} />
                     )}
 
                     {/* Invoices Tab */}
                     {activeTab === 'invoices' && (
-                        <InvoicesTab dateRange={dateRange} onExport={exportToCSV} />
+                        <InvoicesTab dateRange={dateRange} onExport={exportReport} />
                     )}
 
                     {/* Performance Tab */}
@@ -192,7 +254,7 @@ function ReportsContent() {
 }
 
 // Tab Components
-function OverviewTab({ stats, onExport }: { stats: ReportStats | null; onExport: (type: string) => void }) {
+function OverviewTab({ stats, onExport }: { stats: ReportStats | null; onExport: (type: string, format: string) => void }) {
     if (!stats) return null;
     return (
         <div className="space-y-6">
@@ -224,9 +286,7 @@ function OverviewTab({ stats, onExport }: { stats: ReportStats | null; onExport:
             <div className="bg-zeno-gray rounded-xl p-6 border border-white/10">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-white">Cases by Status</h3>
-                    <button onClick={() => onExport('status')} className="text-zeno-cyan hover:text-cyan-300 text-sm">
-                        📥 Export CSV
-                    </button>
+                    <ExportDropdown reportType="status" onExport={onExport} label="Export" variant="inline" />
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {stats.casesByStatus.slice(0, 8).map((item) => (
@@ -242,9 +302,7 @@ function OverviewTab({ stats, onExport }: { stats: ReportStats | null; onExport:
             <div className="bg-zeno-gray rounded-xl p-6 border border-white/10">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-white">Cases by Project</h3>
-                    <button onClick={() => onExport('project')} className="text-zeno-cyan hover:text-cyan-300 text-sm">
-                        📥 Export CSV
-                    </button>
+                    <ExportDropdown reportType="project" onExport={onExport} label="Export" variant="inline" />
                 </div>
                 <div className="space-y-2">
                     {stats.casesByProject.map((item) => (
@@ -259,34 +317,35 @@ function OverviewTab({ stats, onExport }: { stats: ReportStats | null; onExport:
     );
 }
 
-function CasesReportTab({ stats, onExport }: { stats: ReportStats | null; onExport: (type: string) => void }) {
+function CasesReportTab({ stats, onExport }: { stats: ReportStats | null; onExport: (type: string, format: string) => void }) {
     return (
         <div className="bg-zeno-gray rounded-xl p-6 border border-white/10">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-semibold text-white">Cases Report</h3>
-                <button
-                    onClick={() => onExport('cases')}
-                    className="px-4 py-2 bg-zeno-cyan text-zeno-navy font-medium rounded-lg hover:bg-cyan-400 transition-colors"
-                >
-                    📥 Export All Cases (CSV)
-                </button>
+                <ExportDropdown reportType="cases" onExport={onExport} label="Export All Cases" variant="primary" />
             </div>
             <p className="text-gray-400 mb-4">Export a detailed report of all cases within the selected date range.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button onClick={() => onExport('cases_b2b')} className="p-4 bg-zeno-navy rounded-lg border border-purple-500/30 hover:bg-purple-500/10 transition-colors text-left">
-                    <h4 className="text-purple-400 font-medium mb-1">B2B Cases Only</h4>
+                <div className="p-4 bg-zeno-navy rounded-lg border border-purple-500/30">
+                    <div className="flex justify-between items-start mb-2">
+                        <h4 className="text-purple-400 font-medium">B2B Cases Only</h4>
+                        <ExportDropdown reportType="cases_b2b" onExport={onExport} label="Export" variant="inline" />
+                    </div>
                     <p className="text-gray-400 text-sm">Export partner/referral cases</p>
-                </button>
-                <button onClick={() => onExport('cases_b2c')} className="p-4 bg-zeno-navy rounded-lg border border-teal-500/30 hover:bg-teal-500/10 transition-colors text-left">
-                    <h4 className="text-teal-400 font-medium mb-1">B2C Cases Only</h4>
+                </div>
+                <div className="p-4 bg-zeno-navy rounded-lg border border-teal-500/30">
+                    <div className="flex justify-between items-start mb-2">
+                        <h4 className="text-teal-400 font-medium">B2C Cases Only</h4>
+                        <ExportDropdown reportType="cases_b2c" onExport={onExport} label="Export" variant="inline" />
+                    </div>
                     <p className="text-gray-400 text-sm">Export direct/private cases</p>
-                </button>
+                </div>
             </div>
         </div>
     );
 }
 
-function InvoicesTab({ dateRange, onExport }: { dateRange: { from: string; to: string }; onExport: (type: string) => void }) {
+function InvoicesTab({ dateRange, onExport }: { dateRange: { from: string; to: string }; onExport: (type: string, format: string) => void }) {
     const [invoices, setInvoices] = useState<Array<{ id: string; fileNumber: string; clientName: string; amount: number; status: string; date: string }>>([]);
     const [loading, setLoading] = useState(true);
 
@@ -311,9 +370,7 @@ function InvoicesTab({ dateRange, onExport }: { dateRange: { from: string; to: s
         <div className="bg-zeno-gray rounded-xl p-6 border border-white/10">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-semibold text-white">Pending Invoices (B2C)</h3>
-                <button onClick={() => onExport('invoices')} className="px-4 py-2 bg-zeno-cyan text-zeno-navy font-medium rounded-lg">
-                    📥 Export Invoices
-                </button>
+                <ExportDropdown reportType="invoices" onExport={onExport} label="Export Invoices" variant="primary" />
             </div>
             {loading ? (
                 <p className="text-gray-400">Loading invoices...</p>

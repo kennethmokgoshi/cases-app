@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { signIn } from 'next-auth/react';
+import { signIn } from '@zenowethu/ui';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 

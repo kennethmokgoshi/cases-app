@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -57,7 +57,7 @@ export default function UsersManagement() {
         password: '',
         confirmPassword: '',
         organization: '',
-        role: 'MEMBER' as 'MEMBER' | 'MANAGER' | 'EXECUTIVE' | 'FINANCE' | 'ADMIN',
+        role: 'MEMBER' as 'MEMBER' | 'MANAGER' | 'SENIOR_MANAGER' | 'EXECUTIVE' | 'FINANCE' | 'ADMIN',
         isLocked: false,
         userType: 'STAFF' as 'STAFF' | 'B2B_PARTNER',
         b2bPartnerId: '' });
@@ -142,7 +142,7 @@ export default function UsersManagement() {
             password: '', // Don't populate password
             confirmPassword: '', // Don't populate confirm password
             organization: user.organization,
-            role: user.role as 'MEMBER' | 'MANAGER' | 'EXECUTIVE' | 'FINANCE' | 'ADMIN',
+            role: user.role as 'MEMBER' | 'MANAGER' | 'SENIOR_MANAGER' | 'EXECUTIVE' | 'FINANCE' | 'ADMIN',
             isLocked: user.isLocked,
             userType: user.userType as 'STAFF' | 'B2B_PARTNER',
             b2bPartnerId: user.b2bPartnerId || '' });
@@ -450,12 +450,36 @@ export default function UsersManagement() {
                                     </td>
                                     <td className="px-6 py-4">
                                         {user.role === 'ADMIN' ? (
-                                            <span className="px-2 py-1 text-xs font-medium rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-orange-500/20 text-orange-300 border border-orange-500/30">
                                                 Admin
                                             </span>
+                                        ) : user.role === 'EXECUTIVE' ? (
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                                                Executive
+                                            </span>
+                                        ) : user.role === 'SENIOR_MANAGER' ? (
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                                Senior Manager
+                                            </span>
                                         ) : user.role === 'MANAGER' ? (
-                                            <span className="px-2 py-1 text-xs font-medium rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                                 Manager
+                                            </span>
+                                        ) : user.role === 'FINANCE' ? (
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                                Finance
+                                            </span>
+                                        ) : user.role === 'ACCOUNTS' ? (
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                                Accounts
+                                            </span>
+                                        ) : user.role === 'B2B_MANAGER' ? (
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                                B2B Manager
+                                            </span>
+                                        ) : user.role === 'B2B_MEMBER' ? (
+                                            <span className="px-2 py-1 text-xs font-medium rounded bg-blue-400/20 text-blue-200 border border-blue-400/30">
+                                                B2B Member
                                             </span>
                                         ) : (
                                             <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400 border border-gray-500/30">
@@ -751,9 +775,19 @@ export default function UsersManagement() {
                                         <>
                                             <button
                                                 type="button"
+                                                onClick={() => setFormData({ ...formData, role: 'SENIOR_MANAGER' })}
+                                                className={`flex-1 min-w-[80px] py-2 px-3 rounded-lg font-medium transition-colors text-sm ${formData.role === 'SENIOR_MANAGER'
+                                                    ? 'bg-violet-500 text-white'
+                                                    : 'bg-zeno-blue/30 text-gray-300 hover:bg-zeno-blue/50'
+                                                    }`}
+                                            >
+                                                Senior Manager
+                                            </button>
+                                            <button
+                                                type="button"
                                                 onClick={() => setFormData({ ...formData, role: 'EXECUTIVE' })}
                                                 className={`flex-1 min-w-[80px] py-2 px-3 rounded-lg font-medium transition-colors text-sm ${formData.role === 'EXECUTIVE'
-                                                    ? 'bg-emerald-500 text-white'
+                                                    ? 'bg-yellow-500 text-white'
                                                     : 'bg-zeno-blue/30 text-gray-300 hover:bg-zeno-blue/50'
                                                     }`}
                                             >

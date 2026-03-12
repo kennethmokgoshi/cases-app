@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory } from '@zenowethu/shared-lib';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
@@ -276,7 +276,8 @@ function CasesContent() {
     const getStatusInfo = (code: string) => {
         return WORKFLOW_STATUSES.find(s => s.code === code) || {
             name: code,
-            category: 'INTAKE' as StatusCategory };
+            category: 'INTAKE' as StatusCategory
+        };
     };
 
     const getCategoryColor = (category: StatusCategory) => {
@@ -775,14 +776,68 @@ function CasesContent() {
     );
 }
 
+/**
+ * Error boundary that silently catches useSession errors caused by
+ * missing SessionProvider (module duplication in monorepo/turbopack).
+ */
+class SessionErrorBoundary extends React.Component<
+    { children: React.ReactNode; fallback?: React.ReactNode },
+    { hasError: boolean }
+> {
+    constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+    componentDidCatch(error: Error) {
+        console.error('[SessionErrorBoundary] Caught:', error.message);
+    }
+    render() {
+        if (this.state.hasError) {
+            return this.props.fallback || (
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="text-center">
+                        <p className="text-gray-400 mb-4">Session loading error. Please refresh.</p>
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="px-4 py-2 bg-zeno-cyan text-zeno-navy font-bold rounded-lg"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 export default function CasesPage() {
-    return (
-        <Suspense fallback={
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) {
+        return (
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-zeno-cyan"></div>
             </div>
-        }>
-            <CasesContent />
-        </Suspense>
+        );
+    }
+
+    return (
+        <SessionErrorBoundary>
+            <Suspense fallback={
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-zeno-cyan"></div>
+                </div>
+            }>
+                <CasesContent />
+            </Suspense>
+        </SessionErrorBoundary>
     );
 }

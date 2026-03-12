@@ -46,7 +46,10 @@ export async function GET(request: Request) {
         const take = searchParams.get('take') ? parseInt(searchParams.get('take')!) : undefined;
         const skip = searchParams.get('skip') ? parseInt(searchParams.get('skip')!) : undefined;
 
-        const where: any = {};
+        // DOMAIN FILTER: Only return cases with a LegalMatter
+        const where: any = {
+            LegalMatter: { some: {} }
+        };
 
         // Security: Filter by project membership (Inherited Access)
         const userRole = (session.user as any).role?.toUpperCase();

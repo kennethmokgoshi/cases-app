@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '@zenowethu/shared-lib/src/logger';
 
 type Case = {
   id: string;
@@ -50,7 +50,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.userType === 'B2B_PARTNER') {
       // Use window.location for cross-app redirect (Port 3001 -> Port 3000)
-      window.location.href = 'http://localhost:3000/b2b-dashboard';
+      window.location.href = window.location.hostname === 'localhost'
+        ? 'http://localhost:3000/b2b-dashboard'
+        : 'https://cases.zenowethu.co.za/b2b-dashboard';
     }
   }, [session, status]);
 

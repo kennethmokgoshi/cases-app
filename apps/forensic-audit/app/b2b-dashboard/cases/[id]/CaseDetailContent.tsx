@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
 import { PDFDocument } from 'pdf-lib';
 const logger = {

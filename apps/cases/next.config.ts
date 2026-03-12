@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
@@ -17,6 +18,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  transpilePackages: ['@zenowethu/ui', '@zenowethu/shared-lib'],
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream', 'puppeteer', 'puppeteer-core'],
   turbopack: {
     root: '../../'

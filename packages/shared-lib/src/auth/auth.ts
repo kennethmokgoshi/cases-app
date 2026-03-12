@@ -93,6 +93,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     log.info({ userId: user.id, role: user.role }, 'Login successful');
 
                     const userRole = (user as { role?: string }).role || 'MEMBER';
+                    const isAdmin = userRole === 'ADMIN' || (user as { isAdmin?: boolean }).isAdmin === true;
+                    const isExecutive = isAdmin || userRole === 'EXECUTIVE';
+                    const isSeniorManager = isExecutive || userRole === 'SENIOR_MANAGER';
+                    const isManager = isSeniorManager || userRole === 'MANAGER';
 
                     return {
                         id: user.id,
@@ -102,8 +106,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         lastName: user.lastName,
                         organization: user.organization,
                         role: userRole,
-                        isAdmin: userRole === 'ADMIN' || (user as { isAdmin?: boolean }).isAdmin === true,
-                        isManager: userRole === 'MANAGER' || userRole === 'ADMIN',
+                        isAdmin,
+                        isExecutive,
+                        isSeniorManager,
+                        isManager,
                         userType: (user as { userType?: string }).userType || 'STAFF',
                         b2bPartnerId: (user as { b2bPartnerId?: string | null }).b2bPartnerId || null,
                         avatarUrl: (user as { avatarUrl?: string | null }).avatarUrl || null };

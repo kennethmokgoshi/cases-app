@@ -4,12 +4,14 @@
     "private": true,
     "sideEffects": false,
     "main": "./src/index.ts",
+    "peerDependencies": {
+        "next": ">=15.0.0",
+        "next-auth": "^5.0.0-0"
+    },
     "dependencies": {
         "@zenowethu/database": "workspace:*",
         "bcryptjs": "^3.0.0",
         "date-fns": "^4.1.0",
-        "next": "16.0.6",
-        "next-auth": "5.0.0-beta.30",
         "nodemailer": "^7.0.11",
         "openai": "^6.9.1",
         "pdf-lib": "^1.17.1",

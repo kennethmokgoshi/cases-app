@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 
 export default function B2BProfilePage() {
     const { data: session } = useSession();

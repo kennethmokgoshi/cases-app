@@ -1,7 +1,7 @@
 'use client';
 
 import { B2BSidebar } from './components/B2BSidebar';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signOut } from '@zenowethu/ui';
 import Link from 'next/link';
 import { DashboardSwitcher } from '@zenowethu/ui';
 import B2BClientSearch from './components/B2BClientSearch';

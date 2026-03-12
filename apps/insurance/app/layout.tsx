@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { SessionProvider } from '@zenowethu/ui';
 import { ThemeProvider } from "@zenowethu/ui";
-import { logger } from '@zenowethu/shared-lib';
 
 export const metadata: Metadata = {
   title: "Zenowethu - Case Management",
@@ -62,10 +61,10 @@ export default function RootLayout({
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js').then(
                     function(registration) {
-                      logger.info('ServiceWorker registered:', registration.scope);
+                      console.log('ServiceWorker registered:', registration.scope);
                     },
                     function(err) {
-                      logger.info('ServiceWorker registration failed:', err);
+                      console.error('ServiceWorker registration failed:', err);
                     }
                   );
                 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '@zenowethu/shared-lib/src/logger';
 
 export default function ForceLogoutPage() {
     const [status, setStatus] = useState('Clearing session...');

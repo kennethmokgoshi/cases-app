@@ -31,7 +31,7 @@ async function getProjectWithChildren(projectId: string, depth: number = 5): Pro
 }
 
 // Helper function to add case counts to projects (counting ONLY direct cases, not descendants)
-// Changed to count ALL cases, not just active ones
+// Only counts cases that have a ForensicAudit (domain filter for forensic-audit app)
 async function addActiveCaseCounts<T extends { id: string; _count?: any }>(projects: T[]): Promise<T[]> {
     if (projects.length === 0) return [];
 
@@ -43,7 +43,8 @@ async function addActiveCaseCounts<T extends { id: string; _count?: any }>(proje
             caseId: true
         },
         where: {
-            projectId: { in: projectIds }
+            projectId: { in: projectIds },
+            case: { ForensicAudit: { some: {} } }
         }
     });
 

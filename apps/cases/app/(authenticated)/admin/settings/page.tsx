@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -163,14 +163,14 @@ export default function SettingsPage() {
                     password: ghlSettings.ghl_password }) });
 
             if (res.ok) {
-                setMessage({ type: 'success', text: 'GHL credentials saved successfully!' });
+                setMessage({ type: 'success', text: 'OPSGENTY credentials saved successfully!' });
                 fetchGHLSettings();
             } else {
                 const data = await res.json();
-                setMessage({ type: 'error', text: data.error || 'Failed to save GHL settings' });
+                setMessage({ type: 'error', text: data.error || 'Failed to save OPSGENTY settings' });
             }
         } catch (error) {
-            setMessage({ type: 'error', text: 'An error occurred while saving GHL settings' });
+            setMessage({ type: 'error', text: 'An error occurred while saving OPSGENTY settings' });
         } finally {
             setGhlSaving(false);
         }
@@ -203,7 +203,7 @@ export default function SettingsPage() {
     };
 
     const handleResetGHL = async () => {
-        if (!confirm('Are you sure you want to reset GHL credentials?')) {
+        if (!confirm('Are you sure you want to reset OPSGENTY credentials?')) {
             return;
         }
 
@@ -215,14 +215,14 @@ export default function SettingsPage() {
                 method: 'DELETE' });
 
             if (res.ok) {
-                setMessage({ type: 'success', text: 'GHL credentials reset successfully' });
+                setMessage({ type: 'success', text: 'OPSGENTY credentials reset successfully' });
                 fetchGHLSettings();
             } else {
                 const data = await res.json();
-                setMessage({ type: 'error', text: data.error || 'Failed to reset GHL settings' });
+                setMessage({ type: 'error', text: data.error || 'Failed to reset OPSGENTY settings' });
             }
         } catch (error) {
-            setMessage({ type: 'error', text: 'An error occurred while resetting GHL settings' });
+            setMessage({ type: 'error', text: 'An error occurred while resetting OPSGENTY settings' });
         } finally {
             setGhlSaving(false);
         }
@@ -362,16 +362,16 @@ export default function SettingsPage() {
                     </div>
                 </section>
 
-                {/* GoHighLevel Settings Section */}
+                {/* OPSGENTY Settings Section */}
                 <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
                     <div className="flex items-center gap-4 mb-6">
                         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white text-2xl">
                             🚀
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-white">GoHighLevel Integration</h2>
+                            <h2 className="text-xl font-bold text-white">OPSGENTY Integration</h2>
                             <p className="text-gray-400 text-sm">
-                                Configure credentials for GHL messaging and automation
+                                Configure credentials for OPSGENTY messaging and automation
                             </p>
                         </div>
                     </div>
@@ -381,7 +381,7 @@ export default function SettingsPage() {
                             {/* API Key */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    GHL API Key
+                                    OPSGENTY API Key
                                     {hasGhlApiKey && (
                                         <span className="ml-2 text-xs text-green-400">(Saved)</span>
                                     )}
@@ -474,7 +474,7 @@ export default function SettingsPage() {
                             disabled={ghlSaving}
                             className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
-                            {ghlSaving ? 'Saving...' : 'Save GHL Credentials'}
+                            {ghlSaving ? 'Saving...' : 'Save OPSGENTY Credentials'}
                         </button>
                         <button
                             onClick={handleResetGHL}

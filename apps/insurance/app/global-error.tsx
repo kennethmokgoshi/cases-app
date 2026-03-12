@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '@zenowethu/shared-lib/src/logger';
 
 /**
  * Global error boundary — catches errors thrown by the root layout.tsx itself.

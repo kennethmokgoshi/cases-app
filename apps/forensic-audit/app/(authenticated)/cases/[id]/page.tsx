@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { WORKFLOW_STATUSES, getStatusByCode, STATUS_CATEGORIES } from '@zenowethu/shared-lib';

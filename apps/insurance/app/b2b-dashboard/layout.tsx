@@ -1,11 +1,11 @@
 'use client';
 
 import { B2BSidebar } from './components/B2BSidebar';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signOut } from '@zenowethu/ui';
 import Link from 'next/link';
 import { DashboardSwitcher } from '@zenowethu/ui';
 import B2BClientSearch from './components/B2BClientSearch';
-import { logger } from '@zenowethu/shared-lib';
+import { logger } from '@zenowethu/shared-lib/src/logger';
 
 export default function B2BLayout({
     children }: {

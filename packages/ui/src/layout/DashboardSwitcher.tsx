@@ -37,9 +37,10 @@ function DashboardSwitcherInner() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Show to Authenticated ADMINS only (as per requirement)
-    // "dashboard switcher for admin on cases just cases"
-    if (!session?.user || !(session.user as any).isAdmin) {
+    // Show to ADMIN, EXECUTIVE, and SENIOR_MANAGER only
+    const { isAdmin, isExecutive, isSeniorManager } = session?.user as any ?? {};
+    const canSwitchDashboard = isAdmin || isExecutive || isSeniorManager;
+    if (!session?.user || !canSwitchDashboard) {
         return null;
     }
 
@@ -58,7 +59,7 @@ function DashboardSwitcherInner() {
             description: 'B2B Partner Dashboard',
             active: pathname.startsWith('/b2b-dashboard')
         },
-        ...(session?.user?.isAdmin ? [{
+        ...(isAdmin ? [{
             name: 'System Admin',
             href: '/admin',
             icon: '⚙️',

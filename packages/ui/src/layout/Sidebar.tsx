@@ -644,25 +644,33 @@ function SidebarInner() {
     useEffect(() => {
         async function fetchProjects() {
             try {
-                // Fetch stats for accurate total count
+                // Fetch stats and projects in PARALLEL (not sequentially)
+                const [statsResult, projectsResult] = await Promise.allSettled([
+                    fetch('/api/dashboard/stats'),
+                    fetch('/api/projects?flat=true&all=true&slim=true')
+                ]);
+
+                // Process stats (non-critical — OK to fail)
                 let totalCasesOverride = 0;
-                try {
-                    const statsRes = await fetch('/api/dashboard/stats');
-                    if (statsRes.ok) {
-                        const stats = await statsRes.json();
+                if (statsResult.status === 'fulfilled' && statsResult.value.ok) {
+                    try {
+                        const stats = await statsResult.value.json();
                         totalCasesOverride = stats.totalActiveCases || stats.totalCases || 0;
+                    } catch (e) {
+                        logger.error('Failed to parse stats', e);
                     }
-                } catch (e) {
-                    logger.error('Failed to fetch stats', e);
                 }
 
-                // Always fetch FLAT list to allow client-side transformation
-                const res = await fetch('/api/projects?flat=true&all=true');
+                // Process projects (critical)
+                if (projectsResult.status === 'rejected') {
+                    throw new Error('Network error fetching projects');
+                }
+                const res = projectsResult.value;
                 if (!res.ok) {
                     const text = await res.text();
                     throw new Error(`API Error ${res.status}: ${text.substring(0, 100)}...`);
                 }
-                const data = await res.json(); // Array of all projects
+                const data = await res.json();
 
                 if (Array.isArray(data)) {
                     let tree: ProjectNode[] = [];
@@ -829,7 +837,7 @@ function SidebarInner() {
                                     Documents
                                 </Link>
                             </li>
-                            {(session?.user?.isAdmin || session?.user?.email === 'kenneth@zenowethu.co.za' || session?.user?.email === 'Kenneth@zenowethu.co.za') && (
+                            {(session?.user?.isAdmin || (session?.user as any)?.isExecutive || (session?.user as any)?.isSeniorManager) && (
                                 <>
                                     <li className="mt-4 mb-2 px-2">
                                         <div className="h-px bg-white/5"></div>
@@ -878,7 +886,7 @@ function SidebarInner() {
                                 </>
                             )}
 
-                            {(session?.user?.isAdmin || (session?.user as any)?.role === 'ACCOUNTS' || (session?.user as any)?.role === 'FINANCE') && (
+                            {(session?.user?.isAdmin || (session?.user as any)?.isExecutive || (session?.user as any)?.isSeniorManager || (session?.user as any)?.role === 'FINANCE' || (session?.user as any)?.role === 'ACCOUNTS') && (
                                 <>
                                     <li className="mt-4 mb-2 px-2">
                                         <div className="h-px bg-white/5"></div>
@@ -1008,8 +1016,20 @@ function SidebarInner() {
                                 {session?.user?.organization || 'Zenowethu'}
                                 {session?.user?.isAdmin ? (
                                     <span className="ml-1 text-zeno-orange font-bold">• Admin</span>
-                                ) : session?.user?.isManager ? (
+                                ) : (session?.user as any)?.isExecutive ? (
+                                    <span className="ml-1 text-yellow-400 font-bold">• Executive</span>
+                                ) : (session?.user as any)?.isSeniorManager ? (
+                                    <span className="ml-1 text-violet-400 font-bold">• Senior Manager</span>
+                                ) : (session?.user as any)?.role === 'MANAGER' ? (
                                     <span className="ml-1 text-purple-400 font-bold">• Manager</span>
+                                ) : (session?.user as any)?.role === 'FINANCE' ? (
+                                    <span className="ml-1 text-emerald-400 font-bold">• Finance</span>
+                                ) : (session?.user as any)?.role === 'ACCOUNTS' ? (
+                                    <span className="ml-1 text-emerald-400 font-bold">• Accounts</span>
+                                ) : (session?.user as any)?.role === 'B2B_MANAGER' ? (
+                                    <span className="ml-1 text-blue-400 font-bold">• B2B Manager</span>
+                                ) : (session?.user as any)?.role === 'B2B_MEMBER' ? (
+                                    <span className="ml-1 text-blue-300 font-bold">• B2B Member</span>
                                 ) : (
                                     <span className="ml-1 text-zeno-cyan font-bold">• Member</span>
                                 )}

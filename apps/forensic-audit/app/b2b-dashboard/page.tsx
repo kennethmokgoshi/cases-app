@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 const logger = {
     info: (...args: any[]) => console.log('[INFO]', ...args),
     warn: (...args: any[]) => console.warn('[WARN]', ...args),

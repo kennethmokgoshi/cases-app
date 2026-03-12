@@ -1,6 +1,6 @@
 'use client'
 
-import { useSession } from 'next-auth/react'
+import { useSession } from '@zenowethu/ui'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
@@ -56,7 +56,9 @@ export default function ForensicDashboard() {
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.userType === 'B2B_PARTNER') {
-      window.location.href = 'http://localhost:3000/b2b-dashboard'
+      window.location.href = window.location.hostname === 'localhost'
+        ? 'http://localhost:3000/b2b-dashboard'
+        : 'https://cases.zenowethu.co.za/b2b-dashboard'
     }
   }, [session, status])
 

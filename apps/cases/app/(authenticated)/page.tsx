@@ -180,7 +180,7 @@ export default async function DirectorDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
 
         {/* Insurance Wing */}
-        <Link href="http://localhost:3001" className="group bg-blue-950/20 border border-blue-500/20 rounded-2xl p-6 hover:bg-blue-900/20 transition-all cursor-pointer relative overflow-hidden">
+        <Link href="https://insurance.zenowethu.co.za" className="group bg-blue-950/20 border border-blue-500/20 rounded-2xl p-6 hover:bg-blue-900/20 transition-all cursor-pointer relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <span className="text-8xl">🛡️</span>
           </div>
@@ -203,7 +203,7 @@ export default async function DirectorDashboard() {
         </Link>
 
         {/* Legal Wing */}
-        <Link href="http://localhost:3002" className="group bg-indigo-950/20 border border-indigo-500/20 rounded-2xl p-6 hover:bg-indigo-900/20 transition-all cursor-pointer relative overflow-hidden">
+        <Link href="https://legal.zenowethu.co.za" className="group bg-indigo-950/20 border border-indigo-500/20 rounded-2xl p-6 hover:bg-indigo-900/20 transition-all cursor-pointer relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <span className="text-8xl">⚖️</span>
           </div>
@@ -226,7 +226,7 @@ export default async function DirectorDashboard() {
         </Link>
 
         {/* Forensic Wing */}
-        <Link href="http://localhost:3003" className="group bg-emerald-950/20 border border-emerald-500/20 rounded-2xl p-6 hover:bg-emerald-900/20 transition-all cursor-pointer relative overflow-hidden">
+        <Link href="https://forensic.zenowethu.co.za" className="group bg-emerald-950/20 border border-emerald-500/20 rounded-2xl p-6 hover:bg-emerald-900/20 transition-all cursor-pointer relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <span className="text-8xl">🕵️‍♂️</span>
           </div>

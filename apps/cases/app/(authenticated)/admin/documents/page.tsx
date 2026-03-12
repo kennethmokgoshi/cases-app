@@ -167,6 +167,11 @@ export default function AdminDocumentsPage() {
 
     return (
         <div className="max-w-7xl mx-auto">
+            <div className="mb-6">
+                <Link href="/admin" className="text-zeno-cyan hover:text-cyan-300 text-sm inline-flex items-center gap-1">
+                    ← Back to Admin
+                </Link>
+            </div>
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-2">Document Resources</h1>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from '@zenowethu/ui';
 import { useEffect, useState } from 'react';
 const logger = {
     info: (...args: any[]) => console.log('[INFO]', ...args),

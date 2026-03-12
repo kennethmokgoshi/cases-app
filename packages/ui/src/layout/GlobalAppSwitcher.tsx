@@ -25,6 +25,8 @@ function GlobalAppSwitcherInner() {
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [currentPort, setCurrentPort] = useState('');
 
+    const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
     // Close on click outside & Get Port
     useEffect(() => {
         setCurrentPort(window.location.port);
@@ -37,49 +39,53 @@ function GlobalAppSwitcherInner() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Show to authenticated users only (Hidden for B2B Partners)
-    if (!session?.user || (session.user as any).userType === 'B2B_PARTNER') {
-        return null; // Explicitly hidden for B2B as requested
+    // Show only to ADMIN, EXECUTIVE, SENIOR_MANAGER (hidden for everyone else including B2B)
+    const { role, isAdmin, isExecutive, isSeniorManager } = session?.user as any ?? {};
+    const canSwitchApps = isAdmin || isExecutive || isSeniorManager;
+    if (!session?.user || !canSwitchApps) {
+        return null;
     }
 
-    const { role } = session.user as any;
-    const canAccessFinance = ['FINANCE', 'EXECUTIVE', 'ADMIN'].includes(role);
+    const canAccessFinance = isAdmin || isExecutive || isSeniorManager || role === 'FINANCE' || role === 'ACCOUNTS';
+
+    const isActiveApp = (port: string, hostname: string) =>
+        isLocalhost ? currentPort === port : window.location.hostname === hostname;
 
     const apps = [
         {
             name: 'Cases Core',
-            href: 'http://localhost:3000/',
+            href: isLocalhost ? 'http://localhost:3000/' : 'https://cases.zenowethu.co.za/',
             icon: '🏢',
             description: 'Group Command Center',
-            active: currentPort === '3000'
+            active: isActiveApp('3000', 'cases.zenowethu.co.za')
         },
         {
             name: 'Insurance Division',
-            href: 'http://localhost:3001/',
+            href: isLocalhost ? 'http://localhost:3001/' : 'https://insurance.zenowethu.co.za/',
             icon: '🛡️',
             description: 'Policy Audits & Assessments',
-            active: currentPort === '3001'
+            active: isActiveApp('3001', 'insurance.zenowethu.co.za')
         },
         {
             name: 'Legal Division',
-            href: 'http://localhost:3002/',
+            href: isLocalhost ? 'http://localhost:3002/' : 'https://legal.zenowethu.co.za/',
             icon: '⚖️',
             description: 'Rescissions & Collections',
-            active: currentPort === '3002'
+            active: isActiveApp('3002', 'legal.zenowethu.co.za')
         },
         {
             name: 'Forensic Division',
-            href: 'http://localhost:3003/',
+            href: isLocalhost ? 'http://localhost:3003/' : 'https://forensic.zenowethu.co.za/',
             icon: '🕵️‍♂️',
             description: 'Fraud & Reckless Lending',
-            active: currentPort === '3003'
+            active: isActiveApp('3003', 'forensic.zenowethu.co.za')
         },
         ...(canAccessFinance ? [{
             name: 'Finance & Accounts',
-            href: 'http://localhost:3004/',
+            href: isLocalhost ? 'http://localhost:3004/' : 'https://accounts.zenowethu.co.za/',
             icon: '💳',
             description: 'Payments & Reconciliation',
-            active: currentPort === '3004'
+            active: isActiveApp('3004', 'accounts.zenowethu.co.za')
         }] : [])
     ];
 

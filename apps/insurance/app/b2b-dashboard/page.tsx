@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
-import { logger } from '@zenowethu/shared-lib';
+import { useSession } from '@zenowethu/ui';
+import { logger } from '@zenowethu/shared-lib/src/logger';
 
 
 type PartnerCase = {

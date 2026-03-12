@@ -1,11 +1,25 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-02-27 (E2E Coverage Complete)
+> Last updated: 2026-03-11 (Role Hierarchy, NCRDC Compliance, Reports Export, UI Hardening)
 
 ---
 
 ## ✅ Completed
+
+### Role Hierarchy, NCRDC Compliance, Reports Export & UI Hardening (2026-03-11)
+- [x] **Circular import fix** — 5 `packages/ui/src/` files were importing from `@zenowethu/ui` (themselves). Fixed all back to `next-auth/react` direct imports.
+- [x] **Role hierarchy expanded** — Added `EXECUTIVE`, `SENIOR_MANAGER`, `MANAGER`, `B2B_MANAGER`, `B2B_MEMBER` roles alongside existing `ADMIN`, `FINANCE`, `ACCOUNTS`, `MEMBER`. Schema updated in `packages/shared-lib/src/schemas.ts`.
+- [x] **Cascading auth flags** — `isExecutive`, `isSeniorManager`, `isManager` computed at login in `packages/shared-lib/src/auth/auth.ts`. JWT + session callbacks updated. TypeScript `next-auth.d.ts` types extended.
+- [x] **Dashboard/App Switcher access** — `DashboardSwitcher` and `GlobalAppSwitcher` now gated to `isAdmin || isExecutive || isSeniorManager` only. Members/Managers cannot switch dashboards or apps.
+- [x] **Finance section visibility** — Sidebar Finance section visible to Admin, Executive, Senior Manager, Finance, and Accounts roles only.
+- [x] **Role badges** — All 9 roles have distinct colour badges in Sidebar and Admin Users table. Added Senior Manager (violet) + Executive (yellow) buttons to Edit User modal.
+- [x] **Reports export** — CSV, Excel, and PDF export added to Reports page. API route (`/api/reports/export`) rewritten to support `format=csv|excel|pdf`. PDF uses `pdf-lib` (A4 landscape, dark theme, cyan headers, auto-pagination). Excel uses `xlsx` package.
+- [x] **OPSGENTY rebrand** — All visible "GoHighLevel"/"GHL" UI text in Admin Settings changed to "OPSGENTY". Internal variable names and API routes unchanged.
+- [x] **Admin Documents back button** — "← Back to Admin" link added to `/admin/documents` page header.
+- [x] **NCRDC Compliance page** — Full registration tracking UI built at `/compliance`. Fields: NCRDC number, registered name, registration date, expiry date, notes. Status logic: ACTIVE / EXPIRING_SOON (≤30 days) / EXPIRED / NOT_SET with colour-coded banners.
+- [x] **NCRDC API** — `GET/POST /api/admin/compliance/ncrdc` using `SystemSettings` with prefixed keys (`ncrdc_ncrdc_number`, etc.) to match the schema's `key String @unique` constraint. Fixed upsert bug that used non-existent compound `category_key` constraint.
+- [x] **Sidebar Admin gate** — Admin section now only visible to `isAdmin || isExecutive || isSeniorManager`. Removed hardcoded email bypass that was exposing Admin nav to MEMBER-role users.
 
 ### E2E Test Coverage — All 5 Apps (2026-02-27)
 - [x] **Insurance E2E** — Fixed port bug (3002→3001), added `@playwright/test`, E2E scripts + 3 spec files: `auth.spec.ts`, `dashboard.spec.ts`, `underwriting.spec.ts` (rewritten with robust selectors)
@@ -246,8 +260,8 @@
 
 | Module | Status | Next Action |
 |--------|:------:|-------------|
-| Cases App | 93% | code dedup (dhs.ts shared across apps) remaining |
-| Auth & SSO | 85% | Upgrade NextAuth stable (blocked upstream) |
+| Cases App | 96% | code dedup remaining; NCRDC compliance + exports complete |
+| Auth & SSO | 92% | Role hierarchy complete; upgrade NextAuth stable (blocked upstream) |
 | B2B Portal | 90% | Analytics depth needs work |
 | Notifications | 80% | Multi-channel sending works; needs tests + retry logic |
 | Legal App | 98% | E2E complete (2026-02-27); WorkflowLog timeline remaining |

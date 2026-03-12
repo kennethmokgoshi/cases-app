@@ -123,7 +123,7 @@ export const UserCreateSchema = z.object({
         .min(8, 'Password must be at least 8 characters')
         .max(128, 'Password too long'),
     organization: optionalString,
-    role: z.enum(['ADMIN', 'MANAGER', 'MEMBER']).optional().default('MEMBER'),
+    role: z.enum(['ADMIN', 'EXECUTIVE', 'SENIOR_MANAGER', 'MANAGER', 'FINANCE', 'ACCOUNTS', 'MEMBER', 'B2B_MANAGER', 'B2B_MEMBER']).optional().default('MEMBER'),
     userType: z.enum(['STAFF', 'B2B_PARTNER']).optional().default('STAFF'),
     b2bPartnerId: z.string().optional().nullable() });
 
@@ -133,7 +133,7 @@ export const UserPatchSchema = z.object({
     email: z.string().email().optional(),
     password: z.string().min(8).max(128).optional(),
     organization: optionalString,
-    role: z.enum(['ADMIN', 'MANAGER', 'MEMBER']).optional(),
+    role: z.enum(['ADMIN', 'EXECUTIVE', 'SENIOR_MANAGER', 'MANAGER', 'FINANCE', 'ACCOUNTS', 'MEMBER', 'B2B_MANAGER', 'B2B_MEMBER']).optional(),
     userType: z.enum(['STAFF', 'B2B_PARTNER']).optional(),
     isAdmin: z.boolean().optional(),
     isLocked: z.boolean().optional(),
