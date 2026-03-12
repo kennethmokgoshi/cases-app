@@ -46,7 +46,7 @@ dokploy() {
 
 # ── App definitions ───────────────────────────────────────────────────────────
 declare -A APP_NAME=( [cases]="cases-app-vtwo" [insurance]="insurance-app" [legal]="legal-app" [forensic-audit]="forensic-app" [finance]="finance-app" )
-declare -A APP_DOMAIN=( [cases]="cases.zenowethu.co.za" [insurance]="insurance.zenowethu.co.za" [legal]="legal.zenowethu.co.za" [forensic-audit]="forensic.zenowethu.co.za" [finance]="accounts.zenowethu.co.za" )
+declare -A APP_DOMAIN=( [cases]="cases.zenowethu.co.za" [insurance]="insurance.zenowethu.co.za" [legal]="legal.zenowethu.co.za" [forensic-audit]="forensic.zenowethu.co.za" [finance]="finance.zenowethu.co.za" )
 APP_KEYS=(cases insurance legal forensic-audit finance)
 
 echo ""

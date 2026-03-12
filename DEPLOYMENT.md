@@ -11,7 +11,7 @@
 │  insurance.zenowethu.co.za → Insurance (Port 3001) │
 │  legal.zenowethu.co.za → Legal (Port 3002)         │
 │  forensic.zenowethu.co.za → Forensic-Audit (3003)  │
-│  accounts.zenowethu.co.za → Finance (Port 3004)    │
+│  finance.zenowethu.co.za → Finance (Port 3004)    │
 └─────────────────────────────────────────────────────┘
 │                                                     │
 │  PostgreSQL (Port 5432) - Shared Database           │
@@ -35,7 +35,7 @@ cases.zenowethu.co.za     → 213.199.57.111
 insurance.zenowethu.co.za → 213.199.57.111
 legal.zenowethu.co.za     → 213.199.57.111
 forensic.zenowethu.co.za  → 213.199.57.111
-accounts.zenowethu.co.za  → 213.199.57.111
+finance.zenowethu.co.za  → 213.199.57.111
 ```
 
 ## Deployment Steps
@@ -62,7 +62,7 @@ CASES_URL=https://cases.zenowethu.co.za
 INSURANCE_URL=https://insurance.zenowethu.co.za
 LEGAL_URL=https://legal.zenowethu.co.za
 FORENSIC_URL=https://forensic.zenowethu.co.za
-ACCOUNTS_URL=https://accounts.zenowethu.co.za
+ACCOUNTS_URL=https://finance.zenowethu.co.za
 ACME_EMAIL=admin@zenowethu.co.za
 EOF
 ```
@@ -108,7 +108,7 @@ The system uses a single root `Dockerfile` with a build argument `APP` to determ
 | **Insurance App** | `insurance` | 3000 | `insurance.zenowethu.co.za` | `insurance-app` |
 | **Legal App** | `legal` | 3000 | `legal.zenowethu.co.za` | `legal-app` |
 | **Forensic Audit** | `forensic-audit` | 3000 | `forensic.zenowethu.co.za` | `forensic-app` |
-| **Finance App** | `finance` | 3000 | `accounts.zenowethu.co.za` | `finance-app` |
+| **Finance App** | `finance` | 3000 | `finance.zenowethu.co.za` | `finance-app` |
 
 > [!NOTE]
 > All containers expose port 3000 internally. Dokploy + Traefik route traffic by domain name, so each app needs its own domain, not a unique port.
@@ -154,7 +154,7 @@ NEXTAUTH_URL=https://cases.zenowethu.co.za      # cases-app-vtwo
 # NEXTAUTH_URL=https://insurance.zenowethu.co.za  # insurance-app
 # NEXTAUTH_URL=https://legal.zenowethu.co.za       # legal-app
 # NEXTAUTH_URL=https://forensic.zenowethu.co.za    # forensic-app
-# NEXTAUTH_URL=https://accounts.zenowethu.co.za    # finance-app
+# NEXTAUTH_URL=https://finance.zenowethu.co.za    # finance-app
 
 # ── AI ────────────────────────────────────────────────────────────────────
 OPENAI_API_KEY=sk-...

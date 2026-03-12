@@ -82,10 +82,10 @@ function GlobalAppSwitcherInner() {
         },
         ...(canAccessFinance ? [{
             name: 'Finance & Accounts',
-            href: isLocalhost ? 'http://localhost:3004/' : 'https://accounts.zenowethu.co.za/',
+            href: isLocalhost ? 'http://localhost:3004/' : 'https://finance.zenowethu.co.za/',
             icon: '💳',
             description: 'Payments & Reconciliation',
-            active: isActiveApp('3004', 'accounts.zenowethu.co.za')
+            active: isActiveApp('3004', 'finance.zenowethu.co.za')
         }] : [])
     ];
 
