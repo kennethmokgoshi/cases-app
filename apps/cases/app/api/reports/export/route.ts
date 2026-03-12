@@ -95,8 +95,9 @@ function excelResponse(headers: string[], rows: string[][], filename: string) {
     ws['!cols'] = headers.map(() => ({ wch: 20 }));
 
     XLSX.utils.book_append_sheet(wb, ws, 'Report');
-    const buffer: Buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    return new Response(buffer, {
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+    return new Response(ab, {
         headers: {
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition': `attachment; filename="${filename}.xlsx"`
@@ -106,7 +107,8 @@ function excelResponse(headers: string[], rows: string[][], filename: string) {
 
 async function pdfResponse(title: string, headers: string[], rows: string[][], filename: string) {
     const pdfBytes = await buildTablePDF(title, headers, rows);
-    return new Response(pdfBytes, {
+    const ab = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength) as ArrayBuffer;
+    return new Response(ab, {
         headers: {
             'Content-Type': 'application/pdf',
             'Content-Disposition': `attachment; filename="${filename}.pdf"`

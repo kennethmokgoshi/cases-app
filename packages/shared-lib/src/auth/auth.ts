@@ -6,6 +6,8 @@ declare module "next-auth" {
             id: string;
             role: string;
             isAdmin: boolean;
+            isExecutive: boolean;
+            isSeniorManager: boolean;
             isManager: boolean;
             userType: string;
             b2bPartnerId: string | null;
@@ -19,6 +21,8 @@ declare module "next-auth" {
     interface User {
         role: string;
         isAdmin: boolean;
+        isExecutive: boolean;
+        isSeniorManager: boolean;
         isManager: boolean;
         userType: string;
         b2bPartnerId: string | null;
