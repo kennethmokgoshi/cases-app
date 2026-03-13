@@ -94,6 +94,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV AUTH_TRUST_HOST=true
 
 # Puppeteer configuration for Debian
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

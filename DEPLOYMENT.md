@@ -149,6 +149,7 @@ DATABASE_URL=postgresql://postgres:<PASSWORD>@<INTERNAL_HOST>:5432/postgres
 # ── Authentication (MUST be identical across all 5 apps for SSO) ──────────
 NEXTAUTH_SECRET=<generate with: openssl rand -base64 32>
 AUTH_SECRET=<same value as NEXTAUTH_SECRET>
+AUTH_TRUST_HOST=true
 # Set per-app — use the app's own domain:
 NEXTAUTH_URL=https://cases.zenowethu.co.za      # cases-app-vtwo
 # NEXTAUTH_URL=https://insurance.zenowethu.co.za  # insurance-app
