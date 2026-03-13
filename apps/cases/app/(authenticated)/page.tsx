@@ -15,72 +15,66 @@ export default async function DirectorDashboard() {
     redirect('/b2b-dashboard');
   }
 
-  // Fetch Real Stats
-  const [
-    insuranceSavings,
-    insuranceAssessments,
-    activePolicies,
-    activeRescissions,
-    upcomingHearings,
-    prescribedDebts,
-    redFlags,
-    forensicCases,
-    fraudPrevented
-  ] = await Promise.all([
-    // Insurance
-    prisma.insuranceAssessment.aggregate({ _sum: { monthlySavings: true } }).then(r => r._sum.monthlySavings?.toNumber() || 0),
-    prisma.insuranceAssessment.count({ where: { status: 'DRAFT' } }),
-    prisma.insurancePolicy.count({ where: { status: 'ACTIVE' } }),
-
-    // Legal
-    prisma.legalMatter.count({ where: { matterType: 'Rescission', status: 'OPEN' } }),
-    prisma.legalMatter.count({ where: { judgmentDate: { gte: new Date() } } }), // Proxy for "Upcoming Hearings" if no dedicated field
-    prisma.creditAccount.count({ where: { isPrescribed: true } }), // Counting prescribed accounts across cases
-
-    // Forensic
-    prisma.recklessLendingAssessment.count({ where: { isReckless: true } }),
-    prisma.forensicAudit.count({ where: { status: 'PENDING' } }),
-    Promise.resolve(0) // Fraud prevented calculation is complex, keeping 0 for now
-  ]);
-
-  const stats = {
-    insurance: {
-      savings: insuranceSavings,
-      assessments: insuranceAssessments,
-      active_policies: activePolicies
-    },
-    legal: {
-      rescissions: activeRescissions,
-      court_dates: upcomingHearings,
-      prescriptions: prescribedDebts
-    },
-    forensic: {
-      red_flags: redFlags,
-      investigations: forensicCases,
-      fraud_prevented: fraudPrevented
-    }
+  // Fetch Real Stats — gracefully degrade if DB is unreachable
+  let stats = {
+    insurance: { savings: 0, assessments: 0, active_policies: 0 },
+    legal: { rescissions: 0, court_dates: 0, prescriptions: 0 },
+    forensic: { red_flags: 0, investigations: 0, fraud_prevented: 0 }
   };
 
+  try {
+    const [
+      insuranceSavings,
+      insuranceAssessments,
+      activePolicies,
+      activeRescissions,
+      upcomingHearings,
+      prescribedDebts,
+      redFlags,
+      forensicCases,
+    ] = await Promise.all([
+      prisma.insuranceAssessment.aggregate({ _sum: { monthlySavings: true } }).then(r => r._sum.monthlySavings?.toNumber() || 0),
+      prisma.insuranceAssessment.count({ where: { status: 'DRAFT' } }),
+      prisma.insurancePolicy.count({ where: { status: 'ACTIVE' } }),
+      prisma.legalMatter.count({ where: { matterType: 'Rescission', status: 'OPEN' } }),
+      prisma.legalMatter.count({ where: { judgmentDate: { gte: new Date() } } }),
+      prisma.creditAccount.count({ where: { isPrescribed: true } }),
+      prisma.recklessLendingAssessment.count({ where: { isReckless: true } }),
+      prisma.forensicAudit.count({ where: { status: 'PENDING' } }),
+    ]);
+    stats = {
+      insurance: { savings: insuranceSavings, assessments: insuranceAssessments, active_policies: activePolicies },
+      legal: { rescissions: activeRescissions, court_dates: upcomingHearings, prescriptions: prescribedDebts },
+      forensic: { red_flags: redFlags, investigations: forensicCases, fraud_prevented: 0 }
+    };
+  } catch {
+    // DB unreachable — dashboard renders with zero values
+  }
+
   // Real Activity Stream (Last 5 Workflow Logs)
-  const logs = await prisma.workflowLog.findMany({
-    take: 5,
-    orderBy: { timestamp: 'desc' },
-    include: {
-      user: true,
-      case: {
-        include: {
-          projects: {
-            where: { isPrimary: true },
-            include: {
-              project: {
-                include: {
-                  parent: {
-                    include: {
-                      parent: {
-                        include: {
-                          parent: {
-                            include: {
-                              parent: true
+  let activityStream: { id: string; type: string; msg: string; time: string; caseId: string }[] = [];
+
+  try {
+    const logs = await prisma.workflowLog.findMany({
+      take: 5,
+      orderBy: { timestamp: 'desc' },
+      include: {
+        user: true,
+        case: {
+          include: {
+            projects: {
+              where: { isPrimary: true },
+              include: {
+                project: {
+                  include: {
+                    parent: {
+                      include: {
+                        parent: {
+                          include: {
+                            parent: {
+                              include: {
+                                parent: true
+                              }
                             }
                           }
                         }
@@ -93,69 +87,52 @@ export default async function DirectorDashboard() {
           }
         }
       }
-    }
-  });
+    });
 
-  const getProjectPath = (c: any) => {
-    const primaryProject = c.projects?.[0]?.project;
-
-    if (!primaryProject) return `Case ${c.fileNumber}`;
-
-    const pathParts: { name: string; type: string }[] = [];
-    let curr = primaryProject;
-
-    while (curr) {
-      if (curr.type !== 'ROOT') {
-        pathParts.unshift({ name: curr.name, type: curr.type });
+    const getProjectPath = (c: any) => {
+      const primaryProject = c.projects?.[0]?.project;
+      if (!primaryProject) return `Case ${c.fileNumber}`;
+      const pathParts: { name: string; type: string }[] = [];
+      let curr = primaryProject;
+      while (curr) {
+        if (curr.type !== 'ROOT') pathParts.unshift({ name: curr.name, type: curr.type });
+        curr = curr.parent;
       }
-      curr = curr.parent;
-    }
-
-    const clean = (name: string) => {
-      let s = name;
-      if (s === 'Letsatsi Referrals') s = 'Letsatsi';
-      s = s.replace(/My Cases\s*-?\s*/gi, '').trim();
-      return s;
+      const clean = (name: string) => {
+        let s = name;
+        if (s === 'Letsatsi Referrals') s = 'Letsatsi';
+        s = s.replace(/My Cases\s*-?\s*/gi, '').trim();
+        return s;
+      };
+      const year = clean(pathParts.filter(p => p.type === 'YEAR').pop()?.name || '');
+      const month = clean(pathParts.filter(p => p.type === 'MONTH').pop()?.name || '');
+      const allSources = pathParts.filter(p => p.type === 'ACQUISITION_SOURCE');
+      const specificSource = allSources.filter(p => p.name !== 'Cases').pop();
+      const source = clean(specificSource?.name || allSources[0]?.name || '');
+      const branches = pathParts
+        .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
+        .map(p => clean(p.name));
+      const branch = branches.join(' ');
+      if (year || month || source || branch) {
+        return [source, branch, month, year].filter(Boolean).join(' ');
+      }
+      return pathParts
+        .filter(p => !['ROOT', 'Audit'].includes(p.type) && p.name.toUpperCase() !== 'ZDM FILES')
+        .map(p => clean(p.name))
+        .filter(Boolean)
+        .join(' ');
     };
 
-    const year = clean(pathParts.filter(p => p.type === 'YEAR').pop()?.name || '');
-    const month = clean(pathParts.filter(p => p.type === 'MONTH').pop()?.name || '');
-
-    // Find sources (skip generic "Cases" if more specific exists)
-    const allSources = pathParts.filter(p => p.type === 'ACQUISITION_SOURCE');
-    const specificSource = allSources.filter(p => p.name !== 'Cases').pop();
-    const source = clean(specificSource?.name || allSources[0]?.name || '');
-
-    // Find all branches/folders
-    const branches = pathParts
-      .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
-      .map(p => clean(p.name));
-    const branch = branches.join(' ');
-
-    if (year || month || source || branch) {
-      // Reorder to: Source Branch Month Year as per request "Letsatsi Finance and Loans Mthata February 2026"
-      // Source: Letsatsi Finance and Loans
-      // Branch: Mthata
-      // Month: February
-      // Year: 2026
-      return [source, branch, month, year].filter(Boolean).join(' ');
-    }
-
-    // Fallback
-    return pathParts
-      .filter(p => !['ROOT', 'Audit'].includes(p.type) && p.name.toUpperCase() !== 'ZDM FILES')
-      .map(p => clean(p.name))
-      .filter(Boolean)
-      .join(' ');
-  };
-
-  const activityStream = logs.map(log => ({
-    id: log.id,
-    type: 'admin', // Generic type for now, or derive from action
-    msg: `${log.user?.firstName || 'System'} - ${log.notes || log.action} for ${getProjectPath(log.case)}`,
-    time: log.timestamp.toLocaleString(),
-    caseId: log.caseId
-  }));
+    activityStream = logs.map(log => ({
+      id: log.id,
+      type: 'admin',
+      msg: `${log.user?.firstName || 'System'} - ${log.notes || log.action} for ${getProjectPath(log.case)}`,
+      time: log.timestamp.toLocaleString(),
+      caseId: log.caseId
+    }));
+  } catch {
+    // DB unreachable — activity stream stays empty
+  }
 
   return (
     <div className="max-w-7xl mx-auto py-8">
@@ -256,7 +233,7 @@ export default async function DirectorDashboard() {
           Unified Activity Stream
         </h3>
         <div className="space-y-0">
-          {activityStream.length > 0 ? activityStream.map((item, i) => (
+          {activityStream.length > 0 ? activityStream.map((item) => (
             <Link href={`/cases/${item.caseId}`} key={item.id} className="group flex gap-4 py-4 border-b border-white/5 last:border-0 hover:bg-white/5 px-4 rounded-lg transition-colors block">
               <div className={`w-2 h-full rounded-full ${item.type === 'insurance' ? 'bg-blue-500' :
                 item.type === 'legal' ? 'bg-indigo-500' :
