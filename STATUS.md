@@ -1,11 +1,21 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-03-18 (Deployment Readiness — CSP hardening, Sentry rollout, unit tests, env docs)
+> Last updated: 2026-03-18 (Email notifications on @mentions wired up in all 5 apps)
 
 ---
 
 ## ✅ Completed
+
+### Email Notifications on @Mentions — All 5 Apps (2026-03-18)
+- [x] **Cases** — replaced `// TODO: Send email notification` stub with real `sendManualMessage` call; added `sendManualMessage` to shared-lib import.
+- [x] **Insurance** — same fix; `sendManualMessage` added to shared-lib import.
+- [x] **Legal** — same fix; `sendManualMessage` added to shared-lib import.
+- [x] **Forensic-Audit** — same fix; `sendManualMessage` added to shared-lib import.
+- [x] **Finance** — was already implemented; verified consistent.
+- [x] **Tests** — `packages/shared-lib/src/notifications/service.test.ts` (7 tests): EMAIL/SMS/WHATSAPP channel success, DB logging, error handling. shared-lib total: 55 tests passing.
+
+Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if email is down. Provider selection: GHL webhook → GHL API → SMTP → Resend → Mock (dev).
 
 ### Deployment Readiness — Security & Observability (2026-03-18)
 - [x] **CSP hardening** — Removed `unsafe-eval` from `script-src` in all 5 apps' `next.config.ts`. Deployment readiness score raised from 78→85/100.

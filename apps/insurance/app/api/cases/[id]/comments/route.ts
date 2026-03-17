@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, CaseCommentCreateSchema, parseBody  } from '@zenowethu/shared-lib';
+import { auth, logger, sendManualMessage, CaseCommentCreateSchema, parseBody } from '@zenowethu/shared-lib';
 import { z } from 'zod';
 
 // Parse @mentions from comment text - returns array of usernames
@@ -227,8 +227,13 @@ export async function POST(
 
             // Send email notification if user has it enabled
             if (user.emailNotificationsEnabled) {
-                // TODO: Send email notification
-                logger.info(`📧 Would send email to ${user.email} about mention in ${caseData.fileNumber}`);
+                sendManualMessage(
+                    id,
+                    'EMAIL',
+                    user.email,
+                    `${currentUser?.firstName} ${currentUser?.lastName} mentioned you in a comment on case ${caseData.fileNumber}.`,
+                    `You were mentioned in case ${caseData.fileNumber}`
+                ).catch(err => logger.error(`[Comments] Failed to send mention email to ${user.email}:`, err));
             }
         }
 
