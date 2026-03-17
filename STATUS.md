@@ -1,11 +1,19 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-03-11 (Role Hierarchy, NCRDC Compliance, Reports Export, UI Hardening)
+> Last updated: 2026-03-18 (Deployment Readiness — CSP hardening, Sentry rollout, unit tests, env docs)
 
 ---
 
 ## ✅ Completed
+
+### Deployment Readiness — Security & Observability (2026-03-18)
+- [x] **CSP hardening** — Removed `unsafe-eval` from `script-src` in all 5 apps' `next.config.ts`. Deployment readiness score raised from 78→85/100.
+- [x] **Sentry rollout** — Added `@sentry/nextjs` + `sentry.{client,server,edge}.config.ts` to Finance, Insurance, Legal, Forensic-Audit. All 5 apps now have error monitoring.
+- [x] **Unit tests** — 64 new tests across 4 previously untested apps (Finance: 12, Insurance: 22, Legal: 18, Forensic-Audit: 12). Total monorepo unit tests: 169.
+- [x] **Complete `.env.example` files** — Added `SMTP_*`, `DHS_*`, `GHL_*`, `SENTRY_*`, `NODE_ENV`, `NEXT_TELEMETRY_DISABLED`, and correct `NEXTAUTH_URL` ports to all 5 apps.
+
+**Remaining security nice-to-haves (not blockers):** nonce-based CSP, Redis rate limiting, input sanitization for user text.
 
 ### Role Hierarchy, NCRDC Compliance, Reports Export & UI Hardening (2026-03-11)
 - [x] **Circular import fix** — 5 `packages/ui/src/` files were importing from `@zenowethu/ui` (themselves). Fixed all back to `next-auth/react` direct imports.

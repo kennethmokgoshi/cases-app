@@ -221,7 +221,7 @@ export async function GET(request: Request) {
         }));
 
         return NextResponse.json(enrichedCases);
-    } catch (error) {
+    } catch (error: any) {
         logger.error('Error fetching cases:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }

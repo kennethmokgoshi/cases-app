@@ -11,62 +11,148 @@ Extract the following information in JSON format:
   "surname": "string (the family name/last name ONLY)",
   "names": "string (first and middle names ONLY, NOT the surname)",
   "idNumber": "string (13 digits)",
-  "dateOfBirth": "string (YYYY-MM-DD)"
+  "dateOfBirth": "string (YYYY-MM-DD)",
+  "_occurrences": {
+    "surname": [{"value": "THWALA", "count": 2}, {"value": "TWALA", "count": 1}],
+    "names": [{"value": "SIMON KHETHUKUTHULA", "count": 2}],
+    "idNumber": [{"value": "9001015800085", "count": 3}]
+  }
 }
 
-Be very careful to distinguish between surname and names - they are separate fields on the ID. If any field is not clearly visible, use null.`,
+Be very careful to distinguish between surname and names - they are separate fields on the ID.
+IMPORTANT: If any field is not found or not clearly visible, use the string "NA" (not null, not empty string).
+ADDITIONALLY: For each field, list ALL values you found across the entire document and how many times each appeared. Put this in the \`_occurrences\` object. Example: if surname appeared as 'THWALA' twice and 'TWALA' once, list both. If all occurrences of a field are the same, just list that one value.`,
 
-    PAYSLIP: `You are analyzing a Payslip or Salary Advice document.
-        
+    PAYSLIP: `You are analyzing a South African Payslip or Salary Advice document.
+
+FIELD MAPPING — these are the same fields with different labels across payslips:
+
+grossSalary (total earnings BEFORE deductions — the biggest total at the top/middle):
+- "Total Earnings", "Gross Salary", "Gross Pay", "Total Gross", "Gross Income", "Cost to Company", "CTC"
+
+netSalary (final take-home amount AFTER all deductions — the bottom-line amount):
+- "Net Pay", "Net Salary", "Take Home Pay", "Net Income", "Amount Payable", "Nett Pay", "Net Remuneration"
+
+payDate — the ACTUAL date the employee was paid. Check in this order:
+1. FIRST look for an explicit single date labeled: "Pay Date", "Payment Date", "Date Paid", "Paid On", "Date of Payment"
+2. If no explicit pay date exists, look for "Pay Period" and use the END date of that period (e.g. "01.01.2026 To 31.01.2026" → use 2026-01-31)
+3. If only a single month/year is shown (e.g. "January 2026"), use the last day of that month (2026-01-31)
+4. If truly no date can be determined, use "NA"
+
+NOTE: South African mining, government, and large employer payslips often show only a pay period range without a specific pay date.
+The bank statement will have the exact transaction date — payDate here is your best estimate from the payslip only.
+
 Extract the following information in JSON format:
 {
   "employer": "string (Company/Employer name)",
-  "grossSalary": number (Total earnings before deductions),
-  "netSalary": number (Take home pay),
-  "payDate": "string (YYYY-MM-DD)",
-  "employeeNumber": "string if found"
+  "grossSalary": number (Total Earnings / Gross Pay before deductions — use the TOTAL row, not individual line items),
+  "netSalary": number (Net Pay / Take Home Pay after all deductions),
+  "payDate": "string (YYYY-MM-DD — explicit pay date, or period end date as fallback)",
+  "payDateSource": "string (one of: 'explicit' | 'period_end' | 'month_end' | 'NA' — indicates how payDate was determined)",
+  "employeeNumber": "string"
 }
-Return valid JSON only.`,
 
-    BANK_STATEMENT: `You are analyzing a Bank Statement.
-        
+IMPORTANT:
+- grossSalary = the "Total Earnings" summary row value (e.g. 79893.40 from "79,893.40")
+- netSalary = the "Net Pay" summary row value (e.g. 31788.55 from "31,788.55")
+- Remove commas from numbers: "79,893.40" → 79893.40
+- For string fields not found, use "NA". For number fields not found, use 0.
+- Return valid JSON only.`,
+
+    BANK_STATEMENT: `You are analyzing a South African Bank Statement.
+
+SALARY DEPOSIT — this is the most important extraction:
+Look through ALL transactions for salary/wage credits. They may appear as:
+- A single large credit labeled "SALARY", "SAL", "PAYROLL", "WAGES", "REMUNERATION"
+- Multiple credits on the SAME DATE from the same employer (e.g. basic + allowances + bonus split into separate lines)
+- Credits with the employer name in the description
+- Any regular large credit that recurs monthly
+
+If multiple salary-related credits appear on the SAME DATE, they are components of one salary payment.
+In that case: sum all the amounts together for the total, and use that single date as the salary date.
+Use the most RECENT such date in the statement.
+
 Extract the following information in JSON format:
 {
-  "bankName": "string (e.g., FNB, ABSA, Standard Bank)",
+  "bankName": "string (e.g., FNB, ABSA, Standard Bank, Capitec)",
   "accountHolder": "string",
   "accountNumber": "string",
-  "statementDate": "string (YYYY-MM-DD)",
+  "statementDate": "string (YYYY-MM-DD, the statement period end date)",
   "latestSalaryDeposit": {
-     "amount": number,
-     "date": "string (YYYY-MM-DD)",
-     "description": "string"
+     "amount": number (TOTAL salary received on that date — sum all salary components if split across multiple lines),
+     "date": "string (YYYY-MM-DD — the ACTUAL TRANSACTION DATE the salary hit the account, NOT the statement date)",
+     "description": "string (employer name or transaction description)"
   }
 }
-Return valid JSON only.`,
+IMPORTANT:
+- latestSalaryDeposit.date = the transaction date (e.g. 14/01/2026 → 2026-01-14) — extract from the transaction row, not from the statement header
+- statementDate = statement period end date — this is usually different from the salary date
+- For string fields not found, use "NA". For number fields not found, use 0.
+- Return valid JSON only.`,
 
-    OTHER: `You are analyzing a generic document affecting a credit repair case.
-Extract any identifiable information:
+    OTHER: `You are analyzing a document that may contain client information for a debt counselling case.
+Extract any identifiable information you can find:
 {
-  "idNumber": "string if found",
-  "clientName": "string if found",
-  "cellNumber": "string if found"
+  "idNumber": "string",
+  "clientName": "string",
+  "cellNumber": "string"
 }
-If nothing relevant is found, return empty strings/nulls.`,
+IMPORTANT: For any field not found, use "NA" (never return null or empty string).`,
 
-    POA: `You are analyzing a Power of Attorney document signed by a client.
+    POA: `You are analyzing a South African debt counselling application or Power of Attorney document.
 
-Extract the following information in JSON format:
+This could be:
+- A Zenowethu "Approved Application" form (contains personal info, employment, income fields)
+- A standard Power of Attorney (POA) signed by a client
+- A client intake / application form
+
+Look carefully through ALL pages of the document for any of these fields:
+
+PERSONAL INFORMATION:
+- Surname / Last Name / Family Name (separate from first names)
+- First Names / Given Names / Full Names (separate from surname)
+- ID Number (13-digit South African ID)
+- Cell / Mobile number (10 digits, starts with 0 or +27)
+- WhatsApp number
+- Email address
+- Residential address
+
+EMPLOYMENT & FINANCIAL:
+- Employer / Company name
+- Gross Salary / Total Income (before deductions)
+- Net Salary / Take-home pay (after deductions)
+- Service Fee (if mentioned)
+
+Extract into this JSON format:
 {
-  "clientName": "string (the client's full name who signed the POA)",
-  "cellNumber": "string (cell/mobile phone number - 10 digits, may start with 0 or +27)",
-  "idNumber": "string (13-digit ID number, often handwritten or typed)",
-  "whatsappNumber": "string or null",
-  "email": "string or null",
-  "address": "string or null"
+  "surname": "string (family/last name ONLY)",
+  "names": "string (first/given names ONLY, not the surname)",
+  "clientName": "string (full name if surname/names cannot be separated)",
+  "cellNumber": "string (10-digit cell number starting with 0)",
+  "idNumber": "string (13-digit SA ID number)",
+  "whatsappNumber": "string",
+  "email": "string",
+  "address": "string",
+  "employer": "string (company/employer name)",
+  "grossSalary": number (gross/total income before deductions, or 0 if not found),
+  "netSalary": number (net/take-home pay after deductions, or 0 if not found),
+  "serviceFee": number (service fee amount if stated, or 0 if not found),
+  "_occurrences": {
+    "surname": [{"value": "string", "count": number}],
+    "names": [{"value": "string", "count": number}],
+    "idNumber": [{"value": "string", "count": number}],
+    "cellNumber": [{"value": "string", "count": number}],
+    "email": [{"value": "string", "count": number}],
+    "employer": [{"value": "string", "count": number}]
+  }
 }
 
-IMPORTANT: The cell number should be a phone number (typically 10 digits like 0741502090), NOT an ID number.
-If any field is not clearly visible, use null.`,
+IMPORTANT:
+- Cell number must be a PHONE NUMBER (10 digits like 0741502090), NOT an ID number
+- Surname and names should be SEPARATE fields (not combined)
+- For any string field not found, use "NA". For number fields not found, use 0.
+- Never return null or empty string.
+- ADDITIONALLY: For each field listed in _occurrences, list ALL values you found across the entire document and how many times each appeared. Example: if surname appeared as 'THWALA' twice and 'TWALA' once, list both. If all occurrences of a field are the same, just list that one value.`,
 
     CREDIT_REPORT: `You are analyzing a South African credit report (likely XDS/Experian/CPB format).
         
@@ -86,12 +172,18 @@ CRITICAL: Use the specific sections below to extract data.
    - dhsStatus: Status description (e.g., "D3", "D4", "Consent order granted")
    - statusDate: Status date
 
-3. **ACCOUNT SUMMARY**
+3. **ACCOUNT SUMMARY (Case Metadata)**
    - Look for "Accounts Summary" table.
-   - totalDebt: "Balance Exposure" column value.
-   - totalInstallment: "Monthly Instalment" column value.
-   - activeAccounts: "Active Accounts" count (open/serviced).
-   - closedAccounts: "Closed Accounts" count (paid up/prescribed/written off).
+   - totalDebt: "Balance Exposure" column value (total outstanding debt in Rands).
+   - totalInstallment: "Monthly Instalment" column value (total monthly repayment in Rands).
+   - activeAccounts: "Active Accounts" count (open/serviced accounts).
+   - closedAccounts: "Closed Accounts" count (paid up/prescribed/written off accounts).
+
+3b. **CONSUMER INCOME / DECLARED INCOME**
+   - Look for "Consumer Income", "Income", "Declared Income", or "Affordability" section.
+   - grossSalary: Gross income / Total income before deductions (number in Rands, 0 if not found).
+   - netSalary: Net income / Disposable income / Take-home pay after deductions (number in Rands, 0 if not found).
+   - affordability: Affordability status or disposable income description (e.g., "Positive", "Negative", "R2500.00 disposable income"). Use "NA" if not found.
 
 4. **CONSUMER RESIDENTIAL ADDRESS**
    - Look for "Addresses" section.
@@ -113,13 +205,15 @@ CRITICAL: Use the specific sections below to extract data.
    - Scan the report for OPEN/ACTIVE/ARREARS accounts.
    - Extract details for each.
 
+IMPORTANT: For ALL string fields not found, use "NA". For number fields not found, use 0. Never use null.
+
 Output JSON:
 {
   "codixResult": { "outcome": "string", "reason": "string" },
   "debtRestructuring": {
     "ncrdcNo": "string",
     "debtCounsellorName": "string",
-    "debtCounsellorNumber": "string", 
+    "debtCounsellorNumber": "string",
     "debtReviewDate": "string",
     "dhsStatus": "string",
     "statusDate": "string"
@@ -129,6 +223,11 @@ Output JSON:
     "totalInstallment": number,
     "activeAccounts": number,
     "closedAccounts": number
+  },
+  "income": {
+    "grossSalary": number,
+    "netSalary": number,
+    "affordability": "string"
   },
   "consumer": {
     "latestAddress": "string",
@@ -149,8 +248,15 @@ Output JSON:
       "status": "string"
     }
   ],
-  "insuranceNotes": "string"
-}`,
+  "insuranceNotes": "string",
+  "_occurrences": {
+    "idNumber": [{"value": "string", "count": number}],
+    "surname": [{"value": "string", "count": number}],
+    "cellNumber": [{"value": "string", "count": number}]
+  }
+}
+
+ADDITIONALLY: For the _occurrences object, list ALL values found across the entire report for: idNumber (consumer ID number), surname/name from the consumer section, and cellNumber. If a value appears multiple times, count each occurrence. If all occurrences are the same, just list that one value.`,
 
     CREDIT_REPORT_SUMMARY: `You are extracting FINANCIAL TOTALS ONLY from a South African credit report.
 

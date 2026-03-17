@@ -502,6 +502,7 @@ function NewCaseWithAIComponent() {
 
             setFinalProjectId(monthProject.id);
             setStep(2);
+            window.scrollTo({ top: 0, behavior: 'instant' });
         } catch (error) {
             logger.error('Error creating project path:', error);
             alert('Failed to create project structure. Please try again.');
@@ -657,6 +658,7 @@ function NewCaseWithAIComponent() {
                 cb_statusDate: result.extractedData?.creditReport?.debtRestructuring?.statusDate || '' });
 
             setStep(3); // Move to review step
+            window.scrollTo({ top: 0, behavior: 'instant' });
 
             // Set warnings for missing documents
             const missingDocs = [];
@@ -736,6 +738,7 @@ function NewCaseWithAIComponent() {
                 cb_status: '',
                 cb_statusDate: '' });
             setStep(3);
+            window.scrollTo({ top: 0, behavior: 'instant' });
         } catch (error) {
             logger.error('Manual entry initialization failed:', error);
             alert('Failed to initialize manual case. Please try again.');
@@ -1315,7 +1318,7 @@ function NewCaseWithAIComponent() {
 
                     <div className="flex gap-4">
                         <button
-                            onClick={() => setStep(1)}
+                            onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'instant' }); }}
                             className="flex-1 px-4 py-3 rounded-lg font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all text-sm"
                             disabled={uploading}
                         >
@@ -1725,7 +1728,7 @@ function NewCaseWithAIComponent() {
 
                     <div className="flex gap-4">
                         <button
-                            onClick={() => setStep(2)}
+                            onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'instant' }); }}
                             className="flex-1 px-4 py-3 rounded-lg font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
                             disabled={submitting}
                         >

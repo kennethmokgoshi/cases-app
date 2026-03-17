@@ -138,21 +138,8 @@ export async function convertPdfToImages(
             onProgress?.(msg);
         });
 
-        // Serve the PDF binary via request interception
-        await page.setRequestInterception(true);
-        page.on('request', request => {
-            if (request.url() === 'http://localhost/document.pdf') {
-                request.respond({
-                    status: 200,
-                    contentType: 'application/pdf',
-                    body: Buffer.from(pdfToProcess, 'base64')
-                });
-            } else {
-                request.continue();
-            }
-        });
-
         // Build HTML with PDF.js inlined — no CDN required
+        // Embed base64 PDF data directly to avoid network fetch inside Puppeteer
         const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -175,7 +162,14 @@ async function renderPdf(max) {
         if (typeof pdfjsLib === 'undefined') {
             throw new Error('PDF.js library failed to load');
         }
-        const loadingTask = pdfjsLib.getDocument('http://localhost/document.pdf');
+        // Use inline base64 data to avoid network fetch failures in headless environments
+        const base64Data = ${JSON.stringify(pdfToProcess)};
+        const binaryStr = atob(base64Data);
+        const pdfData = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+            pdfData[i] = binaryStr.charCodeAt(i);
+        }
+        const loadingTask = pdfjsLib.getDocument({ data: pdfData });
         const pdf = await loadingTask.promise;
         const images = [];
         const totalPages = pdf.numPages;

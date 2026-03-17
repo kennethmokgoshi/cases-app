@@ -264,8 +264,8 @@ export async function GET(request: NextRequest) {
         });
 
         return NextResponse.json({ hierarchy, independent });
-    } catch (error) {
-        logger.error('Error fetching projects:', error);
+    } catch (error: any) {
+        logger.error('Error fetching projects:', error?.code, error?.message, error?.meta);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

@@ -4,7 +4,7 @@ import { sendStatusChangeNotification  } from '@zenowethu/shared-lib';
 import { getStatusByCode } from '@zenowethu/shared-lib';
 import {
     analyzeCombinedDocument,
-    analyzeMultipleDocumentsAsCombined,
+    batchAnalyzeDocuments,
     extractDocumentsFromCombinedPdf
 } from '@zenowethu/shared-lib';
 import { writeFile, mkdir } from 'fs/promises';
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
         }
 
         const savedDocuments = [];
-        const documentsToAnalyze: Array<{ base64: string; type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'OTHER'; docId: string; mimeType: string }> = [];
+        const documentsToAnalyze: Array<{ base64: string; type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER'; docId: string; mimeType: string }> = [];
         let combinedDocBase64 = '';
         let combinedDocId = '';
 
@@ -198,12 +198,12 @@ export async function POST(request: Request) {
                     combinedDocBase64 = buffer.toString('base64');
                     combinedDocId = document.id;
                 }
-                // Prepare for AI analysis if it's a key document type (separate mode)
-                else if (docType === 'ID' || docType === 'POA' || docType === 'CREDIT_REPORT' || docType === 'OTHER') {
+                // Prepare ALL typed documents for separate per-document AI analysis
+                else if (docType !== 'COMBINED') {
                     const base64 = buffer.toString('base64');
                     documentsToAnalyze.push({
                         base64,
-                        type: docType as 'ID' | 'POA' | 'CREDIT_REPORT' | 'OTHER',
+                        type: docType as 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER',
                         docId: document.id,
                         mimeType: file.type
                     });
@@ -293,25 +293,30 @@ export async function POST(request: Request) {
                     }
                 }
             }
-            // Handle separate documents - analyze them together as combined
+            // Handle separate documents - analyze each one individually with its correct prompt
             else if (documentsToAnalyze.length > 0) {
-                logger.info('🤖 Analyzing', documentsToAnalyze.length, 'separate documents as COMBINED');
+                logger.info('🔍 Step 1: Extracting', documentsToAnalyze.length, 'separate documents by type');
                 logger.info('📄 Document types:', documentsToAnalyze.map(d => d.type));
 
                 try {
-                    // Use the combined analysis approach for all separate documents
-                    const analysisResults = await analyzeMultipleDocumentsAsCombined(
+                    // Analyze each document separately with its own type-specific prompt
+                    // (batchAnalyzeDocuments processes one at a time: ID → POA → Credit Report → Payslip → Bank Statement)
+                    logger.info('🤖 Step 2: Analysing each document separately for maximum accuracy...');
+                    const analysisResults = await batchAnalyzeDocuments(
                         documentsToAnalyze.map(d => ({ base64: d.base64, type: d.type, mimeType: d.mimeType }))
                     );
 
-                    logger.info('✅ AI Combined Analysis Results:', JSON.stringify(analysisResults, null, 2));
+                    logger.info('✅ AI Per-Document Analysis Results:', JSON.stringify(analysisResults, null, 2));
                     extractedData = analysisResults;
 
-                    // Update documents with extracted data
+                    // Save extracted data back to each document record
                     for (const doc of documentsToAnalyze) {
-                        const data = doc.type === 'ID' ? analysisResults.id :
-                            doc.type === 'POA' ? analysisResults.poa :
-                                analysisResults.creditReport;
+                        const data = doc.type === 'ID' ? analysisResults.id
+                            : doc.type === 'POA' ? analysisResults.poa
+                            : doc.type === 'CREDIT_REPORT' ? analysisResults.creditReport
+                            : doc.type === 'PAYSLIP' ? analysisResults.payslip
+                            : doc.type === 'BANK_STATEMENT' ? analysisResults.bankStatement
+                            : null;
 
                         if (data) {
                             logger.info(`💾 Saving extracted data for ${doc.type}`);
@@ -330,7 +335,7 @@ export async function POST(request: Request) {
                     logger.error('❌ AI Analysis Error:', aiError);
                 }
             } else {
-                logger.info('⏭️  No documents to analyze (not ID/POA/CREDIT_REPORT or COMBINED)');
+                logger.info('⏭️  No documents to analyze');
             }
         }
 

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@sentry/nextjs": "^9.47.1",
     "@types/busboy": "^1.5.4",
     "@zenowethu/config": "workspace:*",
     "@zenowethu/database": "workspace:*",
@@ -24,6 +25,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.50.0",
     "@prisma/client": "^5.22.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
@@ -31,15 +33,14 @@
     "@types/nodemailer": "^7.0.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^3.0.6",
     "eslint": "^9",
     "eslint-config-next": "16.0.6",
     "prisma": "^5.22.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5",
-    "vitest": "^3.0.6",
-    "@vitest/coverage-v8": "^3.0.6",
-    "@playwright/test": "^1.50.0"
+    "vitest": "^3.0.6"
   },
   "scripts": {
     "dev": "next dev --port 3003 --hostname 0.0.0.0",

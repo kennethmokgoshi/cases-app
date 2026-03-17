@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 
 const securityHeaders = [
@@ -11,7 +12,7 @@ const securityHeaders = [
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
   {
     key: 'Content-Security-Policy',
-    value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.zenowethu.co.za; font-src 'self' data:; connect-src 'self' https://*.zenowethu.co.za https://api.openai.com; frame-src 'self'; object-src 'none'; upgrade-insecure-requests;"
+    value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.zenowethu.co.za; font-src 'self' data:; connect-src 'self' https://*.zenowethu.co.za https://api.openai.com; frame-src 'self'; object-src 'none'; upgrade-insecure-requests;"
   },
 ];
 
@@ -38,5 +39,11 @@ const nextConfig: NextConfig = {
   }
 };
 
-export default nextConfig;
-// force rebuild
+export default withSentryConfig(nextConfig, {
+  org: "zenowethu",
+  project: "finance",
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+});

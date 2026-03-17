@@ -2,7 +2,7 @@ import { logger } from '../logger';
 import { convertPdfToImages, extractTextFromPdf } from '../pdf-image';
 import { openai } from './client';
 import { PROMPTS } from './prompts';
-import { parseAIResponse } from './utils';
+import { parseAIResponse, buildVerificationReport } from './utils';
 import { identifyDocumentPages, splitPdf } from './pdf-process';
 
 export type DocType = 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'ZENOWETHU_POA';
@@ -118,6 +118,9 @@ export async function extractDocumentsFromCombinedPdf(
         }
     }));
 
+    // Build cross-document field verification report
+    analysis.verification = buildVerificationReport(analysis);
+
     return { extractedDocuments, analysis };
 }
 
@@ -145,5 +148,6 @@ export async function batchAnalyzeDocuments(
             logger.error({ err: e, type: doc.type }, `❌ Failed analysis`);
         }
     }
+    results.verification = buildVerificationReport(results);
     return results;
 }

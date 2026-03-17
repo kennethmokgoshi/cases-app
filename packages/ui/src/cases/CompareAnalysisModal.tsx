@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -461,49 +462,36 @@ export function CompareAnalysisModal({
     };
 
     // Render a section of the comparison table
-    const renderSection = (title: string, fields: ComparisonField[]) => (
+    const renderSection = (title: string, fields: ComparisonField[], isFirst: boolean) => (
         <div className="mb-6">
             <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 border-b border-gray-700 pb-2">
                 {title}
             </h4>
-            <table className="w-full">
-                <thead>
-                    <tr className="text-xs text-gray-500 uppercase">
-                        <th className="text-left py-2 px-2 w-8">
-                            {analysisComplete && (
-                                <input
-                                    type="checkbox"
-                                    className="rounded bg-gray-700 border-gray-600"
-                                    checked={fields.filter(f => f.hasChanged && f.aiValue !== null).every(f => selectedFields.has(f.field))}
-                                    onChange={() => {
-                                        const sectionFields = fields.filter(f => f.hasChanged && f.aiValue !== null);
-                                        const allSelected = sectionFields.every(f => selectedFields.has(f.field));
-                                        const newSelected = new Set(selectedFields);
-                                        sectionFields.forEach(f => {
-                                            if (allSelected) {
-                                                newSelected.delete(f.field);
-                                            } else {
-                                                newSelected.add(f.field);
-                                            }
-                                        });
-                                        setSelectedFields(newSelected);
-                                    }}
-                                />
-                            )}
-                        </th>
-                        <th className="text-left py-2 px-2">Field</th>
-                        <th className="text-left py-2 px-2">Current (Database)</th>
-                        <th className="text-left py-2 px-2">AI Extracted</th>
-                    </tr>
-                </thead>
+            <table className="w-full table-fixed">
+                <colgroup>
+                    {analysisComplete && <col style={{ width: '2rem' }} />}
+                    <col style={{ width: '25%' }} />
+                    <col style={{ width: '41.667%' }} />
+                    <col />
+                </colgroup>
+                {isFirst && (
+                    <thead>
+                        <tr className="text-xs text-gray-500 uppercase">
+                            {analysisComplete && <th className="text-left py-2 px-2" />}
+                            <th className="text-left py-2 px-2">Field</th>
+                            <th className="text-left py-2 px-2">Current (Database)</th>
+                            <th className="text-left py-2 px-2">AI Extracted</th>
+                        </tr>
+                    </thead>
+                )}
                 <tbody>
                     {fields.map((field) => (
                         <tr
                             key={field.field}
                             className={`border-b border-gray-800 ${field.hasChanged && analysisComplete ? 'bg-yellow-900/20' : ''}`}
                         >
-                            <td className="py-3 px-2">
-                                {analysisComplete && (
+                            {analysisComplete && (
+                                <td className="py-3 px-2 w-8">
                                     <input
                                         type="checkbox"
                                         className="rounded bg-gray-700 border-gray-600 text-blue-500"
@@ -511,12 +499,12 @@ export function CompareAnalysisModal({
                                         onChange={() => toggleField(field.field)}
                                         disabled={!field.hasChanged || field.aiValue === null}
                                     />
-                                )}
-                            </td>
-                            <td className="py-3 px-2 text-gray-300 font-medium">
+                                </td>
+                            )}
+                            <td className="py-3 px-2 text-gray-300 font-medium truncate">
                                 {field.label}
                             </td>
-                            <td className="py-3 px-2 text-white font-medium">
+                            <td className="py-3 px-2 text-white font-medium truncate">
                                 {formatValue(field.currentValue)}
                             </td>
                             <td className={`py-3 px-2 ${field.hasChanged && analysisComplete ? 'text-green-400 font-medium' : 'text-gray-500'}`}>
@@ -546,9 +534,10 @@ export function CompareAnalysisModal({
     );
 
     if (!isOpen) return null;
+    if (typeof document === 'undefined') return null;
 
-    return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+    return createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
             <div className="bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
@@ -647,9 +636,9 @@ export function CompareAnalysisModal({
                     {/* Comparison Table - Always visible if we have case data */}
                     {comparison && (
                         <>
-                            {renderSection('Personal Information', comparison.personalInfo)}
-                            {renderSection('Credit Bureau - Accounts Summary', comparison.creditBureau)}
-                            {renderSection('Restructuring Information', comparison.restructuring)}
+                            {renderSection('Personal Information', comparison.personalInfo, true)}
+                            {renderSection('Credit Bureau - Accounts Summary', comparison.creditBureau, false)}
+                            {renderSection('Restructuring Information', comparison.restructuring, false)}
                         </>
                     )}
 
@@ -697,6 +686,7 @@ export function CompareAnalysisModal({
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

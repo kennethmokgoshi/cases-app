@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { TopBar } from '@zenowethu/ui';
 import { Sidebar } from '@zenowethu/ui';
 import { MobileBottomNav } from '@zenowethu/ui';
@@ -12,10 +13,16 @@ export default function AuthenticatedLayout({
     children: React.ReactNode;
 }) {
     const [mounted, setMounted] = useState(false);
+    const pathname = usePathname();
 
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // Scroll to top on every page navigation
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }, [pathname]);
 
     return (
         <LayoutProvider>

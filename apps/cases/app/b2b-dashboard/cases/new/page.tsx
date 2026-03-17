@@ -903,7 +903,7 @@ function PartnerNewCaseComponent() {
 
                     <div className="flex gap-4">
                         <button
-                            onClick={() => setStep(1)}
+                            onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'instant' }); }}
                             className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-all"
                         >
                             Back
