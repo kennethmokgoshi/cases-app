@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, CaseCommentCreateSchema, parseBody  } from '@zenowethu/shared-lib';
-import { sendManualMessage } from '../../../../../lib/notifications/service';
+import { auth, logger, sendManualMessage, CaseCommentCreateSchema, parseBody } from '@zenowethu/shared-lib';
 import { z } from 'zod';
 
 // Parse @mentions from comment text - returns array of usernames
