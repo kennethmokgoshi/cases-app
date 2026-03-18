@@ -989,6 +989,14 @@ function NewCaseWithAIComponent() {
                     errorMessage = `${errorData.error}\n\nDetails: ${errorData.details || 'Unknown error'}`;
                 }
 
+                // Append Zod field-level errors when present (e.g. from parseBody returning { error, errors })
+                if (errorData.errors && typeof errorData.errors === 'object') {
+                    const fieldLines = Object.entries(errorData.errors as Record<string, string[]>)
+                        .map(([field, msgs]) => `• ${field}: ${msgs.join(', ')}`)
+                        .join('\n');
+                    if (fieldLines) errorMessage = `${errorMessage}\n\n${fieldLines}`;
+                }
+
                 setSubmitError({ title: errorTitle, message: errorMessage, code: errorData.code });
                 return;
             }
