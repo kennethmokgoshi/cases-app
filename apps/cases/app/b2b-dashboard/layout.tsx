@@ -64,11 +64,11 @@ export default function B2BLayout({
                         <button
                             onClick={async () => {
                                 try {
-                                    await signOut({ callbackUrl: '/login', redirect: true });
+                                    await signOut({ redirect: false });
                                 } catch (error) {
                                     logger.error('Logout error:', error);
-                                    // Force redirect even if error
-                                    window.location.href = '/login';
+                                } finally {
+                                    window.location.replace('/login');
                                 }
                             }}
                             className="ml-2 p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors border border-transparent hover:border-white/10"
