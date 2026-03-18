@@ -19,7 +19,6 @@ type PartnerCase = {
     clientName: string;
     status: string;
     createdAt: string;
-    services: string;
 };
 
 type PartnerStats = {
@@ -30,12 +29,12 @@ type PartnerStats = {
     newLeads: number;
     newLeadsLast7Days: number;
     completedLast7Days: number;
-    myCases: number; // Cases uploaded by current user
+    myCases: number;
+    recentCases: PartnerCase[];
 };
 
 export default function B2BDashboard() {
     const { data: session } = useSession();
-    const [cases, setCases] = useState<PartnerCase[]>([]);
     const [stats, setStats] = useState<PartnerStats>({
         totalCases: 0,
         activeCases: 0,
@@ -44,7 +43,9 @@ export default function B2BDashboard() {
         newLeads: 0,
         newLeadsLast7Days: 0,
         completedLast7Days: 0,
-        myCases: 0 });
+        myCases: 0,
+        recentCases: [],
+    });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -72,71 +73,12 @@ export default function B2BDashboard() {
     const fetchPartnerData = async () => {
         setError(null);
         try {
-            // Fetch all cases (API already filters by project membership)
-            const res = await fetch('/api/cases');
+            const res = await fetch('/api/b2b-dashboard/stats');
             if (!res.ok) {
-                logger.error('API Error Details:', { status: res.status, statusText: res.statusText, url: res.url });
-                const errorText = await res.text().catch(() => 'No error details');
-                throw new Error(`Database Error: Unable to reach cases API (Status: ${res.status} ${res.statusText})`);
+                throw new Error(`Database Error: Unable to load dashboard (Status: ${res.status})`);
             }
             const data = await res.json();
-
-            if (res.ok && Array.isArray(data)) {
-                // Map to PartnerCase format
-                const mappedCases = data.map((c: any) => ({
-                    id: c.id,
-                    fileNumber: c.fileNumber,
-                    clientName: `${c.client.firstName} ${c.client.lastName}`,
-                    status: c.status,
-                    createdAt: c.createdAt,
-                    services: c.services || 'N/A' }));
-
-                // Filter to only show cases created by current user for "Your Cases" section
-                const myCases = mappedCases.filter((c: any) => {
-                    const caseData = data.find((d: any) => d.id === c.id);
-                    return caseData?.createdById === session?.user?.id;
-                });
-                setCases(myCases.slice(0, 5)); // Show only last 5 cases created by user
-
-                // Calculate stats
-                const now = new Date();
-                const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-                const totalCases = data.length;
-                const newLeads = data.filter((c: any) => c.status === 'NEW_LEAD').length;
-                const activeCases = data.filter((c: any) =>
-                    c.status !== 'COMPLETED' && c.status !== 'CLOSED' && c.status !== 'CANCELLED'
-                ).length;
-                const completedCases = data.filter((c: any) => c.status === 'COMPLETED').length;
-                const pendingCases = data.filter((c: any) =>
-                    c.status === 'NEW_LEAD' || c.status === 'Outstanding Documents'
-                ).length;
-
-                const newLeadsLast7Days = data.filter((c: any) => {
-                    const createdDate = new Date(c.createdAt);
-                    return c.status === 'NEW_LEAD' && createdDate >= sevenDaysAgo;
-                }).length;
-
-                const completedLast7Days = data.filter((c: any) => {
-                    const updatedDate = new Date(c.updatedAt || c.createdAt);
-                    return c.status === 'COMPLETED' && updatedDate >= sevenDaysAgo;
-                }).length;
-
-                // Count cases uploaded by current user
-                const myCasesCount = data.filter((c: any) => c.createdById === session?.user?.id).length;
-
-                setStats({
-                    totalCases,
-                    activeCases,
-                    completedCases,
-                    pendingCases,
-                    newLeads,
-                    newLeadsLast7Days,
-                    completedLast7Days,
-                    myCases: myCasesCount });
-            } else {
-                throw new Error('Database Error: Invalid data format');
-            }
+            setStats(data);
         } catch (error: any) {
             logger.error('Failed to fetch partner data:', error);
             setError(error.message || 'Connection Failure');
@@ -481,7 +423,7 @@ export default function B2BDashboard() {
                     </Link>
                 </div>
 
-                {cases.length === 0 ? (
+                {stats.recentCases.length === 0 ? (
                     <div className="text-center py-12">
                         <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -500,7 +442,7 @@ export default function B2BDashboard() {
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {cases.map(c => (
+                        {stats.recentCases.map(c => (
                             <Link
                                 key={c.id}
                                 href={`/b2b-dashboard/cases/${c.id}`}
