@@ -914,6 +914,10 @@ function NewCaseWithAIComponent() {
         // Clear previous errors
         setSubmitError(null);
 
+        // Strip "NA" placeholder values (set by naStr when AI can't extract a field)
+        // back to null so they pass Zod validation (phone regex, email format, etc.)
+        const clean = (val: string | null | undefined) => (!val || val === 'NA') ? null : val;
+
         try {
             // Update the temporary case with real client data and services
             const res = await fetch(`/api/cases/${tempCaseId}`, {
@@ -924,32 +928,32 @@ function NewCaseWithAIComponent() {
                         firstName: formData.names.split(' ')[0], // Simplistic split, maybe user should enter separate? Form has 'names' field.
                         lastName: formData.surname,
                         idNumber: formData.idNumber,
-                        email: formData.email || null,
-                        phone: formData.cellNumber || null,
-                        address: formData.address || null,
-                        employer: formData.employer || null,
-                        employeeNo: formData.employeeNo || null,
-                        grossSalary: formData.grossSalary || null,
-                        netSalary: formData.netSalary || null,
-                        salaryPayDate: formData.salaryPayDate || null,
+                        email: clean(formData.email),
+                        phone: clean(formData.cellNumber),
+                        address: clean(formData.address),
+                        employer: clean(formData.employer),
+                        employeeNo: clean(formData.employeeNo),
+                        grossSalary: clean(formData.grossSalary),
+                        netSalary: clean(formData.netSalary),
+                        salaryPayDate: clean(formData.salaryPayDate),
                         type: formData.category },
                     closedAccounts: formData.closedAccounts,
                     openAccounts: formData.openAccounts,
                     prescribedAccounts: formData.prescribedAccounts,
-                    ncrdcNo: formData.ncrdcNo || null,
+                    ncrdcNo: clean(formData.ncrdcNo),
                     services: selectedServices,
-                    serviceFee: formData.serviceFee || null,
+                    serviceFee: clean(formData.serviceFee),
                     instalments: formData.instalments || 1,
-                    affordabilityStatus: formData.affordabilityStatus || null,
+                    affordabilityStatus: clean(formData.affordabilityStatus),
                     totalDebtAmount: formData.totalDebtAmount,
                     totalMonthlyInstallment: formData.totalMonthlyInstallment,
 
-                    cb_ncrdcNo: formData.cb_ncrdcNo || null,
-                    cb_debtCounsellor: formData.cb_debtCounsellor || null,
-                    cb_contactNo: formData.cb_contactNo || null,
-                    cb_applicationDate: formData.cb_applicationDate || null,
-                    cb_status: formData.cb_status || null,
-                    cb_statusDate: formData.cb_statusDate || null,
+                    cb_ncrdcNo: clean(formData.cb_ncrdcNo),
+                    cb_debtCounsellor: clean(formData.cb_debtCounsellor),
+                    cb_contactNo: clean(formData.cb_contactNo),
+                    cb_applicationDate: clean(formData.cb_applicationDate),
+                    cb_status: clean(formData.cb_status),
+                    cb_statusDate: clean(formData.cb_statusDate),
 
                     forceUpdate // Allow overriding duplicates
                 }) });
