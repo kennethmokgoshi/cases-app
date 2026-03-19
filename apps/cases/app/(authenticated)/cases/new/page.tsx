@@ -945,8 +945,8 @@ function NewCaseWithAIComponent() {
                     serviceFee: clean(formData.serviceFee),
                     instalments: formData.instalments || 1,
                     affordabilityStatus: clean(formData.affordabilityStatus),
-                    totalDebtAmount: formData.totalDebtAmount,
-                    totalMonthlyInstallment: formData.totalMonthlyInstallment,
+                    totalDebtAmount: formData.totalDebtAmount ? parseFloat(formData.totalDebtAmount) : null,
+                    totalMonthlyInstallment: formData.totalMonthlyInstallment ? parseFloat(formData.totalMonthlyInstallment) : null,
 
                     cb_ncrdcNo: clean(formData.cb_ncrdcNo),
                     cb_debtCounsellor: clean(formData.cb_debtCounsellor),
