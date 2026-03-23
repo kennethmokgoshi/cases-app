@@ -135,6 +135,7 @@ model Case {
   declineReason           String?
   declineReasonAttended   Boolean               @default(false)
   aiAutonomyLevel         String                @default("CO_PILOT") // CO_PILOT, AUTOPILOT, MANUAL
+  planReadyToStart        Boolean               @default(false)
   description             String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -154,9 +155,12 @@ model Case {
   payments                Payment[]
   workflowLogs            WorkflowLog[]
   invoices                Invoice[]
+  plan                    CasePlan?
 
   @@index([status])
   @@index([isOverdue])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model Document {
@@ -187,6 +191,7 @@ model CaseProject {
   project   Project @relation(fields: [projectId], references: [id])
 
   @@id([caseId, projectId])
+  @@index([projectId])
 }
 
 model WorkflowLog {
@@ -238,6 +243,7 @@ model User {
   b2bPartner                Project?            @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
   groupMemberships          UserGroupMember[]
   workflowLogs              WorkflowLog[]
+  approvedPlans             CasePlan[]          @relation("PlanApprover")
 }
 
 model CaseComment {
@@ -809,4 +815,87 @@ model RecklessLendingAssessment {
   assessedBy       String
   assessedAt       DateTime      @default(now())
   ForensicAudit    ForensicAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+}
+
+model CasePlan {
+  id              String           @id @default(cuid())
+  caseId          String           @unique
+  status          String           @default("DRAFT")
+  confidenceScore Int              @default(0)
+  missingInfo     Json             @default("[]")
+  readyToStart    Boolean          @default(false)
+  caseType        String?
+  version         Int              @default(1)
+  approvedAt      DateTime?
+  approvedById    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  case            Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  approvedBy      User?            @relation("PlanApprover", fields: [approvedById], references: [id])
+  steps           CasePlanStep[]
+  updates         CasePlanUpdate[]
+  events          CasePlanEvent[]
+
+  @@index([caseId])
+  @@index([status])
+}
+
+model CasePlanStep {
+  id               String    @id @default(cuid())
+  planId           String
+  stepNumber       Int
+  title            String
+  description      String
+  ownerApp         String
+  category         String
+  actionType       String
+  actionParams     Json      @default("{}")
+  status           String    @default("PENDING")
+  requiresApproval Boolean   @default(false)
+  breakpointBefore Boolean   @default(false)
+  breakpointAfter  Boolean   @default(false)
+  waitingForEvent  String?
+  timeoutHours     Int?
+  timeoutAction    String?
+  executedAt       DateTime?
+  completedAt      DateTime?
+  pausedAt         DateTime?
+  result           Json?
+  error            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  plan             CasePlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([status])
+  @@index([ownerApp])
+}
+
+model CasePlanUpdate {
+  id                    String   @id @default(cuid())
+  planId                String
+  newInfoDescription    String
+  changeType            String
+  affectedStepNumbers   Json     @default("[]")
+  previousStepsSnapshot Json     @default("[]")
+  createdAt             DateTime @default(now())
+  plan                  CasePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+}
+
+model CasePlanEvent {
+  id          String    @id @default(cuid())
+  planId      String
+  stepId      String?
+  eventSource String
+  eventType   String
+  eventData   Json      @default("{}")
+  notifiedAt  DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  plan        CasePlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([eventType])
 }

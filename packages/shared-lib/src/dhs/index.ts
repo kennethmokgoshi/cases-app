@@ -20,3 +20,5 @@ export { getDebtCounsellorInfo } from './counsellor';
 export { checkTransferStatus } from './status';
 export { requestTransfer } from './transfer';
 export { searchConsumer, scrapeDetailedConsumerInfo } from './search';
+export { lookupDCFromNCR, resolveDCEmail } from './ncr-lookup';
+export type { NCRDCLookupResult, DCEmailResolution } from './ncr-lookup';

@@ -7,6 +7,7 @@
     "@zenowethu/config": "workspace:*",
     "@zenowethu/shared-lib": "workspace:*",
     "@zenowethu/database": "workspace:*",
+    "@zenowethu/plan-engine": "workspace:*",
     "date-fns": "^4.1.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",

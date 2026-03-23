@@ -21,6 +21,9 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { searchParams } = new URL(request.url);
+        const slim = searchParams.get('slim') === 'true';
+
         // Fetch all projects first to support path building AND recursive filtering
         const allProjects = await prisma.project.findMany({
             select: { id: true, name: true, parentId: true, type: true }
@@ -29,24 +32,33 @@ export async function GET(request: Request) {
         type ProjectMapType = { id: string; name: string; parentId: string | null; type: string };
         const projectMap = new Map<string, ProjectMapType>(allProjects.map(p => [p.id, p]));
 
-        // Helper to find all descendant IDs
+        // Pre-build a children map for O(n) descendant traversal
+        const childrenMap = new Map<string, string[]>();
+        for (const p of allProjects) {
+            if (p.parentId) {
+                const list = childrenMap.get(p.parentId);
+                if (list) list.push(p.id);
+                else childrenMap.set(p.parentId, [p.id]);
+            }
+        }
+
+        // Helper to find all descendant IDs — O(n) using pre-built map
         const getDescendantIds = (rootId: string): string[] => {
             const descendants: string[] = [];
             const queue = [rootId];
-
             while (queue.length > 0) {
                 const currId = queue.shift()!;
-                // Find children
-                const children = allProjects.filter(p => p.parentId === currId);
-                children.forEach(child => {
-                    descendants.push(child.id);
-                    queue.push(child.id);
-                });
+                const children = childrenMap.get(currId);
+                if (children) {
+                    for (const childId of children) {
+                        descendants.push(childId);
+                        queue.push(childId);
+                    }
+                }
             }
             return descendants;
         };
 
-        const { searchParams } = new URL(request.url);
         const status = searchParams.get('status');
         const projectId = searchParams.get('projectId');
         const filter = searchParams.get('filter');
@@ -139,6 +151,18 @@ export async function GET(request: Request) {
                     }
                 }
             ];
+        }
+
+        // Slim mode: sidebar only needs id + createdAt for timeline grouping
+        if (slim) {
+            const slimCases = await prisma.case.findMany({
+                where,
+                select: { id: true, createdAt: true },
+                take,
+                skip,
+                orderBy: { updatedAt: 'desc' }
+            });
+            return NextResponse.json(slimCases);
         }
 
         const cases = await prisma.case.findMany({

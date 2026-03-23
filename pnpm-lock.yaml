@@ -29,6 +29,9 @@ importers:
       '@zenowethu/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@zenowethu/plan-engine':
+        specifier: workspace:*
+        version: link:../../packages/plan-engine
       '@zenowethu/shared-lib':
         specifier: workspace:*
         version: link:../../packages/shared-lib
@@ -49,7 +52,7 @@ importers:
         version: 16.0.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       next-auth:
         specifier: ^5.0.0-beta.30
-        version: 5.0.0-beta.30(next@16.0.6(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(nodemailer@7.0.13)(react@19.2.0)
+        version: 5.0.0-beta.30(next@16.0.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(nodemailer@7.0.13)(react@19.2.0)
       nodemailer:
         specifier: ^7.0.11
         version: 7.0.13
@@ -113,7 +116,7 @@ importers:
         version: 9.39.3(jiti@2.6.1)
       eslint-config-next:
         specifier: 16.0.6
-        version: 16.0.6(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
+        version: 16.0.6(@typescript-eslint/parser@8.56.0(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
       prisma:
         specifier: ^5.22.0
         version: 5.22.0
@@ -164,7 +167,7 @@ importers:
         version: 16.0.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       next-auth:
         specifier: ^5.0.0-beta.30
-        version: 5.0.0-beta.30(next@16.0.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(nodemailer@7.0.13)(react@19.2.0)
+        version: 5.0.0-beta.30(next@16.0.6(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(nodemailer@7.0.13)(react@19.2.0)
       nodemailer:
         specifier: ^7.0.11
         version: 7.0.13
@@ -225,7 +228,7 @@ importers:
         version: 9.39.3(jiti@2.6.1)
       eslint-config-next:
         specifier: 16.0.6
-        version: 16.0.6(@typescript-eslint/parser@8.56.0(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
+        version: 16.0.6(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
       prisma:
         specifier: ^5.22.0
         version: 5.22.0
@@ -609,6 +612,34 @@ importers:
         specifier: '*'
         version: 16.0.6(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
 
+  packages/plan-engine:
+    dependencies:
+      '@zenowethu/database':
+        specifier: workspace:*
+        version: link:../database
+      '@zenowethu/shared-lib':
+        specifier: workspace:*
+        version: link:../shared-lib
+      openai:
+        specifier: ^6.9.1
+        version: 6.22.0(ws@8.19.0)(zod@4.3.6)
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@types/node':
+        specifier: ^20.19.25
+        version: 20.19.33
+      '@vitest/coverage-v8':
+        specifier: ^3.0.6
+        version: 3.2.4(vitest@3.2.4(@types/node@20.19.33)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0))
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.6
+        version: 3.2.4(@types/node@20.19.33)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)
+
   packages/shared-lib:
     dependencies:
       '@zenowethu/database':
@@ -680,6 +711,9 @@ importers:
       '@zenowethu/database':
         specifier: workspace:*
         version: link:../database
+      '@zenowethu/plan-engine':
+        specifier: workspace:*
+        version: link:../plan-engine
       '@zenowethu/shared-lib':
         specifier: workspace:*
         version: link:../shared-lib

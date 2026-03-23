@@ -16,6 +16,7 @@ import { MoveCaseModal } from '@zenowethu/ui';
 import { EditServicesModal } from '@zenowethu/ui';
 import { CompareAnalysisModal } from '@zenowethu/ui';
 import { RichTextEditor } from '@zenowethu/ui';
+import { AIPlanTab } from '@zenowethu/ui';
 
 // Client-side logger (avoid importing createLogger from shared-lib)
 const createLogger = (name: string) => ({
@@ -263,7 +264,7 @@ export default function CaseDetailPage() {
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
     const [isEditServicesOpen, setIsEditServicesOpen] = useState(false);
     const [showCompareModal, setShowCompareModal] = useState(false);
-    const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION'>('ACTIVITY');
+    const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN'>('ACTIVITY');
 
     // Tasks & Decline Reason State
     // Tasks & Decline Reason State
@@ -2476,6 +2477,15 @@ export default function CaseDetailPage() {
                             >
                                 <span>🗣️</span> Comm Hub
                             </button>
+                            <button
+                                onClick={() => setActiveDetailTab('AI_PLAN')}
+                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'AI_PLAN'
+                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
+                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    }`}
+                            >
+                                <span>🤖</span> AI Plan
+                            </button>
                         </nav>
 
                         <div className="p-8">
@@ -2496,6 +2506,11 @@ export default function CaseDetailPage() {
                                         clientEmail={caseData.client.email}
                                         clientPhone={caseData.client.phone || caseData.client.whatsappNumber}
                                     />
+                                </div>
+                            )}
+                            {activeDetailTab === 'AI_PLAN' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <AIPlanTab caseId={caseData.id} acquisitionType={caseData.acquisitionType} />
                                 </div>
                             )}
                         </div>

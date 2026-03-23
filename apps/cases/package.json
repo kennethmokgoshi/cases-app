@@ -21,6 +21,7 @@
     "@types/busboy": "^1.5.4",
     "@zenowethu/config": "workspace:*",
     "@zenowethu/database": "workspace:*",
+    "@zenowethu/plan-engine": "workspace:*",
     "@zenowethu/shared-lib": "workspace:*",
     "@zenowethu/ui": "workspace:*",
     "bcryptjs": "^3.0.3",

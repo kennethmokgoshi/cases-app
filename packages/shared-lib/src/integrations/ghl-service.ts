@@ -63,6 +63,22 @@ export class GhlService {
 
         await this.sendAutoAcknowledgment(caseRecord.id, channel, phone, email);
 
+        // Notify AI Plan Engine of inbound event
+        try {
+            // @ts-ignore — plan-engine resolved at runtime via pnpm workspace
+            const { handlePlanEvent } = await import('@zenowethu/plan-engine');
+            await handlePlanEvent({
+                caseId: caseRecord.id,
+                planId: '',
+                eventSource: 'GHL',
+                eventType: channel.toUpperCase().includes('EMAIL') ? 'DOCUMENT_RECEIVED' : 'REPLY_RECEIVED',
+                eventData: { channel, contactId, message, provider: 'GoHighLevel' },
+                description: `Inbound ${channel} from ${caseRecord.client.firstName} ${caseRecord.client.lastName}: "${message.substring(0, 200)}${message.length > 200 ? '...' : ''}"`
+            });
+        } catch (err) {
+            logger.warn('[GHL Webhook] Plan event notification failed (non-critical):', err);
+        }
+
         return { success: true, caseId: caseRecord.id };
     }
 

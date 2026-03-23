@@ -50,18 +50,30 @@ export async function GET(request: Request) {
                     select: { id: true, parentId: true }
                 });
 
+                // Pre-build children map for O(n) traversal
+                const childrenMap = new Map<string, string[]>();
+                for (const p of allProjects) {
+                    if (p.parentId) {
+                        const list = childrenMap.get(p.parentId);
+                        if (list) list.push(p.id);
+                        else childrenMap.set(p.parentId, [p.id]);
+                    }
+                }
+
                 const getDescendantIds = (rootIds: string[]): string[] => {
                     const descendants = new Set<string>();
                     const queue = [...rootIds];
                     while (queue.length > 0) {
                         const currId = queue.shift()!;
-                        const children = allProjects.filter(p => p.parentId === currId);
-                        children.forEach(child => {
-                            if (!descendants.has(child.id)) {
-                                descendants.add(child.id);
-                                queue.push(child.id);
+                        const children = childrenMap.get(currId);
+                        if (children) {
+                            for (const childId of children) {
+                                if (!descendants.has(childId)) {
+                                    descendants.add(childId);
+                                    queue.push(childId);
+                                }
                             }
-                        });
+                        }
                     }
                     return Array.from(descendants);
                 };

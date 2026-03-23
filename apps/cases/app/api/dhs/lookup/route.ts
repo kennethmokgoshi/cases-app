@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo  } from '@zenowethu/shared-lib';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, sendStatusChangeNotification, lookupDCFromNCR  } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { addWorkingDays } from '@zenowethu/shared-lib';
 import path, { join } from 'path';
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         // Fetch full case data if available to get documents for auto-request
         const caseData = caseId ? await prisma.case.findUnique({
             where: { id: caseId },
-            include: { documents: true }
+            include: { documents: true, client: true }
         }) : null;
 
         if (action === 'check_status' || !action) {
@@ -448,23 +448,95 @@ export async function POST(request: Request) {
                 });
             }
 
-            // 4. Proceed to Request
-            const poaPath = getFilePath(poaDoc.fileUrl);
-            const idPath = getFilePath(idDoc.fileUrl);
+            // 4. DHS is offline — resolve DC email then send file + Form 17.7 request
 
-            logger.info('Proceeding to request transfer with:', { poaPath, idPath });
+            // Load bad email list from SystemSettings
+            const badEmailSettings = await prisma.systemSettings.findMany({
+                where: { category: 'bad_dc_email' },
+                select: { value: true }
+            });
+            const badEmails = badEmailSettings.map(s => s.value.toLowerCase().trim());
 
-            // Call the shared request function
-            const requestResult = await requestTransfer(idNumber, poaPath, idPath);
-            result = requestResult;
+            // Email resolution chain: case record → DB history → NCR website
+            let resolvedEmail: string | null = null;
+            let emailSource = '';
 
-            if (result.success) {
-                // Update specific status for explicit request
+            const isGoodEmail = (e: string | null | undefined): e is string =>
+                !!e && e.trim().length > 0 && !badEmails.includes(e.toLowerCase().trim());
+
+            if (isGoodEmail(caseData.dcEmail)) {
+                resolvedEmail = caseData.dcEmail;
+                emailSource = 'case record';
+            } else if (isGoodEmail(caseData.lastKnownEmail)) {
+                resolvedEmail = caseData.lastKnownEmail;
+                emailSource = 'last known email';
+            } else if (caseData.ncrdcNo) {
+                // Try DB history — find most recent working email for this NCRDC across other cases
+                const previousCase = await prisma.case.findFirst({
+                    where: {
+                        ncrdcNo: caseData.ncrdcNo,
+                        dcEmail: { not: null, gt: '' },
+                        id: { not: caseId },
+                        NOT: { dcEmail: { in: badEmails.length > 0 ? badEmails : ['__no_match__'] } }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    select: { dcEmail: true }
+                });
+
+                if (previousCase?.dcEmail && isGoodEmail(previousCase.dcEmail)) {
+                    resolvedEmail = previousCase.dcEmail;
+                    emailSource = 'database history';
+                    logger.info(`Resolved DC email from DB history for NCRDC ${caseData.ncrdcNo}: ${resolvedEmail}`);
+                } else {
+                    // Final fallback — NCR public register
+                    logger.info(`No DB email found — trying NCR website for NCRDC ${caseData.ncrdcNo}`);
+                    const ncrResult = await lookupDCFromNCR(caseData.ncrdcNo);
+                    if (ncrResult.found && ncrResult.email && isGoodEmail(ncrResult.email)) {
+                        resolvedEmail = ncrResult.email;
+                        emailSource = 'NCR website (ncr.org.za)';
+                        logger.info(`Resolved DC email from NCR website: ${resolvedEmail}`);
+                    }
+                }
+            }
+
+            if (!resolvedEmail) {
+                return NextResponse.json({
+                    success: false,
+                    message: 'Cannot send request: no valid email address found for this debt counsellor. ' +
+                        'The email may have been flagged as invalid or could not be found in our records or on ncr.org.za. ' +
+                        'Please call the debt counsellor to obtain a working email address and update the case.',
+                    requiresManualEmail: true
+                });
+            }
+
+            // Save the resolved email back to the case if it differs
+            if (resolvedEmail !== caseData.dcEmail) {
+                await prisma.case.update({
+                    where: { id: caseId },
+                    data: { dcEmail: resolvedEmail, lastKnownEmail: resolvedEmail }
+                });
+                logger.info(`Updated case dcEmail to resolved address (source: ${emailSource})`);
+            }
+
+            logger.info(`DHS offline — sending email to DC (${emailSource}):`, resolvedEmail);
+
+            const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`;
+            const emailResult = await sendStatusChangeNotification({
+                caseId,
+                clientName,
+                fileNumber: caseData.fileNumber,
+                statusCode: 'REQUEST_FILE_DC',
+                dcName: caseData.debtCounsellorName || 'Debt Counsellor',
+                dcEmail: resolvedEmail,
+                idNumber: caseData.client.idNumber,
+                isB2B: caseData.acquisitionType === 'B2B'
+            });
+
+            if (emailResult.emailSuccess) {
                 await prisma.case.update({
                     where: { id: caseId },
                     data: {
-                        dhsStatus: 'Requested via DHS',
-                        status: 'REQUESTED_VIA_DHS',
+                        status: 'REQUEST_FILE_DC',
                         nextUpdate: addWorkingDays(new Date(), 5)
                     }
                 });
@@ -473,9 +545,13 @@ export async function POST(request: Request) {
                     data: {
                         caseId,
                         userId: (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id || '',
-                        content: `[SYSTEM] Manual Transfer Request initiated. Status updated to 'Requested via DHS'.`
+                        content: `[SYSTEM] Email sent to DC (${caseData.dcEmail}) requesting complete file and Form 17.7. Status updated to 'Request File from DC'.`
                     }
                 });
+
+                result = { success: true, message: `Email sent to debt counsellor (${resolvedEmail}) requesting complete file and Form 17.7. Email source: ${emailSource}.` };
+            } else {
+                result = { success: false, message: `Documents validated but failed to send email to DC (${resolvedEmail}). Errors: ${emailResult.errors.join(', ')}` };
             }
 
         }

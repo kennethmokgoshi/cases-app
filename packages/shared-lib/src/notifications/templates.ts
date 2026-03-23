@@ -295,12 +295,16 @@ Kind regards,
         statusCode: 'REQUEST_FILE_DC',
         statusName: 'Request File from DC',
         smsTemplate: 'N/A',
-        emailSubject: 'URGENT: Request for File - {clientName} ({idNumber})',
+        emailSubject: 'URGENT: Request for File & Form 17.7 - {clientName} ({idNumber})',
         emailTemplate: `Dear {dcName},
 
 We are attending to the credit repair matter for {clientName} (ID: {idNumber}).
 
-We kindly request you to provide us with the complete file for this consumer as soon as possible.
+We kindly request you to provide us with the following documents as soon as possible:
+
+1. The complete file for this consumer
+2. Form 17.7 (Notice to Credit Bureaux)
+3. All supporting documentation on record
 
 Consumer Details:
 • Name: {clientName}

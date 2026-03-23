@@ -45,18 +45,28 @@ export async function GET(request: Request) {
             select: { id: true, parentId: true }
         });
 
-        // Helper to find all descendant IDs
+        // Pre-build children map for O(n) traversal
+        const childrenMap = new Map<string, string[]>();
+        for (const p of allProjects) {
+            if (p.parentId) {
+                const list = childrenMap.get(p.parentId);
+                if (list) list.push(p.id);
+                else childrenMap.set(p.parentId, [p.id]);
+            }
+        }
+
         const getDescendantIds = (rootId: string): string[] => {
             const descendants: string[] = [];
             const queue = [rootId];
-
             while (queue.length > 0) {
                 const currId = queue.shift()!;
-                const children = allProjects.filter(p => p.parentId === currId);
-                children.forEach(child => {
-                    descendants.push(child.id);
-                    queue.push(child.id);
-                });
+                const children = childrenMap.get(currId);
+                if (children) {
+                    for (const childId of children) {
+                        descendants.push(childId);
+                        queue.push(childId);
+                    }
+                }
             }
             return descendants;
         };
