@@ -1,24 +1,111 @@
-import { GhlService } from '@zenowethu/shared-lib';
-import { logger } from '@zenowethu/shared-lib';
+import { prisma } from '@zenowethu/database';
+import {
+  logger,
+  getGHLCredentials,
+  GhlSmsProvider,
+  GhlEmailProvider,
+  GhlWhatsAppProvider,
+} from '@zenowethu/shared-lib';
 import { stepRegistry } from '../step-registry';
 import type { ActionContext } from '../step-registry';
 import type { StepExecutionResult } from '../types';
 
+type GhlChannel = 'SMS' | 'EMAIL' | 'WHATSAPP';
+
+interface GhlStepResult {
+  channel: GhlChannel;
+  recipient: string;
+  messageId?: string;
+  sentAt: string;
+}
+
+async function sendViaGhl(
+  ctx: ActionContext,
+  channel: GhlChannel,
+  message: string,
+  subject?: string,
+): Promise<StepExecutionResult> {
+  const { caseId, caseRecord } = ctx;
+
+  const client = await prisma.client.findUnique({
+    where: { id: caseRecord.clientId },
+    select: { id: true, phone: true, email: true, whatsappNumber: true, ghlContactId: true },
+  });
+
+  if (!client) return { success: false, error: 'Client not found' };
+
+  const ghl = await getGHLCredentials();
+  if (!ghl.apiKey || !ghl.locationId) {
+    return { success: false, error: 'GHL not configured: missing apiKey or locationId' };
+  }
+
+  const rawTo = channel === 'EMAIL' ? client.email : (client.whatsappNumber ?? client.phone);
+  if (!rawTo) {
+    const missing = channel === 'EMAIL' ? 'email' : 'phone/whatsappNumber';
+    return { success: false, error: `Client has no ${missing} — cannot send ${channel}` };
+  }
+
+  // Format SA numbers: 0821234567 → +27821234567
+  const to = channel !== 'EMAIL' && rawTo.startsWith('0') ? '+27' + rawTo.substring(1) : rawTo;
+
+  let sendResult: { success: boolean; messageId?: string; contactId?: string; error?: string; provider: string };
+
+  if (channel === 'SMS') {
+    const provider = new GhlSmsProvider(ghl.apiKey, ghl.locationId);
+    sendResult = await provider.send(to, message);
+  } else if (channel === 'EMAIL') {
+    const provider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
+    sendResult = await provider.send(to, subject ?? 'Update from Zenowethu Debt Counsellors', message);
+  } else {
+    const provider = new GhlWhatsAppProvider(ghl.apiKey, ghl.locationId);
+    sendResult = await provider.send(to, message);
+  }
+
+  // Persist contactId on Client after first successful send
+  if (sendResult.contactId && !client.ghlContactId) {
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { ghlContactId: sendResult.contactId },
+    });
+  }
+
+  // Log every attempt to NotificationLog
+  await prisma.notificationLog.create({
+    data: {
+      caseId,
+      channel,
+      recipient: to,
+      recipientType: 'CLIENT',
+      message,
+      success: sendResult.success,
+      externalId: sendResult.messageId,
+      error: sendResult.error,
+      provider: 'GoHighLevel',
+      senderId: caseRecord.assignedToId,
+    },
+  });
+
+  if (!sendResult.success) {
+    logger.warn(`[GHL_SEND_${channel}] Case ${caseId}: send failed — ${sendResult.error}`);
+    return { success: false, error: sendResult.error };
+  }
+
+  logger.info(`[GHL_SEND_${channel}] Case ${caseId}: sent to ${to} (msgId=${sendResult.messageId})`);
+
+  const result: GhlStepResult = {
+    channel,
+    recipient: to,
+    messageId: sendResult.messageId,
+    sentAt: new Date().toISOString(),
+  };
+
+  return { success: true, result };
+}
+
 stepRegistry.register('GHL_SEND_SMS', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const message = (ctx.actionParams.message as string) || 'Message from Zenowethu Debt Counsellors.';
-    const result = await GhlService.sendMessage(ctx.caseId, 'SMS', message);
-
-    if (!result.success) {
-      logger.warn(`[GHL_SEND_SMS] Case ${ctx.caseId}: send failed — ${result.error}`);
-      return { success: false, error: result.error };
-    }
-
-    logger.info(`[GHL_SEND_SMS] Case ${ctx.caseId}: SMS sent to ${result.recipient} (msgId=${result.messageId})`);
-    return {
-      success: true,
-      result: { channel: 'SMS', recipient: result.recipient, messageId: result.messageId, sentAt: new Date().toISOString() },
-    };
+    return await sendViaGhl(ctx, 'SMS', message);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error: message };
@@ -29,18 +116,7 @@ stepRegistry.register('GHL_SEND_EMAIL', async (ctx: ActionContext): Promise<Step
   try {
     const message = (ctx.actionParams.message as string) || 'Email from Zenowethu Debt Counsellors.';
     const subject = (ctx.actionParams.subject as string) || 'Update from Zenowethu Debt Counsellors';
-    const result = await GhlService.sendMessage(ctx.caseId, 'EMAIL', message, subject);
-
-    if (!result.success) {
-      logger.warn(`[GHL_SEND_EMAIL] Case ${ctx.caseId}: send failed — ${result.error}`);
-      return { success: false, error: result.error };
-    }
-
-    logger.info(`[GHL_SEND_EMAIL] Case ${ctx.caseId}: email sent to ${result.recipient} (msgId=${result.messageId})`);
-    return {
-      success: true,
-      result: { channel: 'EMAIL', recipient: result.recipient, messageId: result.messageId, sentAt: new Date().toISOString() },
-    };
+    return await sendViaGhl(ctx, 'EMAIL', message, subject);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error: message };
@@ -50,18 +126,7 @@ stepRegistry.register('GHL_SEND_EMAIL', async (ctx: ActionContext): Promise<Step
 stepRegistry.register('GHL_SEND_WHATSAPP', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const message = (ctx.actionParams.message as string) || 'WhatsApp from Zenowethu Debt Counsellors.';
-    const result = await GhlService.sendMessage(ctx.caseId, 'WHATSAPP', message);
-
-    if (!result.success) {
-      logger.warn(`[GHL_SEND_WHATSAPP] Case ${ctx.caseId}: send failed — ${result.error}`);
-      return { success: false, error: result.error };
-    }
-
-    logger.info(`[GHL_SEND_WHATSAPP] Case ${ctx.caseId}: WhatsApp sent to ${result.recipient} (msgId=${result.messageId})`);
-    return {
-      success: true,
-      result: { channel: 'WHATSAPP', recipient: result.recipient, messageId: result.messageId, sentAt: new Date().toISOString() },
-    };
+    return await sendViaGhl(ctx, 'WHATSAPP', message);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error: message };
