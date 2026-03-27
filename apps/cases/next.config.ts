@@ -18,7 +18,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  transpilePackages: ['@zenowethu/ui', '@zenowethu/shared-lib'],
+  transpilePackages: ['@zenowethu/ui', '@zenowethu/shared-lib', '@zenowethu/plan-engine'],
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream', 'puppeteer', 'puppeteer-core'],
   turbopack: {
     root: '../../'
