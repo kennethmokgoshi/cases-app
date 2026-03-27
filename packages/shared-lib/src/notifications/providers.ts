@@ -17,6 +17,7 @@ export interface EmailProvider {
 export interface SmsResult {
     success: boolean;
     messageId?: string;
+    contactId?: string;
     error?: string;
     provider: string;
 }
@@ -24,6 +25,7 @@ export interface SmsResult {
 export interface EmailResult {
     success: boolean;
     messageId?: string;
+    contactId?: string;
     error?: string;
     provider: string;
 }
@@ -208,6 +210,7 @@ export interface WhatsAppProvider {
 export interface WhatsAppResult {
     success: boolean;
     messageId?: string;
+    contactId?: string;
     error?: string;
     provider: string;
 }
@@ -355,7 +358,7 @@ export class GhlSmsProvider extends GhlBaseProvider implements SmsProvider {
         const contactId = await this.ensureContactId(to, 'phone');
         if (!contactId) return { success: false, error: 'Contact could not be found or created', provider: this.name };
         const res = await this.sendMessage(contactId, message, 'SMS');
-        return { ...res, provider: this.name };
+        return { ...res, contactId, provider: this.name };
     }
 }
 
@@ -366,7 +369,7 @@ export class GhlEmailProvider extends GhlBaseProvider implements EmailProvider {
         const contactId = await this.ensureContactId(to, 'email');
         if (!contactId) return { success: false, error: 'Contact could not be found or created', provider: this.name };
         const res = await this.sendMessage(contactId, htmlBody, 'EMAIL', subject);
-        return { ...res, provider: this.name };
+        return { ...res, contactId, provider: this.name };
     }
 }
 
@@ -377,7 +380,7 @@ export class GhlWhatsAppProvider extends GhlBaseProvider implements WhatsAppProv
         const contactId = await this.ensureContactId(to, 'phone');
         if (!contactId) return { success: false, error: 'Contact could not be found or created', provider: this.name };
         const res = await this.sendMessage(contactId, message, 'WhatsApp');
-        return { ...res, provider: this.name };
+        return { ...res, contactId, provider: this.name };
     }
 }
 

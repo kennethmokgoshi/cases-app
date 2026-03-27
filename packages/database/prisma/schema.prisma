@@ -51,6 +51,7 @@ model Client {
   phone          String?
   whatsappNumber String?
   telegramNumber String?
+  ghlContactId   String?
   address        String?
   employer       String?
   employeeNo     String?
@@ -60,10 +61,11 @@ model Client {
   type           String        @default("Standard")
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-  cases          Case[]
-  LegalMatter    LegalMatter[]
-  payments       Payment[]
-  invoices       Invoice[]
+  cases           Case[]
+  LegalMatter     LegalMatter[]
+  payments        Payment[]
+  invoices        Invoice[]
+  consumerAccount ConsumerAccount?
 }
 
 model Case {
@@ -156,6 +158,7 @@ model Case {
   workflowLogs            WorkflowLog[]
   invoices                Invoice[]
   plan                    CasePlan?
+  debtReviewDocuments     DebtReviewDocument[]
 
   @@index([status])
   @@index([isOverdue])
@@ -244,6 +247,7 @@ model User {
   groupMemberships          UserGroupMember[]
   workflowLogs              WorkflowLog[]
   approvedPlans             CasePlan[]          @relation("PlanApprover")
+  approvedDebtReviewDocs    DebtReviewDocument[] @relation("DebtReviewDocumentApprover")
 }
 
 model CaseComment {
@@ -500,6 +504,136 @@ model Invoice {
   @@index([dueAt])
 }
 
+// ============================================================
+// CREDO — Consumer-facing platform models
+// ============================================================
+
+model CredoTenant {
+  id           String            @id @default(cuid())
+  name         String
+  slug         String            @unique
+  primaryColor String            @default("#0B1D35")
+  accentColor  String            @default("#C4953A")
+  logoUrl      String?
+  ncrdc        String?
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  consumers    ConsumerAccount[]
+  coupons      CouponCode[]
+
+  @@index([slug])
+}
+
+model ConsumerAccount {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  password       String
+  firstName      String
+  lastName       String
+  idNumber       String?          @unique
+  phone          String?
+  province       String?
+  language       String           @default("English")
+  tenantId       String?
+  isVerified     Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  linkedClientId String?          @unique
+  linkedClient   Client?          @relation(fields: [linkedClientId], references: [id])
+  tenant         CredoTenant?     @relation(fields: [tenantId], references: [id])
+  serviceRequests ServiceRequest[]
+
+  @@index([email])
+  @@index([tenantId])
+}
+
+model CouponCode {
+  id              String           @id @default(cuid())
+  code            String           @unique
+  discountPercent Int
+  maxUses         Int?
+  usedCount       Int              @default(0)
+  expiresAt       DateTime?
+  isActive        Boolean          @default(true)
+  tenantId        String?
+  createdAt       DateTime         @default(now())
+  tenant          CredoTenant?     @relation(fields: [tenantId], references: [id])
+  redemptions     ServiceRequest[]
+
+  @@index([code])
+}
+
+model ServiceRequest {
+  id              String          @id @default(cuid())
+  consumerId      String
+  services        String          // JSON array of selected service names
+  subtotal        Decimal
+  vatAmount       Decimal         @default(0)
+  total           Decimal
+  couponId        String?
+  discountPercent Int             @default(0)
+  status          String          @default("PENDING") // PENDING, ACCEPTED, IN_PROGRESS, CONVERTED, CANCELLED
+  linkedCaseId    String?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  consumer        ConsumerAccount @relation(fields: [consumerId], references: [id])
+  coupon          CouponCode?     @relation(fields: [couponId], references: [id])
+
+  @@index([consumerId])
+  @@index([status])
+}
+
+// ============================================================
+// DEBT REVIEW — Credit provider registry & generated documents
+// ============================================================
+
+model CreditProvider {
+  id             String          @id @default(cuid())
+  name           String          @unique
+  type           String          // BANK, MICRO_LENDER, TELECOM, RETAILER, OTHER
+  email          String?
+  phone          String?
+  address        String?
+  attorney       String?         // Attorney / collector firm name
+  attorneyEmail  String?
+  attorneyPhone  String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  creditAccounts CreditAccount[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model DebtReviewDocument {
+  id               String    @id @default(cuid())
+  caseId           String
+  // FORM_16 | FORM_17_1 | SECTION_86_NOTICE | DEBT_RESTRUCTURING_PROPOSAL
+  documentType     String
+  // DRAFT | SENT_FOR_SIGNING | SIGNED | APPROVED | SENT_TO_CREDITORS
+  status           String    @default("DRAFT")
+  fileUrl          String?
+  signedFileUrl    String?
+  consumerSignedAt DateTime?
+  sentToConsumerAt DateTime?
+  approvedById     String?
+  approvedAt       DateTime?
+  sentToCreditors  Boolean   @default(false)
+  sentToCreditorAt DateTime?
+  emailsSentTo     String?   // JSON array of recipient emails
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  case             Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  approvedBy       User?     @relation("DebtReviewDocumentApprover", fields: [approvedById], references: [id])
+
+  @@index([caseId])
+  @@index([documentType])
+  @@index([status])
+}
+
 model CreditAccount {
   id                 String                       @id @default(cuid())
   caseId             String
@@ -525,9 +659,11 @@ model CreditAccount {
   prescriptionDate   DateTime?
   status             String                       @default("ACTIVE")
   isIncluded         Boolean                      @default(true)
+  creditProviderId   String?
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @updatedAt
   case               Case                         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  creditProvider     CreditProvider?              @relation(fields: [creditProviderId], references: [id])
   documents          CreditAccountDocument[]
   assessmentAccounts InsuranceAssessmentAccount[]
 
@@ -535,6 +671,7 @@ model CreditAccount {
   @@index([clientId])
   @@index([accountType])
   @@index([status])
+  @@index([creditProviderId])
 }
 
 model CreditAccountDocument {

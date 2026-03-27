@@ -1,9 +1,23 @@
 import { prisma } from '@zenowethu/database';
 import { getGHLCredentials } from './ghl-config';
 import { logger } from '../logger';
+import {
+    GhlSmsProvider,
+    GhlEmailProvider,
+    GhlWhatsAppProvider,
+} from '../notifications/providers';
+
+export interface GhlSendResult {
+    success: boolean;
+    messageId?: string;
+    contactId?: string;
+    error?: string;
+    channel: string;
+    recipient: string;
+}
 
 export class GhlService {
-    static async handleWebhook(payload: any) {
+    static async handleWebhook(payload: Record<string, unknown>) {
         logger.info('[GHL Webhook] Received payload:', JSON.stringify(payload, null, 2));
 
         const type = payload.type;
@@ -15,12 +29,13 @@ export class GhlService {
         return { success: true };
     }
 
-    private static async handleInboundMessage(payload: any) {
-        const message = payload.message || payload.body;
-        const contactId = payload.contactId;
-        const phone = payload.phone || payload.contact?.phone;
-        const email = payload.email || payload.contact?.email;
-        const channel = payload.channelType || 'SMS';
+    private static async handleInboundMessage(payload: Record<string, unknown>) {
+        const contact = payload.contact as Record<string, unknown> | undefined;
+        const message = (payload.message ?? payload.body) as string | undefined;
+        const contactId = payload.contactId as string | undefined;
+        const phone = (payload.phone ?? contact?.phone) as string | undefined;
+        const email = (payload.email ?? contact?.email) as string | undefined;
+        const channel = (payload.channelType ?? 'SMS') as string;
 
         if (!message || (!phone && !email)) {
             logger.warn('[GHL Webhook] Missing message or contact info');
@@ -32,10 +47,10 @@ export class GhlService {
                 OR: [
                     { client: { phone: phone } },
                     { client: { email: email } },
-                    { client: { phone: { endsWith: phone?.slice(-9) } } }
-                ]
+                    { client: { phone: { endsWith: phone?.slice(-9) } } },
+                ],
             },
-            include: { client: true }
+            include: { client: true },
         });
 
         if (!caseRecord) {
@@ -43,12 +58,20 @@ export class GhlService {
             return { success: false, error: 'Case not found' };
         }
 
+        // Persist contactId on the Client if we now know it and didn't before
+        if (contactId && !caseRecord.client.ghlContactId) {
+            await prisma.client.update({
+                where: { id: caseRecord.client.id },
+                data: { ghlContactId: contactId },
+            });
+        }
+
         const systemUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
 
         await prisma.caseComment.create({
             data: {
                 caseId: caseRecord.id,
-                userId: systemUser?.id || 'system',
+                userId: systemUser?.id ?? 'system',
                 content: `[Inbound ${channel}] ${message}`,
                 type: 'GHL',
                 isInternal: false,
@@ -56,12 +79,10 @@ export class GhlService {
                 activityData: JSON.stringify({
                     channel,
                     contactId,
-                    provider: 'GoHighLevel'
-                })
-            }
+                    provider: 'GoHighLevel',
+                }),
+            },
         });
-
-        await this.sendAutoAcknowledgment(caseRecord.id, channel, phone, email);
 
         // Notify AI Plan Engine of inbound event
         try {
@@ -73,7 +94,7 @@ export class GhlService {
                 eventSource: 'GHL',
                 eventType: channel.toUpperCase().includes('EMAIL') ? 'DOCUMENT_RECEIVED' : 'REPLY_RECEIVED',
                 eventData: { channel, contactId, message, provider: 'GoHighLevel' },
-                description: `Inbound ${channel} from ${caseRecord.client.firstName} ${caseRecord.client.lastName}: "${message.substring(0, 200)}${message.length > 200 ? '...' : ''}"`
+                description: `Inbound ${channel} from ${caseRecord.client.firstName} ${caseRecord.client.lastName}: "${message.substring(0, 200)}${message.length > 200 ? '...' : ''}"`,
             });
         } catch (err) {
             logger.warn('[GHL Webhook] Plan event notification failed (non-critical):', err);
@@ -82,24 +103,100 @@ export class GhlService {
         return { success: true, caseId: caseRecord.id };
     }
 
-    private static async sendAutoAcknowledgment(caseId: string, channel: string, phone?: string, email?: string) {
-        logger.info(`[GHL Webhook] sending auto-ack to ${phone || email} via ${channel}`);
-    }
-
-    static async sendMessage(caseId: string, channel: 'SMS' | 'EMAIL' | 'WHATSAPP', message: string, subject?: string) {
+    /**
+     * Send a message to a case's client via GHL (SMS, EMAIL, or WHATSAPP).
+     * - Looks up or creates the GHL contact automatically.
+     * - Persists the returned contactId on the Client record.
+     * - Logs every attempt to NotificationLog.
+     */
+    static async sendMessage(
+        caseId: string,
+        channel: 'SMS' | 'EMAIL' | 'WHATSAPP',
+        message: string,
+        subject?: string,
+    ): Promise<GhlSendResult> {
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
-            include: { client: true }
+            include: { client: true },
         });
 
-        if (!caseRecord) throw new Error('Case not found');
+        if (!caseRecord) throw new Error(`Case not found: ${caseId}`);
+
+        const { client } = caseRecord;
 
         const ghl = await getGHLCredentials();
-        if (!ghl.apiKey || !ghl.locationId) throw new Error('GHL not configured');
+        if (!ghl.apiKey || !ghl.locationId) {
+            throw new Error('GHL not configured: missing apiKey or locationId');
+        }
 
-        // NOTE: GHL provider classes (GhlSmsProvider, GhlEmailProvider, GhlWhatsAppProvider)
-        // are app-specific and imported in each app from their local notifications/providers path.
-        // This service exposes the logic; apps wire in the providers as needed.
-        logger.info(`[GHL Service] sendMessage called: caseId=${caseId}, channel=${channel}`);
+        // Determine the recipient address for this channel
+        const to =
+            channel === 'EMAIL'
+                ? client.email
+                : (client.whatsappNumber ?? client.phone);
+
+        if (!to) {
+            const missing = channel === 'EMAIL' ? 'email' : 'phone/whatsappNumber';
+            throw new Error(`Client ${client.id} has no ${missing} — cannot send ${channel}`);
+        }
+
+        // Format SA numbers: 0821234567 → +27821234567
+        const formattedTo =
+            channel !== 'EMAIL' && to.startsWith('0')
+                ? '+27' + to.substring(1)
+                : to;
+
+        let result: GhlSendResult;
+
+        try {
+            if (channel === 'SMS') {
+                const provider = new GhlSmsProvider(ghl.apiKey, ghl.locationId);
+                const res = await provider.send(formattedTo, message);
+                result = { ...res, channel, recipient: formattedTo };
+            } else if (channel === 'EMAIL') {
+                const provider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
+                const res = await provider.send(formattedTo, subject ?? 'Message from Zenowethu Debt Counsellors', message);
+                result = { ...res, channel, recipient: formattedTo };
+            } else {
+                const provider = new GhlWhatsAppProvider(ghl.apiKey, ghl.locationId);
+                const res = await provider.send(formattedTo, message);
+                result = { ...res, channel, recipient: formattedTo };
+            }
+
+            // Persist the GHL contactId on the Client so future sends skip the lookup
+            if (result.contactId && !client.ghlContactId) {
+                await prisma.client.update({
+                    where: { id: client.id },
+                    data: { ghlContactId: result.contactId },
+                });
+                logger.info(`[GHL Service] Stored ghlContactId=${result.contactId} on Client ${client.id}`);
+            }
+        } catch (err: unknown) {
+            const error = err instanceof Error ? err.message : 'Unknown error';
+            result = { success: false, error, channel, recipient: formattedTo };
+            logger.error(`[GHL Service] sendMessage failed: caseId=${caseId} channel=${channel}`, err);
+        }
+
+        // Always log the attempt regardless of success/failure
+        await prisma.notificationLog.create({
+            data: {
+                caseId,
+                channel,
+                recipient: result.recipient,
+                recipientType: 'CLIENT',
+                message,
+                success: result.success,
+                externalId: result.messageId,
+                error: result.error,
+                provider: 'GoHighLevel',
+                senderId: caseRecord.assignedToId,
+            },
+        });
+
+        logger.info(
+            `[GHL Service] sendMessage: caseId=${caseId} channel=${channel} success=${result.success} messageId=${result.messageId ?? 'none'}`,
+        );
+
+        return result;
     }
 }
