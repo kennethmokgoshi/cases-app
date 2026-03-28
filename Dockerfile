@@ -24,6 +24,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/database/package.json ./packages/database/
 COPY packages/shared-lib/package.json ./packages/shared-lib/
+COPY packages/plan-engine/package.json ./packages/plan-engine/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/config/package.json ./packages/config/
 COPY packages/eslint-config/package.json ./packages/eslint-config/
@@ -54,6 +55,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
 COPY --from=deps /app/packages/shared-lib/node_modules ./packages/shared-lib/node_modules
+COPY --from=deps /app/packages/plan-engine/node_modules ./packages/plan-engine/node_modules
 COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
 COPY --from=deps /app/packages/config/node_modules ./packages/config/node_modules
 COPY --from=deps /app/apps/${APP}/node_modules ./apps/${APP}/node_modules
