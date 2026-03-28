@@ -99,7 +99,7 @@ async function sendViaGhl(
     sentAt: new Date().toISOString(),
   };
 
-  return { success: true, result: result as Record<string, unknown> };
+  return { success: true, result: result as unknown as Record<string, unknown> };
 }
 
 stepRegistry.register('GHL_SEND_SMS', async (ctx: ActionContext): Promise<StepExecutionResult> => {
