@@ -1,18 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { calculateSlaDeadline } from '@zenowethu/shared-lib';
-import { sendStatusChangeNotification } from '@zenowethu/shared-lib';
-import { auth } from '@zenowethu/shared-lib';
+import { calculateSlaDeadline, sendStatusChangeNotification, auth, createLogger } from '@zenowethu/shared-lib';
 import { CaseCreateSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/cases');
 
 export async function GET(request: Request) {
     try {
@@ -70,9 +62,9 @@ export async function GET(request: Request) {
         const where: any = {};
 
         // Security: Filter by project membership (Inherited Access)
-        const userRole = (session.user as any).role?.toUpperCase();
-        const isAdmin = userRole === 'ADMIN' || (session.user as any).isAdmin === true;
-        const isStaff = (session.user as any).userType === 'STAFF';
+        const userRole = session.user.role?.toUpperCase();
+        const isAdmin = userRole === 'ADMIN' || session.user.isAdmin === true;
+        const isStaff = session.user.userType === 'STAFF';
 
         // Staff members (internal) should see all cases, Partners (external) are restricted to their projects
         const isRestricted = !isAdmin && !isStaff;

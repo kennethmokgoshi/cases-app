@@ -1,15 +1,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, draftLegalDocument, getAutonomyDecision, sendManualMessage  } from '@zenowethu/shared-lib';
+import { auth, draftLegalDocument, getAutonomyDecision, sendManualMessage, createLogger } from '@zenowethu/shared-lib';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/ai/draft');
 
 /**
  * POST /api/ai/draft

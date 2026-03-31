@@ -13,7 +13,7 @@ const ALLOWED_EXTENSIONS = /\.(xlsx|xls)$/i;
 export async function POST(req: NextRequest) {
     // 1. Auth & Role Check
     const session = await auth();
-    const userRole = (session?.user as any)?.role;
+    const userRole = session?.user?.role;
 
     if (!session?.user?.id || !['ADMIN', 'FINANCE', 'ACCOUNTS'].includes(userRole || '')) {
         return NextResponse.json({ error: 'Unauthorized access' }, { status: 401 });

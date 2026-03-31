@@ -1,18 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth } from '@zenowethu/shared-lib';
-import { extractDocumentsFromCombinedPdf, analyzeDocument } from '@zenowethu/shared-lib';
+import { extractDocumentsFromCombinedPdf, analyzeDocument, createLogger } from '@zenowethu/shared-lib';
 import { writeFile, mkdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/documents/extract');
 
 export async function POST(request: Request) {
     const encoder = new TextEncoder();
@@ -153,7 +147,7 @@ export async function POST(request: Request) {
                     }
 
                     // Check if we should skip AI
-                    const userType = (session?.user as any)?.userType;
+                    const userType = session?.user?.userType;
                     const isB2BPartner = userType === 'B2B_PARTNER';
                     const isB2BPartnerProject = caseRecord?.projects?.some((cp: any) =>
                         cp.project.parentId === 'cm3m176ia0004v0u8pysf0j5u'

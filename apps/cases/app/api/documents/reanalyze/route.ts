@@ -1,20 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth } from '@zenowethu/shared-lib';
-import { extractDocumentsFromCombinedPdf, analyzeDocument, batchAnalyzeDocuments, verifyIdNumbers } from '@zenowethu/shared-lib';
+import { extractDocumentsFromCombinedPdf, analyzeDocument, batchAnalyzeDocuments, verifyIdNumbers, createLogger } from '@zenowethu/shared-lib';
 import { ReanalyzeSchema, parseBody } from '@/lib/schemas';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { z } from 'zod';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/documents/reanalyze');
 
 export async function POST(request: Request) {
     let session;
@@ -44,7 +38,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
-        const userType = (session?.user as any)?.userType;
+        const userType = session?.user?.userType;
         const isB2BPartner = userType === 'B2B_PARTNER';
 
         const isB2BPartnerProject = caseRecord.projects?.some(cp =>

@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         }
 
         const isB2BCase = caseRecord.acquisitionType === 'B2B';
-        const userType = (session?.user as any)?.userType;
+        const userType = session?.user?.userType;
         const isB2BPartner = userType === 'B2B_PARTNER';
 
         const isB2BProject = caseRecord.projects?.some(cp =>

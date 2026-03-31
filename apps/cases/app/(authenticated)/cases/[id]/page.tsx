@@ -17,6 +17,7 @@ import { EditServicesModal } from '@zenowethu/ui';
 import { CompareAnalysisModal } from '@zenowethu/ui';
 import { RichTextEditor } from '@zenowethu/ui';
 import { AIPlanTab } from '@zenowethu/ui';
+import { DebtReviewTab } from './DebtReviewTab';
 
 // Client-side logger (avoid importing createLogger from shared-lib)
 const createLogger = (name: string) => ({
@@ -257,6 +258,9 @@ export default function CaseDetailPage() {
     const [mounted, setMounted] = useState(false);
     const [requestingTransfer, setRequestingTransfer] = useState(false);
     const [transferStatus, setTransferStatus] = useState('');
+    const [autoFillLoading, setAutoFillLoading] = useState(false);
+    const [autoFillMessage, setAutoFillMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+    const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
 
     const [viewingProjectMembers, setViewingProjectMembers] = useState<{ id: string; name: string; members?: any[] } | null>(null);
     // Modals
@@ -264,7 +268,7 @@ export default function CaseDetailPage() {
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
     const [isEditServicesOpen, setIsEditServicesOpen] = useState(false);
     const [showCompareModal, setShowCompareModal] = useState(false);
-    const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN'>('ACTIVITY');
+    const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN' | 'DEBT_REVIEW'>('ACTIVITY');
 
     // Tasks & Decline Reason State
     // Tasks & Decline Reason State
@@ -658,11 +662,11 @@ export default function CaseDetailPage() {
 
     const handleAutoFillDhs = async () => {
         if (!caseData?.client.idNumber) {
-            setDhsMessage({ type: 'error', text: 'Client ID number is required' });
+            setAutoFillMessage({ type: 'error', text: 'Client ID number is required' });
             return;
         }
-        setDhsLoading(true);
-        setDhsMessage({ type: 'info', text: 'Scraping DHS details... This may take a minute.' });
+        setAutoFillLoading(true);
+        setAutoFillMessage(null);
 
         try {
             const res = await fetch('/api/dhs/lookup', {
@@ -693,20 +697,49 @@ export default function CaseDetailPage() {
                     dcOperatingStatus: result.data.dcOperatingStatus || prev.dcOperatingStatus,
                     dcMobile: result.data.dcMobile || prev.dcMobile,
                     consumerDhsStatus: result.data.status || prev.consumerDhsStatus,
-                    dhsPreviousStatus: result.data.status || prev.dhsPreviousStatus, // Map scraped Status to Previous Status for history? Or just keep what we have. API updates usage.
-                    // Note: result.data includes 'status'.
+                    dhsPreviousStatus: result.data.status || prev.dhsPreviousStatus,
                 }));
 
-                setDhsMessage({ type: 'success', text: 'DHS Information Auto-filled successfully!' });
+                setAutoFillMessage({ type: 'success', text: 'Auto-filled successfully!' });
                 setIsEditingDhs(true); // Open edit mode to show populated fields
             } else {
-                setDhsMessage({ type: 'error', text: result.message || 'Failed to auto-fill DHS info' });
+                setAutoFillMessage({ type: 'error', text: result.message || 'Failed to auto-fill DHS info' });
             }
         } catch (error) {
             log.error({ err: error }, 'Auto-fill error:', error);
-            setDhsMessage({ type: 'error', text: 'Failed to connect to DHS service' });
+            setAutoFillMessage({ type: 'error', text: 'Failed to connect to DHS service' });
         } finally {
-            setDhsLoading(false);
+            setAutoFillLoading(false);
+        }
+    };
+
+    const handleDocUpload = async (file: File, docType: string) => {
+        if (!caseData) return;
+        setUploadingDocType(docType);
+        try {
+            const formData = new FormData();
+            formData.append('caseId', caseData.id);
+            if (docType === 'COMBINED') {
+                formData.append('combined', 'true');
+                formData.append('file', file);
+            } else {
+                formData.append(`file_${docType}`, file);
+            }
+            const res = await fetch('/api/documents/upload', { method: 'POST', body: formData });
+            const result = await res.json();
+            if (res.ok) {
+                const caseRes = await fetch(`/api/cases/${params.id}`);
+                const updatedCase = await caseRes.json();
+                setCaseData(updatedCase);
+                setDhsMessage({ type: 'success', text: `${docType === 'COMBINED' ? 'Combined file' : docType} uploaded — AI is extracting documents.` });
+            } else {
+                setDhsMessage({ type: 'error', text: result.error || 'Upload failed' });
+            }
+        } catch (error) {
+            log.error({ err: error }, 'Doc upload error:', error);
+            setDhsMessage({ type: 'error', text: 'Upload failed' });
+        } finally {
+            setUploadingDocType(null);
         }
     };
 
@@ -1177,6 +1210,16 @@ export default function CaseDetailPage() {
                     {/* Actions */}
                     {!isEditing && (
                         <div className="flex items-center gap-2">
+                            <a
+                                href={`/api/cases/${params.id}/form16`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 bg-teal-500/10 border border-teal-500/30 text-teal-400 rounded hover:bg-teal-500/20 text-sm flex items-center gap-2 transition-colors"
+                                title="Download Form 16 — Application for Debt Review"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                Form 16
+                            </a>
                             {isAdmin && (
                                 <button
                                     onClick={() => setShowDeleteConfirm(true)}
@@ -1901,15 +1944,32 @@ export default function CaseDetailPage() {
                             <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-lg font-semibold text-white">🏛️ DHS Information</h3>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={handleAutoFillDhs}
-                                            className="px-3 py-1 bg-indigo-600 border border-indigo-500/50 text-white rounded hover:bg-indigo-700 transition-colors text-sm flex items-center gap-2"
-                                            title="Populate fields from Credit Report"
-                                        >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                            Auto-fill
-                                        </button>
+                                    <div className="flex gap-2 items-start">
+                                        <div className="flex flex-col items-end gap-1">
+                                            <button
+                                                onClick={handleAutoFillDhs}
+                                                disabled={autoFillLoading}
+                                                className="px-3 py-1 bg-indigo-600 border border-indigo-500/50 text-white rounded hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors text-sm flex items-center gap-2"
+                                                title="Populate fields from DHS portal"
+                                            >
+                                                {autoFillLoading ? (
+                                                    <>
+                                                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        Auto-filling...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                        Auto-fill
+                                                    </>
+                                                )}
+                                            </button>
+                                            {autoFillMessage && (
+                                                <div className={`text-[10px] px-2 py-0.5 rounded max-w-[180px] text-right ${autoFillMessage.type === 'error' ? 'text-red-400 bg-red-500/10 border border-red-500/20' : autoFillMessage.type === 'success' ? 'text-green-400 bg-green-500/10 border border-green-500/20' : 'text-blue-400 bg-blue-500/10 border border-blue-500/20'}`}>
+                                                    {autoFillMessage.text}
+                                                </div>
+                                            )}
+                                        </div>
                                         {!isEditing && (
                                             isEditingDhs ? (
                                                 <div className="flex items-center gap-2">
@@ -2112,7 +2172,7 @@ export default function CaseDetailPage() {
                                                     </button>
                                                     {(() => {
                                                         const status = caseData.dhsStatus?.toUpperCase();
-                                                        if (status !== 'PENDING' && status !== 'DECLINED' && status !== 'NOT_REQUESTED') return null;
+                                                        if (status !== 'PENDING' && status !== 'DECLINED') return null;
                                                         return (
                                                             <button
                                                                 onClick={handleRequestTransfer}
@@ -2124,6 +2184,86 @@ export default function CaseDetailPage() {
                                                         );
                                                     })()}
                                                 </div>
+
+                                                {/* Document readiness check — shown when transfer has NOT been requested yet */}
+                                                {(() => {
+                                                    const s = (caseData.dhsStatus || '').toUpperCase().replace(/[\s_]+/g, '');
+                                                    if (s !== '' && s !== 'NOTREQUESTED') return null;
+                                                    const hasId = caseData.documents.some(d => d.type === 'ID');
+                                                    const hasPoa = caseData.documents.some(d => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
+                                                    const hasCombined = caseData.documents.some(d => d.type === 'COMBINED' || d.type === 'OTHER');
+
+                                                    if (hasId && hasPoa) {
+                                                        return (
+                                                            <div className="mt-3 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                                                                <div className="flex items-center gap-2 mb-1.5">
+                                                                    <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                                                                    <span className="text-xs text-green-400 font-semibold">Ready to Request Transfer</span>
+                                                                </div>
+                                                                <p className="text-[11px] text-gray-400 mb-2">ID and POA documents are present.</p>
+                                                                <button
+                                                                    onClick={handleRequestTransfer}
+                                                                    disabled={requestingTransfer}
+                                                                    className="px-3 py-1.5 bg-green-600/80 border border-green-500/40 text-white rounded text-xs font-semibold hover:bg-green-600 transition-colors flex items-center gap-1.5 disabled:opacity-60"
+                                                                >
+                                                                    {requestingTransfer ? (
+                                                                        <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />Requesting...</>
+                                                                    ) : (
+                                                                        <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>Request Transfer</>
+                                                                    )}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    const missingDocs: string[] = [];
+                                                    if (!hasId) missingDocs.push('ID');
+                                                    if (!hasPoa) missingDocs.push('POA');
+
+                                                    return (
+                                                        <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                                                            <div className="flex items-center gap-2 mb-1.5">
+                                                                <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse"></div>
+                                                                <span className="text-xs text-amber-400 font-semibold">Documents Required Before Requesting</span>
+                                                            </div>
+                                                            <p className="text-[11px] text-gray-400 mb-3">
+                                                                Missing: <span className="text-amber-300 font-medium">{missingDocs.join(' & ')}</span>
+                                                                {hasCombined && ' — or extract from combined file below.'}
+                                                            </p>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {!hasId && (
+                                                                    <label className={`px-2.5 py-1.5 bg-amber-600/20 border border-amber-600/40 text-amber-300 rounded text-xs cursor-pointer hover:bg-amber-600/30 transition-all flex items-center gap-1.5 ${uploadingDocType === 'ID' ? 'opacity-70 pointer-events-none' : ''}`}>
+                                                                        {uploadingDocType === 'ID'
+                                                                            ? <span className="w-3 h-3 border border-amber-300 border-t-transparent rounded-full animate-spin inline-block" />
+                                                                            : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                                                        }
+                                                                        Upload ID
+                                                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => { if (e.target.files?.[0]) handleDocUpload(e.target.files[0], 'ID'); e.target.value = ''; }} />
+                                                                    </label>
+                                                                )}
+                                                                {!hasPoa && (
+                                                                    <label className={`px-2.5 py-1.5 bg-amber-600/20 border border-amber-600/40 text-amber-300 rounded text-xs cursor-pointer hover:bg-amber-600/30 transition-all flex items-center gap-1.5 ${uploadingDocType === 'POA' ? 'opacity-70 pointer-events-none' : ''}`}>
+                                                                        {uploadingDocType === 'POA'
+                                                                            ? <span className="w-3 h-3 border border-amber-300 border-t-transparent rounded-full animate-spin inline-block" />
+                                                                            : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                                                        }
+                                                                        Upload POA
+                                                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => { if (e.target.files?.[0]) handleDocUpload(e.target.files[0], 'POA'); e.target.value = ''; }} />
+                                                                    </label>
+                                                                )}
+                                                                <label className={`px-2.5 py-1.5 bg-purple-600/20 border border-purple-600/40 text-purple-300 rounded text-xs cursor-pointer hover:bg-purple-600/30 transition-all flex items-center gap-1.5 ${uploadingDocType === 'COMBINED' ? 'opacity-70 pointer-events-none' : ''}`}>
+                                                                    {uploadingDocType === 'COMBINED'
+                                                                        ? <span className="w-3 h-3 border border-purple-300 border-t-transparent rounded-full animate-spin inline-block" />
+                                                                        : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                                    }
+                                                                    Upload Combined File
+                                                                    <input type="file" className="hidden" accept=".pdf" onChange={(e) => { if (e.target.files?.[0]) handleDocUpload(e.target.files[0], 'COMBINED'); e.target.value = ''; }} />
+                                                                </label>
+                                                            </div>
+                                                            <p className="text-[10px] text-gray-500 mt-2">Upload a combined PDF — the system will extract the ID and POA automatically.</p>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     </div>
@@ -2486,6 +2626,15 @@ export default function CaseDetailPage() {
                             >
                                 <span>🤖</span> AI Plan
                             </button>
+                            <button
+                                onClick={() => setActiveDetailTab('DEBT_REVIEW')}
+                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'DEBT_REVIEW'
+                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
+                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    }`}
+                            >
+                                <span>📄</span> Debt Review Docs
+                            </button>
                         </nav>
 
                         <div className="p-8">
@@ -2511,6 +2660,14 @@ export default function CaseDetailPage() {
                             {activeDetailTab === 'AI_PLAN' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <AIPlanTab caseId={caseData.id} acquisitionType={caseData.acquisitionType} />
+                                </div>
+                            )}
+                            {activeDetailTab === 'DEBT_REVIEW' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <DebtReviewTab
+                                        caseId={caseData.id}
+                                        canApprove={!!(session?.user?.isAdmin || session?.user?.isExecutive || (session?.user as any)?.isSeniorManager || (session?.user as any)?.role === 'MANAGER')}
+                                    />
                                 </div>
                             )}
                         </div>

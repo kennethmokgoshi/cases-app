@@ -1,19 +1,10 @@
-'use server';
-
 import { NextResponse } from 'next/server';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, createLogger, invalidateGHLCredentialsCache } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
-import { invalidateGHLCredentialsCache } from '@zenowethu/shared-lib';
 import { GhlSettingsSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/admin/settings/ghl');
 
 // GET /api/admin/settings/ghl - Get GHL credentials
 export async function GET() {

@@ -2,7 +2,7 @@
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 // Client-side logger
@@ -16,6 +16,11 @@ const logger = {
 interface DHSSettings {
     dhs_username: string;
     dhs_password: string;
+}
+
+interface MaxDcSettings {
+    maxdc_username: string;
+    maxdc_password: string;
 }
 
 interface GHLSettings {
@@ -49,7 +54,20 @@ export default function SettingsPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [showGhlApiKey, setShowGhlApiKey] = useState(false);
     const [showGhlPassword, setShowGhlPassword] = useState(false);
+    const [maxdcSettings, setMaxdcSettings] = useState<MaxDcSettings>({ maxdc_username: '', maxdc_password: '' });
+    const [hasMaxdcPassword, setHasMaxdcPassword] = useState(false);
+    const [maxdcLastUpdated, setMaxdcLastUpdated] = useState<Date | null>(null);
+    const [maxdcSaving, setMaxdcSaving] = useState(false);
+    const [showMaxdcPassword, setShowMaxdcPassword] = useState(false);
     const [mounted, setMounted] = useState(false);
+
+    // Letterhead state
+    const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
+    const [letterheadUpdatedAt, setLetterheadUpdatedAt] = useState<Date | null>(null);
+    const [letterheadSaving, setLetterheadSaving] = useState(false);
+    const [letterheadPreview, setLetterheadPreview] = useState<string | null>(null);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Track when component is mounted for hydration-safe rendering
     useEffect(() => {
@@ -69,11 +87,82 @@ export default function SettingsPage() {
     const fetchSettings = async () => {
         setLoading(true);
         try {
-            await Promise.all([fetchDHSSettings(), fetchGHLSettings()]);
+            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings()]);
         } catch (error) {
             logger.error('Error fetching settings:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchLetterheadSettings = async () => {
+        try {
+            const res = await fetch('/api/admin/settings/letterhead');
+            if (res.ok) {
+                const data = await res.json();
+                setLetterheadUrl(data.url ?? null);
+                setLetterheadUpdatedAt(data.updatedAt ? new Date(data.updatedAt) : null);
+            }
+        } catch (error) {
+            logger.error('Error fetching letterhead settings:', error);
+        }
+    };
+
+    const handleLetterheadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setSelectedFile(file);
+        setLetterheadPreview(URL.createObjectURL(file));
+    };
+
+    const handleLetterheadUpload = async () => {
+        if (!selectedFile) return;
+        setLetterheadSaving(true);
+        setMessage(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            const res = await fetch('/api/admin/settings/letterhead', { method: 'POST', body: formData });
+            if (res.ok) {
+                const data = await res.json();
+                setLetterheadUrl(data.url);
+                setLetterheadPreview(null);
+                setSelectedFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                setMessage({ type: 'success', text: 'Letterhead uploaded successfully!' });
+                fetchLetterheadSettings();
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to upload letterhead' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while uploading the letterhead' });
+        } finally {
+            setLetterheadSaving(false);
+        }
+    };
+
+    const handleLetterheadRemove = async () => {
+        if (!confirm('Are you sure you want to remove the current letterhead?')) return;
+        setLetterheadSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/letterhead', { method: 'DELETE' });
+            if (res.ok) {
+                setLetterheadUrl(null);
+                setLetterheadUpdatedAt(null);
+                setLetterheadPreview(null);
+                setSelectedFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                setMessage({ type: 'success', text: 'Letterhead removed successfully' });
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to remove letterhead' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while removing the letterhead' });
+        } finally {
+            setLetterheadSaving(false);
         }
     };
 
@@ -118,6 +207,64 @@ export default function SettingsPage() {
             }
         } catch (error) {
             logger.error('Error fetching GHL settings:', error);
+        }
+    };
+
+    const fetchMaxDcSettings = async () => {
+        try {
+            const res = await fetch('/api/admin/settings/maxdc');
+            if (res.ok) {
+                const data = await res.json();
+                setHasMaxdcPassword(!!(data.settings.maxdc_password && data.settings.maxdc_password.includes('•')));
+                setMaxdcSettings({ maxdc_username: data.settings.maxdc_username || '', maxdc_password: '' });
+                if (data.lastUpdated) setMaxdcLastUpdated(new Date(data.lastUpdated));
+            }
+        } catch (error) {
+            logger.error('Error fetching MaxDC settings:', error);
+        }
+    };
+
+    const handleSaveMaxDc = async () => {
+        setMaxdcSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/maxdc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: maxdcSettings.maxdc_username, password: maxdcSettings.maxdc_password })
+            });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'MaxDC credentials saved successfully!' });
+                fetchMaxDcSettings();
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to save MaxDC credentials' });
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: 'An error occurred while saving MaxDC credentials' });
+        } finally {
+            setMaxdcSaving(false);
+        }
+    };
+
+    const handleResetMaxDc = async () => {
+        if (!confirm('Are you sure you want to clear MaxDC credentials?')) return;
+        setMaxdcSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/maxdc', { method: 'DELETE' });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'MaxDC credentials cleared' });
+                setMaxdcSettings({ maxdc_username: '', maxdc_password: '' });
+                setHasMaxdcPassword(false);
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to clear MaxDC credentials' });
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: 'An error occurred while clearing MaxDC credentials' });
+        } finally {
+            setMaxdcSaving(false);
         }
     };
 
@@ -273,6 +420,103 @@ export default function SettingsPage() {
             )}
 
             <div className="space-y-8">
+                {/* Letterhead Section — ADMIN and EXECUTIVE only */}
+                {(session?.user?.isAdmin || session?.user?.isExecutive) && (
+                    <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-2xl">
+                                🖼️
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-bold text-white">Document Letterhead</h2>
+                                    <span className="px-2 py-0.5 text-xs font-semibold bg-teal-500/20 text-teal-400 border border-teal-500/40 rounded-full">
+                                        Admin &amp; Executive only
+                                    </span>
+                                </div>
+                                <p className="text-gray-400 text-sm mt-0.5">
+                                    Upload the Zenowethu letterhead image used on generated NCA documents (Form 16, Form 17.1, etc.)
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Current letterhead preview */}
+                        {letterheadUrl && !letterheadPreview && (
+                            <div className="mb-5">
+                                <p className="text-sm text-gray-400 mb-2">Current letterhead:</p>
+                                <div className="border border-zeno-blue/40 rounded-lg overflow-hidden bg-white p-2 max-w-lg">
+                                    <img
+                                        src={letterheadUrl}
+                                        alt="Current letterhead"
+                                        className="w-full object-contain max-h-40"
+                                    />
+                                </div>
+                                {mounted && letterheadUpdatedAt && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Last updated: {letterheadUpdatedAt.toLocaleString()}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* New file preview */}
+                        {letterheadPreview && (
+                            <div className="mb-5">
+                                <p className="text-sm text-teal-400 mb-2">New letterhead preview:</p>
+                                <div className="border border-teal-500/40 rounded-lg overflow-hidden bg-white p-2 max-w-lg">
+                                    <img
+                                        src={letterheadPreview}
+                                        alt="New letterhead preview"
+                                        className="w-full object-contain max-h-40"
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">{selectedFile?.name}</p>
+                            </div>
+                        )}
+
+                        {/* No letterhead yet */}
+                        {!letterheadUrl && !letterheadPreview && (
+                            <div className="mb-5 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-300">
+                                No letterhead uploaded yet. Documents will be generated without a letterhead until one is uploaded.
+                            </div>
+                        )}
+
+                        {/* File picker */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Select new letterhead file
+                                <span className="ml-2 text-xs text-gray-500">(PNG, JPEG, WebP or PDF — max 5 MB)</span>
+                            </label>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                                onChange={handleLetterheadFileChange}
+                                className="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-600 file:text-white hover:file:bg-teal-500 file:cursor-pointer cursor-pointer"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-4 pt-4 border-t border-zeno-blue/30">
+                            <button
+                                onClick={handleLetterheadUpload}
+                                disabled={!selectedFile || letterheadSaving}
+                                className="px-6 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {letterheadSaving ? 'Uploading...' : 'Upload Letterhead'}
+                            </button>
+                            {letterheadUrl && (
+                                <button
+                                    onClick={handleLetterheadRemove}
+                                    disabled={letterheadSaving}
+                                    className="px-6 py-3 bg-zeno-dark/50 border border-red-500/50 text-red-400 font-semibold rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Remove
+                                </button>
+                            )}
+                        </div>
+                    </section>
+                )}
+
                 {/* DHS Credentials Section */}
                 <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
                     <div className="flex items-center gap-4 mb-6">
@@ -377,6 +621,17 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="space-y-4">
+                        {/* Webhook URL info box */}
+                        <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                            <p className="text-sm font-medium text-cyan-300 mb-1">Inbound Webhook URL</p>
+                            <p className="text-xs text-gray-400 mb-2">
+                                Add this URL as a Webhook action in your GHL Automation / Workflow to receive replies and inbound messages:
+                            </p>
+                            <code className="block text-xs text-cyan-200 bg-zeno-dark/60 rounded px-3 py-2 break-all select-all">
+                                {typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/ghl` : 'https://cases.zenowethu.co.za/api/webhooks/ghl'}
+                            </code>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* API Key */}
                             <div>
@@ -482,6 +737,99 @@ export default function SettingsPage() {
                             className="px-6 py-3 bg-zeno-dark/50 border border-red-500/50 text-red-400 font-semibold rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Reset
+                        </button>
+                    </div>
+                </section>
+
+                {/* MaxDC Credentials Section */}
+                <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-2xl">
+                            ⚖️
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-xl font-bold text-white">MaxDC Portal Credentials</h2>
+                                <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-full">
+                                    Active — DHS coming soon
+                                </span>
+                            </div>
+                            <p className="text-gray-400 text-sm mt-0.5">
+                                Login credentials for{' '}
+                                <a href="https://www.maxdc.co.za/Maximus/Controller?" target="_blank" rel="noopener noreferrer" className="text-zeno-cyan hover:underline">
+                                    www.maxdc.co.za
+                                </a>{' '}
+                                — used to place consumers under debt review
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-300">
+                        Note: MaxDC may delay OTP delivery. Allow 2–3 minutes before retrying if the OTP does not arrive.
+                    </div>
+
+                    <div className="space-y-4">
+                        {/* Username */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                MaxDC Username
+                            </label>
+                            <input
+                                type="text"
+                                value={maxdcSettings.maxdc_username}
+                                onChange={(e) => setMaxdcSettings({ ...maxdcSettings, maxdc_username: e.target.value })}
+                                className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                placeholder="Enter MaxDC username"
+                            />
+                        </div>
+
+                        {/* Password */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                MaxDC Password
+                                {hasMaxdcPassword && (
+                                    <span className="ml-2 text-xs text-green-400">(Password saved)</span>
+                                )}
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type={showMaxdcPassword ? 'text' : 'password'}
+                                    value={maxdcSettings.maxdc_password}
+                                    onChange={(e) => setMaxdcSettings({ ...maxdcSettings, maxdc_password: e.target.value })}
+                                    className="w-full px-4 py-3 pr-12 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                    placeholder={hasMaxdcPassword ? 'Enter new password to change' : 'Enter password'}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMaxdcPassword(!showMaxdcPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                >
+                                    {showMaxdcPassword ? '🙈' : '👁️'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {mounted && maxdcLastUpdated && (
+                            <div className="pt-2 text-sm text-gray-500">
+                                Last updated: {maxdcLastUpdated.toLocaleString()}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-4 mt-6 pt-6 border-t border-zeno-blue/30">
+                        <button
+                            onClick={handleSaveMaxDc}
+                            disabled={maxdcSaving}
+                            className="px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {maxdcSaving ? 'Saving...' : 'Save MaxDC Credentials'}
+                        </button>
+                        <button
+                            onClick={handleResetMaxDc}
+                            disabled={maxdcSaving}
+                            className="px-6 py-3 bg-zeno-dark/50 border border-red-500/50 text-red-400 font-semibold rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Clear
                         </button>
                     </div>
                 </section>

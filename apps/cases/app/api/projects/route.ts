@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
 import { ProjectCreateSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/projects');
 
 // Helper function to recursively fetch children
 async function getProjectWithChildren(projectId: string, depth: number = 5): Promise<unknown> {
@@ -81,7 +75,7 @@ export async function GET(request: NextRequest) {
 
         const isAllRequested = searchParams.get('all') === 'true';
         const isAdmin = session.user.role === 'ADMIN' || session.user.isAdmin;
-        const isStaff = (session.user as any).userType === 'STAFF';
+        const isStaff = session.user.userType === 'STAFF';
 
         // Allow users to see all ACQUISITION_SOURCE projects (Partners) for selection
         // regardless of direct membership. This fixes the issue where Partners with invalid/stale
@@ -103,8 +97,8 @@ export async function GET(request: NextRequest) {
             const explicitProjectIds = memberships.map(m => m.projectId);
 
             // 2. Add assigned B2B partner project for partners
-            if ((session.user as any).b2bPartnerId) {
-                explicitProjectIds.push((session.user as any).b2bPartnerId);
+            if (session.user.b2bPartnerId) {
+                explicitProjectIds.push(session.user.b2bPartnerId);
             }
 
             if (explicitProjectIds.length === 0) {

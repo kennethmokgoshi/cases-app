@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/b2b/clients/search');
 
 export async function GET(request: Request) {
     try {
@@ -26,7 +20,7 @@ export async function GET(request: Request) {
         }
 
         // Get user details
-        const user = session.user as any;
+        const user = session.user;
         const isAdmin = user.role?.toUpperCase() === 'ADMIN' || user.isAdmin === true;
         const isStaff = user.userType === 'STAFF';
         const b2bPartnerId = user.b2bPartnerId;

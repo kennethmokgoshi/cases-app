@@ -52,9 +52,9 @@ export async function GET(request: Request) {
         };
 
         // Security: Filter by project membership (Inherited Access)
-        const userRole = (session.user as any).role?.toUpperCase();
-        const isAdmin = userRole === 'ADMIN' || (session.user as any).isAdmin === true;
-        const isStaff = (session.user as any).userType === 'STAFF';
+        const userRole = session.user.role?.toUpperCase();
+        const isAdmin = userRole === 'ADMIN' || session.user.isAdmin === true;
+        const isStaff = session.user.userType === 'STAFF';
 
         // Staff members (internal) should see all cases, Partners (external) are restricted to their projects
         const isRestricted = !isAdmin && !isStaff;

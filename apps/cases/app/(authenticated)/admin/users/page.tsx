@@ -48,6 +48,7 @@ export default function UsersManagement() {
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Form state
     const [formData, setFormData] = useState({
@@ -240,7 +241,19 @@ export default function UsersManagement() {
         }
     };
 
-    const sortedUsers = [...users].sort((a, b) => {
+    const filteredUsers = searchQuery.trim()
+        ? users.filter(u => {
+            const q = searchQuery.toLowerCase();
+            return (
+                u.firstName.toLowerCase().includes(q) ||
+                u.lastName.toLowerCase().includes(q) ||
+                `${u.firstName} ${u.lastName}`.toLowerCase().includes(q) ||
+                u.email.toLowerCase().includes(q)
+            );
+        })
+        : users;
+
+    const sortedUsers = [...filteredUsers].sort((a, b) => {
         let aVal: any;
         let bVal: any;
 
@@ -325,6 +338,30 @@ export default function UsersManagement() {
                         New User
                     </button>
                 </div>
+            </div>
+
+            {/* Search */}
+            <div className="mb-4 relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 0 5 11a6 6 0 0 0 12 0z" />
+                </svg>
+                <input
+                    type="text"
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-zeno-cyan transition-colors"
+                />
+                {searchQuery && (
+                    <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
             </div>
 
             {/* Users Table */}
@@ -537,9 +574,9 @@ export default function UsersManagement() {
                         </tbody>
                     </table>
                 </div>
-                {users.length === 0 && !loading && (
+                {sortedUsers.length === 0 && !loading && (
                     <div className="p-8 text-center text-gray-400">
-                        No users found.
+                        {searchQuery ? `No users found matching "${searchQuery}".` : 'No users found.'}
                     </div>
                 )}
             </div>

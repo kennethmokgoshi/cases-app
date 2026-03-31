@@ -165,6 +165,11 @@ function NewCaseWithAIComponent() {
         creditReport?: File;
         bankStatement?: File;
         payslip?: File;
+        form16?: File;
+        form171?: File;
+        form172?: File;
+        form177?: File;
+        clearance?: File;
         allCombined?: File;
         optional: File[];
     }>({
@@ -302,6 +307,9 @@ function NewCaseWithAIComponent() {
 
     // Filter parent projects based on selected acquisition type (B2B/B2C)
     const filteredParentProjects = parentProjects.filter(p => {
+        // Exclude legacy referral sources — they have no related cases
+        if (p.name.toLowerCase().includes('referrals')) return false;
+
         if (acquisitionType === 'B2B') {
             // Strictly show only B2B marked projects, OR projects without clientType (legacy)
             // This ensures we show acquisition sources even if not yet marked
@@ -403,7 +411,7 @@ function NewCaseWithAIComponent() {
         // REMOVED: Reseting Year/Month
     }, [selectedParentId]);
 
-    const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'bankStatement' | 'payslip' | 'allCombined' | 'optional', file: File | null) => {
+    const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'bankStatement' | 'payslip' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
         if (type === 'optional' && file) {
             setUploadedFiles(prev => ({
                 ...prev,
@@ -527,6 +535,11 @@ function NewCaseWithAIComponent() {
                 if (uploadedFiles.creditReport) formDataUpload.append('file_CREDIT_REPORT', uploadedFiles.creditReport);
                 if (uploadedFiles.bankStatement) formDataUpload.append('file_BANK_STATEMENT', uploadedFiles.bankStatement);
                 if (uploadedFiles.payslip) formDataUpload.append('file_PAYSLIP', uploadedFiles.payslip);
+                if (uploadedFiles.form16) formDataUpload.append('file_FORM_16', uploadedFiles.form16);
+                if (uploadedFiles.form171) formDataUpload.append('file_FORM_17_1', uploadedFiles.form171);
+                if (uploadedFiles.form172) formDataUpload.append('file_FORM_17_2', uploadedFiles.form172);
+                if (uploadedFiles.form177) formDataUpload.append('file_FORM_17_7', uploadedFiles.form177);
+                if (uploadedFiles.clearance) formDataUpload.append('file_CLEARANCE', uploadedFiles.clearance);
             }
             // Optional files still use generic 'files'
             uploadedFiles.optional.forEach(file => formDataUpload.append('files', file));
@@ -1393,6 +1406,86 @@ function NewCaseWithAIComponent() {
                                     </label>
                                 </div>
                             </div>
+
+                            {(selectedServices.includes('debt_review_flag_removal') || selectedServices.includes('debt_review_application')) && (<>
+                                <div className="col-span-2 mt-2">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="h-px flex-1 bg-white/10"></div>
+                                        <span className="text-xs text-gray-500 uppercase tracking-wider">Debt Review Documents</span>
+                                        <div className="h-px flex-1 bg-white/10"></div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-300">Form 16</label>
+                                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.form16 ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                        <input type="file" id="form16-upload" className="hidden" onChange={(e) => handleFileChange('form16', e.target.files?.[0] || null)} accept=".pdf,image/*" />
+                                        <label htmlFor="form16-upload" className="cursor-pointer">
+                                            {uploadedFiles.form16 ? (
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2"><span>✓</span> {uploadedFiles.form16.name}</div>
+                                            ) : (
+                                                <div className="text-gray-400"><span className="text-2xl block mb-2">📄</span>Click to upload Form 16</div>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-300">Form 17.1</label>
+                                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.form171 ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                        <input type="file" id="form171-upload" className="hidden" onChange={(e) => handleFileChange('form171', e.target.files?.[0] || null)} accept=".pdf,image/*" />
+                                        <label htmlFor="form171-upload" className="cursor-pointer">
+                                            {uploadedFiles.form171 ? (
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2"><span>✓</span> {uploadedFiles.form171.name}</div>
+                                            ) : (
+                                                <div className="text-gray-400"><span className="text-2xl block mb-2">📄</span>Click to upload Form 17.1</div>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-300">Form 17.2</label>
+                                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.form172 ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                        <input type="file" id="form172-upload" className="hidden" onChange={(e) => handleFileChange('form172', e.target.files?.[0] || null)} accept=".pdf,image/*" />
+                                        <label htmlFor="form172-upload" className="cursor-pointer">
+                                            {uploadedFiles.form172 ? (
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2"><span>✓</span> {uploadedFiles.form172.name}</div>
+                                            ) : (
+                                                <div className="text-gray-400"><span className="text-2xl block mb-2">📄</span>Click to upload Form 17.2</div>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-300">Form 17.7</label>
+                                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.form177 ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                        <input type="file" id="form177-upload" className="hidden" onChange={(e) => handleFileChange('form177', e.target.files?.[0] || null)} accept=".pdf,image/*" />
+                                        <label htmlFor="form177-upload" className="cursor-pointer">
+                                            {uploadedFiles.form177 ? (
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2"><span>✓</span> {uploadedFiles.form177.name}</div>
+                                            ) : (
+                                                <div className="text-gray-400"><span className="text-2xl block mb-2">📄</span>Click to upload Form 17.7</div>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-300">Clearance Certificate (Form 17.W)</label>
+                                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.clearance ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                        <input type="file" id="clearance-upload" className="hidden" onChange={(e) => handleFileChange('clearance', e.target.files?.[0] || null)} accept=".pdf,image/*" />
+                                        <label htmlFor="clearance-upload" className="cursor-pointer">
+                                            {uploadedFiles.clearance ? (
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2"><span>✓</span> {uploadedFiles.clearance.name}</div>
+                                            ) : (
+                                                <div className="text-gray-400"><span className="text-2xl block mb-2">🏆</span>Click to upload Clearance</div>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+                            </>)}
 
                             <div className="space-y-2">
                                 <label className="block text-sm font-medium text-gray-300">Other Files</label>

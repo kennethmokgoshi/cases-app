@@ -40,7 +40,7 @@ function GlobalAppSwitcherInner() {
     }, []);
 
     // Show only to ADMIN, EXECUTIVE, SENIOR_MANAGER (hidden for everyone else including B2B)
-    const { role, isAdmin, isExecutive, isSeniorManager } = session?.user as any ?? {};
+    const { role, isAdmin, isExecutive, isSeniorManager } = session?.user ?? {} as any;
     const canSwitchApps = isAdmin || isExecutive || isSeniorManager;
     if (!session?.user || !canSwitchApps) {
         return null;

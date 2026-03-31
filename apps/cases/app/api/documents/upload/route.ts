@@ -12,15 +12,9 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import busboy from 'busboy';
 import { Readable } from 'stream';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/documents/upload');
 
 
 export const maxDuration = 600; // 10 minutes
@@ -80,7 +74,7 @@ export async function POST(request: Request) {
         // --- NEW BULLETPROOF BYPASS LOGIC ---
         // 1. Get Session
         const session = await auth();
-        const userType = (session?.user as any)?.userType;
+        const userType = session?.user?.userType;
         const isB2BPartner = userType === 'B2B_PARTNER';
 
         // 2. Fetch Case Record to verify acquisitionType (The source of truth)

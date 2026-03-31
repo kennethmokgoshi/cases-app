@@ -41,8 +41,8 @@ export function B2BSidebar() {
 
     useEffect(() => {
         if (session?.user) {
-            // Fetch cases for timeline
-            fetch('/api/cases')
+            // Fetch cases for timeline — slim=true returns only {id, createdAt}
+            fetch('/api/cases?slim=true')
                 .then(res => res.json())
                 .then(data => {
                     if (Array.isArray(data)) {

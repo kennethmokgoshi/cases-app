@@ -72,7 +72,7 @@ export async function POST(request: Request) {
         // --- NEW BULLETPROOF BYPASS LOGIC ---
         // 1. Get Session
         const session = await auth();
-        const userType = (session?.user as any)?.userType;
+        const userType = session?.user?.userType;
         const isB2BPartner = userType === 'B2B_PARTNER';
 
         // 2. Fetch Case Record to verify acquisitionType (The source of truth)

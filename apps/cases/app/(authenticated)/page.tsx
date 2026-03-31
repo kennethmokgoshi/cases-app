@@ -11,7 +11,7 @@ export default async function DirectorDashboard() {
   const session = await auth();
 
   // B2B Redirect Check (Server Side)
-  if (session?.user && (session.user as any).userType === 'B2B_PARTNER') {
+  if (session?.user && session.user.userType === 'B2B_PARTNER') {
     redirect('/b2b-dashboard');
   }
 
@@ -143,7 +143,7 @@ export default async function DirectorDashboard() {
             Group Command Center
           </h1>
           <p className="text-gray-400">
-            Logged in as <span className="text-zeno-cyan font-bold">{(session?.user as any)?.role || 'Director'}</span>.
+            Logged in as <span className="text-zeno-cyan font-bold">{session?.user?.role || 'Director'}</span>.
             System Status: <span className="text-emerald-400">Operational</span>.
           </p>
         </div>

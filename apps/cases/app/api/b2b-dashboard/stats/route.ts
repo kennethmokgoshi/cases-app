@@ -10,8 +10,8 @@ export async function GET() {
         }
 
         const userId = session.user.id;
-        const userType = (session.user as any).userType;
-        const isAdmin = (session.user as any).isAdmin === true || (session.user as any).role?.toUpperCase() === 'ADMIN';
+        const userType = session.user.userType;
+        const isAdmin = session.user.isAdmin === true || session.user.role?.toUpperCase() === 'ADMIN';
         const isStaff = userType === 'STAFF';
         const isRestricted = !isAdmin && !isStaff;
 
@@ -133,7 +133,9 @@ export async function GET() {
             })),
         });
     } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        const errStack = error instanceof Error ? error.stack : undefined;
         logger.error('[b2b-dashboard/stats] Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal Server Error', detail: errMsg, stack: errStack }, { status: 500 });
     }
 }

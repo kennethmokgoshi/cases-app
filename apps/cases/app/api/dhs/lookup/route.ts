@@ -9,17 +9,11 @@
 import { NextResponse } from 'next/server';
 import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, sendStatusChangeNotification, lookupDCFromNCR  } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
-import { addWorkingDays } from '@zenowethu/shared-lib';
+import { addWorkingDays, createLogger } from '@zenowethu/shared-lib';
 import path, { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/dhs/lookup');
 
 // Helper to resolve file paths from URLs
 const getFilePath = (fileUrl: string) => {

@@ -3,17 +3,11 @@ import { prisma } from '@zenowethu/database';
 
 export const maxDuration = 300; // Allow 5 minutes for heavy analysis
 import { auth } from '@zenowethu/shared-lib';
-import { analyzeDocument, analyzeCombinedDocument } from '@zenowethu/shared-lib';
+import { analyzeDocument, analyzeCombinedDocument, createLogger } from '@zenowethu/shared-lib';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/documents/[id]/analyze');
 
 export async function POST(
     request: Request,

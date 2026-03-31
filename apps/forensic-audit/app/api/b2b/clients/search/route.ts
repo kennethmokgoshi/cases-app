@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         }
 
         // Get user details
-        const user = session.user as any;
+        const user = session.user;
         const isAdmin = user.role?.toUpperCase() === 'ADMIN' || user.isAdmin === true;
         const isStaff = user.userType === 'STAFF';
         const b2bPartnerId = user.b2bPartnerId;

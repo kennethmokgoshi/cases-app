@@ -54,15 +54,12 @@ async function getSmsProvider(): Promise<SmsProvider> {
 }
 
 async function getEmailProvider(): Promise<EmailProvider> {
-    if (process.env.GHL_EMAIL_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL) {
-        return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL || '');
-    }
-    const ghl = await getGHLCredentials();
-    if (ghl.apiKey && ghl.locationId) {
-        return new GhlEmailProvider(ghl.apiKey, ghl.locationId);
+    // Priority 1: GHL webhook (explicit email override)
+    if (process.env.GHL_EMAIL_WEBHOOK_URL) {
+        return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL);
     }
 
-    // Priority 1: SMTP
+    // Priority 2: SMTP (preferred direct email provider)
     if (process.env.SMTP_HOST) {
         return new SmtpEmailProvider({
             host: process.env.SMTP_HOST,
@@ -70,18 +67,24 @@ async function getEmailProvider(): Promise<EmailProvider> {
             secure: process.env.SMTP_SECURE === 'true',
             auth: {
                 user: process.env.SMTP_USER || '',
-                pass: process.env.SMTP_PASS || ''
+                pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || ''
             },
-            fromEmail: process.env.EMAIL_FROM
+            fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM
         });
     }
 
-    // Priority 2: Resend
+    // Priority 3: Resend
     if (process.env.RESEND_API_KEY) {
         return new ResendEmailProvider(
             process.env.RESEND_API_KEY,
-            process.env.EMAIL_FROM || 'notifications@zenowethu.co.za'
+            process.env.EMAIL_FROM || process.env.SMTP_FROM || 'notifications@zenowethu.co.za'
         );
+    }
+
+    // Priority 4: GHL API (fallback — shares creds with SMS/WhatsApp)
+    const ghl = await getGHLCredentials();
+    if (ghl.apiKey && ghl.locationId) {
+        return new GhlEmailProvider(ghl.apiKey, ghl.locationId);
     }
 
     return new MockEmailProvider();

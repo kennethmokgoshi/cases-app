@@ -3,17 +3,11 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
-import { invalidateDHSCredentialsCache } from '@zenowethu/shared-lib';
+import { invalidateDHSCredentialsCache, createLogger } from '@zenowethu/shared-lib';
 import { DhsSettingsSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/admin/settings/dhs');
 
 // GET /api/admin/settings/dhs - Get DHS credentials
 export async function GET() {

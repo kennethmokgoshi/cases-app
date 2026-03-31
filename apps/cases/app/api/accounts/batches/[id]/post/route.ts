@@ -5,7 +5,7 @@ import { auth } from '@zenowethu/shared-lib';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const session = await auth();
-    const userRole = (session?.user as any)?.role;
+    const userRole = session?.user?.role;
 
     if (!session?.user?.id || !['ADMIN', 'FINANCE', 'ACCOUNTS'].includes(userRole || '')) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

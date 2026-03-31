@@ -118,7 +118,7 @@ export async function POST(request: Request) {
         }
 
         // Check if we should skip AI (Only skip for B2B Partners to control costs, but allow internal B2B splitting)
-        const userType = (session?.user as any)?.userType;
+        const userType = session?.user?.userType;
         const isB2BPartner = userType === 'B2B_PARTNER';
 
         // Deep project check - if it's a strict B2B partner project, we might still want to skip

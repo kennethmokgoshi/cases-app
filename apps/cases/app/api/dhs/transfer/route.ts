@@ -5,18 +5,12 @@
  */
 
 import { NextResponse } from 'next/server';
-import { requestTransfer, closeBrowser  } from '@zenowethu/shared-lib';
+import { requestTransfer, closeBrowser, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import path from 'path';
 import fs from 'fs';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/dhs/transfer');
 
 export async function POST(request: Request) {
     try {

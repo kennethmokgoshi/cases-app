@@ -1,11 +1,45 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-03-18 (Email notifications on @mentions wired up in all 5 apps)
+> Last updated: 2026-03-25 (Phase 4: Debt Review document workflow complete — 3 new API routes + DebtReviewTab UI + 20 new tests, 151 total)
 
 ---
 
 ## ✅ Completed
+
+### Phase 4 — Debt Review Document Workflow (2026-03-25)
+- [x] **`PATCH /api/cases/[id]/debt-review/[docId]/approve`** — Staff approval endpoint. Requires ADMIN, EXECUTIVE, SENIOR_MANAGER, or MANAGER role. Validates document exists, has a fileUrl, is not already approved. Sets `status=APPROVED`, `approvedById`, `approvedAt`. Returns updated document with approver name.
+- [x] **`POST /api/cases/[id]/debt-review/[docId]/send-consumer`** — Emails generated PDF to consumer. Reads PDF from disk, attaches to Nodemailer email (SMTP or mock fallback in dev). Sets `status=SENT_FOR_SIGNING`, `sentToConsumerAt`. Returns 422 if no consumer email, no fileUrl, or PDF missing on disk. Returns 502 on SMTP failure.
+- [x] **`POST /api/cases/[id]/debt-review/send-creditors`** — Emails all APPROVED documents to every linked credit provider. Validates all providers have email addresses (returns 422 with `missingEmails` list if not). Sends one email per unique provider email with all approved PDFs attached. Sets `status=SENT_TO_CREDITORS`, `sentToCreditors=true`, `sentToCreditorAt`, `emailsSentTo` (JSON). Returns 502 if all deliveries fail.
+- [x] **`DebtReviewTab` component** — `apps/cases/app/(authenticated)/cases/[id]/DebtReviewTab.tsx`. Shows all 4 NCA document types (Form 16, Form 17.1, Section 86 Notice, Debt Restructuring Proposal) with status badges, per-document Generate/Regenerate, Email Consumer, and Approve buttons. Bulk "Send to Creditors" panel appears when at least one doc is approved. Missing-email warning banner with link to Credit Providers registry.
+- [x] **Tab wired into case detail page** — "Debt Review Docs" tab added to case `[id]/page.tsx`. `canApprove` flag passed based on role. Tab state type updated to include `DEBT_REVIEW`.
+- [x] **Tests** — 20 new Vitest tests in `debt-review-actions.test.ts` covering: approve (401/403/404/422/409/200-admin/200-senior-mgr), send-consumer (401/404/422-no-url/422-no-email/422-missing-pdf/200/502), send-creditors (401/422-missing-emails/422-no-approved/404/200/502). **151 total passing** across cases app.
+- **Note**: Consumer digital signature UI is NOT in scope here — future Credo team task.
+
+### Phase 3 — Credit Providers Registry (2026-03-24)
+- [x] **`GET/POST /api/admin/credit-providers`** — Paginated list (any authenticated user) with search/type/isActive filters + meta stats. Create (admin/executive/senior manager only) with Zod validation and 409 on duplicate name.
+- [x] **`GET/PATCH/DELETE /api/admin/credit-providers/[id]`** — Single record read (any auth), update (admin/executive/senior manager), delete (admin/executive only). DELETE unlinks all CreditAccount records first.
+- [x] **`/admin/credit-providers` page** — Full CRUD UI: stats bar, search/type/status filters, paginated table with provider name, type badge (colour-coded), email (amber warning when missing), attorney details. Add/Edit modal with basic details + attorney section + active toggle. Delete with confirmation.
+- [x] **Sidebar** — "Credit Providers" link added to Admin section in `SidebarNav.tsx`.
+- [x] **Admin hub** — "Credit Providers" tile added to `/admin` dashboard.
+- [x] **Tests** — 17 new Vitest tests in `route.test.ts` (GET list 401/data/filters, POST 401/403/422/201/409, GET[id] 401/404/200, PATCH 403/404/200, DELETE 403/404/200+unlink). 131 total passing.
+
+### Phase 2 — Letterhead Upload (Admin/Executive) (2026-03-24)
+- [x] **`GET/POST/DELETE /api/admin/settings/letterhead`** — Upload, fetch, and remove letterhead; restricted to isAdmin || isExecutive. Files saved to `public/uploads/letterhead/` with timestamp filenames. URL persisted in `SystemSettings` key `letterhead_url`.
+- [x] **Settings page UI** — Letterhead section added to `/admin/settings`; shows current preview, new-file preview, file picker (PNG/JPEG/WebP/PDF, 5 MB max), Upload and Remove buttons. Visible to ADMIN and EXECUTIVE only.
+- [x] **Tests** — 9 new Vitest tests in `route.test.ts` (GET 401/null/url, POST 401/no-file/bad-type/too-large, DELETE 401/success). 114 total passing in cases app.
+
+### Phase 1 — Debt Review Schema (2026-03-24)
+- [x] **`CreditProvider` model** — Global registry of credit providers with name, type, email, phone, address, attorney, attorneyEmail, attorneyPhone, isActive. Linked to `CreditAccount`.
+- [x] **`DebtReviewDocument` model** — Tracks generated NCA documents per case (Form 16, Form 17.1, Section 86 Notice, Debt Restructuring Proposal). Statuses: DRAFT → SENT_FOR_SIGNING → SIGNED → APPROVED → SENT_TO_CREDITORS. Linked to `Case` and `User` (approver).
+- [x] **`creditProviderId` on `CreditAccount`** — Optional FK to `CreditProvider` global registry.
+- [x] **Migration** — `20260324_add_credit_provider_and_debt_review_documents` applied and Prisma client regenerated.
+- **Next**: Phase 3 — Credit Provider registry UI in cases app.
+
+### Prisma Connection Retry Middleware (2026-03-23)
+- **Root cause investigated**: `b2b-dashboard` dashboard returning HTTP 500 — traced to `PrismaClientKnownRequestError: Can't reach database server at 213.199.57.111:5432` (50 occurrences in dev log). The Contabo VPS firewall silently drops idle TCP connections after ~6 min; Prisma's cached pool held stale connections and did not recover automatically.
+- **Fix**: Added automatic retry extension to `packages/database/src/index.ts` — wraps all Prisma operations with up to 3 attempts and exponential back-off (500ms, 1000ms) on `PrismaClientInitializationError` or `P1001`/`P1002` known request errors. Applies to all 5 apps that use `@zenowethu/database`.
+- **Immediate action**: Refresh the browser page — the error clears once the DB connection is re-established.
 
 ### Email Notifications on @Mentions — All 5 Apps (2026-03-18)
 - [x] **Cases** — replaced `// TODO: Send email notification` stub with real `sendManualMessage` call; added `sendManualMessage` to shared-lib import.

@@ -75,7 +75,9 @@ export default function B2BDashboard() {
         try {
             const res = await fetch('/api/b2b-dashboard/stats');
             if (!res.ok) {
-                throw new Error(`Database Error: Unable to load dashboard (Status: ${res.status})`);
+                const body = await res.json().catch(() => ({}));
+                const detail = body.detail || body.error || `Status: ${res.status}`;
+                throw new Error(`Database Error: Unable to load dashboard (${detail})`);
             }
             const data = await res.json();
             setStats(data);

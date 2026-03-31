@@ -253,7 +253,10 @@ export class MockTelegramProvider implements TelegramProvider {
             provider: this.name };
     }
 }
-// ===== GOHIGHLEVEL (GHL) PROVIDERS =====
+// ===== GOHIGHLEVEL (GHL) PROVIDERS — v2 API =====
+
+const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
+const GHL_API_VERSION = '2021-07-28';
 
 class GhlBaseProvider {
     protected apiKey: string;
@@ -264,89 +267,84 @@ class GhlBaseProvider {
         this.locationId = locationId;
     }
 
-    protected async ensureContactId(to: string, type: 'phone' | 'email'): Promise<string | null> {
-        // 1. Try to find existing
-        let contactId = await this.getContactId(to, type);
-        if (contactId) return contactId;
+    protected get headers() {
+        return {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            'Version': GHL_API_VERSION,
+        };
+    }
 
-        // 2. Create if not found
-        logger.info(`[GHL] Contact not found for ${to}, creating new contact...`);
+    protected async ensureContactId(to: string, type: 'phone' | 'email'): Promise<string | null> {
+        const contactId = await this.getContactId(to, type);
+        if (contactId) return contactId;
+        logger.info(`[GHL] Contact not found for ${to}, creating...`);
         return this.createContact(to, type);
     }
 
     protected async getContactId(to: string, type: 'phone' | 'email'): Promise<string | null> {
         try {
-            const query = type === 'phone' ? `phone=${encodeURIComponent(to)}` : `email=${encodeURIComponent(to)}`;
-            // V1 API: Implicit location via Key
-            const response = await fetch(`https://rest.gohighlevel.com/v1/contacts/lookup?${query}`, {
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json' } });
-
+            const param = type === 'phone' ? `phone=${encodeURIComponent(to)}` : `email=${encodeURIComponent(to)}`;
+            const response = await fetch(
+                `${GHL_BASE_URL}/contacts/?locationId=${this.locationId}&${param}`,
+                { headers: this.headers }
+            );
             if (!response.ok) return null;
             const data = await response.json();
-            return data.contacts?.[0]?.id || null;
+            return data.contacts?.[0]?.id ?? null;
         } catch (error) {
-            logger.error('GHL Contact Lookup Error:', error);
+            logger.error('[GHL] Contact lookup error:', error);
             return null;
         }
     }
 
     protected async createContact(value: string, type: 'phone' | 'email'): Promise<string | null> {
         try {
-            const body: any = {};
+            const body: Record<string, string> = { locationId: this.locationId };
             if (type === 'phone') body.phone = value;
             else body.email = value;
 
-            const response = await fetch(`https://rest.gohighlevel.com/v1/contacts/`, {
+            const response = await fetch(`${GHL_BASE_URL}/contacts/`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                headers: this.headers,
+                body: JSON.stringify(body),
             });
-
             if (!response.ok) {
                 const err = await response.json();
-                logger.error('GHL Create Contact Error:', err);
+                logger.error('[GHL] Create contact error:', err);
                 return null;
             }
-
             const data = await response.json();
-            return data.contact?.id || null;
+            return data.contact?.id ?? null;
         } catch (error) {
-            logger.error('GHL Create Contact Exception:', error);
+            logger.error('[GHL] Create contact exception:', error);
             return null;
         }
     }
 
-    protected async sendMessage(contactId: string, message: string, type: 'SMS' | 'EMAIL' | 'WhatsApp', subject?: string): Promise<any> {
+    protected async sendMessage(
+        contactId: string,
+        message: string,
+        type: 'SMS' | 'Email' | 'WhatsApp',
+        subject?: string,
+    ): Promise<{ success: boolean; messageId?: string; error?: string }> {
         try {
-            const body: any = {
-                contactId,
-                type,
-                message };
+            const body: Record<string, string> = { type, contactId, message };
+            if (type === 'Email' && subject) body.subject = subject;
 
-            if (type === 'EMAIL' && subject) {
-                body.subject = subject;
-            }
-
-            const response = await fetch(`https://rest.gohighlevel.com/v1/conversations/messages`, {
+            const response = await fetch(`${GHL_BASE_URL}/conversations/messages`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json' },
-                body: JSON.stringify(body) });
-
+                headers: this.headers,
+                body: JSON.stringify(body),
+            });
             const data = await response.json();
             return {
                 success: response.ok,
-                messageId: data.conversationId || data.id || data.msgId,
-                error: response.ok ? undefined : data.message || 'GHL API Error' };
-        } catch (error: any) {
-            return {
-                success: false,
-                error: error.message };
+                messageId: data.messageId ?? data.conversationId ?? data.id,
+                error: response.ok ? undefined : (data.message ?? 'GHL API error'),
+            };
+        } catch (error: unknown) {
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
     }
 }
@@ -368,7 +366,7 @@ export class GhlEmailProvider extends GhlBaseProvider implements EmailProvider {
     async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: { fromName?: string, fromEmail?: string }): Promise<EmailResult> {
         const contactId = await this.ensureContactId(to, 'email');
         if (!contactId) return { success: false, error: 'Contact could not be found or created', provider: this.name };
-        const res = await this.sendMessage(contactId, htmlBody, 'EMAIL', subject);
+        const res = await this.sendMessage(contactId, htmlBody, 'Email', subject);
         return { ...res, contactId, provider: this.name };
     }
 }

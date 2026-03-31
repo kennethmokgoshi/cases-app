@@ -1,0 +1,405 @@
+@import "tailwindcss";
+
+@theme {
+  /* ─── Typography ─────────────────────────────────────────────── */
+  --font-family-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-family-display: var(--font-playfair), Georgia, serif;
+
+  /* ─── Credo Brand Palette ─────────────────────────────────────── */
+  --color-credo-navy:        #0B1D35;
+  --color-credo-navy-700:    #0F2847;
+  --color-credo-navy-600:    #163356;
+  --color-credo-navy-500:    #1E4470;
+  --color-credo-navy-200:    #C8D9EF;
+  --color-credo-navy-100:    #E4EDF8;
+  --color-credo-navy-50:     #F0F5FB;
+
+  --color-credo-gold:        #C4953A;
+  --color-credo-gold-700:    #A37828;
+  --color-credo-gold-300:    #DEBB7A;
+  --color-credo-gold-100:    #F6EDD6;
+  --color-credo-gold-50:     #FBF6EA;
+
+  --color-credo-white:       #FFFFFF;
+  --color-credo-bg:          #F8F9FA;
+  --color-credo-bg-alt:      #F1F4F8;
+
+  --color-credo-ink:         #0F172A;
+  --color-credo-ink-700:     #1E293B;
+  --color-credo-ink-500:     #475569;
+  --color-credo-ink-400:     #64748B;
+  --color-credo-ink-300:     #94A3B8;
+  --color-credo-ink-200:     #CBD5E1;
+  --color-credo-ink-100:     #E2E8F0;
+  --color-credo-ink-50:      #F1F5F9;
+
+  --color-credo-success:     #059669;
+  --color-credo-success-bg:  #ECFDF5;
+  --color-credo-warning:     #D97706;
+  --color-credo-warning-bg:  #FFFBEB;
+  --color-credo-danger:      #DC2626;
+  --color-credo-danger-bg:   #FEF2F2;
+  --color-credo-info:        #2563EB;
+  --color-credo-info-bg:     #EFF6FF;
+
+  /* ─── Shadows ─────────────────────────────────────────────────── */
+  --shadow-card:    0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-lifted:  0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+  --shadow-modal:   0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-navy:    0 4px 14px 0 rgb(11 29 53 / 0.25);
+  --shadow-gold:    0 4px 14px 0 rgb(196 149 58 / 0.30);
+
+  /* ─── Radius ──────────────────────────────────────────────────── */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  24px;
+  --radius-full: 9999px;
+
+  /* ─── Transitions ─────────────────────────────────────────────── */
+  --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base:   200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow:   300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   WHITE-LABEL THEMING SYSTEM
+   Override these variables per tenant to fully rebrand Credo.
+   Inject a <style> tag with :root overrides from tenant config.
+   ──────────────────────────────────────────────────────────────────── */
+:root {
+  --brand-primary:        #0B1D35;
+  --brand-primary-hover:  #0F2847;
+  --brand-primary-light:  #E4EDF8;
+  --brand-accent:         #C4953A;
+  --brand-accent-hover:   #A37828;
+  --brand-accent-light:   #F6EDD6;
+  --brand-name:           "Credo";
+
+  color-scheme: light;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   BASE STYLES
+   ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #F8F9FA;
+  color: #0F172A;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   TYPOGRAPHY UTILITIES
+   ──────────────────────────────────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-playfair), Georgia, serif;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   COMPONENT PRIMITIVES
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Card */
+.credo-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.credo-card:hover {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+}
+
+/* Buttons */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: var(--brand-primary);
+  color: #FFFFFF;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.btn-primary:hover {
+  background-color: var(--brand-primary-hover);
+  box-shadow: 0 4px 14px 0 rgb(11 29 53 / 0.25);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: var(--brand-accent);
+  color: #FFFFFF;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 150ms, box-shadow 150ms, transform 150ms;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-accent:hover {
+  background-color: var(--brand-accent-hover);
+  box-shadow: 0 4px 14px 0 rgb(196 149 58 / 0.30);
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: transparent;
+  color: var(--brand-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: 1.5px solid var(--brand-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 150ms, color 150ms;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-outline:hover {
+  background-color: var(--brand-primary-light);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: transparent;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 150ms, color 150ms;
+  text-decoration: none;
+}
+
+.btn-ghost:hover {
+  background-color: #F1F5F9;
+  color: #0F172A;
+}
+
+/* Inputs */
+.credo-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #0F172A;
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+  font-family: inherit;
+}
+
+.credo-input::placeholder {
+  color: #94A3B8;
+}
+
+.credo-input:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgb(11 29 53 / 0.08);
+}
+
+.credo-input:disabled {
+  background: #F8F9FA;
+  color: #94A3B8;
+  cursor: not-allowed;
+}
+
+/* Labels */
+.credo-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge-navy    { background: #E4EDF8; color: #0B1D35; }
+.badge-gold    { background: #F6EDD6; color: #A37828; }
+.badge-success { background: #ECFDF5; color: #059669; }
+.badge-warning { background: #FFFBEB; color: #D97706; }
+.badge-danger  { background: #FEF2F2; color: #DC2626; }
+.badge-neutral { background: #F1F5F9; color: #475569; }
+
+/* Dividers */
+.credo-divider {
+  border: none;
+  border-top: 1px solid #E2E8F0;
+  margin: 0;
+}
+
+/* Score Ring helper */
+.score-ring-track {
+  stroke: #E2E8F0;
+  fill: none;
+}
+
+.score-ring-fill {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Sidebar nav item */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: background-color 150ms, color 150ms;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background-color: #F1F5F9;
+  color: #0F172A;
+}
+
+.nav-item.active {
+  background-color: var(--brand-primary-light);
+  color: var(--brand-primary);
+}
+
+.nav-item.active svg {
+  color: var(--brand-accent);
+}
+
+/* Stat Card */
+.stat-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06);
+}
+
+/* Section heading */
+.section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94A3B8;
+}
+
+/* Scroll lock */
+.overflow-hidden { overflow: hidden; }
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+/* Smooth page transitions */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-in {
+  animation: slideInLeft 250ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Score colour helpers */
+.score-excellent { color: #059669; }
+.score-good      { color: #10B981; }
+.score-fair      { color: #D97706; }
+.score-poor      { color: #DC2626; }
+
+.score-ring-excellent { stroke: #059669; }
+.score-ring-good      { stroke: #10B981; }
+.score-ring-fair      { stroke: #D97706; }
+.score-ring-poor      { stroke: #DC2626; }

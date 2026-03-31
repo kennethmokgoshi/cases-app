@@ -12,10 +12,10 @@ export async function GET(request: Request) {
 
         // Build project filter (Inherited Access + Admin Bypass)
         // Check multiple flags for robustness
-        const userRole = (session.user as any).role || 'MEMBER';
-        const isAdmin = userRole === 'ADMIN' || (session.user as any).isAdmin === true;
-        const isStaff = (session.user as any).userType === 'STAFF';
-        const isPartner = (session.user as any).userType === 'B2B_PARTNER';
+        const userRole = session.user.role || 'MEMBER';
+        const isAdmin = userRole === 'ADMIN' || session.user.isAdmin === true;
+        const isStaff = session.user.userType === 'STAFF';
+        const isPartner = session.user.userType === 'B2B_PARTNER';
 
         let projectFilter: any = {};
 
@@ -32,8 +32,8 @@ export async function GET(request: Request) {
             const rootProjectIds = userProducts.map((up: { projectId: string }) => up.projectId);
 
             // Also include their assigned B2B partner project if they have one
-            if ((session.user as any).b2bPartnerId) {
-                rootProjectIds.push((session.user as any).b2bPartnerId);
+            if (session.user.b2bPartnerId) {
+                rootProjectIds.push(session.user.b2bPartnerId);
             }
 
             if (rootProjectIds.length > 0) {

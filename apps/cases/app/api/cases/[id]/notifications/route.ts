@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { sendStatusChangeNotification, sendManualMessage  } from '@zenowethu/shared-lib';
+import { sendStatusChangeNotification, sendManualMessage, createLogger } from '@zenowethu/shared-lib';
 import { CaseNotificationSendSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/cases/[id]/notifications');
 
 // GET - Get notification history for a case
 export async function GET(

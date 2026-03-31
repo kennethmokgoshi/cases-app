@@ -223,6 +223,12 @@ export const GhlSettingsSchema = z.object({
     email: z.string().email().optional().nullable(),
     password: optionalString });
 
+// ─── MaxDC settings schema ────────────────────────────────────────────────────
+
+export const MaxDcSettingsSchema = z.object({
+    username: optionalString,
+    password: optionalString });
+
 // ─── Message template schema ──────────────────────────────────────────────────
 
 export const TemplateCreateSchema = z.object({

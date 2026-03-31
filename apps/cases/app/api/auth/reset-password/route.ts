@@ -4,14 +4,9 @@ import bcrypt from 'bcryptjs';
 import { ResetPasswordSchema, parseBody } from '@/lib/schemas';
 
 import { z } from 'zod';
+import { createLogger } from '@zenowethu/shared-lib';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/auth/reset-password');
 
 export async function POST(request: NextRequest) {
     try {

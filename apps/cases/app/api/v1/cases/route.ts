@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { validateApiKey, hasPermission, apiError, apiSuccess  } from '@zenowethu/shared-lib';
+import { validateApiKey, hasPermission, apiError, apiSuccess, createLogger } from '@zenowethu/shared-lib';
 
-// Server-side logger for API routes
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
-};
+const logger = createLogger('api/v1/cases');
 
 /**
  * GET /api/v1/cases
