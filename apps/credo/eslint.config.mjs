@@ -52,6 +52,7 @@ const eslintConfig = defineConfig([
       "react/require-render-return": "warn",
       "react-hooks/rules-of-hooks": "warn",
       "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/purity": "warn",
       "@next/next/no-html-link-for-pages": "warn",
       "@next/next/no-sync-scripts": "warn",
       "@next/next/inline-script-id": "warn",
