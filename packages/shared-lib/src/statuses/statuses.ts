@@ -584,3 +584,21 @@ export const STATUS_CATEGORIES: { code: StatusCategory; name: string; color: str
     { code: 'FOLLOW_UP', name: 'Follow-up', color: 'yellow' },
     { code: 'INACTIVE', name: 'Inactive/Withdrawn', color: 'gray' },
 ];
+
+/**
+ * Formats a status code into a human-readable name.
+ * Looks up the name in WORKFLOW_STATUSES or falls back to Title Case.
+ */
+export function formatStatus(code: string | null | undefined): string {
+    if (!code) return 'Initial';
+    
+    const status = getStatusByCode(code);
+    if (status) return status.name;
+    
+    // Fallback: convert SNAKE_CASE to Title Case
+    return code
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+}
+
