@@ -118,6 +118,7 @@ export interface NotificationPayload {
     partnerName?: string | null;
     partnerEmail?: string | null;
     isB2B: boolean;
+    isCreatedByPartner?: boolean;  // true only when a B2B_PARTNER user created the case
     services?: string | null;
     mainSource?: string | null;
     dcName?: string | null;
@@ -152,8 +153,14 @@ export async function sendStatusChangeNotification(
         errors: [] };
 
     let statusCodeForTemplate = payload.statusCode;
-    if (payload.statusCode === 'NEW_LEAD' && payload.isB2B) {
-        statusCodeForTemplate = 'NEW_LEAD_B2B';
+    if (payload.statusCode === 'NEW_LEAD') {
+        if (payload.isB2B && payload.isCreatedByPartner) {
+            statusCodeForTemplate = 'NEW_LEAD_B2B';      // B2B partner user created the case
+        } else if (!payload.isB2B) {
+            statusCodeForTemplate = 'NEW_LEAD';           // Direct B2C intake
+        } else {
+            statusCodeForTemplate = 'NEW_LEAD_STAFF';     // Zenowethu staff captured a B2B lead
+        }
     }
 
     const template = getTemplateByStatus(statusCodeForTemplate);

@@ -492,6 +492,7 @@ export async function POST(request: Request) {
                 partnerName: newCase.partnerName,
                 partnerUserName: newCase.createdBy ? `${newCase.createdBy.firstName} ${newCase.createdBy.lastName}` : 'Zenowethu Team',
                 isB2B: newCase.acquisitionType === 'B2B',
+                isCreatedByPartner: newCase.createdBy?.userType === 'B2B_PARTNER',
                 services: servicesText,
                 mainSource: mainSource,
                 senderName: newCase.createdBy ? `${newCase.createdBy.firstName} ${newCase.createdBy.lastName}` : 'Zenowethu Team',

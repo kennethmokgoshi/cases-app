@@ -62,6 +62,36 @@ If you no longer wish to receive these emails you may unsubscribe`,
         sendToClient: true,
         sendToPartner: true,
         isUrgent: false },
+    // Staff-created Welcome - Zenowethu staff captures case on client's behalf
+    {
+        statusCode: 'NEW_LEAD_STAFF',
+        statusName: 'New Lead',
+        smsTemplate: `Hi {clientName}, your file for {services} has been received by {companyName}. Ref: {fileNumber}. We will contact you within 24-48 hours.`,
+        emailSubject: 'Application Received - {companyName}',
+        emailTemplate: `Dear {clientName},
+
+Hi, my name is {partnerUserName} from {companyName}.
+
+Thank you for your enquiry. I am pleased to confirm that your application for **{services}** has been received and your file has been created.
+
+**Your File Details:**
+• Reference Number: {fileNumber}
+• Service Requested: {services}
+• Status: Application Received
+
+Our team is now reviewing your file and will be in touch with you directly within 24-48 hours. If any additional information is required, we will contact you.
+
+If you have any immediate questions in the meantime, please do not hesitate to reach out to us at {phone}.
+
+Kind Regards,
+{partnerUserName}
+{companyName}
+
+
+If you no longer wish to receive these emails you may unsubscribe`,
+        sendToClient: true,
+        sendToPartner: false,
+        isUrgent: false },
     // B2C Welcome - Personal introduction from Zenowethu
     {
         statusCode: 'NEW_LEAD',
