@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger, sendStatusChangeNotification } from '@zenowethu/shared-lib';
 import { CasePatchSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
@@ -662,6 +662,34 @@ export async function PATCH(
                 fullPath: getPath(cp.project.id)
             }
         }));
+
+        // Send welcome notification if email was just set on a NEW_LEAD case
+        if (client?.email && updatedCase.status === 'NEW_LEAD') {
+            const existingNotification = await prisma.notificationLog.findFirst({
+                where: { caseId: id, statusCode: 'NEW_LEAD', success: true }
+            });
+            if (!existingNotification) {
+                const notifSource = updatedCase.partnerName || 'Zenowethu Debt Management';
+                sendStatusChangeNotification({
+                    caseId: updatedCase.id,
+                    clientName: `${updatedCase.client.firstName} ${updatedCase.client.lastName}`,
+                    clientPhone: updatedCase.client.phone,
+                    clientEmail: updatedCase.client.email,
+                    clientWhatsApp: updatedCase.client.phone,
+                    fileNumber: updatedCase.fileNumber,
+                    statusCode: 'NEW_LEAD',
+                    partnerName: updatedCase.partnerName,
+                    isB2B: updatedCase.acquisitionType === 'B2B',
+                    mainSource: notifSource,
+                    senderName: updatedCase.acquisitionType === 'B2B' ? `${notifSource} (via Zenowethu)` : 'Zenowethu Debt Management',
+                    senderEmail: 'updates@zenowethu.co.za'
+                }).then(result => {
+                    logger.info(`Welcome notification sent (PATCH) for ${updatedCase.fileNumber}: Email=${result.emailSuccess}, SMS=${result.smsSuccess}`);
+                }).catch(err => {
+                    logger.error(`Failed to send welcome notification (PATCH) for ${updatedCase.id}:`, err);
+                });
+            }
+        }
 
         return NextResponse.json({
             ...updatedCase,
