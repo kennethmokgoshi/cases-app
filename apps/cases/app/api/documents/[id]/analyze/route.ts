@@ -65,8 +65,8 @@ export async function POST(
 
         if (body.analysisType) {
             docType = body.analysisType;
-        } else if (docType.includes('CREDIT_REPORT')) {
-            docType = 'CREDIT_REPORT';
+        } else if (docType === 'CREDIT_REPORT' || docType === 'CREDIT_REPORT_OTHER') {
+            docType = docType; // Keep the specific type
         }
 
         logger.info(`🤖 Analyzing document ${documentId} (Type: ${docType})...`);

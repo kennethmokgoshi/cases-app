@@ -352,7 +352,9 @@ export async function POST(request: Request) {
                                 lastName: client.lastName,
                                 idNumber: client.idNumber,
                                 email: client.email || null,
+                                alternativeEmail: (client as any).alternativeEmail || null,
                                 phone: client.phone || null,
+                                alternativePhone: (client as any).alternativePhone || null,
                                 address: client.address || null,
                                 type: client.type || 'Standard' }
                         },

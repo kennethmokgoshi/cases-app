@@ -23,6 +23,12 @@ interface MaxDcSettings {
     maxdc_password: string;
 }
 
+interface BureauEntry {
+    key:   string;
+    name:  string;
+    email: string;
+}
+
 interface GHLSettings {
     ghl_api_key: string;
     ghl_location_id: string;
@@ -61,6 +67,12 @@ export default function SettingsPage() {
     const [showMaxdcPassword, setShowMaxdcPassword] = useState(false);
     const [mounted, setMounted] = useState(false);
 
+    // Credit bureau emails state
+    const [bureauEntries, setBureauEntries] = useState<BureauEntry[]>([]);
+    const [bureauSaving, setBureauSaving] = useState(false);
+    const [bureauLastUpdated, setBureauLastUpdated] = useState<Date | null>(null);
+    const [bureauIsDefault, setBureauIsDefault] = useState(true);
+
     // Letterhead state
     const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
     const [letterheadUpdatedAt, setLetterheadUpdatedAt] = useState<Date | null>(null);
@@ -87,7 +99,7 @@ export default function SettingsPage() {
     const fetchSettings = async () => {
         setLoading(true);
         try {
-            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings()]);
+            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings(), fetchBureauSettings()]);
         } catch (error) {
             logger.error('Error fetching settings:', error);
         } finally {
@@ -321,6 +333,80 @@ export default function SettingsPage() {
         } finally {
             setGhlSaving(false);
         }
+    };
+
+    const fetchBureauSettings = async () => {
+        try {
+            const res = await fetch('/api/admin/settings/credit-bureaus');
+            if (res.ok) {
+                const data = await res.json();
+                setBureauEntries(data.bureaus || []);
+                setBureauLastUpdated(data.lastUpdated ? new Date(data.lastUpdated) : null);
+                setBureauIsDefault(data.isDefault ?? true);
+            }
+        } catch (error) {
+            logger.error('Error fetching bureau settings:', error);
+        }
+    };
+
+    const handleSaveBureaus = async () => {
+        setBureauSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/credit-bureaus', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bureaus: bureauEntries }),
+            });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'Credit bureau emails saved successfully!' });
+                fetchBureauSettings();
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to save bureau emails' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while saving bureau emails' });
+        } finally {
+            setBureauSaving(false);
+        }
+    };
+
+    const handleResetBureaus = async () => {
+        if (!confirm('Reset to default SA credit bureau email addresses?')) return;
+        setBureauSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/credit-bureaus', { method: 'DELETE' });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'Credit bureau emails reset to defaults' });
+                fetchBureauSettings();
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to reset bureau emails' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while resetting bureau emails' });
+        } finally {
+            setBureauSaving(false);
+        }
+    };
+
+    const addBureauRow = () => {
+        const idx = bureauEntries.length + 1;
+        setBureauEntries(prev => [...prev, { key: `bureau_email_custom_${idx}`, name: '', email: '' }]);
+    };
+
+    const updateBureauRow = (index: number, field: keyof BureauEntry, value: string) => {
+        setBureauEntries(prev => prev.map((entry, i) =>
+            i === index
+                ? { ...entry, [field]: value, ...(field === 'name' ? { key: `bureau_email_${value.toLowerCase().replace(/[^a-z0-9]/g, '_')}` } : {}) }
+                : entry
+        ));
+    };
+
+    const removeBureauRow = (index: number) => {
+        setBureauEntries(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleReset = async () => {
@@ -830,6 +916,96 @@ export default function SettingsPage() {
                             className="px-6 py-3 bg-zeno-dark/50 border border-red-500/50 text-red-400 font-semibold rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Clear
+                        </button>
+                    </div>
+                </section>
+
+                {/* Credit Bureau Email Addresses */}
+                <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center text-white text-2xl">
+                            🏛️
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-xl font-bold text-white">Credit Bureau Email Addresses</h2>
+                                {bureauIsDefault && (
+                                    <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-full">
+                                        Using defaults
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-gray-400 text-sm mt-0.5">
+                                Email addresses used when sending formal file-request letters to credit bureaus after DHS acceptance. Add or edit bureau contact details below.
+                            </p>
+                            {mounted && bureauLastUpdated && (
+                                <p className="text-xs text-gray-500 mt-1">Last saved: {bureauLastUpdated.toLocaleString()}</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-3 mb-4">
+                        {/* Header row */}
+                        <div className="grid grid-cols-[1fr_2fr_auto] gap-3 px-1">
+                            <span className="text-xs text-gray-500 font-semibold uppercase">Bureau Name</span>
+                            <span className="text-xs text-gray-500 font-semibold uppercase">Dispute Email Address</span>
+                            <span className="w-8" />
+                        </div>
+
+                        {bureauEntries.map((entry, idx) => (
+                            <div key={idx} className="grid grid-cols-[1fr_2fr_auto] gap-3 items-center">
+                                <input
+                                    type="text"
+                                    value={entry.name}
+                                    onChange={e => updateBureauRow(idx, 'name', e.target.value)}
+                                    placeholder="e.g. TransUnion"
+                                    className="bg-zeno-dark/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-cyan-500 focus:outline-none"
+                                />
+                                <input
+                                    type="email"
+                                    value={entry.email}
+                                    onChange={e => updateBureauRow(idx, 'email', e.target.value)}
+                                    placeholder="e.g. disputes@transunion.co.za"
+                                    className="bg-zeno-dark/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-cyan-500 focus:outline-none"
+                                />
+                                <button
+                                    onClick={() => removeBureauRow(idx)}
+                                    disabled={bureauEntries.length <= 1}
+                                    title="Remove bureau"
+                                    className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    <button
+                        onClick={addBureauRow}
+                        className="mb-6 flex items-center gap-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add bureau
+                    </button>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleSaveBureaus}
+                            disabled={bureauSaving}
+                            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-teal-500 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {bureauSaving ? 'Saving...' : 'Save Bureau Emails'}
+                        </button>
+                        <button
+                            onClick={handleResetBureaus}
+                            disabled={bureauSaving}
+                            className="px-6 py-3 bg-zeno-dark/50 border border-white/10 text-gray-400 font-semibold rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Reset to Defaults
                         </button>
                     </div>
                 </section>

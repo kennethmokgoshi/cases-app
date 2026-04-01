@@ -16,3 +16,6 @@ export * from './ai/strategy-engine';
 export * from './ai/legal-secretary';
 export * from './ai/autonomy-engine';
 export * from './metrics';
+
+// XDS Credit Bureau Integration
+export * from './xds';

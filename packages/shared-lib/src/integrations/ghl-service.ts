@@ -199,4 +199,81 @@ export class GhlService {
 
         return result;
     }
+
+    /**
+     * Apply one or more tags to a GHL contact, creating the contact first if needed.
+     * Used to trigger GHL automation workflows (e.g. "dhs_file_requested" → 5-day follow-up sequence).
+     */
+    static async applyTags(caseId: string, tags: string[]): Promise<{ success: boolean; error?: string }> {
+        try {
+            const caseRecord = await prisma.case.findUnique({
+                where: { id: caseId },
+                include: { client: true },
+            });
+            if (!caseRecord) throw new Error(`Case not found: ${caseId}`);
+
+            const ghl = await getGHLCredentials();
+            if (!ghl.apiKey || !ghl.locationId) {
+                logger.warn('[GHL Service] applyTags: GHL not configured — skipping');
+                return { success: false, error: 'GHL not configured' };
+            }
+
+            const { client } = caseRecord;
+
+            // Resolve or create GHL contact
+            let contactId = client.ghlContactId;
+
+            if (!contactId) {
+                // Look up by email or phone
+                const searchParam = client.email
+                    ? `email=${encodeURIComponent(client.email)}`
+                    : `phone=${encodeURIComponent(client.phone || '')}`;
+
+                const searchRes = await fetch(
+                    `https://services.leadconnectorhq.com/contacts/?locationId=${ghl.locationId}&${searchParam}`,
+                    { headers: { Authorization: `Bearer ${ghl.apiKey}`, Version: '2021-07-28' } }
+                );
+                const searchData = await searchRes.json();
+                contactId = searchData?.contacts?.[0]?.id ?? null;
+            }
+
+            if (!contactId) {
+                logger.warn(`[GHL Service] applyTags: no GHL contact found for case ${caseId} — tags not applied`);
+                return { success: false, error: 'GHL contact not found' };
+            }
+
+            // Persist contactId for future calls
+            if (!client.ghlContactId) {
+                await prisma.client.update({ where: { id: client.id }, data: { ghlContactId: contactId } });
+            }
+
+            // Apply tags via GHL Contacts API
+            const tagRes = await fetch(
+                `https://services.leadconnectorhq.com/contacts/${contactId}/tags`,
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${ghl.apiKey}`,
+                        Version: '2021-07-28',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ tags }),
+                }
+            );
+
+            if (!tagRes.ok) {
+                const err = await tagRes.text();
+                logger.error(`[GHL Service] applyTags failed for contact ${contactId}:`, err);
+                return { success: false, error: err };
+            }
+
+            logger.info(`[GHL Service] Applied tags [${tags.join(', ')}] to GHL contact ${contactId} (case ${caseId})`);
+            return { success: true };
+
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error('[GHL Service] applyTags error:', err);
+            return { success: false, error: message };
+        }
+    }
 }

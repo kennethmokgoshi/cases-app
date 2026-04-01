@@ -27,11 +27,23 @@ const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: stri
     'ID': { label: 'ID Document', color: 'bg-blue-500/20 text-blue-300', icon: '🪪' },
     'POA': { label: 'Power of Attorney', color: 'bg-purple-500/20 text-purple-300', icon: '📝' },
     'CREDIT_REPORT': { label: 'Credit Report', color: 'bg-green-500/20 text-green-300', icon: '📊' },
+    'CREDIT_REPORT_TRANSUNION': { label: 'TransUnion Report', color: 'bg-green-600/20 text-green-400', icon: '📊' },
+    'CREDIT_REPORT_EXPERIAN': { label: 'Experian Report', color: 'bg-red-500/20 text-red-300', icon: '📊' },
+    'CREDIT_REPORT_XDS': { label: 'XDS Report', color: 'bg-yellow-500/20 text-yellow-300', icon: '📊' },
+    'CREDIT_REPORT_LIGHTSTONE': { label: 'Lightstone Report', color: 'bg-pink-500/20 text-pink-300', icon: '📊' },
     'ZENOWETHU_POA': { label: 'Zenowethu POA', color: 'bg-cyan-500/20 text-cyan-300', icon: '📋' },
     'PAYSLIP': { label: 'Payslip', color: 'bg-emerald-500/20 text-emerald-300', icon: '💸' },
     'BANK_STATEMENT': { label: 'Bank Statement', color: 'bg-indigo-500/20 text-indigo-300', icon: '🏦' },
+    'PROOF_OF_RESIDENCE': { label: 'Proof of Residence', color: 'bg-teal-500/20 text-teal-300', icon: '🏠' },
     'COMBINED': { label: 'Combined File', color: 'bg-orange-500/20 text-orange-300', icon: '📦' },
     'OTHER': { label: 'Other Document', color: 'bg-gray-500/20 text-gray-300', icon: '📄' } };
+
+const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: string }[] = [
+    { type: 'CREDIT_REPORT_TRANSUNION', name: 'TransUnion', color: 'border-green-500/30 bg-green-500/5', accent: 'text-green-400' },
+    { type: 'CREDIT_REPORT_EXPERIAN',  name: 'Experian',   color: 'border-red-500/30 bg-red-500/5',   accent: 'text-red-400' },
+    { type: 'CREDIT_REPORT_XDS',       name: 'XDS',        color: 'border-yellow-500/30 bg-yellow-500/5', accent: 'text-yellow-400' },
+    { type: 'CREDIT_REPORT_LIGHTSTONE',name: 'Lightstone', color: 'border-pink-500/30 bg-pink-500/5', accent: 'text-pink-400' },
+];
 
 export function DocumentsTab({ caseId }: { caseId: string }) {
     const { data: session } = useSession();
@@ -71,7 +83,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
         }
     };
 
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, typeOverride?: string) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -82,7 +94,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('type', uploadType);
+            formData.append('type', typeOverride ?? uploadType);
 
             const res = await fetch(`/api/cases/${caseId}/documents`, {
                 method: 'POST',
@@ -453,6 +465,40 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
             {error && <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>}
             {success && <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">{success}</div>}
 
+            {/* Credit Bureau Reports Section */}
+            <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/10">
+                <p className="text-sm font-medium text-white mb-3">📊 Credit Bureau Reports</p>
+                <div className="grid grid-cols-2 gap-3">
+                    {CREDIT_BUREAUS.map((bureau) => {
+                        const uploaded = documents.find(d => d.type === bureau.type);
+                        return (
+                            <div key={bureau.type} className={`rounded-lg border p-3 flex items-center justify-between gap-3 ${bureau.color}`}>
+                                <div className="min-w-0">
+                                    <p className={`text-sm font-medium ${bureau.accent}`}>{bureau.name}</p>
+                                    {uploaded ? (
+                                        <p className="text-xs text-gray-400 truncate">{uploaded.fileName}</p>
+                                    ) : (
+                                        <p className="text-xs text-gray-500 italic">Not uploaded</p>
+                                    )}
+                                </div>
+                                <label className="shrink-0 cursor-pointer">
+                                    <span className={`px-2 py-1 text-xs rounded transition-colors ${uploaded ? 'bg-white/10 text-gray-300 hover:bg-white/20' : `${bureau.accent} bg-white/10 hover:bg-white/20`}`}>
+                                        {uploading && uploadType === bureau.type ? '⏳' : uploaded ? 'Replace' : 'Upload'}
+                                    </span>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        className="sr-only"
+                                        disabled={uploading}
+                                        onChange={(e) => handleUpload(e, bureau.type)}
+                                    />
+                                </label>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
             {/* Upload Section */}
             <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/10">
                 <p className="text-sm text-gray-400 mb-3">Upload individual document:</p>
@@ -464,10 +510,17 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                     >
                         <option value="ID" className="bg-zeno-navy text-white">ID Document</option>
                         <option value="POA" className="bg-zeno-navy text-white">Power of Attorney</option>
-                        <option value="CREDIT_REPORT" className="bg-zeno-navy text-white">Credit Report</option>
+                        <optgroup label="Credit Bureau Reports" className="bg-zeno-navy text-gray-400">
+                            <option value="CREDIT_REPORT_TRANSUNION" className="bg-zeno-navy text-white">TransUnion Report</option>
+                            <option value="CREDIT_REPORT_EXPERIAN" className="bg-zeno-navy text-white">Experian Report</option>
+                            <option value="CREDIT_REPORT_XDS" className="bg-zeno-navy text-white">XDS Report</option>
+                            <option value="CREDIT_REPORT_LIGHTSTONE" className="bg-zeno-navy text-white">Lightstone Report</option>
+                            <option value="CREDIT_REPORT" className="bg-zeno-navy text-white">Credit Report (other)</option>
+                        </optgroup>
                         <option value="ZENOWETHU_POA" className="bg-zeno-navy text-white">Zenowethu POA</option>
                         <option value="PAYSLIP" className="bg-zeno-navy text-white">Payslip</option>
                         <option value="BANK_STATEMENT" className="bg-zeno-navy text-white">Bank Statement</option>
+                        <option value="PROOF_OF_RESIDENCE" className="bg-zeno-navy text-white">Proof of Residence</option>
                         <option value="OTHER" className="bg-zeno-navy text-white">Other Document</option>
                     </select>
                     <label className="flex-1">

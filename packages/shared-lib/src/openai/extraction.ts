@@ -5,7 +5,7 @@ import { PROMPTS } from './prompts';
 import { parseAIResponse, buildVerificationReport } from './utils';
 import { identifyDocumentPages, splitPdf } from './pdf-process';
 
-export type DocType = 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'ZENOWETHU_POA';
+export type DocType = 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'ZENOWETHU_POA' | 'PROOF_OF_RESIDENCE';
 
 /**
  * Analyze a document (ID, POA, or Credit Report) and extract structured data
@@ -15,10 +15,21 @@ export async function analyzeDocument(
     documentType: DocType,
     mimeType?: string,
     onProgress?: (msg: string, progress?: number) => void
-): Promise<any> {
+): Promise<{ data: any; bureauName?: string; identifiedType?: DocType }> {
     try {
         const isPdf = base64Image.startsWith('JVBERi0') || mimeType === 'application/pdf';
-        const promptKey = documentType === 'ZENOWETHU_POA' ? 'POA' : documentType;
+        let identifiedType = documentType;
+        let bureauName = '';
+
+        if (documentType === 'CREDIT_REPORT' && isPdf) {
+            onProgress?.('🔍 Identifying credit report type...');
+            const idResult = await identifyCreditReportType(base64Image);
+            identifiedType = idResult.type;
+            bureauName = idResult.bureauName;
+            onProgress?.(`📑 Identified as: ${bureauName}`);
+        }
+
+        const promptKey = identifiedType === 'ZENOWETHU_POA' ? 'POA' : identifiedType;
         const prompt = PROMPTS[promptKey as keyof typeof PROMPTS] || PROMPTS.OTHER;
 
         let response;
@@ -53,7 +64,7 @@ export async function analyzeDocument(
             response = await openai.chat.completions.create({
                 model: 'gpt-4o',
                 messages: [{ role: 'user', content: contentParts }],
-                max_tokens: 2000,
+                max_tokens: 3500,
                 temperature: 0.1,
                 response_format: { type: "json_object" }
             });
@@ -75,7 +86,11 @@ export async function analyzeDocument(
         }
 
         const content = response.choices[0]?.message?.content;
-        return parseAIResponse(content || '');
+        return { 
+            data: parseAIResponse(content || ''), 
+            bureauName: bureauName || undefined,
+            identifiedType: identifiedType !== documentType ? identifiedType : undefined
+        };
     } catch (error) {
         logger.error({ err: error }, '❌ Error analyzing document');
         throw error;
@@ -105,14 +120,21 @@ export async function extractDocumentsFromCombinedPdf(
             const analysisType = doc.type === 'ZENOWETHU_POA' ? 'POA' : doc.type;
 
             const docResult = await analyzeDocument(doc.base64Pdf, analysisType as any, 'application/pdf');
+            const data = docResult.data;
+            const bureauName = docResult.bureauName || docInfo?.bureauName || docInfo?.description;
 
-            if (doc.type === 'ID') analysis.id = docResult;
-            else if (doc.type === 'POA' || doc.type === 'ZENOWETHU_POA') analysis.poa = docResult;
-            else if (doc.type === 'CREDIT_REPORT') analysis.creditReport = docResult;
-            else if (doc.type === 'PAYSLIP') analysis.payslip = docResult;
-            else if (doc.type === 'BANK_STATEMENT') analysis.bankStatement = docResult;
+            if (doc.type === 'ID') analysis.id = data;
+            else if (doc.type === 'POA' || doc.type === 'ZENOWETHU_POA') analysis.poa = data;
+            else if (doc.type === 'CREDIT_REPORT' || doc.type === 'CREDIT_REPORT_OTHER') analysis.creditReport = data;
+            else if (doc.type === 'PAYSLIP') analysis.payslip = data;
+            else if (doc.type === 'BANK_STATEMENT') analysis.bankStatement = data;
+            else if (doc.type === 'PROOF_OF_RESIDENCE') analysis.proofOfResidence = data;
 
-            extractedDocuments.push({ ...doc, confidence: docInfo?.confidence || 0.8 });
+            extractedDocuments.push({ 
+                ...doc, 
+                description: bureauName || doc.type,
+                confidence: docInfo?.confidence || 0.8 
+            });
         } catch (err) {
             logger.error({ err, type: doc.type }, `❌ Failed to analyze document`);
         }
@@ -139,15 +161,53 @@ export async function batchAnalyzeDocuments(
 
         try {
             const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType);
-            if (doc.type === 'ID') results.id = extracted;
-            else if (doc.type === 'POA') results.poa = extracted;
-            else if (doc.type === 'CREDIT_REPORT') results.creditReport = extracted;
-            else if (doc.type === 'PAYSLIP') results.payslip = extracted;
-            else if (doc.type === 'BANK_STATEMENT') results.bankStatement = extracted;
+            const data = extracted.data;
+            if (doc.type === 'ID') results.id = data;
+            else if (doc.type === 'POA') results.poa = data;
+            else if (doc.type === 'CREDIT_REPORT' || doc.type === 'CREDIT_REPORT_OTHER') results.creditReport = data;
+            else if (doc.type === 'PAYSLIP') results.payslip = data;
+            else if (doc.type === 'BANK_STATEMENT') results.bankStatement = data;
+            else if (doc.type === 'PROOF_OF_RESIDENCE') results.proofOfResidence = data;
+            
+            // Re-assign refined type if identified
+            if (extracted.identifiedType) {
+                doc.type = extracted.identifiedType;
+            }
         } catch (e) {
             logger.error({ err: e, type: doc.type }, `❌ Failed analysis`);
         }
     }
     results.verification = buildVerificationReport(results);
     return results;
+}
+
+/**
+ * Specifically identifies the type of credit report (Major vs Other)
+ */
+export async function identifyCreditReportType(base64Pdf: string): Promise<{ type: DocType; bureauName: string }> {
+    try {
+        const text = await extractTextFromPdf(base64Pdf, 5);
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'text', text: PROMPTS.CREDIT_REPORT_TYPE_IDENTIFICATION },
+                    { type: 'text', text: `[EXTRACTED TEXT CONTENT]\n\n${text}` }
+                ]
+            }],
+            max_tokens: 500,
+            temperature: 0,
+            response_format: { type: "json_object" }
+        });
+
+        const result = JSON.parse(response.choices[0]?.message?.content || '{}');
+        return {
+            type: (result.type as DocType) || 'CREDIT_REPORT',
+            bureauName: result.bureauName || 'Credit Report'
+        };
+    } catch (error) {
+        logger.error({ err: error }, '❌ Error identifying credit report type');
+        return { type: 'CREDIT_REPORT', bureauName: 'Credit Report' };
+    }
 }

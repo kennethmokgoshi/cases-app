@@ -376,6 +376,89 @@ Kind regards,
         sendToClient: false,
         sendToPartner: false,
         isUrgent: true },
+    // ===== CREDIT BUREAU FILE REQUESTS =====
+    {
+        statusCode: 'REQUEST_FILE_CREDIT_BUREAU',
+        statusName: 'Request File from Credit Bureau',
+        smsTemplate: 'N/A',
+        emailSubject: 'Formal Request: Consumer Credit Report & Flag Removal - {clientName} (ID: {idNumber})',
+        emailTemplate: `Dear Sir/Madam,
+
+RE: FORMAL REQUEST FOR CONSUMER CREDIT REPORT AND FLAG REMOVAL
+Consumer: {clientName}
+ID Number: {idNumber}
+Our Reference: {fileNumber}
+
+We represent the above-mentioned consumer and are currently attending to the removal of a debt review flag on their credit profile.
+
+We kindly request you to provide us with the following within 5 (five) business days:
+
+1. A full copy of the consumer's credit report
+2. Confirmation of any debt review or adverse flags currently listed
+3. The specific accounts listed under debt review on your bureau
+4. Any documentation you require to process the flag removal
+
+Kindly note that the consumer has successfully exited the debt review process and is entitled to have all adverse listings removed in accordance with the National Credit Act, 34 of 2005.
+
+Consumer Details:
+• Full Name: {clientName}
+• ID Number: {idNumber}
+• Our Reference: {fileNumber}
+
+Please respond to this email or contact us at {phone}.
+
+We look forward to your prompt response.
+
+Yours faithfully,
+{senderName}
+{companyName}
+Tel: {phone}`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: true },
+
+    // ===== CREDIT PROVIDER FILE REQUESTS =====
+    {
+        statusCode: 'REQUEST_FILE_CREDIT_PROVIDER',
+        statusName: 'Request File from Credit Provider',
+        smsTemplate: 'N/A',
+        emailSubject: 'Formal Request: Account Information & Clearance Certificate - {clientName} (ID: {idNumber})',
+        emailTemplate: `Dear Sir/Madam,
+
+RE: FORMAL REQUEST FOR ACCOUNT INFORMATION AND CLEARANCE CERTIFICATE
+Consumer: {clientName}
+ID Number: {idNumber}
+Account Number(s): {accountNumbers}
+Our Reference: {fileNumber}
+
+We act on behalf of the above-mentioned consumer and are currently facilitating the finalisation of their debt review matter.
+
+We kindly request the following documentation within 5 (five) business days:
+
+1. Current outstanding balance on the above account(s)
+2. Full payment history and account statement
+3. Confirmation of whether the account is settled or still active
+4. A clearance/settlement letter if the account has been paid up
+5. Any notices issued in terms of Section 86 of the National Credit Act
+
+The consumer has provided written authority for us to request this information on their behalf.
+
+Consumer Details:
+• Full Name: {clientName}
+• ID Number: {idNumber}
+• Account Number(s): {accountNumbers}
+• Our Reference: {fileNumber}
+
+Please respond to this email or contact us at {phone}.
+
+Yours faithfully,
+{senderName}
+{companyName}
+Tel: {phone}`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: true },
+
     // ===== INTERNAL NOTIFICATIONS =====
     {
         statusCode: 'DECLINED_MANAGER',

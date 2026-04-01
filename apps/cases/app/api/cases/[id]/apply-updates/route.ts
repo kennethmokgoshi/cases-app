@@ -61,7 +61,9 @@ export async function POST(
                 } else if (field === 'openAccounts' || field === 'closedAccounts') {
                     caseUpdates[field] = value !== null ? parseInt(String(value), 10) : 0;
                 } else if (field === 'cb_applicationDate' || field === 'cb_statusDate') {
-                    caseUpdates[field] = value !== null ? new Date(String(value)) : null;
+                    const strVal = value !== null ? String(value).trim() : '';
+                    const isValidDate = strVal && strVal.toUpperCase() !== 'NA' && strVal.toUpperCase() !== 'N/A' && !isNaN(Date.parse(strVal));
+                    caseUpdates[field] = isValidDate ? new Date(strVal) : null;
                 } else {
                     caseUpdates[field] = value;
                 }

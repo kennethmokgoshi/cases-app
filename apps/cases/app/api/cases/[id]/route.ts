@@ -203,7 +203,9 @@ export async function PATCH(
                             firstName: client.firstName,
                             lastName: client.lastName,
                             phone: client.phone || existingByIdNumber.phone,
+                            alternativePhone: client.alternativePhone || (existingByIdNumber as any).alternativePhone,
                             email: client.email || existingByIdNumber.email,
+                            alternativeEmail: client.alternativeEmail || (existingByIdNumber as any).alternativeEmail,
                             address: client.address || existingByIdNumber.address,
                             employer: client.employer || existingByIdNumber.employer,
                             grossSalary: client.grossSalary ? parseFloat(String(client.grossSalary)) : existingByIdNumber.grossSalary,
@@ -423,7 +425,9 @@ export async function PATCH(
             if (client.lastName !== undefined) clientUpdateData.lastName = client.lastName;
             if (client.idNumber !== undefined) clientUpdateData.idNumber = client.idNumber;
             if (client.email !== undefined) clientUpdateData.email = client.email || null;
+            if (client.alternativeEmail !== undefined) clientUpdateData.alternativeEmail = client.alternativeEmail || null;
             if (client.phone !== undefined) clientUpdateData.phone = client.phone || null;
+            if (client.alternativePhone !== undefined) clientUpdateData.alternativePhone = client.alternativePhone || null;
             if (client.whatsappNumber !== undefined) clientUpdateData.whatsappNumber = client.whatsappNumber || null;
             if (client.telegramNumber !== undefined) clientUpdateData.telegramNumber = client.telegramNumber || null;
             if (client.address !== undefined) clientUpdateData.address = client.address || null;

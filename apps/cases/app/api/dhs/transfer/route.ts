@@ -9,6 +9,7 @@ import { requestTransfer, closeBrowser, createLogger } from '@zenowethu/shared-l
 import { prisma } from '@zenowethu/database';
 import path from 'path';
 import fs from 'fs';
+import { headers } from 'next/headers';
 
 const logger = createLogger('api/dhs/transfer');
 
@@ -147,6 +148,35 @@ export async function POST(request: Request) {
                     notes: 'Transfer request submitted via DHS automation'
                 }
             });
+
+            // Fire file-request emails to credit bureaus and credit providers
+            try {
+                const headersList = await headers();
+                const host = headersList.get('host') || 'localhost:3000';
+                const proto = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+                const baseUrl = `${proto}://${host}`;
+
+                const fileReqRes = await fetch(`${baseUrl}/api/cases/${caseId}/send-file-requests`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Forward cookies so the internal request passes auth
+                        'Cookie': headersList.get('cookie') || '',
+                    },
+                    body: JSON.stringify({}),
+                });
+
+                if (!fileReqRes.ok) {
+                    const err = await fileReqRes.json().catch(() => ({}));
+                    logger.warn('File request emails failed (non-blocking):', err);
+                } else {
+                    const summary = await fileReqRes.json();
+                    logger.info('File request emails sent:', summary.summary);
+                }
+            } catch (emailErr) {
+                // Non-blocking — DHS transfer success is not affected by email delivery
+                logger.warn('Could not send file request emails (non-blocking):', emailErr);
+            }
         }
 
         // Close browser

@@ -117,7 +117,7 @@ export async function POST(request: Request) {
         }
 
         const savedDocuments = [];
-        const documentsToAnalyze: Array<{ base64: string; type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'OTHER'; docId: string; mimeType: string }> = [];
+        const documentsToAnalyze: Array<{ base64: string; type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'OTHER' | 'PROOF_OF_RESIDENCE'; docId: string; mimeType: string }> = [];
         let combinedDocBase64 = '';
         let combinedDocId = '';
 

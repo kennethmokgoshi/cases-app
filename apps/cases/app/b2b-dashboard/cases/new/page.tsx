@@ -96,6 +96,7 @@ function PartnerNewCaseComponent() {
         creditReport?: File;
         bankStatement?: File;
         payslip?: File;
+        proofOfResidence?: File;
         form16?: File;
         form171?: File;
         form172?: File;
@@ -297,7 +298,7 @@ function PartnerNewCaseComponent() {
         }
     };
 
-    const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'bankStatement' | 'payslip' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
+    const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'bankStatement' | 'payslip' | 'proofOfResidence' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
         if (type === 'optional' && file) {
             setUploadedFiles(prev => ({
                 ...prev,
@@ -408,7 +409,7 @@ function PartnerNewCaseComponent() {
             // Handle document uploads if present
             const hasFiles = uploadMode === 'combined'
                 ? uploadedFiles.allCombined
-                : (uploadedFiles.id || uploadedFiles.poa || uploadedFiles.creditReport || uploadedFiles.bankStatement || uploadedFiles.payslip || uploadedFiles.form16 || uploadedFiles.form171 || uploadedFiles.form172 || uploadedFiles.form177 || uploadedFiles.clearance || uploadedFiles.optional.length > 0);
+                : (uploadedFiles.id || uploadedFiles.poa || uploadedFiles.creditReport || uploadedFiles.bankStatement || uploadedFiles.payslip || uploadedFiles.proofOfResidence || uploadedFiles.form16 || uploadedFiles.form171 || uploadedFiles.form172 || uploadedFiles.form177 || uploadedFiles.clearance || uploadedFiles.optional.length > 0);
 
             if (hasFiles) {
                 const formData = new FormData();
@@ -427,6 +428,7 @@ function PartnerNewCaseComponent() {
                     if (uploadedFiles.creditReport) formData.append('file_CREDIT_REPORT', uploadedFiles.creditReport);
                     if (uploadedFiles.bankStatement) formData.append('file_BANK_STATEMENT', uploadedFiles.bankStatement);
                     if (uploadedFiles.payslip) formData.append('file_PAYSLIP', uploadedFiles.payslip);
+                    if (uploadedFiles.proofOfResidence) formData.append('file_PROOF_OF_RESIDENCE', uploadedFiles.proofOfResidence);
                     if (uploadedFiles.form16) formData.append('file_FORM_16', uploadedFiles.form16);
                     if (uploadedFiles.form171) formData.append('file_FORM_17_1', uploadedFiles.form171);
                     if (uploadedFiles.form172) formData.append('file_FORM_17_2', uploadedFiles.form172);
@@ -824,8 +826,8 @@ function PartnerNewCaseComponent() {
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-2">Credit Report</label>
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Credit Report (Experian, XDS, ClearScore, TransUnion, etc.)</label>
                                     <div className="border-2 border-dashed border-gray-600 rounded-xl p-6 text-center hover:border-zeno-cyan transition-colors cursor-pointer">
                                         <input
                                             type="file"
@@ -836,7 +838,8 @@ function PartnerNewCaseComponent() {
                                         />
                                         <label htmlFor="report-upload" className="cursor-pointer">
                                             <div className="text-3xl mb-2">📊</div>
-                                            <p className="text-zeno-cyan text-sm">Click to upload Report</p>
+                                            <p className="text-zeno-cyan text-sm">Click to upload Credit Report</p>
+                                            <p className="text-xs text-gray-500 mt-1">AI will automatically identify the bureau and category</p>
                                             {uploadedFiles.creditReport && (
                                                 <p className="text-green-400 text-xs mt-1">✓ {uploadedFiles.creditReport.name}</p>
                                             )}
@@ -879,6 +882,26 @@ function PartnerNewCaseComponent() {
                                             <p className="text-zeno-cyan text-sm">Click to upload Statement</p>
                                             {uploadedFiles.bankStatement && (
                                                 <p className="text-green-400 text-xs mt-1">✓ {uploadedFiles.bankStatement.name}</p>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Proof of Residence</label>
+                                    <div className="border-2 border-dashed border-gray-600 rounded-xl p-6 text-center hover:border-teal-400 transition-colors cursor-pointer">
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            onChange={(e) => handleFileChange('proofOfResidence', e.target.files?.[0] || null)}
+                                            className="hidden"
+                                            id="por-upload"
+                                        />
+                                        <label htmlFor="por-upload" className="cursor-pointer">
+                                            <div className="text-3xl mb-2">🏠</div>
+                                            <p className="text-teal-400 text-sm">Click to upload PoR</p>
+                                            {uploadedFiles.proofOfResidence && (
+                                                <p className="text-green-400 text-xs mt-1">✓ {uploadedFiles.proofOfResidence.name}</p>
                                             )}
                                         </label>
                                     </div>

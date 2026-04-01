@@ -12,11 +12,12 @@ export async function identifyDocumentPages(
     onProgress?: (msg: string, progress?: number) => void
 ): Promise<{
     documents: Array<{
-        type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'ZENOWETHU_POA' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER';
+        type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'ZENOWETHU_POA' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER';
         startPage: number;
         endPage: number;
         confidence: number;
         description: string;
+        bureauName?: string;
     }>;
     totalPages: number;
 }> {

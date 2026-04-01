@@ -20,6 +20,11 @@ export const emailField = z
     .optional()
     .nullable();
 
+export const requiredEmailField = z
+    .string({ required_error: 'Email address is required' })
+    .email('Invalid email address')
+    .toLowerCase();
+
 export const nonEmptyString = z.string().min(1, 'This field is required').max(500);
 export const optionalString = z.string().max(500).optional().nullable();
 
@@ -30,7 +35,9 @@ export const ClientCreateSchema = z.object({
     lastName: z.string().min(1, 'Last name is required').max(100),
     idNumber: saIdNumber,
     email: emailField,
+    alternativeEmail: emailField,
     phone: saPhoneNumber,
+    alternativePhone: saPhoneNumber,
     address: optionalString,
     type: z.string().max(50).optional().nullable() });
 
@@ -39,7 +46,9 @@ export const ClientUpdateSchema = z.object({
     lastName: z.string().min(1).max(100).optional(),
     idNumber: saIdNumber.optional(),
     email: emailField,
+    alternativeEmail: emailField,
     phone: saPhoneNumber,
+    alternativePhone: saPhoneNumber,
     whatsappNumber: saPhoneNumber,
     telegramNumber: saPhoneNumber,
     address: optionalString,

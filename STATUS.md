@@ -316,10 +316,10 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 | Auth & SSO | 92% | Role hierarchy complete; upgrade NextAuth stable (blocked upstream) |
 | B2B Portal | 90% | Analytics depth needs work |
 | Notifications | 80% | Multi-channel sending works; needs tests + retry logic |
-| Legal App | 98% | E2E complete (2026-02-27); WorkflowLog timeline remaining |
+| Legal App | 100% | E2E complete (2026-02-27) ✅ |
 | Insurance App | 100% | E2E complete (2026-02-27) ✅ |
 | Finance App | 100% | E2E complete (2026-02-27) ✅ |
-| Forensic Audit App | 96% | E2E complete (2026-02-27); WorkflowLog timeline on case detail remaining |
+| Forensic Audit App | 100% | E2E complete (2026-02-27) ✅ |
 | Reporting | 95% | Advanced Analytics dashboard + SLA dashboard + Excel export completed (2026-02-27) |
 
 ---

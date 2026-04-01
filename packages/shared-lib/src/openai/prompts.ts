@@ -90,6 +90,25 @@ IMPORTANT:
 - For string fields not found, use "NA". For number fields not found, use 0.
 - Return valid JSON only.`,
 
+    PROOF_OF_RESIDENCE: `You are analyzing a South African Proof of Residence document.
+
+This could be:
+- A municipal rates/utility bill (water, electricity, refuse)
+- A bank letter confirming the client's address
+- A signed lease agreement
+- A government letter addressed to the client
+
+Extract the following information in JSON format:
+{
+  "clientName": "string (full name on the document)",
+  "address": "string (full street address including suburb and city)",
+  "documentType": "string (e.g. 'Municipal Bill', 'Bank Letter', 'Lease Agreement', 'Government Letter')",
+  "issuer": "string (e.g. 'City of Johannesburg', 'ABSA Bank', landlord name)",
+  "documentDate": "string (YYYY-MM-DD — date on the document)",
+  "idNumber": "string (if present)"
+}
+IMPORTANT: For any field not found, use "NA" (never return null or empty string). Return valid JSON only.`,
+
     OTHER: `You are analyzing a document that may contain client information for a debt counselling case.
 Extract any identifiable information you can find:
 {
@@ -154,7 +173,7 @@ IMPORTANT:
 - Never return null or empty string.
 - ADDITIONALLY: For each field listed in _occurrences, list ALL values you found across the entire document and how many times each appeared. Example: if surname appeared as 'THWALA' twice and 'TWALA' once, list both. If all occurrences of a field are the same, just list that one value.`,
 
-    CREDIT_REPORT: `You are analyzing a South African credit report (likely XDS/Experian/CPB format).
+    CREDIT_REPORT: `You are analyzing a MAJOR South African credit bureau report (e.g. XDS, Experian, TransUnion, or CPB).
         
 CRITICAL: Use the specific sections below to extract data.
 
@@ -204,6 +223,15 @@ CRITICAL: Use the specific sections below to extract data.
 7. **OPEN ACCOUNT DETAILS** (Manual Scan)
    - Scan the report for OPEN/ACTIVE/ARREARS accounts.
    - Extract details for each.
+   - For each account, also extract the 24-month payment history code string if available.
+     Payment codes: C=Current, 0=No data, 1-9=Months in arrears, ?=Unknown/data gap.
+   - Extract the last payment date for each account if available.
+
+8. **ENQUIRY HISTORY**
+   - Look for "Enquiries", "Credit Enquiries", or "Search History" section.
+   - Extract ALL enquiries from the last 12 months.
+   - For each: date, enquirer name (credit provider), enquiry type, and reason.
+   - If more than 4 enquiries appear within any 3-month window, flag as excessive.
 
 IMPORTANT: For ALL string fields not found, use "NA". For number fields not found, use 0. Never use null.
 
@@ -245,9 +273,23 @@ Output JSON:
       "balance": number,
       "installment": number,
       "arrearsAmount": number,
-      "status": "string"
+      "status": "string",
+      "paymentHistory": "string (24-month code string e.g. CCCCCC000122C, or NA if not found)",
+      "lastPaymentDate": "string (YYYY-MM-DD or NA if not found)"
     }
   ],
+  "enquiries": [
+    {
+      "date": "string (YYYY-MM-DD)",
+      "enquirer": "string (credit provider name)",
+      "type": "string (e.g. Application, Account Review)",
+      "reason": "string"
+    }
+  ],
+  "enquirySummary": {
+    "totalLast12Months": number,
+    "excessiveFlag": "boolean (true if > 4 enquiries in any 3-month window)"
+  },
   "insuranceNotes": "string",
   "_occurrences": {
     "idNumber": [{"value": "string", "count": number}],
@@ -257,6 +299,58 @@ Output JSON:
 }
 
 ADDITIONALLY: For the _occurrences object, list ALL values found across the entire report for: idNumber (consumer ID number), surname/name from the consumer section, and cellNumber. If a value appears multiple times, count each occurrence. If all occurrences are the same, just list that one value.`,
+
+    CREDIT_REPORT_OTHER: `You are analyzing an alternative South African credit report or consumer summary (e.g. ClearScore, Kudough, Kughdo).
+        
+These reports are often summaries rather than full bureau data. Focus on extracting the high-level financial summary.
+
+Extract the following information in JSON format:
+{
+  "summary": {
+    "totalDebt": number (e.g. from "Total Debt", "Total Balance", "You owe"),
+    "totalInstallment": number (e.g. from "Monthly Payment", "Instalments"),
+    "activeAccounts": number,
+    "closedAccounts": number
+  },
+  "income": {
+    "grossSalary": number,
+    "netSalary": number,
+    "affordability": "string"
+  },
+  "consumer": {
+    "latestAddress": "string",
+    "idNumber": "string",
+    "cellNumber": "string",
+    "employer": "string"
+  },
+  "accounts": [
+    {
+      "creditor": "string",
+      "balance": number,
+      "installment": number,
+      "status": "string"
+    }
+  ],
+  "_occurrences": {
+    "idNumber": [{"value": "string", "count": number}],
+    "surname": [{"value": "string", "count": number}],
+    "cellNumber": [{"value": "string", "count": number}]
+  }
+}
+
+IMPORTANT: For ALL string fields not found, use "NA". For number fields not found, use 0. Never use null.`,
+
+    CREDIT_REPORT_TYPE_IDENTIFICATION: `Identify if this South African credit report is a **MAJOR BUREAU** report or an **OTHER/SUMMARY** report.
+    
+    MAJOR BUREAU: Official reports from XDS, Experian, TransUnion, or CPB.
+    OTHER/SUMMARY: Summary reports from ClearScore, Kudough, or Carbon.
+    
+    Return JSON format:
+    {
+      "type": "CREDIT_REPORT" | "CREDIT_REPORT_OTHER",
+      "bureauName": "string (e.g., 'Experian Credit Report', 'XDS Credit Report', 'ClearScore Credit Report')",
+      "confidence": number (0.0 to 1.0)
+    }`,
 
     CREDIT_REPORT_SUMMARY: `You are extracting FINANCIAL TOTALS ONLY from a South African credit report.
 
@@ -291,20 +385,22 @@ export const IDENTIFICATION_PROMPT = `Analyze this text content extracted from a
 {{EXTRACTED_TEXT}}
 
 You need to identify:
-1. ** ID Document ** - South African ID(green ID book or smart card)
-2. ** POA(Power of Attorney) ** - Client's signed Power of Attorney document granting authority
-3. ** CREDIT_REPORT ** - Credit bureau report(XDS, Experian, TransUnion) showing credit history
-4. ** ZENOWETHU_POA ** - The full Zenowethu packet(approx 4 pages).
+1. ** ID Document ** - South African ID (green ID book or smart card)
+2. ** POA (Power of Attorney) ** - Client's signed Power of Attorney document granting authority
+3. ** CREDIT_REPORT ** - Major credit bureau report (XDS, Experian, TransUnion, CPB)
+4. ** CREDIT_REPORT_OTHER ** - Alternative credit report or summary (ClearScore, Kudough, Kughdo)
+5. ** ZENOWETHU_POA ** - The full Zenowethu packet (approx 4 pages).
                    - INCLUDES: Aftercare Fees, Transfer Authorization, Power of Attorney, Credit Info Authorization.
-5. ** PAYSLIP ** - Salary advice or payslip from an employer.
-6. ** BANK_STATEMENT ** - Document showing bank transactions and account details.
+6. ** PAYSLIP ** - Salary advice or payslip from an employer.
+7. ** BANK_STATEMENT ** - Document showing bank transactions and account details.
 
 For each document found, provide:
-- type: "ID", "POA", "CREDIT_REPORT", "ZENOWETHU_POA", "PAYSLIP", "BANK_STATEMENT", or "OTHER"
-    - startPage: the page number where this document starts(1 - based, use the--- Page X--- headers in the text)
-        - endPage: the page number where this document ends(1 - based)
-            - confidence: how confident you are(0.0 to 1.0)
-                - description: brief description of what you see
+- type: "ID", "POA", "CREDIT_REPORT", "CREDIT_REPORT_OTHER", "ZENOWETHU_POA", "PAYSLIP", "BANK_STATEMENT", or "OTHER"
+- startPage: the page number where this document starts (1-based)
+- endPage: the page number where this document ends (1-based)
+- confidence: how confident you are (0.0 to 1.0)
+- description: brief description (e.g. "Experian Credit Report", "ClearScore Credit Report")
+- bureauName: specifically for credit reports, name the bureau (e.g. "Experian Credit Report", "ClearScore Credit Report")
 
 IMPORTANT:
 - Page numbers are 1 - based(first page is 1)

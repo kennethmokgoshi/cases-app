@@ -632,6 +632,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                                             <option value="CREDIT_REPORT" className="bg-zeno-dark text-white">Credit Report</option>
                                             <option value="PAYSLIP" className="bg-zeno-dark text-white">Payslip</option>
                                             <option value="BANK_STATEMENT" className="bg-zeno-dark text-white">Bank Statement</option>
+                                            <option value="PROOF_OF_RESIDENCE" className="bg-zeno-dark text-white">Proof of Residence</option>
                                             <option value="OTHER" className="bg-zeno-dark text-white">Other Document</option>
                                         </select>
                                         <div className="relative">

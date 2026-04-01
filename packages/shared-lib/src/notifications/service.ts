@@ -26,6 +26,8 @@ import {
 } from './templates';
 import { getGHLCredentials } from '../integrations';
 import { logger } from '../logger';
+import { draftLegalDocument } from '../ai/legal-secretary';
+import type { DraftingAccount } from '../ai/legal-secretary';
 
 // Configuration
 const SMS_ENABLED = process.env.SMS_ENABLED === 'true';
@@ -105,6 +107,13 @@ async function getTelegramProvider(): Promise<TelegramProvider> {
     return new MockTelegramProvider();
 }
 
+export interface CreditProviderContact {
+    name: string;
+    email: string;
+    accountNumbers: string[];  // accounts this provider holds for the consumer
+    outstandingBalances?: Record<string, number>;  // accountNumber → balance (used by AI drafter)
+}
+
 export interface NotificationPayload {
     caseId: string;
     clientName: string;
@@ -128,6 +137,14 @@ export interface NotificationPayload {
     projectName?: string | null;
     senderName?: string;
     senderEmail?: string;
+    // File request recipients (used for DHS post-acceptance outreach)
+    creditBureauEmails?: string[];
+    creditProviderContacts?: CreditProviderContact[];
+}
+
+export interface FileRequestResult {
+    bureauResults: Array<{ email: string; success: boolean; error?: string }>;
+    providerResults: Array<{ name: string; email: string; success: boolean; error?: string }>;
 }
 
 export interface NotificationResult {
@@ -414,6 +431,176 @@ async function logNotification(entry: NotificationLogEntry): Promise<void> {
     } catch (error) {
         logger.error('Failed to log notification:', error);
     }
+}
+
+/**
+ * Send file request emails to Credit Bureaus and Credit Providers after DHS acceptance.
+ * Each credit provider receives a tailored email listing their specific account numbers.
+ */
+export async function sendFileRequestEmails(payload: {
+    caseId: string;
+    clientName: string;
+    idNumber: string;
+    fileNumber: string;
+    senderName?: string;
+    creditBureauEmails: string[];
+    creditProviderContacts: CreditProviderContact[];
+    // AI drafting
+    useAiDraft?: boolean;
+    allAccounts?: DraftingAccount[];  // full account list used for bureau AI drafts
+}): Promise<FileRequestResult> {
+    const bureauTemplate = getTemplateByStatus('REQUEST_FILE_CREDIT_BUREAU');
+    const providerTemplate = getTemplateByStatus('REQUEST_FILE_CREDIT_PROVIDER');
+
+    const emailProvider = await getEmailProvider();
+
+    const bureauResults: FileRequestResult['bureauResults'] = [];
+    const providerResults: FileRequestResult['providerResults'] = [];
+
+    const baseVariables = {
+        clientName: payload.clientName,
+        idNumber: payload.idNumber,
+        fileNumber: payload.fileNumber,
+        companyName: COMPANY_NAME,
+        phone: COMPANY_PHONE,
+        senderName: payload.senderName || COMPANY_NAME,
+        accountNumbers: '',
+    };
+
+    const clientParts = payload.clientName.split(' ');
+    const draftingClient = {
+        firstName: clientParts[0] || payload.clientName,
+        lastName:  clientParts.slice(1).join(' ') || '',
+        idNumber:  payload.idNumber,
+    };
+
+    // --- Credit Bureaus ---
+    // AI: one draft for all bureaus (same content), with template fallback
+    let bureauSubject: string;
+    let bureauBody: string;
+    let bureauDraftedByAi = false;
+
+    if (payload.useAiDraft && bureauTemplate) {
+        try {
+            const draft = await draftLegalDocument({
+                client:       draftingClient,
+                caseData:     { fileNumber: payload.fileNumber },
+                matter:       { type: 'Debt Review Flag Removal', creditorName: 'Credit Bureau' },
+                documentType: 'BUREAU_FILE_REQUEST',
+                accounts:     payload.allAccounts,
+                senderName:   payload.senderName,
+                companyName:  COMPANY_NAME,
+                companyPhone: COMPANY_PHONE,
+            });
+            bureauSubject     = draft.subject;
+            bureauBody        = draft.content;
+            bureauDraftedByAi = true;
+            logger.info('[FileRequest] AI-drafted bureau letter successfully');
+        } catch (aiErr) {
+            logger.warn('[FileRequest] AI bureau draft failed — falling back to template:', aiErr);
+            bureauSubject = bureauTemplate ? renderTemplate(bureauTemplate.emailSubject, baseVariables) : '';
+            bureauBody    = bureauTemplate ? renderTemplate(bureauTemplate.emailTemplate, baseVariables) : '';
+        }
+    } else if (bureauTemplate) {
+        bureauSubject = renderTemplate(bureauTemplate.emailSubject, baseVariables);
+        bureauBody    = renderTemplate(bureauTemplate.emailTemplate, baseVariables);
+    } else {
+        bureauSubject = '';
+        bureauBody    = '';
+    }
+
+    if (bureauSubject) {
+        for (const bureauEmail of payload.creditBureauEmails) {
+            const res = await emailProvider.send(bureauEmail, bureauSubject, bureauBody.replace(/\n/g, '<br>'), bureauBody);
+
+            bureauResults.push({ email: bureauEmail, success: res.success, error: res.error });
+
+            await logNotification({
+                caseId:        payload.caseId,
+                channel:       'EMAIL',
+                recipient:     bureauEmail,
+                recipientType: 'PARTNER',
+                statusCode:    'REQUEST_FILE_CREDIT_BUREAU',
+                message:       `${bureauDraftedByAi ? '[AI] ' : ''}${bureauSubject}`,
+                success:       res.success,
+                messageId:     res.messageId,
+                error:         res.error,
+                provider:      res.provider,
+            });
+
+            if (!res.success) logger.error(`[FileRequest] Failed to email bureau ${bureauEmail}: ${res.error}`);
+        }
+    }
+
+    // --- Credit Providers ---
+    // AI: one draft per provider (personalised with their accounts), with template fallback
+    for (const cp of payload.creditProviderContacts) {
+        let subject: string;
+        let body: string;
+        let draftedByAi = false;
+
+        const providerAccounts: DraftingAccount[] = cp.accountNumbers.map(num => ({
+            creditorName:       cp.name,
+            accountNumber:      num,
+            outstandingBalance: cp.outstandingBalances?.[num],
+        }));
+
+        if (payload.useAiDraft) {
+            try {
+                const draft = await draftLegalDocument({
+                    client:       draftingClient,
+                    caseData:     { fileNumber: payload.fileNumber },
+                    matter:       { type: 'Debt Review Flag Removal', creditorName: cp.name, accountNumber: cp.accountNumbers[0] || null },
+                    documentType: 'PROVIDER_FILE_REQUEST',
+                    accounts:     providerAccounts,
+                    senderName:   payload.senderName,
+                    companyName:  COMPANY_NAME,
+                    companyPhone: COMPANY_PHONE,
+                });
+                subject     = draft.subject;
+                body        = draft.content;
+                draftedByAi = true;
+                logger.info(`[FileRequest] AI-drafted provider letter for ${cp.name}`);
+            } catch (aiErr) {
+                logger.warn(`[FileRequest] AI provider draft failed for ${cp.name} — falling back to template:`, aiErr);
+                const vars = { ...baseVariables, accountNumbers: cp.accountNumbers.join(', ') };
+                subject = providerTemplate ? renderTemplate(providerTemplate.emailSubject, vars) : '';
+                body    = providerTemplate ? renderTemplate(providerTemplate.emailTemplate, vars) : '';
+            }
+        } else if (providerTemplate) {
+            const vars = { ...baseVariables, accountNumbers: cp.accountNumbers.join(', ') };
+            subject = renderTemplate(providerTemplate.emailSubject, vars);
+            body    = renderTemplate(providerTemplate.emailTemplate, vars);
+        } else {
+            subject = '';
+            body    = '';
+        }
+
+        if (!subject) continue;
+
+        const res = await emailProvider.send(cp.email, subject, body.replace(/\n/g, '<br>'), body);
+
+        providerResults.push({ name: cp.name, email: cp.email, success: res.success, error: res.error });
+
+        await logNotification({
+            caseId:        payload.caseId,
+            channel:       'EMAIL',
+            recipient:     cp.email,
+            recipientType: 'PARTNER',
+            statusCode:    'REQUEST_FILE_CREDIT_PROVIDER',
+            message:       `${draftedByAi ? '[AI] ' : ''}${subject}`,
+            success:       res.success,
+            messageId:     res.messageId,
+            error:         res.error,
+            provider:      res.provider,
+        });
+
+        if (!res.success) logger.error(`[FileRequest] Failed to email provider ${cp.name} (${cp.email}): ${res.error}`);
+    }
+
+    logger.info(`[FileRequest] Sent ${bureauResults.filter(r => r.success).length}/${payload.creditBureauEmails.length} bureau emails, ${providerResults.filter(r => r.success).length}/${payload.creditProviderContacts.length} provider emails (aiDraft=${payload.useAiDraft ?? false})`);
+
+    return { bureauResults, providerResults };
 }
 
 export async function getNotificationHistory(caseId: string) {

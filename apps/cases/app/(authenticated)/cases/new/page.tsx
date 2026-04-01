@@ -192,6 +192,8 @@ function NewCaseWithAIComponent() {
         cellNumber: '',
         whatsappNumber: '',
         email: '',
+        alternativeEmail: '',
+        alternativePhone: '',
         address: '',
         employer: '',
         employeeNo: '',
@@ -709,6 +711,8 @@ function NewCaseWithAIComponent() {
                 cellNumber: naStr(result.extractedData?.poa?.cellNumber),
                 whatsappNumber: naStr(result.extractedData?.poa?.whatsappNumber),
                 email: naStr(result.extractedData?.poa?.email),
+                alternativeEmail: '',
+                alternativePhone: '',
                 address: naStr(result.extractedData?.poa?.address),
                 employer: employer || naStr(result.extractedData?.poa?.employer),
                 employeeNo: naStr(result.extractedData?.poa?.employeeNo),
@@ -794,6 +798,8 @@ function NewCaseWithAIComponent() {
                 cellNumber: '',
                 whatsappNumber: '',
                 email: '',
+                alternativeEmail: '',
+                alternativePhone: '',
                 address: '',
                 employer: '',
                 employeeNo: '',
@@ -923,6 +929,13 @@ function NewCaseWithAIComponent() {
     };
 
     const handleSubmit = async (forceUpdate = false) => {
+        // Validate required fields before submitting
+        const emailVal = formData.email?.trim();
+        if (!emailVal || emailVal === 'NA') {
+            setSubmitError({ title: '❌ Email Required', message: 'Please enter the client\'s email address before creating the case.', code: 'MISSING_EMAIL' });
+            return;
+        }
+
         setSubmitting(true);
         // Clear previous errors
         setSubmitError(null);
@@ -942,7 +955,9 @@ function NewCaseWithAIComponent() {
                         lastName: formData.surname,
                         idNumber: formData.idNumber,
                         email: clean(formData.email),
+                        alternativeEmail: clean(formData.alternativeEmail),
                         phone: clean(formData.cellNumber),
+                        alternativePhone: clean(formData.alternativePhone),
                         address: clean(formData.address),
                         employer: clean(formData.employer),
                         employeeNo: clean(formData.employeeNo),
@@ -1332,8 +1347,8 @@ function NewCaseWithAIComponent() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-300">Credit Report</label>
+                             <div className="space-y-2 col-span-2">
+                                <label className="block text-sm font-medium text-gray-300">Credit Report (Experian, XDS, ClearScore, TransUnion, etc.)</label>
                                 <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.creditReport ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
                                     <input
                                         type="file"
@@ -1350,7 +1365,8 @@ function NewCaseWithAIComponent() {
                                         ) : (
                                             <div className="text-gray-400">
                                                 <span className="text-2xl block mb-2">📊</span>
-                                                Click to upload Report
+                                                Click to upload Credit Report
+                                                <span className="block text-xs mt-1 text-gray-500">AI will automatically identify the bureau and category</span>
                                             </div>
                                         )}
                                     </label>
@@ -1827,12 +1843,41 @@ function NewCaseWithAIComponent() {
                                     )}
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Email</label>
+                                    <label className="block text-xs text-gray-500 mb-1">
+                                        Email <span className="text-red-400">*</span>
+                                    </label>
                                     <input
                                         type="email"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        className={`w-full px-3 py-2 bg-zeno-navy border rounded text-white focus:border-zeno-cyan focus:outline-none ${!formData.email ? 'border-red-500/70' : 'border-white/10'}`}
+                                    />
+                                    {!formData.email && (
+                                        <div className="text-[10px] text-red-400 mt-1">Email is required</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Alternative Contact Info */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Alternative Cell Number</label>
+                                    <input
+                                        type="text"
+                                        value={formData.alternativePhone}
+                                        onChange={(e) => setFormData({ ...formData, alternativePhone: e.target.value })}
                                         className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                        placeholder="Optional"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Alternative Email</label>
+                                    <input
+                                        type="email"
+                                        value={formData.alternativeEmail}
+                                        onChange={(e) => setFormData({ ...formData, alternativeEmail: e.target.value })}
+                                        className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                        placeholder="Optional"
                                     />
                                 </div>
                             </div>

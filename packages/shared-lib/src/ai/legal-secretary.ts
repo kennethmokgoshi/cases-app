@@ -3,6 +3,13 @@ import { openai } from '../openai';
 import { logger } from '../logger';
 import { CaseStrategyResponse } from './strategy-engine';
 
+export interface DraftingAccount {
+    creditorName: string;
+    accountNumber?: string | null;
+    accountType?: string;
+    outstandingBalance?: number;
+}
+
 export interface DraftingRequest {
     client: {
         firstName: string;
@@ -19,7 +26,12 @@ export interface DraftingRequest {
         accountNumber?: string | null;
     };
     strategy?: CaseStrategyResponse;
-    documentType: 'LOD' | 'RESCISSION_AFFIDAVIT' | 'PRESCRIPTION_NOTICE' | 'CLEARANCE_DEMAND';
+    documentType: 'LOD' | 'RESCISSION_AFFIDAVIT' | 'PRESCRIPTION_NOTICE' | 'CLEARANCE_DEMAND' | 'BUREAU_FILE_REQUEST' | 'PROVIDER_FILE_REQUEST';
+    // Extra context used by BUREAU_FILE_REQUEST and PROVIDER_FILE_REQUEST
+    accounts?: DraftingAccount[];
+    senderName?: string;
+    companyName?: string;
+    companyPhone?: string;
 }
 
 export interface DraftResponse {
@@ -33,12 +45,86 @@ export interface DraftResponse {
  * AI Legal Secretary (Stage 2)
  * Drafts professional legal documents based on case data and strategy
  */
-export async function draftLegalDocument(request: DraftingRequest): Promise<DraftResponse> {
-    try {
-        const prompt = `
+function buildPrompt(request: DraftingRequest): string {
+    const clientFullName = `${request.client.firstName} ${request.client.lastName}`;
+    const company = request.companyName || 'Zenowethu Debt Management';
+    const phone = request.companyPhone || '012 345 6789';
+    const sender = request.senderName || company;
+
+    if (request.documentType === 'BUREAU_FILE_REQUEST') {
+        const accountsSummary = request.accounts && request.accounts.length > 0
+            ? request.accounts.map(a =>
+                `- ${a.creditorName}${a.accountNumber ? ` (Acc: ${a.accountNumber})` : ''}${a.outstandingBalance ? ` — R${a.outstandingBalance.toLocaleString()}` : ''}`
+              ).join('\n')
+            : 'See attached consumer profile.';
+
+        return `
+You are an expert Legal Secretary at ${company} in South Africa. Draft a formal letter to a credit bureau requesting the consumer's full credit profile and removal of a debt review flag, in compliance with the National Credit Act 34 of 2005.
+
+CONSUMER: ${clientFullName} (ID: ${request.client.idNumber})
+OUR REFERENCE: ${request.caseData.fileNumber}
+ACCOUNTS ON RECORD:
+${accountsSummary}
+SENDER: ${sender}, ${company} — Tel: ${phone}
+
+INSTRUCTIONS:
+1. Formal, professional South African legal tone.
+2. Cite Section 71(1) of the NCA: right to clearance certificate upon full repayment.
+3. Cite Section 71(2): credit bureau must update records within 5 business days of receiving clearance certificate.
+4. Request: full credit report, list of current flags, confirmation of debt review flag status.
+5. Give a 5-business-day response deadline.
+6. Use [TODAY_DATE] as the date placeholder.
+7. Sign off from ${sender} on behalf of ${company}.
+
+Output ONLY valid JSON in this format:
+{
+  "subject": "Formal subject line referencing consumer name and ID",
+  "content": "Complete formal letter body with date, salutation, paragraphs, and sign-off",
+  "recipientName": "Sir/Madam",
+  "recipientDetails": "Credit Bureau Disputes Department"
+}`;
+    }
+
+    if (request.documentType === 'PROVIDER_FILE_REQUEST') {
+        const accountsSummary = request.accounts && request.accounts.length > 0
+            ? request.accounts.map(a =>
+                `- ${a.accountType || 'Account'}${a.accountNumber ? ` #${a.accountNumber}` : ''}${a.outstandingBalance ? ` — Outstanding: R${a.outstandingBalance.toLocaleString()}` : ''}`
+              ).join('\n')
+            : 'Refer to consumer ID number for account lookup.';
+
+        return `
+You are an expert Legal Secretary at ${company} in South Africa. Draft a formal letter to a credit provider requesting account information, statement of account, and a clearance/settlement certificate, in compliance with the National Credit Act 34 of 2005.
+
+CONSUMER: ${clientFullName} (ID: ${request.client.idNumber})
+CREDIT PROVIDER: ${request.matter.creditorName}
+ACCOUNTS:
+${accountsSummary}
+OUR REFERENCE: ${request.caseData.fileNumber}
+SENDER: ${sender}, ${company} — Tel: ${phone}
+
+INSTRUCTIONS:
+1. Formal, professional South African legal tone.
+2. State that we act on behalf of the consumer under a valid Power of Attorney.
+3. Request: current outstanding balance, full account statement, any Section 86 notices issued, and a clearance/settlement letter if account is paid up.
+4. Cite Section 86(9) of the NCA regarding the consumer's right to request their account information.
+5. Give a 5-business-day response deadline.
+6. Use [TODAY_DATE] as the date placeholder.
+7. Sign off from ${sender} on behalf of ${company}.
+
+Output ONLY valid JSON in this format:
+{
+  "subject": "Formal subject line referencing consumer name, ID and account(s)",
+  "content": "Complete formal letter body with date, salutation, paragraphs, and sign-off",
+  "recipientName": "${request.matter.creditorName}",
+  "recipientDetails": "Credit Collections / Legal Department"
+}`;
+    }
+
+    // Original document types
+    return `
 You are an expert Legal Secretary at Zenowethu. Your task is to draft a professional legal document for a South African credit repair case.
 
-CLIENT: ${request.client.firstName} ${request.client.lastName} (ID: ${request.client.idNumber})
+CLIENT: ${clientFullName} (ID: ${request.client.idNumber})
 ADDRESS: ${request.client.address || 'Not Provided'}
 CASE: ${request.caseData.fileNumber}
 MATTER: ${request.matter.type} against ${request.matter.creditorName} ${request.matter.accountNumber ? `(Acc: ${request.matter.accountNumber})` : ''}
@@ -60,8 +146,12 @@ Output your draft in the following JSON format:
   "content": "Full body text of the document including headers, dates [TODAY_DATE], and sign-offs.",
   "recipientName": "Name of the creditor/entity",
   "recipientDetails": "Email or address if known, otherwise placeholder"
+}`;
 }
-`;
+
+export async function draftLegalDocument(request: DraftingRequest): Promise<DraftResponse> {
+    try {
+        const prompt = buildPrompt(request);
 
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',

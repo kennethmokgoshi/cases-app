@@ -206,6 +206,11 @@ export default function CaseDetailPage() {
     const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
     const [sendingNotification, setSendingNotification] = useState(false);
     const [sendingDCNotification, setSendingDCNotification] = useState<'FILE' | 'INVOICE' | null>(null);
+    const [sendingFileRequests, setSendingFileRequests] = useState(false);
+    const [fileRequestResult, setFileRequestResult] = useState<{ bureausSent: number; providersSent: number; failures: number; message: string } | null>(null);
+    const [sendingAllRequests, setSendingAllRequests] = useState(false);
+    const [allRequestsResult, setAllRequestsResult] = useState<{ dcSent: boolean; bureausSent: number; providersSent: number; failures: number; lines: string[] } | null>(null);
+    const [useAiDraft, setUseAiDraft] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -478,6 +483,113 @@ export default function CaseDetailPage() {
         } finally {
             setSendingNotification(false);
         }
+    };
+
+    const handleSendFileRequests = async () => {
+        if (!caseData) return;
+        setSendingFileRequests(true);
+        setFileRequestResult(null);
+        try {
+            const res = await fetch(`/api/cases/${params.id}/send-file-requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ useAiDraft }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const { bureausSent, providersSent, totalFailures } = data.summary;
+                const parts = [];
+                if (bureausSent > 0) parts.push(`${bureausSent} bureau${bureausSent !== 1 ? 's' : ''}`);
+                if (providersSent > 0) parts.push(`${providersSent} provider${providersSent !== 1 ? 's' : ''}`);
+                const message = parts.length > 0
+                    ? `Sent to ${parts.join(' + ')}${totalFailures > 0 ? ` (${totalFailures} failed)` : ''}`
+                    : 'No recipients found — add provider emails in admin settings.';
+                setFileRequestResult({ bureausSent, providersSent, failures: totalFailures, message });
+                if (bureausSent > 0 || providersSent > 0) setActivityUpdate(prev => prev + 1);
+            } else {
+                setFileRequestResult({ bureausSent: 0, providersSent: 0, failures: 1, message: data.error || 'Failed to send' });
+            }
+        } catch {
+            setFileRequestResult({ bureausSent: 0, providersSent: 0, failures: 1, message: 'Connection failed. Please try again.' });
+        } finally {
+            setSendingFileRequests(false);
+        }
+    };
+
+    const handleSendAllFileRequests = async () => {
+        if (!caseData) return;
+        setSendingAllRequests(true);
+        setAllRequestsResult(null);
+
+        const [dcRes, bureauRes] = await Promise.allSettled([
+            // DC file request — only if dcEmail is set
+            caseData.dcEmail
+                ? fetch(`/api/cases/${params.id}/dc-notification`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ type: 'FILE_REQUEST' }),
+                  })
+                : Promise.resolve(null),
+            // Bureau + provider emails
+            fetch(`/api/cases/${params.id}/send-file-requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ useAiDraft }),
+            }),
+        ]);
+
+        const lines: string[] = [];
+        let dcSent = false;
+        let bureausSent = 0;
+        let providersSent = 0;
+        let failures = 0;
+
+        // DC result
+        if (caseData.dcEmail) {
+            if (dcRes.status === 'fulfilled' && dcRes.value !== null) {
+                const r = dcRes.value as Response;
+                if (r.ok) {
+                    dcSent = true;
+                    lines.push(`DC (${caseData.dcEmail}): sent`);
+                } else {
+                    failures++;
+                    const d = await r.json().catch(() => ({}));
+                    lines.push(`DC: failed — ${(d as any).error || 'unknown error'}`);
+                }
+            } else {
+                failures++;
+                lines.push(`DC: failed — connection error`);
+            }
+        } else {
+            lines.push(`DC: skipped (no email on file)`);
+        }
+
+        // Bureau + provider result
+        if (bureauRes.status === 'fulfilled') {
+            const r = bureauRes.value as Response;
+            const d = await r.json().catch(() => ({}));
+            if (r.ok) {
+                bureausSent = (d as any).summary?.bureausSent ?? 0;
+                providersSent = (d as any).summary?.providersSent ?? 0;
+                const bfailures = (d as any).summary?.totalFailures ?? 0;
+                failures += bfailures;
+                if (bureausSent > 0) lines.push(`Bureaus: sent to ${bureausSent}`);
+                else lines.push(`Bureaus: no recipients configured`);
+                if (providersSent > 0) lines.push(`Providers: sent to ${providersSent}`);
+                else lines.push(`Providers: none with email on file`);
+                if (bfailures > 0) lines.push(`${bfailures} delivery failure(s)`);
+            } else {
+                failures++;
+                lines.push(`Bureaus/Providers: failed — ${(d as any).error || 'unknown error'}`);
+            }
+        } else {
+            failures++;
+            lines.push(`Bureaus/Providers: failed — connection error`);
+        }
+
+        setAllRequestsResult({ dcSent, bureausSent, providersSent, failures, lines });
+        if (dcSent || bureausSent > 0 || providersSent > 0) setActivityUpdate(prev => prev + 1);
+        setSendingAllRequests(false);
     };
 
     const handleDCNotification = async (type: 'FILE_REQUEST' | 'INVOICE_REQUEST') => {
@@ -1985,40 +2097,124 @@ export default function CaseDetailPage() {
                                     </div>
                                 </div>
 
-                                {caseData.dcEmail && (
-                                    <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-[10px] text-indigo-400 font-bold uppercase">Debt Counsellor Actions</span>
-                                            <span className="text-[10px] text-gray-500 italic">{caseData.dcEmail}</span>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
+                                {/* ── File Requests Panel ── */}
+                                <div className="mb-4 rounded-lg border border-white/10 overflow-hidden">
+                                    {/* Primary: Send All */}
+                                    <div className="p-3 bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 border-b border-white/5">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-[10px] text-white font-bold uppercase tracking-wide">File Requests</span>
+                                            {/* AI Draft toggle */}
                                             <button
-                                                onClick={() => handleDCNotification('FILE_REQUEST')}
-                                                disabled={sendingDCNotification !== null}
-                                                className="py-1.5 px-3 bg-indigo-600/20 border border-indigo-600/40 text-indigo-300 rounded text-xs font-semibold hover:bg-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                onClick={() => setUseAiDraft(v => !v)}
+                                                title={useAiDraft ? 'AI-drafted letters enabled — click to use standard templates' : 'Standard templates — click to enable AI drafting'}
+                                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wide transition-all ${
+                                                    useAiDraft
+                                                        ? 'bg-violet-500/20 border-violet-500/40 text-violet-300 hover:bg-violet-500/30'
+                                                        : 'bg-white/5 border-white/10 text-gray-500 hover:bg-white/10'
+                                                }`}
                                             >
-                                                {sendingDCNotification === 'FILE' ? (
-                                                    <span className="animate-spin h-3 w-3 border-2 border-indigo-300 border-t-transparent rounded-full"></span>
-                                                ) : (
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                                                )}
-                                                Request File
-                                            </button>
-                                            <button
-                                                onClick={() => handleDCNotification('INVOICE_REQUEST')}
-                                                disabled={sendingDCNotification !== null}
-                                                className="py-1.5 px-3 bg-indigo-600/20 border border-indigo-600/40 text-indigo-300 rounded text-xs font-semibold hover:bg-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                            >
-                                                {sendingDCNotification === 'INVOICE' ? (
-                                                    <span className="animate-spin h-3 w-3 border-2 border-indigo-300 border-t-transparent rounded-full"></span>
-                                                ) : (
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                )}
-                                                Request Invoice
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                                                {useAiDraft ? 'AI On' : 'AI Off'}
                                             </button>
                                         </div>
+                                        <p className="text-[10px] text-gray-400 mb-2 leading-relaxed">
+                                            Sends file-request emails to the Debt Counsellor{caseData.dcEmail ? ` (${caseData.dcEmail})` : ' (no email on file)'}, credit bureaus and all linked credit providers in one action.
+                                        </p>
+                                        <button
+                                            onClick={handleSendAllFileRequests}
+                                            disabled={sendingAllRequests || sendingDCNotification !== null || sendingFileRequests}
+                                            className="w-full py-2 px-3 bg-gradient-to-r from-cyan-600/30 to-indigo-600/30 border border-cyan-500/30 text-white rounded text-xs font-bold hover:from-cyan-600/40 hover:to-indigo-600/40 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {sendingAllRequests ? (
+                                                <>
+                                                    <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                                                    Sending all requests...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                                                    Send All File Requests
+                                                </>
+                                            )}
+                                        </button>
+                                        {allRequestsResult && (
+                                            <div className={`mt-2 text-[10px] px-2 py-1.5 rounded leading-relaxed space-y-0.5 ${
+                                                allRequestsResult.failures > 0 && !allRequestsResult.dcSent && allRequestsResult.bureausSent === 0 && allRequestsResult.providersSent === 0
+                                                    ? 'text-red-400 bg-red-500/10 border border-red-500/20'
+                                                    : allRequestsResult.failures > 0
+                                                        ? 'text-yellow-400 bg-yellow-500/10 border border-yellow-500/20'
+                                                        : 'text-green-400 bg-green-500/10 border border-green-500/20'
+                                            }`}>
+                                                {allRequestsResult.lines.map((line, i) => (
+                                                    <div key={i}>• {line}</div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+
+                                    {/* Individual actions */}
+                                    <div className="p-3 bg-black/20 space-y-2">
+                                        <span className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider">Individual Actions</span>
+                                        {/* DC actions */}
+                                        {caseData.dcEmail && (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    onClick={() => handleDCNotification('FILE_REQUEST')}
+                                                    disabled={sendingDCNotification !== null || sendingAllRequests}
+                                                    className="py-1.5 px-3 bg-indigo-600/20 border border-indigo-600/40 text-indigo-300 rounded text-xs font-semibold hover:bg-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                >
+                                                    {sendingDCNotification === 'FILE' ? (
+                                                        <span className="animate-spin h-3 w-3 border-2 border-indigo-300 border-t-transparent rounded-full" />
+                                                    ) : (
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                                    )}
+                                                    DC: Request File
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDCNotification('INVOICE_REQUEST')}
+                                                    disabled={sendingDCNotification !== null || sendingAllRequests}
+                                                    className="py-1.5 px-3 bg-indigo-600/20 border border-indigo-600/40 text-indigo-300 rounded text-xs font-semibold hover:bg-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                >
+                                                    {sendingDCNotification === 'INVOICE' ? (
+                                                        <span className="animate-spin h-3 w-3 border-2 border-indigo-300 border-t-transparent rounded-full" />
+                                                    ) : (
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                    )}
+                                                    DC: Request Invoice
+                                                </button>
+                                            </div>
+                                        )}
+                                        {/* Bureau + provider only */}
+                                        <button
+                                            onClick={handleSendFileRequests}
+                                            disabled={sendingFileRequests || sendingAllRequests}
+                                            className="w-full py-1.5 px-3 bg-cyan-600/20 border border-cyan-600/40 text-cyan-300 rounded text-xs font-semibold hover:bg-cyan-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {sendingFileRequests ? (
+                                                <>
+                                                    <span className="animate-spin h-3 w-3 border-2 border-cyan-300 border-t-transparent rounded-full" />
+                                                    Sending...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                                                    Bureaus &amp; Providers Only
+                                                </>
+                                            )}
+                                        </button>
+                                        {fileRequestResult && (
+                                            <div className={`text-[10px] px-2 py-1 rounded leading-relaxed ${
+                                                fileRequestResult.failures > 0 && fileRequestResult.bureausSent === 0 && fileRequestResult.providersSent === 0
+                                                    ? 'text-red-400 bg-red-500/10 border border-red-500/20'
+                                                    : fileRequestResult.failures > 0
+                                                        ? 'text-yellow-400 bg-yellow-500/10 border border-yellow-500/20'
+                                                        : 'text-green-400 bg-green-500/10 border border-green-500/20'
+                                            }`}>
+                                                {fileRequestResult.message}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
                                 {isEditing || isEditingDhs ? (
                                     <div className="space-y-3">

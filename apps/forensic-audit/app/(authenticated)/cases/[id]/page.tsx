@@ -17,6 +17,7 @@ import { SERVICES_MAP } from '@zenowethu/config';
 import { ActivityTab } from '@zenowethu/ui';
 import { DocumentsTab } from '@zenowethu/ui';
 import { CommunicationHub } from '@zenowethu/ui';
+import { WorkflowTimeline } from '@zenowethu/ui';
 import { ProjectMembersModal } from '@zenowethu/ui';
 import { MoveCaseModal } from '@zenowethu/ui';
 import { EditServicesModal } from '@zenowethu/ui';
@@ -252,7 +253,7 @@ export default function CaseDetailPage() {
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
     const [isEditServicesOpen, setIsEditServicesOpen] = useState(false);
     const [showCompareModal, setShowCompareModal] = useState(false);
-    const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'FORENSIC'>('ACTIVITY');
+    const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'FORENSIC' | 'TIMELINE'>('ACTIVITY');
 
     // Tasks & Decline Reason State
     // Tasks & Decline Reason State
@@ -2334,6 +2335,15 @@ export default function CaseDetailPage() {
                         <span>📁</span> Documents
                     </button>
                     <button
+                        onClick={() => setActiveDetailTab('TIMELINE')}
+                        className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'TIMELINE'
+                            ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
+                            : 'text-gray-500 hover:text-white hover:bg-white/5'
+                            }`}
+                    >
+                        <span>🔄</span> Status Timeline
+                    </button>
+                    <button
                         onClick={() => setActiveDetailTab('COMMUNICATION')}
                         className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'COMMUNICATION'
                             ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
@@ -2362,6 +2372,11 @@ export default function CaseDetailPage() {
                     {activeDetailTab === 'DOCUMENTS' && (
                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <DocumentsTab caseId={caseData.id} />
+                        </div>
+                    )}
+                    {activeDetailTab === 'TIMELINE' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <WorkflowTimeline workflowLogs={caseData.workflowLogs} />
                         </div>
                     )}
                     {activeDetailTab === 'COMMUNICATION' && (

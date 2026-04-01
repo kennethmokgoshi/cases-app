@@ -1216,8 +1216,8 @@ function NewCaseWithAIComponent() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-300">Credit Report</label>
+                             <div className="space-y-2 col-span-2">
+                                <label className="block text-sm font-medium text-gray-300">Credit Report (Experian, XDS, ClearScore, TransUnion, etc.)</label>
                                 <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.creditReport ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
                                     <input
                                         type="file"
@@ -1234,7 +1234,8 @@ function NewCaseWithAIComponent() {
                                         ) : (
                                             <div className="text-gray-400">
                                                 <span className="text-2xl block mb-2">📊</span>
-                                                Click to upload Report
+                                                Click to upload Credit Report
+                                                <span className="block text-xs mt-1 text-gray-500">AI will automatically identify the bureau and category</span>
                                             </div>
                                         )}
                                     </label>

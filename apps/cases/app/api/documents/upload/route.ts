@@ -4,6 +4,7 @@ import { sendStatusChangeNotification  } from '@zenowethu/shared-lib';
 import { getStatusByCode } from '@zenowethu/shared-lib';
 import {
     analyzeCombinedDocument,
+    analyzeDocument,
     batchAnalyzeDocuments,
     extractDocumentsFromCombinedPdf
 } from '@zenowethu/shared-lib';
@@ -118,7 +119,7 @@ export async function POST(request: Request) {
         }
 
         const savedDocuments = [];
-        const documentsToAnalyze: Array<{ base64: string; type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER'; docId: string; mimeType: string }> = [];
+        const documentsToAnalyze: Array<{ base64: string; type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'PROOF_OF_RESIDENCE'; docId: string; mimeType: string }> = [];
         let combinedDocBase64 = '';
         let combinedDocId = '';
 
@@ -150,6 +151,8 @@ export async function POST(request: Request) {
                 docType = 'PAYSLIP';
             } else if (file.fieldName === 'file_BANK_STATEMENT') {
                 docType = 'BANK_STATEMENT';
+            } else if (file.fieldName === 'file_PROOF_OF_RESIDENCE') {
+                docType = 'PROOF_OF_RESIDENCE';
             }
             // 2. Check combined flag
             else if (isCombined) {
@@ -160,12 +163,14 @@ export async function POST(request: Request) {
                 docType = 'ID';
             } else if (nameLower.includes('poa') || nameLower.includes('power')) {
                 docType = 'POA';
-            } else if (nameLower.includes('credit') || nameLower.includes('report') || nameLower.includes('xds') || nameLower.includes('experian') || nameLower.includes('transunion')) {
+            } else if (nameLower.includes('credit') || nameLower.includes('report') || nameLower.includes('xds') || nameLower.includes('experian') || nameLower.includes('transunion') || nameLower.includes('clearscore') || nameLower.includes('kudough') || nameLower.includes('kughdo')) {
                 docType = 'CREDIT_REPORT';
             } else if (nameLower.includes('payslip') || nameLower.includes('salary') || nameLower.includes('advice')) {
                 docType = 'PAYSLIP';
             } else if (nameLower.includes('bank') || nameLower.includes('statement')) {
                 docType = 'BANK_STATEMENT';
+            } else if (nameLower.includes('proof') || nameLower.includes('residence') || nameLower.includes('municipal') || nameLower.includes('utility')) {
+                docType = 'PROOF_OF_RESIDENCE';
             }
 
             logger.info(`📄 File: ${file.name} → Type: ${docType}`);
@@ -197,7 +202,7 @@ export async function POST(request: Request) {
                     const base64 = buffer.toString('base64');
                     documentsToAnalyze.push({
                         base64,
-                        type: docType as 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER',
+                        type: docType as 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT' | 'PROOF_OF_RESIDENCE' | 'OTHER',
                         docId: document.id,
                         mimeType: file.type
                     });
@@ -206,7 +211,7 @@ export async function POST(request: Request) {
         }
 
         // Analyze documents with AI
-        let extractedData = {};
+        let extractedData: any = {};
 
         if (skipAnalysis) {
             logger.info('⏭️  Skipping AI analysis as requested (skipAnalysis=true)');
@@ -239,13 +244,13 @@ export async function POST(request: Request) {
                             data: {
                                 caseId,
                                 type: extractedDoc.type,
-                                fileName: `Extracted ${extractedDoc.type} (${extractedDoc.pageCount} pages)`,
+                                fileName: extractedDoc.description || `Extracted ${extractedDoc.type} (${extractedDoc.pageCount} pages)`,
                                 fileUrl: docFileUrl,
                                 fileSize: docBuffer.length,
                                 mimeType: 'application/pdf',
                                 extractedData: extractedDoc.type === 'ID' ? JSON.stringify(extraction.analysis.id) :
                                     extractedDoc.type === 'POA' ? JSON.stringify(extraction.analysis.poa) :
-                                        extractedDoc.type === 'CREDIT_REPORT' ? JSON.stringify(extraction.analysis.creditReport) : null,
+                                        extractedDoc.type === 'CREDIT_REPORT' || extractedDoc.type === 'CREDIT_REPORT_OTHER' ? JSON.stringify(extraction.analysis.creditReport) : null,
                                 analyzedAt: new Date(),
                                 uploadedById: session?.user?.id || null, // Track who uploaded the document
                             }
@@ -294,35 +299,38 @@ export async function POST(request: Request) {
 
                 try {
                     // Analyze each document separately with its own type-specific prompt
-                    // (batchAnalyzeDocuments processes one at a time: ID → POA → Credit Report → Payslip → Bank Statement)
-                    logger.info('🤖 Step 2: Analysing each document separately for maximum accuracy...');
-                    const analysisResults = await batchAnalyzeDocuments(
-                        documentsToAnalyze.map(d => ({ base64: d.base64, type: d.type, mimeType: d.mimeType }))
-                    );
-
-                    logger.info('✅ AI Per-Document Analysis Results:', JSON.stringify(analysisResults, null, 2));
-                    extractedData = analysisResults;
-
-                    // Save extracted data back to each document record
                     for (const doc of documentsToAnalyze) {
-                        const data = doc.type === 'ID' ? analysisResults.id
-                            : doc.type === 'POA' ? analysisResults.poa
-                            : doc.type === 'CREDIT_REPORT' ? analysisResults.creditReport
-                            : doc.type === 'PAYSLIP' ? analysisResults.payslip
-                            : doc.type === 'BANK_STATEMENT' ? analysisResults.bankStatement
-                            : null;
+                        try {
+                            logger.info(`🤖 Analyzing ${doc.type}...`);
+                            const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType);
+                            const data = extracted.data;
+                            
+                            // Re-assign refined type if identified
+                            const finalType = extracted.identifiedType || doc.type;
+                            const finalName = extracted.bureauName || doc.type;
 
-                        if (data) {
-                            logger.info(`💾 Saving extracted data for ${doc.type}`);
-                            await prisma.document.update({
-                                where: { id: doc.docId },
-                                data: {
-                                    extractedData: JSON.stringify(data),
-                                    analyzedAt: new Date()
-                                }
-                            });
-                        } else {
-                            logger.warn(`⚠️  No data extracted for ${doc.type}`);
+                            if (data) {
+                                logger.info(`💾 Saving extracted data for ${finalType} (${finalName})`);
+                                await prisma.document.update({
+                                    where: { id: doc.docId },
+                                    data: {
+                                        extractedData: JSON.stringify(data),
+                                        analyzedAt: new Date(),
+                                        type: finalType,
+                                        fileName: finalName !== doc.type ? finalName : undefined
+                                    }
+                                });
+
+                                // Add to overall extractedData for response
+                                if (finalType === 'ID') extractedData.id = data;
+                                else if (finalType === 'POA') extractedData.poa = data;
+                                else if (finalType === 'CREDIT_REPORT' || finalType === 'CREDIT_REPORT_OTHER') extractedData.creditReport = data;
+                                else if (finalType === 'PAYSLIP') extractedData.payslip = data;
+                                else if (finalType === 'BANK_STATEMENT') extractedData.bankStatement = data;
+                                else if (finalType === 'PROOF_OF_RESIDENCE') extractedData.proofOfResidence = data;
+                            }
+                        } catch (docError) {
+                            logger.error({ err: docError, type: doc.type }, `❌ Failed to analyze individual document`);
                         }
                     }
                 } catch (aiError) {
