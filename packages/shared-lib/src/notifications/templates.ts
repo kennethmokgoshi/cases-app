@@ -62,26 +62,33 @@ If you no longer wish to receive these emails you may unsubscribe`,
         sendToClient: true,
         sendToPartner: true,
         isUrgent: false },
-    // B2C Welcome - Simple (client already knows Zenowethu)
+    // B2C Welcome - Personal introduction from Zenowethu
     {
         statusCode: 'NEW_LEAD',
         statusName: 'New Lead',
         smsTemplate: 'Hi {clientName}, your credit repair file ({fileNumber}) has been received by {companyName}. We will contact you shortly.',
-        emailSubject: 'Welcome to {companyName} - File #{fileNumber} Received',
+        emailSubject: 'Welcome to {companyName} - Application Received',
         emailTemplate: `Dear {clientName},
 
-Thank you for choosing {companyName} for your credit repair journey.
+Hi, my name is {virtualAssistantName} from {companyName}.
 
-Your file has been successfully created:
-• File Number: {fileNumber}
+Thank you for reaching out to us. I am pleased to confirm that your application for **{services}** has been successfully received and your file has been created.
+
+**Your File Details:**
+• Reference Number: {fileNumber}
+• Service Requested: {services}
 • Status: Application Received
 
-Our team will review your documents and contact you within 24-48 hours.
+Our team is now reviewing your file and will be in touch with you directly within 24-48 hours. If any additional information is required, we will contact you.
 
-If you have any questions, please contact us at {phone}.
+If you have any immediate questions in the meantime, please do not hesitate to reach out to us at {phone}.
 
-Kind regards,
-{companyName} Team`,
+Kind Regards,
+{virtualAssistantName}
+{companyName}
+
+
+If you no longer wish to receive these emails you may unsubscribe`,
         sendToClient: true,
         sendToPartner: false,
         isUrgent: false },
