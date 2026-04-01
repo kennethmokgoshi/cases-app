@@ -506,6 +506,7 @@ export async function PATCH(
             data: caseUpdateData,
             include: {
                 client: true,
+                createdBy: { select: { firstName: true, lastName: true } },
                 projects: {
                     include: {
                         project: true
@@ -670,6 +671,9 @@ export async function PATCH(
             });
             if (!existingNotification) {
                 const notifSource = updatedCase.partnerName || 'Zenowethu Debt Management';
+                const creatorName = updatedCase.createdBy
+                    ? `${updatedCase.createdBy.firstName} ${updatedCase.createdBy.lastName}`
+                    : 'Zenowethu Team';
                 sendStatusChangeNotification({
                     caseId: updatedCase.id,
                     clientName: `${updatedCase.client.firstName} ${updatedCase.client.lastName}`,
@@ -679,9 +683,10 @@ export async function PATCH(
                     fileNumber: updatedCase.fileNumber,
                     statusCode: 'NEW_LEAD',
                     partnerName: updatedCase.partnerName,
+                    partnerUserName: creatorName,
                     isB2B: updatedCase.acquisitionType === 'B2B',
                     mainSource: notifSource,
-                    senderName: updatedCase.acquisitionType === 'B2B' ? `${notifSource} (via Zenowethu)` : 'Zenowethu Debt Management',
+                    senderName: creatorName,
                     senderEmail: 'updates@zenowethu.co.za'
                 }).then(result => {
                     logger.info(`Welcome notification sent (PATCH) for ${updatedCase.fileNumber}: Email=${result.emailSuccess}, SMS=${result.smsSuccess}`);

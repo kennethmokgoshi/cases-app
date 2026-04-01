@@ -70,7 +70,7 @@ If you no longer wish to receive these emails you may unsubscribe`,
         emailSubject: 'Welcome to {companyName} - Application Received',
         emailTemplate: `Dear {clientName},
 
-Hi, my name is {virtualAssistantName} from {companyName}.
+Hi, my name is {partnerUserName} from {companyName}.
 
 Thank you for reaching out to us. I am pleased to confirm that your application for **{services}** has been successfully received and your file has been created.
 
@@ -84,7 +84,7 @@ Our team is now reviewing your file and will be in touch with you directly withi
 If you have any immediate questions in the meantime, please do not hesitate to reach out to us at {phone}.
 
 Kind Regards,
-{virtualAssistantName}
+{partnerUserName}
 {companyName}
 
 

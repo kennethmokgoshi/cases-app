@@ -490,11 +490,11 @@ export async function POST(request: Request) {
                 fileNumber: newCase.fileNumber,
                 statusCode: 'NEW_LEAD',
                 partnerName: newCase.partnerName,
-                partnerUserName: (newCase.acquisitionType === 'B2B' && newCase.createdBy) ? `${newCase.createdBy.firstName} ${newCase.createdBy.lastName}` : (newCase.createdBy?.name || 'Partner'),
+                partnerUserName: newCase.createdBy ? `${newCase.createdBy.firstName} ${newCase.createdBy.lastName}` : 'Zenowethu Team',
                 isB2B: newCase.acquisitionType === 'B2B',
                 services: servicesText,
                 mainSource: mainSource,
-                senderName: (newCase.acquisitionType === 'B2B') ? `${mainSource} (via Zenowethu)` : 'Zenowethu Debt Management',
+                senderName: newCase.createdBy ? `${newCase.createdBy.firstName} ${newCase.createdBy.lastName}` : 'Zenowethu Team',
                 senderEmail: 'updates@zenowethu.co.za' }).then(result => {
                 if (result.errors.length > 0) {
                     logger.warn(`⚠️ Welcome notification errors for ${newCase.id}:`, result.errors);
