@@ -69,7 +69,7 @@ export function B2BSidebar() {
                 .catch(err => logger.error('Failed to fetch cases for timeline:', err));
 
             // Fetch projects for source view
-            fetch('/api/projects?flat=true')
+            fetch('/api/projects?flat=true&slim=true')
                 .then(res => res.json())
                 .then(data => {
                     if (Array.isArray(data)) {
