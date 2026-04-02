@@ -169,9 +169,16 @@ export async function POST(request: Request) {
                 try {
                     logger.info('🔍 Performing detailed individual analysis on Credit Report...');
                     // Analyze specifically as a Credit Report
-                    const analysis = await analyzeDocument(extractedDoc.base64Pdf, 'CREDIT_REPORT', 'application/pdf');
+                    const result = await analyzeDocument(extractedDoc.base64Pdf, 'CREDIT_REPORT', 'application/pdf');
+                    const analysis = result.data;
+                    
                     // Merge including the important counts
                     extractedData = { ...extractedData, ...analysis };
+
+                    // Re-assign refined type/name if identified
+                    if (result.identifiedType) extractedDoc.type = result.identifiedType;
+                    if (result.bureauName) extractedDoc.description = result.bureauName;
+
                     logger.info(`✅ Detailed analysis complete. Found ${analysis.totalAccounts || 0} accounts.`);
                 } catch (err) {
                     logger.error('⚠️ Detailed extraction failed, falling back to combined summary:', err);

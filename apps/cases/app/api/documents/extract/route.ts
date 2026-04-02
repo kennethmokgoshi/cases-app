@@ -202,8 +202,13 @@ export async function POST(request: Request) {
                             try {
                                 logger.info('🔍 Performing detailed individual analysis on Credit Report...');
                                 onProgress('🔍 Analyzing Credit Report details...', saveProgress);
-                                const analysis = await analyzeDocument(extractedDoc.base64Pdf, 'CREDIT_REPORT', 'application/pdf');
+                                const result = await analyzeDocument(extractedDoc.base64Pdf, 'CREDIT_REPORT', 'application/pdf');
+                                const analysis = result.data;
                                 extractedData = { ...extractedData, ...analysis };
+
+                                // Re-assign refined type/name if identified
+                                if (result.identifiedType) extractedDoc.type = result.identifiedType;
+                                if (result.bureauName) extractedDoc.description = result.bureauName;
                             } catch (err) {
                                 logger.error('⚠️ Detailed extraction failed:', err);
                                 if (extraction.analysis.creditReport) {

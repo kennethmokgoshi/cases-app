@@ -90,11 +90,22 @@ export async function POST(
 
             // MERGE: Use Detailed accounts, but FORCE Summary totals
             analysis = {
-                ...detailedAnalysis,
-                ...summaryAnalysis, // Overwrite totals with the trusted summary
-                accounts: detailedAnalysis.accounts, // Keep the detailed list
-                insuranceNotes: detailedAnalysis.insuranceNotes
+                ...detailedAnalysis.data,
+                ...summaryAnalysis.data, // Overwrite totals with the trusted summary
+                accounts: detailedAnalysis.data.accounts, // Keep the detailed list
+                insuranceNotes: detailedAnalysis.data.insuranceNotes
             };
+
+            // Update identification if changed
+            if (detailedAnalysis.identifiedType || detailedAnalysis.bureauName) {
+                await prisma.document.update({
+                    where: { id: documentId },
+                    data: {
+                        type: detailedAnalysis.identifiedType || undefined,
+                        fileName: detailedAnalysis.bureauName || undefined
+                    }
+                });
+            }
 
             // If manually edited, override counts and limit accounts array
             if (manuallyEditedData) {
@@ -121,7 +132,18 @@ export async function POST(
 
         } else {
             // Standard single-pass for other docs
-            analysis = await analyzeDocument(base64File, docType as any, document.mimeType);
+            const result = await analyzeDocument(base64File, docType as any, document.mimeType);
+            analysis = result.data;
+            
+            if (result.identifiedType || result.bureauName) {
+                await prisma.document.update({
+                    where: { id: documentId },
+                    data: {
+                        type: result.identifiedType || undefined,
+                        fileName: result.bureauName || undefined
+                    }
+                });
+            }
         }
 
         // 5. Update Database

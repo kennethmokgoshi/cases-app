@@ -36,7 +36,7 @@ const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED === 'true';
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true';
 
 const COMPANY_NAME = process.env.COMPANY_NAME || 'Zenowethu Debt Management';
-const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 345 6789';
+const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 035 1824';
 const VIRTUAL_ASSISTANT_NAME = process.env.VIRTUAL_ASSISTANT_NAME || 'Thandi';
 
 // Initialize providers based on configuration

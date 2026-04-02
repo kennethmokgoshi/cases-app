@@ -110,10 +110,10 @@ async function notifyAdminsNewFile(params: {
         const caseUrl = `${appUrl}/cases/${caseId}`;
 
         for (const admin of emailAdmins) {
-            await emailProvider.send({
-                to: admin.email!,
-                subject: `XDS Alert: New File Created — ${consumerName} (${fileNumber})`,
-                html: `
+            await emailProvider.send(
+                admin.email!,
+                `XDS Alert: New File Created — ${consumerName} (${fileNumber})`,
+                `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                         <h2 style="color: #1a56db;">New Case File Created from XDS Credit Report</h2>
                         <p>Hello ${admin.firstName},</p>
@@ -141,8 +141,8 @@ async function notifyAdminsNewFile(params: {
                         </p>
                     </div>
                 `,
-                text: `New Case File Created\n\nConsumer: ${consumerName}${idNumber ? `\nID: ${idNumber}` : ''}\nFile Number: ${fileNumber}\nView: ${caseUrl}`,
-            });
+                `New Case File Created\n\nConsumer: ${consumerName}${idNumber ? `\nID: ${idNumber}` : ''}\nFile Number: ${fileNumber}\nView: ${caseUrl}`
+            );
         }
 
         logger.info(`[XDS] Email notifications sent to ${emailAdmins.length} admin(s)`);

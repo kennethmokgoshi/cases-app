@@ -196,8 +196,13 @@ export async function POST(request: Request) {
                     // Detailed individual analysis
                     if (extractedDoc.type === 'CREDIT_REPORT') {
                         try {
-                            const analysis = await analyzeDocument(extractedDoc.base64Pdf, 'CREDIT_REPORT', 'application/pdf');
+                            const result = await analyzeDocument(extractedDoc.base64Pdf, 'CREDIT_REPORT', 'application/pdf');
+                            const analysis = result.data;
                             extractedData = { ...extractedData, ...analysis };
+                            
+                            // Re-assign refined type/name if identified
+                            if (result.identifiedType) extractedDoc.type = result.identifiedType;
+                            if (result.bureauName) extractedDoc.description = result.bureauName;
                         } catch (err) {
                             if (extraction.analysis.creditReport) extractedData = { ...extractedData, ...extraction.analysis.creditReport };
                         }
@@ -226,7 +231,8 @@ export async function POST(request: Request) {
 
         } else if (['ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA'].includes(document.type)) {
             logger.info(`🔍 Re-analyzing single ${document.type}...`);
-            const analysis = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf');
+            const result = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf');
+            const analysis = result.data;
 
             const updatedData = {
                 ...(document.extractedData ? JSON.parse(document.extractedData as string) : {}),
@@ -236,7 +242,12 @@ export async function POST(request: Request) {
 
             await prisma.document.update({
                 where: { id: document.id },
-                data: { extractedData: JSON.stringify(updatedData), analyzedAt: new Date() }
+                data: { 
+                    extractedData: JSON.stringify(updatedData), 
+                    analyzedAt: new Date(),
+                    type: result.identifiedType || undefined,
+                    fileName: result.bureauName || undefined
+                }
             });
 
             fullAnalysis = {};
