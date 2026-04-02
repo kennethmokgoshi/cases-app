@@ -1,11 +1,14 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-03-25 (Phase 4: Debt Review document workflow complete — 3 new API routes + DebtReviewTab UI + 20 new tests, 151 total)
+> Last updated: 2026-04-02 (Bug fix: case search dropdown returning no results for case-insensitive name matches)
 
 ---
 
 ## ✅ Completed
+
+### Bug Fix — Case Search Case-Sensitivity (2026-04-02)
+- [x] **`/api/cases/search`** — Added `mode: 'insensitive'` to all Prisma `contains` filters (fileNumber, firstName, lastName, idNumber, phone, email). Previously, searching "dikili" would not match "MASITHEMBE DIKILI" because PostgreSQL's default collation is case-sensitive. The fix makes the search dropdown consistent with the table's client-side filtering.
 
 ### Phase 4 — Debt Review Document Workflow (2026-03-25)
 - [x] **`PATCH /api/cases/[id]/debt-review/[docId]/approve`** — Staff approval endpoint. Requires ADMIN, EXECUTIVE, SENIOR_MANAGER, or MANAGER role. Validates document exists, has a fileUrl, is not already approved. Sets `status=APPROVED`, `approvedById`, `approvedAt`. Returns updated document with approver name.

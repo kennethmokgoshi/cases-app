@@ -49,7 +49,7 @@ Zenowethu provides specialized credit repair services and will be handling your 
 
 The Zenowethu team has received your file and is currently reviewing it. They will contact you directly within 7 working days if any further information is required.
 
-If you have any immediate questions, you may contact them at 012 345 6789.
+If you have any immediate questions, you may contact them at 012 035 1824.
 
 Kind Regards,
 {partnerUserName}

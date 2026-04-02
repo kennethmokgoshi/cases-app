@@ -230,7 +230,8 @@ export async function POST(request: Request) {
 
         } else if (['ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA'].includes(document.type)) {
             logger.info(`🔍 Re-analyzing single ${document.type}...`);
-            const analysis = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf');
+            const result = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf');
+            const analysis = result.data;
 
             const updatedData = {
                 ...(document.extractedData ? JSON.parse(document.extractedData as string) : {}),

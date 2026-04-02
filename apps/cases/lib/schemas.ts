@@ -21,7 +21,8 @@ export const emailField = z
     .nullable();
 
 export const requiredEmailField = z
-    .string({ required_error: 'Email address is required' })
+    .string()
+    .min(1, 'Email address is required')
     .email('Invalid email address')
     .toLowerCase();
 

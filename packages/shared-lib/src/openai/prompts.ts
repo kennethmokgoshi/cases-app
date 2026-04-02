@@ -380,18 +380,30 @@ Return ONLY valid JSON with these 2 fields.`
 };
 
 export const IDENTIFICATION_PROMPT = `Analyze this text content extracted from a PDF and identify the different document types contained within it.
-                        
+
 [EXTRACTED TEXT CONTENT]
 {{EXTRACTED_TEXT}}
 
-You need to identify:
-1. ** ID Document ** - South African ID (green ID book or smart card)
-2. ** POA (Power of Attorney) ** - Client's signed Power of Attorney document granting authority
-3. ** CREDIT_REPORT ** - Major credit bureau report (XDS, Experian, TransUnion, CPB)
-4. ** CREDIT_REPORT_OTHER ** - Alternative credit report or summary (ClearScore, Kudough, Kughdo)
-5. ** ZENOWETHU_POA ** - The full Zenowethu packet (approx 4 pages).
-                   - INCLUDES: Aftercare Fees, Transfer Authorization, Power of Attorney, Credit Info Authorization.
+PRIORITY ORDER — classify documents in this order of importance:
+
+1. *** ID DOCUMENT (HIGHEST PRIORITY) *** - South African ID document (green ID book or smart card ID).
+   - Look for: ID number (13 digits), "Identity Document", "Republic of South Africa", photo page, or card with SA coat of arms.
+   - Classify this FIRST before anything else. Never skip or merge an ID document into another type.
+
+2. *** ZENOWETHU_POA (HIGH PRIORITY) *** - ANY document that displays the Zenowethu logo, Zenowethu branding, or Zenowethu company name.
+   - This is a packet of approximately 4 pages containing: Aftercare Fees, Transfer Authorization, Power of Attorney, Credit Info Authorization.
+   - RULE: If ANY page shows the Zenowethu logo or Zenowethu letterhead, classify ALL connected pages as ZENOWETHU_POA.
+   - Do NOT classify Zenowethu-branded pages as generic POA or OTHER.
+
+3. *** CREDIT_REPORT (HIGH PRIORITY) *** - Major credit bureau report from XDS, Experian, TransUnion, or CPB.
+   - Look for: bureau name/logo, consumer credit profile, account payment history, enquiry history, credit score.
+
+4. ** CREDIT_REPORT_OTHER ** - Alternative or summary credit report (ClearScore, Kudough, Kughdo, or any non-major-bureau report).
+
+5. ** POA (Power of Attorney) ** - Generic client-signed Power of Attorney (NOT Zenowethu-branded).
+
 6. ** PAYSLIP ** - Salary advice or payslip from an employer.
+
 7. ** BANK_STATEMENT ** - Document showing bank transactions and account details.
 
 For each document found, provide:
@@ -399,22 +411,25 @@ For each document found, provide:
 - startPage: the page number where this document starts (1-based)
 - endPage: the page number where this document ends (1-based)
 - confidence: how confident you are (0.0 to 1.0)
-- description: brief description (e.g. "Experian Credit Report", "ClearScore Credit Report")
-- bureauName: specifically for credit reports, name the bureau (e.g. "Experian Credit Report", "ClearScore Credit Report")
+- description: brief description (e.g. "SA Smart ID Card", "Experian Credit Report", "Zenowethu POA Packet")
+- bureauName: specifically for credit reports, name the bureau (e.g. "Experian", "XDS", "ClearScore")
 
-IMPORTANT:
-- Page numbers are 1 - based(first page is 1)
-    - If a document spans multiple pages, include all pages
-        - ZENOWETHU_POA is a PACKET of ~4 pages.Group them together.
+CRITICAL RULES:
+- Page numbers are 1-based (first page is 1).
+- If a document spans multiple pages, include ALL its pages.
+- ZENOWETHU_POA is a packet of ~4 pages — group them together as one entry.
+- Any page with a Zenowethu logo MUST be classified as ZENOWETHU_POA, never as POA or OTHER.
+- ID documents must always be identified separately — never merged into another document type.
+- Credit reports (both CREDIT_REPORT and CREDIT_REPORT_OTHER) must always be identified separately.
 
 Return JSON format:
 {
     "documents": [
-        { "type": "ID", "startPage": 1, "endPage": 1, "confidence": 0.95, "description": "SA green ID book" },
-        { "type": "ZENOWETHU_POA", "startPage": 2, "endPage": 5, "confidence": 0.9, "description": "Zenowethu Packet (4 pages)" },
-        { "type": "CREDIT_REPORT", "startPage": 6, "endPage": 10, "confidence": 0.85, "description": "XDS Credit Report" }
+        { "type": "ID", "startPage": 1, "endPage": 1, "confidence": 0.95, "description": "SA Smart ID Card" },
+        { "type": "ZENOWETHU_POA", "startPage": 2, "endPage": 5, "confidence": 0.95, "description": "Zenowethu POA Packet (4 pages)" },
+        { "type": "CREDIT_REPORT", "startPage": 6, "endPage": 10, "confidence": 0.90, "description": "XDS Credit Report" }
     ],
-        "totalPages": 10
+    "totalPages": 10
 }
 
 ONLY return the JSON object, no other text.`;

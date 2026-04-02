@@ -23,12 +23,12 @@ export async function GET(request: Request) {
         const cases = await prisma.case.findMany({
             where: {
                 OR: [
-                    { fileNumber: { contains: query } }, // Case insensitive usually depends on DB collation
-                    { client: { firstName: { contains: query } } },
-                    { client: { lastName: { contains: query } } },
-                    { client: { idNumber: { contains: query } } },
-                    { client: { phone: { contains: query } } },
-                    { client: { email: { contains: query } } },
+                    { fileNumber: { contains: query, mode: 'insensitive' } },
+                    { client: { firstName: { contains: query, mode: 'insensitive' } } },
+                    { client: { lastName: { contains: query, mode: 'insensitive' } } },
+                    { client: { idNumber: { contains: query, mode: 'insensitive' } } },
+                    { client: { phone: { contains: query, mode: 'insensitive' } } },
+                    { client: { email: { contains: query, mode: 'insensitive' } } },
                 ]
             },
             take: 10,
