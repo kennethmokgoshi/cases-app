@@ -21,6 +21,7 @@ import { auth, createLogger, runXdsSync } from '@zenowethu/shared-lib';
 import { z } from 'zod';
 
 const logger = createLogger('api/admin/xds/sync');
+export const runtime = 'nodejs';
 
 // Max duration: 10 minutes (XDS portal + PDF downloads can be slow)
 export const maxDuration = 600;

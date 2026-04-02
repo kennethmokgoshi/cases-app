@@ -8,6 +8,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 
 const logger = createLogger('api/documents/[id]/analyze');
+export const runtime = 'nodejs';
 
 export async function POST(
     request: Request,
@@ -49,10 +50,10 @@ export async function POST(
         // 3. Resolve File Path
         let filePath = '';
         if (document.fileUrl.startsWith('/uploads/')) {
-            filePath = join(process.cwd(), 'storage', 'uploads', document.fileUrl.replace('/uploads/', ''));
+            filePath = join('storage', 'uploads', document.fileUrl.replace('/uploads/', ''));
         } else {
             const relativePath = document.fileUrl.startsWith('/') ? document.fileUrl.slice(1) : document.fileUrl;
-            filePath = join(process.cwd(), 'public', relativePath);
+            filePath = join('public', relativePath);
         }
 
         // 4. Read File

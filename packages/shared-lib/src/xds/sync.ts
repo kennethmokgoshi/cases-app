@@ -163,7 +163,7 @@ async function savePdfToDisk(
     // In production the app's CWD is /app (inside Docker), storage mounts at /storage
     const storageDirs = [
         join('/storage', 'uploads', caseId),
-        join(process.cwd(), 'storage', 'uploads', caseId),
+        join('storage', 'uploads', caseId),
     ];
 
     let uploadsDir = storageDirs[1]; // default
