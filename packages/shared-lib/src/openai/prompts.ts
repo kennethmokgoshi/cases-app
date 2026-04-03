@@ -224,8 +224,8 @@ CRITICAL: Use the specific sections below to extract data.
    - Scan the report for OPEN/ACTIVE/ARREARS accounts.
    - Extract details for each.
    - For each account, also extract the 24-month payment history code string if available.
-     Payment codes: C=Current, 0=No data, 1-9=Months in arrears, ?=Unknown/data gap.
-   - Extract the last payment date for each account if available.
+   - **INSURANCE AUDIT**: Extract the "Insurance", "Credit Life", or "Monthly Fee" specifically related to the account if visible.
+   - **SAVINGS METRICS**: Extract the **"Contract Start Date"** and **"Contract Term"** (e.g., 72 months) or "Months Remaining".
 
 8. **ENQUIRY HISTORY**
    - Look for "Enquiries", "Credit Enquiries", or "Search History" section.
@@ -272,6 +272,10 @@ Output JSON:
       "accountNumber": "string",
       "balance": number,
       "installment": number,
+      "insurancePremium": number,
+      "contractStart": "string (YYYY-MM-DD)",
+      "contractTerm": number (Total months),
+      "remainingMonths": number (Months remaining),
       "arrearsAmount": number,
       "status": "string",
       "paymentHistory": "string (24-month code string e.g. CCCCCC000122C, or NA if not found)",

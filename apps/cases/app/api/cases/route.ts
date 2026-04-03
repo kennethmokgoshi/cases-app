@@ -9,7 +9,9 @@ const logger = createLogger('api/cases');
 export async function GET(request: Request) {
     try {
         const session = await auth();
+        console.log(`[API] GET /api/cases entry - User: ${session?.user?.id}, Role: ${session?.user?.role}`);
         if (!session?.user) {
+            console.log('[API] Unauthorized - No session user');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -53,6 +55,7 @@ export async function GET(request: Request) {
 
         const status = searchParams.get('status');
         const projectId = searchParams.get('projectId');
+        const service = searchParams.get('service');
         const filter = searchParams.get('filter');
         const createdBy = searchParams.get('createdBy');
         const assignedTo = searchParams.get('assignedTo');
@@ -106,16 +109,34 @@ export async function GET(request: Request) {
 
         // Apply filters
         if (status) {
-            where.status = status;
+            if (status.includes(',')) {
+                where.status = { in: status.split(',').map(s => s.trim()) };
+            } else {
+                where.status = status;
+            }
+        }
+
+        const category = searchParams.get('category');
+        if (category && category !== 'ALL') {
+            where.category = category;
+        }
+ 
+        if (service && service !== 'ALL') {
+            where.services = { contains: '"' + service + '"' };
         }
 
         if (filter === 'overdue') {
             where.nextUpdate = { lt: new Date() };
             where.status = { notIn: ['COMPLETED', 'CLOSED', 'CANCELLED'] };
         } else if (filter === 'my-cases') {
-            where.createdById = session.user.id;
+            where.OR = [
+                { createdById: session.user.id },
+                { assignments: { some: { userId: session.user.id } } }
+            ];
         } else if (filter === 'assigned') {
-            where.assignedToId = session.user.id;
+            where.assignments = { some: { userId: session.user.id } };
+        } else if (filter === 'new-leads') {
+            where.status = 'NEW_LEAD';
         }
 
         if (createdBy) {
@@ -145,6 +166,8 @@ export async function GET(request: Request) {
             ];
         }
 
+        console.log(`[API] Final GET Where Clause: ${JSON.stringify(where)}`);
+
         // Slim mode: sidebar only needs id + createdAt for timeline grouping
         if (slim) {
             const slimCases = await prisma.case.findMany({
@@ -157,22 +180,65 @@ export async function GET(request: Request) {
             return NextResponse.json(slimCases);
         }
 
-        const cases = await prisma.case.findMany({
-            where,
-            include: {
-                client: true,
-                projects: {
-                    include: {
-                        project: true
+        let cases: any[] = [];
+        try {
+            cases = await prisma.case.findMany({
+                where,
+                include: {
+                    client: true,
+                    assignments: {
+                        include: {
+                            user: {
+                                select: {
+                                    id: true,
+                                    firstName: true,
+                                    lastName: true,
+                                    email: true,
+                                    avatarUrl: true
+                                }
+                            }
+                        }
+                    },
+                    projects: {
+                        include: {
+                            project: true
+                        }
                     }
+                },
+                take,
+                skip,
+                orderBy: {
+                    updatedAt: 'desc'
                 }
-            },
-            take,
-            skip,
-            orderBy: {
-                updatedAt: 'desc'
+            });
+        } catch (initialError) {
+            console.error('[API] Failed with assignments include or where, retrying without:', initialError);
+            
+            // Clean 'assignments' from where if it exists
+            const fallbackWhere = { ...where };
+            if (fallbackWhere.OR) {
+                fallbackWhere.OR = fallbackWhere.OR.filter((clause: any) => !clause.assignments);
+                if (fallbackWhere.OR.length === 0) delete fallbackWhere.OR;
             }
-        });
+            if (fallbackWhere.assignments) delete fallbackWhere.assignments;
+
+            cases = await prisma.case.findMany({
+                where: fallbackWhere,
+                include: {
+                    client: true,
+                    projects: {
+                        include: {
+                            project: true
+                        }
+                    }
+                },
+                take,
+                skip,
+                orderBy: {
+                    updatedAt: 'desc'
+                }
+            });
+        }
 
 
 
@@ -181,7 +247,10 @@ export async function GET(request: Request) {
             if (!curr) return '';
 
             const pathParts: { name: string; type: string }[] = [];
-            while (curr) {
+            const visited = new Set<string>(); // Cycle detection
+
+            while (curr && !visited.has(curr.id)) {
+                visited.add(curr.id);
                 if (curr.type !== 'ROOT') {
                     pathParts.unshift({ name: curr.name, type: curr.type });
                 }
@@ -225,9 +294,9 @@ export async function GET(request: Request) {
                 .join(' ');
         };
 
-        const enrichedCases = cases.map(c => ({
+        const enrichedCases = cases.map((c: any) => ({
             ...c,
-            projects: c.projects.map(cp => ({
+            projects: (c.projects || []).map((cp: any) => ({
                 ...cp,
                 project: {
                     ...cp.project,
@@ -236,6 +305,7 @@ export async function GET(request: Request) {
             }))
         }));
 
+        console.log(`[API] Cases found: ${cases.length}, Enriched: ${enrichedCases.length}, IsArray: ${Array.isArray(enrichedCases)}`);
         return NextResponse.json(enrichedCases);
     } catch (error: any) {
         logger.error('Error fetching cases:', error);
@@ -371,6 +441,9 @@ export async function POST(request: Request) {
                                     isPrimary: false
                                 }))
                             ]
+                        },
+                        assignments: {
+                            create: currentUserId ? [{ userId: currentUserId }] : []
                         },
                         workflowLogs: {
                             create: [

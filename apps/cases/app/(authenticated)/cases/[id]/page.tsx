@@ -18,6 +18,8 @@ import { CompareAnalysisModal } from '@zenowethu/ui';
 import { RichTextEditor } from '@zenowethu/ui';
 import { AIPlanTab } from '@zenowethu/ui';
 import { DebtReviewTab } from './DebtReviewTab';
+import { SavingsAuditCard } from './SavingsAuditCard';
+import { SavingsAuditResult } from '@zenowethu/shared-lib';
 
 // Client-side logger (avoid importing createLogger from shared-lib)
 const createLogger = (name: string) => ({
@@ -86,6 +88,7 @@ type CaseDetail = {
     createdAt: string;
     updatedAt: string;
     nextUpdate: string | null;
+    category: string;
 
     // Tasks & Issues
     todos: string | null; // JSON
@@ -138,6 +141,17 @@ type CaseDetail = {
         extractedData: string | null;
         uploadedAt: string;
     }>;
+    assignments?: Array<{
+        userId: string;
+        user: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            email: string;
+            avatarUrl: string | null;
+        };
+    }>;
+    savingsAudit?: SavingsAuditResult | null;
 };
 
 type NotificationEntry = {
@@ -190,6 +204,7 @@ type EditFormData = {
     cb_status: string;
     cb_statusDate: string;
     idNumber: string;
+    category: string;
 };
 
 export default function CaseDetailPage() {
@@ -223,6 +238,7 @@ export default function CaseDetailPage() {
     const [isEditingDhs, setIsEditingDhs] = useState(false);
     const [isEditingNct, setIsEditingNct] = useState(false);
     const [isEditingCreditInfo, setIsEditingCreditInfo] = useState(false);
+    const [isReferring, setIsReferring] = useState(false);
     const [editForm, setEditForm] = useState<EditFormData>({
         firstName: '',
         lastName: '',
@@ -257,7 +273,8 @@ export default function CaseDetailPage() {
         cb_applicationDate: '',
         cb_status: '',
         cb_statusDate: '',
-        idNumber: ''
+        idNumber: '',
+        category: ''
     });
 
     const [mounted, setMounted] = useState(false);
@@ -272,6 +289,7 @@ export default function CaseDetailPage() {
     const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
     const [isEditServicesOpen, setIsEditServicesOpen] = useState(false);
+    const [isManageAssignmentsOpen, setIsManageAssignmentsOpen] = useState(false);
     const [showCompareModal, setShowCompareModal] = useState(false);
     const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN' | 'DEBT_REVIEW'>('ACTIVITY');
 
@@ -349,6 +367,26 @@ export default function CaseDetailPage() {
         fetchCase();
     }, [fetchCase]);
 
+    const handleUpdateAssignments = async (userIds: string[]) => {
+        try {
+            const response = await fetch(`/api/cases/${params.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignments: userIds })
+            });
+
+            if (!response.ok) throw new Error('Failed to update assignments');
+
+            const updatedCase = await response.json();
+            setCaseData(updatedCase);
+            setIsManageAssignmentsOpen(false);
+            setActivityUpdate(prev => prev + 1);
+        } catch (error) {
+            log.error({ err: error }, 'Error updating assignments:', error);
+            alert('Failed to update assignments');
+        }
+    };
+
     const handleSaveServices = async (selectedServices: string[]) => {
         try {
             const response = await fetch(`/api/cases/${params.id}`, {
@@ -397,6 +435,44 @@ export default function CaseDetailPage() {
             log.error({ err: error }, 'Failed to refresh case', error);
         }
     };
+ 
+    // Auto-calculate Fee based on Category & Partner
+    useEffect(() => {
+        if (!isEditing || !caseData?.services) return;
+ 
+        try {
+            const services = JSON.parse(caseData.services) as string[];
+            const isDebtRemoval = services.includes('debt_review_flag_removal');
+ 
+            if (isDebtRemoval) {
+                const isLetsatsi = (editForm.partnerName || '').toLowerCase().includes('letsatsi');
+                let suggestedFee = editForm.serviceFee;
+ 
+                switch (editForm.category) {
+                    case 'Non-Payroll Single':
+                        suggestedFee = '5500';
+                        break;
+                    case 'Non-Payroll Joint':
+                        suggestedFee = '8500';
+                        break;
+                    case 'Payroll Single':
+                        suggestedFee = isLetsatsi ? '4950' : '5500';
+                        break;
+                    case 'Payroll Joint':
+                        suggestedFee = '8500';
+                        break;
+                }
+ 
+                // Only update if current fee is different, but respect user manual entry
+                // Actually, if category changes, we should probably update it automatically
+                if (suggestedFee !== editForm.serviceFee) {
+                    setEditForm(prev => ({ ...prev, serviceFee: suggestedFee }));
+                }
+            }
+        } catch (e) {
+            log.error('Error parsing services for fee calculation', e);
+        }
+    }, [editForm.category, editForm.partnerName, isEditing, caseData?.services, editForm.serviceFee]);
 
     const handleStatusChange = async (newStatus: string) => {
         if (!caseData) return;
@@ -660,7 +736,8 @@ export default function CaseDetailPage() {
             cb_applicationDate: caseData.cb_applicationDate || '',
             cb_status: caseData.cb_status || '',
             cb_statusDate: caseData.cb_statusDate || '',
-            idNumber: caseData.client.idNumber || ''
+            idNumber: caseData.client.idNumber || '',
+            category: caseData.category || ''
         });
         setIsEditing(true);
     };
@@ -1018,6 +1095,7 @@ export default function CaseDetailPage() {
                     partnerName: editForm.partnerName || null,
                     partnerBranch: editForm.partnerBranch || null,
                     partnerSplitPercent: editForm.partnerSplitPercent ? parseInt(editForm.partnerSplitPercent) : 0,
+                    category: editForm.category || null,
                     // DHS fields
                     ncrdcNo: editForm.ncrdcNo || null,
                     dhsStatus: editForm.dhsStatus || null,
@@ -1370,6 +1448,32 @@ export default function CaseDetailPage() {
 
 
 
+            {/* Savings Audit Widget - Hero Position */}
+            {caseData.savingsAudit && (
+                <div className="mb-8 animate-in fade-in slide-in-from-top duration-700">
+                    <SavingsAuditCard 
+                        data={caseData.savingsAudit} 
+                        isReferring={isReferring}
+                        onRefer={async () => {
+                            if (!confirm('This will submit a referral to DCCP to secure these savings. Continue?')) return;
+                            setIsReferring(true);
+                            try {
+                                const res = await fetch(`/api/cases/${params.id}/dccp-referral`, { method: 'POST' });
+                                if (res.ok) {
+                                    alert('Referral submitted successfully! DCCP will contact the client.');
+                                } else {
+                                    alert('Failed to submit referral.');
+                                }
+                            } catch (e) {
+                                alert('Connection error.');
+                            } finally {
+                                setIsReferring(false);
+                            }
+                        }}
+                    />
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column - Client Info & Projects */}
                 <div className="lg:col-span-1 space-y-6">
@@ -1419,14 +1523,31 @@ export default function CaseDetailPage() {
                                     <span className="text-xs text-gray-600 block mt-1">Partner gets {editForm.partnerSplitPercent || 0}%, Zenowethu gets {100 - (parseInt(editForm.partnerSplitPercent) || 0)}%</span>
                                 </div>
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase">Service Fee</label>
+                                    <label className="text-xs text-gray-500 uppercase">Category</label>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Case classification</p>
+                                    <select
+                                        value={editForm.category}
+                                        onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                                        className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                    >
+                                        <option value="">Select Category...</option>
+                                        <option value="Non-Payroll Single">Non-Payroll Single</option>
+                                        <option value="Non-Payroll Joint">Non-Payroll Joint</option>
+                                        <option value="Payroll Single">Payroll Single</option>
+                                        <option value="Payroll Joint">Payroll Joint</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 uppercase">
+                                        {(editForm.partnerName || '').toLowerCase().includes('letsatsi') ? 'Service Fee' : 'Quote'}
+                                    </label>
                                     <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Total fee charged</p>
                                     <input
                                         type="text"
                                         value={editForm.serviceFee}
                                         onChange={(e) => setEditForm({ ...editForm, serviceFee: e.target.value })}
                                         className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
-                                        placeholder="R 2,500.00"
+                                        placeholder="R 0.00"
                                     />
                                 </div>
                             </div>
@@ -1473,6 +1594,15 @@ export default function CaseDetailPage() {
                                         <p className="text-white">{caseData.partnerSplitPercent}-{100 - caseData.partnerSplitPercent} (Partner-Zenowethu)</p>
                                     </div>
                                 )}
+                                <div>
+                                    <span className="text-xs text-gray-500 uppercase">
+                                        {(caseData.partnerName || '').toLowerCase().includes('letsatsi') ? 'Service Fee' : 'Quote'}
+                                    </span>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Total Amount</p>
+                                    <p className="text-white font-semibold">
+                                        {caseData.serviceFee ? `R ${parseFloat(caseData.serviceFee).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R 0.00'}
+                                    </p>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1629,121 +1759,104 @@ export default function CaseDetailPage() {
                                 </>
                             )}
                             <div>
-                                <label className="text-xs text-gray-500 uppercase">Client Type</label>
-                                <p className="text-white">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${caseData.client.type === 'Payroll' ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'
-                                        }`}>
-                                        {caseData.client.type}
+                                <label className="text-xs text-gray-500 uppercase font-semibold text-zeno-cyan/70">Case Category</label>
+                                <p className="text-white mt-1">
+                                    <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold bg-zeno-cyan/10 text-zeno-cyan border border-zeno-cyan/30">
+                                        {caseData.category || 'Not Categorized'}
                                     </span>
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Projects */}
-                    <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6">
-                        <h3 className="text-lg font-semibold text-white mb-4">Linked Projects</h3>
-                        <div className="space-y-2">
-                            {primaryProject && (
-                                <div className="p-3 bg-zeno-cyan/10 border border-zeno-cyan/30 rounded-lg">
-                                    <span className="text-xs text-zeno-cyan font-semibold uppercase">Primary</span>
-                                    <div className="mt-1">
-                                        <Link
-                                            href={`/cases?projectId=${primaryProject.project.id}`}
-                                            className="text-white font-medium hover:text-zeno-cyan hover:underline transition-colors inline-flex items-center gap-2 group"
-                                            title="View all cases for this project"
-                                        >
-                                            {(primaryProject.project.fullPath || primaryProject.project.name).replace(/Referrals/i, '').trim()}
-                                            <svg className="w-3.5 h-3.5 text-gray-500 group-hover:text-zeno-cyan transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                            </svg>
-                                        </Link>
-                                    </div>
-                                    <div className="mt-3 pt-2 border-t border-zeno-cyan/20">
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-xs text-zeno-cyan/70 font-medium">Team Members</span>
+                    {/* Service Required - Replaces Projects */}
+                    <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-white">⚙️ Service Required</h3>
+                            <button
+                                onClick={() => setIsEditServicesOpen(true)}
+                                className="text-[10px] text-zeno-cyan hover:underline uppercase font-bold tracking-wider"
+                            >
+                                Edit Services
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            {(() => {
+                                try {
+                                    const services = caseData.services ? JSON.parse(caseData.services) : [];
+                                    if (services.length === 0) return <p className="text-sm text-gray-500 italic">No services selected</p>;
+                                    if (services.length === 1) {
+                                        const s = SERVICES_MAP.find(sm => sm.id === services[0]);
+                                        return (
+                                            <div className="p-3 bg-zeno-cyan/10 border border-zeno-cyan/30 rounded-lg">
+                                                <p className="text-white font-medium">{s?.name || services[0]}</p>
                                             </div>
-                                            <button
-                                                onClick={() => setViewingProjectMembers(primaryProject.project)}
-                                                className="text-[10px] text-zeno-cyan hover:underline uppercase font-bold tracking-wider"
-                                            >
-                                                Manage
-                                            </button>
-                                        </div>
-                                        <div className="mb-3">
-                                            <button
-                                                onClick={() => setIsMoveModalOpen(true)}
-                                                className="w-full py-1.5 bg-zeno-cyan/10 border border-zeno-cyan/30 rounded text-xs text-zeno-cyan hover:bg-zeno-cyan/20 transition-colors flex items-center justify-center gap-1.5"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                                                Move to Different Project
-                                            </button>
-                                        </div>
-                                        {primaryProject.project.members && primaryProject.project.members.length > 0 ? (
-                                            <div className="space-y-1">
-                                                {primaryProject.project.members.map((member) => (
-                                                    <div key={member.userId} className="flex items-center gap-2">
-                                                        <div
-                                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${member.role === 'MANAGER' ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30' : 'bg-zeno-cyan/20 text-zeno-cyan ring-1 ring-zeno-cyan/30'}`}
-                                                            title={member.role}
-                                                        >
-                                                            {member.user.firstName[0]}{member.user.lastName[0]}
-                                                        </div>
-                                                        <span className="text-xs text-gray-300">
-                                                            {member.user.firstName} {member.user.lastName}
-                                                        </span>
-                                                        {member.role === 'MANAGER' && <span className="text-[9px] text-amber-400 bg-amber-500/10 px-1 rounded border border-amber-500/20">Mgr</span>}
-                                                    </div>
-                                                ))}
+                                        );
+                                    }
+                                    return (
+                                        <div className="p-3 bg-zeno-cyan/10 border border-zeno-cyan/30 rounded-lg">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-white font-bold text-lg">2 or More</p>
+                                                <span className="px-2 py-0.5 bg-zeno-cyan text-zeno-navy text-[10px] font-bold rounded-full">
+                                                    {services.length} Total
+                                                </span>
                                             </div>
-                                        ) : (
-                                            <div className="text-xs text-gray-500 italic">No members assigned</div>
-                                        )}
+                                            <div className="mt-2 pt-2 border-t border-zeno-cyan/20 space-y-1">
+                                                {services.slice(0, 3).map((sid: string) => {
+                                                    const sm = SERVICES_MAP.find(s => s.id === sid);
+                                                    return (
+                                                        <p key={sid} className="text-[11px] text-gray-400">• {sm?.name || sid}</p>
+                                                    );
+                                                })}
+                                                {services.length > 3 && (
+                                                    <p className="text-[11px] text-zeno-cyan/60 italic">+{services.length - 3} more...</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                } catch (e) {
+                                    return <p className="text-sm text-red-400">Error parsing services</p>;
+                                }
+                            })()}
+                        </div>
+                    </div>
+
+                    {/* Case Team - New Section */}
+                    <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6 mt-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-white">Case Team</h3>
+                                <p className="text-[10px] text-gray-500 uppercase mt-0.5 tracking-wider">Specifically assigned users</p>
+                            </div>
+                            <button
+                                onClick={() => setIsManageAssignmentsOpen(true)}
+                                className="p-1.5 text-zeno-cyan hover:bg-zeno-cyan/10 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6-0H6" />
+                                </svg>
+                                Manage
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            {caseData.assignments && caseData.assignments.length > 0 ? (
+                                caseData.assignments.map((assignment) => (
+                                    <div key={assignment.userId} className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5 group hover:border-zeno-cyan/30 transition-all">
+                                        <div className="w-8 h-8 rounded-full bg-zeno-cyan/20 flex items-center justify-center text-zeno-cyan font-bold border border-zeno-cyan/30">
+                                            {assignment.user.firstName[0]}{assignment.user.lastName[0]}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-white truncate">{assignment.user.firstName} {assignment.user.lastName}</p>
+                                            <p className="text-[10px] text-gray-400 truncate">{assignment.user.email}</p>
+                                        </div>
                                     </div>
+                                ))
+                            ) : (
+                                <div className="text-center py-6 px-4 bg-white/5 rounded-lg border border-dashed border-white/10">
+                                    <p className="text-sm text-gray-500 italic mb-2">No users assigned to this case specifically.</p>
+                                    <p className="text-[10px] text-gray-600">Assigned users get priority access and notifications for this record.</p>
                                 </div>
                             )}
-                            {secondaryProjects.map((sp, i) => (
-                                <div key={i} className="p-3 bg-white/5 border border-white/10 rounded-lg">
-                                    <span className="text-xs text-gray-500 uppercase">Secondary</span>
-                                    <p className="text-white mt-1">
-                                        {(sp.project.fullPath || sp.project.name).replace(/Referrals/i, '').trim()}
-                                    </p>
-                                    <div className="mt-3 pt-2 border-t border-white/10">
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-xs text-gray-500 font-medium">Team Members</span>
-                                            </div>
-                                            <button
-                                                onClick={() => setViewingProjectMembers(sp.project)}
-                                                className="text-[10px] text-gray-500 hover:text-white hover:underline uppercase font-bold tracking-wider"
-                                            >
-                                                Manage
-                                            </button>
-                                        </div>
-                                        {sp.project.members && sp.project.members.length > 0 ? (
-                                            <div className="space-y-1">
-                                                {sp.project.members.map((member) => (
-                                                    <div key={member.userId} className="flex items-center gap-2">
-                                                        <div
-                                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${member.role === 'MANAGER' ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30' : 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30'}`}
-                                                            title={member.role}
-                                                        >
-                                                            {member.user.firstName[0]}{member.user.lastName[0]}
-                                                        </div>
-                                                        <span className="text-xs text-gray-400">
-                                                            {member.user.firstName} {member.user.lastName}
-                                                        </span>
-                                                        {member.role === 'MANAGER' && <span className="text-[9px] text-amber-500/70 bg-amber-500/5 px-1 rounded border border-amber-500/10">Mgr</span>}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="text-xs text-gray-500 italic">No members assigned</div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
                         </div>
                     </div>
 
@@ -1795,6 +1908,25 @@ export default function CaseDetailPage() {
                             onClose={() => setIsEditServicesOpen(false)}
                             currentServices={caseData.services ? JSON.parse(caseData.services) : []}
                             onSave={handleSaveServices}
+                        />
+                    )}
+
+                    {caseData && (
+                        <CaseAssignmentsModal
+                            isOpen={isManageAssignmentsOpen}
+                            onClose={() => setIsManageAssignmentsOpen(false)}
+                            currentAssignments={caseData.assignments?.map(a => a.userId) || []}
+                            projectMembers={(() => {
+                                // Extract all unique members from all projects
+                                const memberMap = new Map();
+                                caseData.projects.forEach(cp => {
+                                    cp.project.members?.forEach(m => {
+                                        memberMap.set(m.userId, m.user);
+                                    });
+                                });
+                                return Array.from(memberMap.entries()).map(([id, user]) => ({ id, ...user }));
+                            })()}
+                            onSave={handleUpdateAssignments}
                         />
                     )}
 
@@ -2120,23 +2252,48 @@ export default function CaseDetailPage() {
                                         <p className="text-[10px] text-gray-400 mb-2 leading-relaxed">
                                             Sends file-request emails to the Debt Counsellor{caseData.dcEmail ? ` (${caseData.dcEmail})` : ' (no email on file)'}, credit bureaus and all linked credit providers in one action.
                                         </p>
-                                        <button
-                                            onClick={handleSendAllFileRequests}
-                                            disabled={sendingAllRequests || sendingDCNotification !== null || sendingFileRequests}
-                                            className="w-full py-2 px-3 bg-gradient-to-r from-cyan-600/30 to-indigo-600/30 border border-cyan-500/30 text-white rounded text-xs font-bold hover:from-cyan-600/40 hover:to-indigo-600/40 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {sendingAllRequests ? (
-                                                <>
-                                                    <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
-                                                    Sending all requests...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                                                    Send All File Requests
-                                                </>
-                                            )}
-                                        </button>
+                                        
+                                        {/* Validation Check */}
+                                        {(() => {
+                                            const hasDhsInfo = !!caseData.ncrdcNo || !!caseData.debtCounsellorName;
+                                            const hasCreditInfo = !!caseData.openAccounts || !!caseData.totalDebtAmount;
+                                            const isReady = hasDhsInfo && hasCreditInfo;
+
+                                            return (
+                                                <div className="space-y-2">
+                                                    {!isReady && (
+                                                        <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 mb-2">
+                                                            <p className="text-[9px] text-amber-300 font-bold uppercase mb-1">⚠️ Action Required</p>
+                                                            <ul className="text-[9px] text-amber-400/80 list-disc list-inside space-y-0.5">
+                                                                {!hasDhsInfo && <li>Click "Auto-fill" to pull DHS Information</li>}
+                                                                {!hasCreditInfo && <li>Upload & Analyze a Credit Report first</li>}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        onClick={handleSendAllFileRequests}
+                                                        disabled={!isReady || sendingAllRequests || sendingDCNotification !== null || sendingFileRequests}
+                                                        className={`w-full py-2 px-3 border rounded text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                                            isReady 
+                                                                ? 'bg-gradient-to-r from-cyan-600/30 to-indigo-600/30 border-cyan-500/30 text-white hover:from-cyan-600/40 hover:to-indigo-600/40' 
+                                                                : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                                                        }`}
+                                                    >
+                                                        {sendingAllRequests ? (
+                                                            <>
+                                                                <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                                                                Sending all requests...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                                                                {isReady ? 'Send All File Requests' : 'Information Incomplete'}
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            );
+                                        })()}
                                         {allRequestsResult && (
                                             <div className={`mt-2 text-[10px] px-2 py-1.5 rounded leading-relaxed space-y-0.5 ${
                                                 allRequestsResult.failures > 0 && !allRequestsResult.dcSent && allRequestsResult.bureausSent === 0 && allRequestsResult.providersSent === 0
@@ -2981,5 +3138,75 @@ export default function CaseDetailPage() {
                 )
             }
         </div >
+    );
+}
+
+function CaseAssignmentsModal({ isOpen, onClose, currentAssignments, projectMembers, onSave }: {
+    isOpen: boolean;
+    onClose: () => void;
+    currentAssignments: string[];
+    projectMembers: Array<{ id: string; firstName: string; lastName: string; email: string }>;
+    onSave: (userIds: string[]) => void;
+}) {
+    const [selected, setSelected] = useState<Set<string>>(new Set(currentAssignments));
+
+    useEffect(() => {
+        setSelected(new Set(currentAssignments));
+    }, [currentAssignments, isOpen]);
+
+    if (!isOpen) return null;
+
+    const toggleUser = (userId: string) => {
+        const next = new Set(selected);
+        if (next.has(userId)) next.delete(userId);
+        else next.add(userId);
+        setSelected(next);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-zeno-navy border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/5">
+                    <h2 className="text-xl font-bold text-white">Manage Case Team</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div className="p-6 max-h-[60vh] overflow-y-auto space-y-2">
+                    <div className="bg-zeno-cyan/5 border border-zeno-cyan/10 rounded-xl p-4 mb-4">
+                        <p className="text-xs text-zeno-cyan font-medium leading-relaxed">
+                            Select users from the project team to assign to this specific case. Assigned users will see this case under "My Cases" and receive specialized notifications.
+                        </p>
+                    </div>
+                    {projectMembers.length === 0 ? (
+                        <div className="text-center py-8">
+                            <p className="text-sm text-gray-500 italic">No members found in linked projects.</p>
+                        </div>
+                    ) : (
+                        projectMembers.map((member) => (
+                            <label key={member.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer group ${selected.has(member.id) ? 'bg-zeno-cyan/10 border-zeno-cyan/50 shadow-sm shadow-zeno-cyan/5' : 'bg-white/5 border-white/5 hover:border-white/20'}`}>
+                                <input
+                                    type="checkbox"
+                                    checked={selected.has(member.id)}
+                                    onChange={() => toggleUser(member.id)}
+                                    className="w-5 h-5 rounded border-white/10 bg-zeno-blue text-zeno-cyan focus:ring-zeno-cyan/50"
+                                />
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-bold truncate ${selected.has(member.id) ? 'text-zeno-cyan' : 'text-white'}`}>{member.firstName} {member.lastName}</p>
+                                    <p className="text-[10px] text-gray-500 truncate lowercase">{member.email}</p>
+                                </div>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ${selected.has(member.id) ? 'bg-zeno-cyan text-zeno-navy' : 'bg-white/5 text-gray-500'}`}>
+                                    {member.firstName[0]}{member.lastName[0]}
+                                </div>
+                            </label>
+                        ))
+                    )}
+                </div>
+                <div className="p-6 bg-white/5 border-t border-white/5 flex gap-3">
+                    <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-transparent border border-white/10 text-white rounded-xl hover:bg-white/5 transition-all text-sm font-bold uppercase tracking-wider">Cancel</button>
+                    <button onClick={() => onSave(Array.from(selected))} className="flex-1 px-4 py-2.5 bg-zeno-cyan text-zeno-navy rounded-xl hover:bg-cyan-400 font-bold text-sm uppercase tracking-wider shadow-lg shadow-zeno-cyan/20">Save Changes</button>
+                </div>
+            </div>
+        </div>
     );
 }

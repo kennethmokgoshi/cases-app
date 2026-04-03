@@ -32,10 +32,14 @@ export function DashboardCasesTable() {
                 const response = await fetch('/api/cases');
                 if (response.ok) {
                     const data = await response.json();
-                    // Get last 10 cases
-                    const recentCases = data.slice(0, 10);
-                    setCases(recentCases);
-                    setFilteredCases(recentCases);
+                    if (Array.isArray(data)) {
+                        // Get last 10 cases
+                        const recentCases = data.slice(0, 10);
+                        setCases(recentCases);
+                        setFilteredCases(recentCases);
+                    } else {
+                        console.error('[DASHBOARD] Cases API returned non-array:', data);
+                    }
                 }
             } catch (error) {
                 console.error('Failed to fetch cases:', error);
@@ -109,17 +113,20 @@ export function DashboardCasesTable() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 Project
                             </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                Services Required
+                            </th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {filteredCases.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                                     No cases found.
                                 </td>
                             </tr>
                         ) : (
-                            filteredCases.map((c) => (
+                            filteredCases.map((c: any) => (
                                 <tr key={c.id} className="hover:bg-white/5 transition-colors">
                                     <td className="px-4 py-3 whitespace-nowrap">
                                         <Link
@@ -143,7 +150,10 @@ export function DashboardCasesTable() {
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-gray-400 text-sm">
-                                        {c.projects.find(p => p.isPrimary)?.project.name || 'None'}
+                                        {c.projects.find((p: any) => p.isPrimary)?.project.name || 'None'}
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-400 text-sm">
+                                        {c.services || '-'}
                                     </td>
                                 </tr>
                             ))

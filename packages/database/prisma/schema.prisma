@@ -161,6 +161,7 @@ model Case {
   invoices                Invoice[]
   plan                    CasePlan?
   debtReviewDocuments     DebtReviewDocument[]
+  assignments             CaseAssignment[]
 
   @@index([status])
   @@index([isOverdue])
@@ -250,6 +251,19 @@ model User {
   workflowLogs              WorkflowLog[]
   approvedPlans             CasePlan[]          @relation("PlanApprover")
   approvedDebtReviewDocs    DebtReviewDocument[] @relation("DebtReviewDocumentApprover")
+  caseAssignments           CaseAssignment[]
+}
+
+model CaseAssignment {
+  caseId     String
+  userId     String
+  assignedAt DateTime @default(now())
+  case       Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, userId])
+  @@index([caseId])
+  @@index([userId])
 }
 
 model CaseComment {

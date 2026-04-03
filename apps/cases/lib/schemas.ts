@@ -111,6 +111,8 @@ export const CasePatchSchema = z.object({
     declineReasonAttended: z.boolean().optional(),
     services: z.array(z.string()).optional().nullable(),
     description: z.string().max(5000).optional().nullable(),
+    category: optionalString,
+    assignments: z.array(z.string()).optional(),
     forceUpdate: z.boolean().optional(),
     status: optionalString,
     workflowStatus: optionalString,

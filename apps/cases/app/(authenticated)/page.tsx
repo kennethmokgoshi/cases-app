@@ -19,7 +19,8 @@ export default async function DirectorDashboard() {
   let stats = {
     insurance: { savings: 0, assessments: 0, active_policies: 0 },
     legal: { rescissions: 0, court_dates: 0, prescriptions: 0 },
-    forensic: { red_flags: 0, investigations: 0, fraud_prevented: 0 }
+    forensic: { red_flags: 0, investigations: 0, fraud_prevented: 0 },
+    cases: { my_cases: 0, new_leads: 0, overdue: 0 }
   };
 
   try {
@@ -42,10 +43,84 @@ export default async function DirectorDashboard() {
       prisma.recklessLendingAssessment.count({ where: { isReckless: true } }),
       prisma.forensicAudit.count({ where: { status: 'PENDING' } }),
     ]);
+
+    // Fetch Case Dashboard Stats with permissions
+    const userRole = session.user.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN' || (session as any).user.isAdmin === true;
+    const isStaff = session.user.userType?.toUpperCase() === 'STAFF';
+    const isRestricted = !isAdmin && !isStaff;
+
+    const caseWhere: any = {};
+    if (isRestricted) {
+      const memberships = await prisma.projectMember.findMany({
+        where: { userId: session.user.id },
+        select: { projectId: true }
+      });
+      const rootIds = memberships.map(m => m.projectId);
+      
+      // Expand to descendants (O(n) logic like in API)
+      const allProjects = await prisma.project.findMany({ select: { id: true, parentId: true } });
+      const descendants = new Set<string>(rootIds);
+      const queue = [...rootIds];
+      while (queue.length > 0) {
+        const curr = queue.shift();
+        const children = allProjects.filter(p => p.parentId === curr).map(p => p.id);
+        children.forEach(cid => {
+          if (!descendants.has(cid)) {
+            descendants.add(cid);
+            queue.push(cid);
+          }
+        });
+      }
+      caseWhere.projects = { some: { projectId: { in: Array.from(descendants) } } };
+    }
+
+    // Wrap counts in try-catch to handle schema inconsistencies (e.g., assignments relation)
+    const getCount = async (where: any) => {
+        try {
+            return await prisma.case.count({ where });
+        } catch (e) {
+            console.error('[DASHBOARD] Count failed for where:', JSON.stringify(where), e);
+            // Fallback: If it was the assignments relation that failed, try without it
+            if (where.OR && where.OR.some((clause: any) => clause.assignments)) {
+                const fallbackWhere = { ...where };
+                fallbackWhere.OR = where.OR.filter((clause: any) => !clause.assignments);
+                try {
+                    return await prisma.case.count({ where: fallbackWhere });
+                } catch (innerE) {
+                    return 0;
+                }
+            }
+            return 0;
+        }
+    };
+
+    const [myCasesCount, newLeadsCount, overdueCount] = await Promise.all([
+      getCount({
+        ...caseWhere,
+        OR: [
+          { createdById: session.user.id },
+          { assignments: { some: { userId: session.user.id } } }
+        ]
+      }),
+      getCount({
+        ...caseWhere,
+        status: 'NEW_LEAD'
+      }),
+      getCount({
+        ...caseWhere,
+        nextUpdate: { lt: new Date() },
+        status: { notIn: ['COMPLETED', 'CLOSED', 'CANCELLED'] }
+      })
+    ]);
+
+    console.log(`[DASHBOARD_STATS] User=${session.user.id} My=${myCasesCount} NewLeads=${newLeadsCount} Overdue=${overdueCount}`);
+
     stats = {
       insurance: { savings: insuranceSavings, assessments: insuranceAssessments, active_policies: activePolicies },
       legal: { rescissions: activeRescissions, court_dates: upcomingHearings, prescriptions: prescribedDebts },
-      forensic: { red_flags: redFlags, investigations: forensicCases, fraud_prevented: 0 }
+      forensic: { red_flags: redFlags, investigations: forensicCases, fraud_prevented: 0 },
+      cases: { my_cases: myCasesCount, new_leads: newLeadsCount, overdue: overdueCount }
     };
   } catch {
     // DB unreachable — dashboard renders with zero values
@@ -221,6 +296,64 @@ export default async function DirectorDashboard() {
               <span className="text-xs bg-emerald-500/20 text-emerald-300 py-1 px-2 rounded">
                 R {stats.forensic.fraud_prevented.toLocaleString('en-US')} Saved
               </span>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Case Management Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+
+        {/* My Cases */}
+        <Link href="/cases?filter=my-cases" className="group bg-purple-950/20 border border-purple-500/20 rounded-2xl p-6 hover:bg-purple-900/20 transition-all cursor-pointer relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <span className="text-8xl">👤</span>
+          </div>
+          <h3 className="text-purple-400 font-bold uppercase tracking-widest text-sm mb-4">My Cases</h3>
+          <div className="space-y-4 relative z-10">
+            <div>
+              <p className="text-3xl font-bold text-white">{stats.cases.my_cases}</p>
+              <p className="text-xs text-gray-400">Personally Assigned</p>
+            </div>
+            <div className="flex justify-between items-center text-xs text-purple-300 font-medium">
+              <span>View active workload</span>
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+            </div>
+          </div>
+        </Link>
+
+        {/* New Leads */}
+        <Link href="/cases?filter=new-leads" className="group bg-cyan-950/20 border border-cyan-500/20 rounded-2xl p-6 hover:bg-cyan-900/20 transition-all cursor-pointer relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <span className="text-8xl">✨</span>
+          </div>
+          <h3 className="text-cyan-400 font-bold uppercase tracking-widest text-sm mb-4">New Leads</h3>
+          <div className="space-y-4 relative z-10">
+            <div>
+              <p className="text-3xl font-bold text-white">{stats.cases.new_leads}</p>
+              <p className="text-xs text-gray-400">Total Fresh Enquiries</p>
+            </div>
+            <div className="flex justify-between items-center text-xs text-cyan-300 font-medium">
+              <span>Action required</span>
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+            </div>
+          </div>
+        </Link>
+
+        {/* Overdue */}
+        <Link href="/cases?filter=overdue" className="group bg-rose-950/20 border border-rose-500/20 rounded-2xl p-6 hover:bg-rose-900/20 transition-all cursor-pointer relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <span className="text-8xl">🚨</span>
+          </div>
+          <h3 className="text-rose-400 font-bold uppercase tracking-widest text-sm mb-4">Overdue</h3>
+          <div className="space-y-4 relative z-10">
+            <div>
+              <p className="text-3xl font-bold text-red-500">{stats.cases.overdue}</p>
+              <p className="text-xs text-gray-400">Past SLA / Deadline</p>
+            </div>
+            <div className="flex justify-between items-center text-xs text-rose-300 font-medium">
+              <span>Priority attention</span>
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
             </div>
           </div>
         </Link>

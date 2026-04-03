@@ -3,7 +3,7 @@ import { prisma } from '@zenowethu/database';
 
 export const maxDuration = 300; // Allow 5 minutes for heavy analysis
 import { auth } from '@zenowethu/shared-lib';
-import { analyzeDocument, analyzeCombinedDocument, createLogger } from '@zenowethu/shared-lib';
+import { analyzeDocument, analyzeCombinedDocument, createLogger, calculateSavingsAudit } from '@zenowethu/shared-lib';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -132,6 +132,15 @@ export async function POST(
             logger.info('   - Open Accounts:', analysis.openAccounts);
             logger.info('   - Accounts in list:', analysis.accounts?.length || 0);
             logger.info('   - Total Debt:', analysis.totalDebt)
+
+            // RUN SAVINGS AUDIT
+            if (analysis.accounts && analysis.accounts.length > 0) {
+                logger.info('💰 Running DCCP Savings Audit...');
+                const savingsAudit = calculateSavingsAudit(analysis.accounts);
+                analysis.savingsAudit = savingsAudit;
+                logger.info(`   - Potential Monthly Savings: R${savingsAudit.monthlySavings.toFixed(2)}`);
+                logger.info(`   - Total Future Savings: R${savingsAudit.totalFutureSavings.toFixed(2)}`);
+            }
 
         } else {
             // Standard single-pass for other docs

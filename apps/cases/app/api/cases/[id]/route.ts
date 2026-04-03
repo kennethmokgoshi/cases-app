@@ -12,38 +12,90 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const session = await auth();
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { id } = await params;
-        const caseDetail = await prisma.case.findUnique({
-            where: { id },
-            include: {
-                client: true,
-                projects: {
-                    include: {
-                        project: {
-                            include: {
-                                members: {
-                                    include: {
-                                        user: {
-                                            select: {
-                                                firstName: true,
-                                                lastName: true,
-                                                email: true
-                                            }
+        let caseDetail;
+        
+        // Define inclusion logic once to reuse for fallback
+        const standardInclude: any = {
+            client: true,
+            projects: {
+                include: {
+                    project: {
+                        include: {
+                            members: {
+                                include: {
+                                    user: {
+                                        select: {
+                                            firstName: true,
+                                            lastName: true,
+                                            email: true
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                },
-                documents: true,
-                workflowLogs: {
-                    orderBy: {
-                        timestamp: 'desc'
+                }
+            },
+            documents: true,
+            workflowLogs: {
+                orderBy: {
+                    timestamp: 'desc'
+                }
+            },
+            assignments: {
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            avatarUrl: true
+                        }
                     }
                 }
             }
-        });
+        };
+
+        try {
+            // Priority 1: Search by internal CUID id
+            caseDetail = await prisma.case.findUnique({
+                where: { id },
+                include: standardInclude
+            });
+
+            // Priority 2: Fallback to search by fileNumber if id lookup failed
+            if (!caseDetail) {
+                caseDetail = await prisma.case.findUnique({
+                    where: { fileNumber: id },
+                    include: standardInclude
+                });
+            }
+        } catch (initialError) {
+            logger.error('[API] Case Details GET failed, retrying without assignments:', initialError);
+            
+            // Critical Fallback: Retry without assignments if schema/data mismatch
+            const fallbackInclude = { ...standardInclude };
+            delete fallbackInclude.assignments;
+
+            caseDetail = await prisma.case.findUnique({
+                where: { id },
+                include: fallbackInclude
+            });
+
+            if (!caseDetail) {
+                caseDetail = await prisma.case.findUnique({
+                    where: { fileNumber: id },
+                    include: fallbackInclude
+                });
+            }
+        }
 
         if (!caseDetail) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
@@ -94,7 +146,7 @@ export async function GET(
             return parts.map(p => clean(p.name)).filter(Boolean).join(' ');
         };
 
-        const projectsWithPath = caseDetail.projects.map((cp) => ({
+        const projectsWithPath = (caseDetail as any).projects.map((cp: any) => ({
             ...cp,
             project: {
                 ...cp.project,
@@ -102,9 +154,25 @@ export async function GET(
             }
         }));
 
+        // Find latest Savings Audit from documents
+        let savingsAudit = null;
+        const creditReport = (caseDetail as any).documents
+            ?.filter((d: any) => d.type === 'CREDIT_REPORT' && d.extractedData)
+            ?.sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0];
+
+        if (creditReport?.extractedData) {
+            try {
+                const parsed = JSON.parse(creditReport.extractedData);
+                savingsAudit = parsed.savingsAudit || null;
+            } catch (e) {
+                logger.error('Failed to parse credit report extractedData for savingsAudit', e);
+            }
+        }
+
         return NextResponse.json({
             ...caseDetail,
-            projects: projectsWithPath
+            projects: projectsWithPath,
+            savingsAudit
         });
     } catch (error) {
         logger.error('Error fetching case:', error);
@@ -167,6 +235,8 @@ export async function PATCH(
             declineReasonAttended,
             services,
             description,
+            assignments,
+            category,
             ...otherCaseData
         } = body;
 
@@ -451,7 +521,7 @@ export async function PATCH(
         if (services !== undefined) caseUpdateData.services = services ? JSON.stringify(services) : null;
         if (serviceFee !== undefined) caseUpdateData.serviceFee = serviceFee ? parseFloat(String(serviceFee).replace(/[^0-9.]/g, '')) : null;
         if (instalments !== undefined) caseUpdateData.instalments = instalments || 1;
-        if (client?.type !== undefined) caseUpdateData.category = client.type || 'Standard';
+        if (category !== undefined) caseUpdateData.category = category || 'Standard';
         if (affordabilityStatus !== undefined) caseUpdateData.affordabilityStatus = affordabilityStatus || null;
         // B2B/B2C fields - only update if provided
         if (acquisitionType !== undefined) caseUpdateData.acquisitionType = acquisitionType;
@@ -503,25 +573,64 @@ export async function PATCH(
         if (!oldCase) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
+    
+        // Sync assignments if provided
+        if (assignments !== undefined) {
+            // @ts-ignore
+            await prisma.caseAssignment.deleteMany({ where: { caseId: id } });
+            if (assignments.length > 0) {
+                // @ts-ignore
+                await prisma.caseAssignment.createMany({
+                    data: assignments.map(userId => ({
+                        caseId: id,
+                        userId
+                    }))
+                });
+            }
+            // Ensure updatedAt is updated even if only assignments changed
+            caseUpdateData.updatedAt = new Date();
+        }
 
         // Normal update - update the existing client
-        const updatedCase = await prisma.case.update({
-            where: { id },
-            data: caseUpdateData,
-            include: {
-                client: true,
-                createdBy: { select: { firstName: true, lastName: true } },
-                projects: {
-                    include: {
-                        project: true
+        let updatedCase;
+        try {
+            updatedCase = await prisma.case.update({
+                where: { id },
+                data: caseUpdateData,
+                include: {
+                    client: true,
+                    createdBy: { select: { firstName: true, lastName: true } },
+                    projects: {
+                        include: {
+                            project: true
+                        }
+                    },
+                    documents: true,
+                    workflowLogs: {
+                        orderBy: { timestamp: 'desc' }
                     }
-                },
-                documents: true,
-                workflowLogs: {
-                    orderBy: { timestamp: 'desc' }
                 }
-            }
-        });
+            });
+        } catch (updateError) {
+            logger.error('[API] Case Update failed with assignments/relations, retrying simple update:', updateError);
+            updatedCase = await prisma.case.update({
+                where: { id },
+                data: caseUpdateData,
+                include: {
+                    client: true,
+                    createdBy: { select: { firstName: true, lastName: true } },
+                    projects: {
+                        include: {
+                            project: true
+                        }
+                    },
+                    documents: true,
+                    workflowLogs: {
+                        orderBy: { timestamp: 'desc' }
+                    }
+                }
+            });
+        }
 
         // Create log if description changed
         if (description !== undefined) {
