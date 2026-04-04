@@ -227,7 +227,7 @@ Would you like me to create a specific action plan for this? I can also draft a 
           </div>
         </div>
 
-        <div style={{ display: "flex", align: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <select
             value={language}
             onChange={e => setLanguage(e.target.value)}
