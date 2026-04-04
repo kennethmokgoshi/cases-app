@@ -3,7 +3,7 @@
  * Manages the Puppeteer singleton and DHS login flow.
  */
 
-import puppeteer, { Browser, Page } from 'puppeteer';
+import type { Browser, Page } from 'puppeteer';
 import { getDHSCredentials } from '../integrations';
 import { logger } from '../logger';
 
@@ -24,6 +24,7 @@ let browser: Browser | null = null;
 
 export async function getBrowser(): Promise<Browser> {
     if (!browser) {
+        const puppeteer = require('puppeteer');
         browser = await puppeteer.launch({
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox']

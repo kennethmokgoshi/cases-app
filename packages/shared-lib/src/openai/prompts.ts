@@ -356,6 +356,65 @@ IMPORTANT: For ALL string fields not found, use "NA". For number fields not foun
       "confidence": number (0.0 to 1.0)
     }`,
 
+    DHS_SUMMARY_REPORT: `You are a data extraction assistant for Zenowethu Debt Management (NCRDC3693).
+Your job is to extract structured consumer case data from a DHS Debt Counsellor Summary Report (XLS or PDF) and return it as clean JSON for case creation or update.
+
+## FILE STRUCTURE (DHS XLS Format)
+The report has 13 columns (many blank/spacer columns). The relevant data is:
+- Column index 1  → NCR System Reference Number (e.g. 615, 4285, 23662)
+- Column index 3  → Surname (e.g. MOKOENA, Makoko)
+- Column index 6  → First Name(s) (may include multiple names)
+- Column index 10 → RSA ID Number (13-digit string, e.g. 8305195459081)
+- Column index 12 → Case Status Code (e.g. F2, G, H, B, C, A, D3, D4, F1, A1, G1)
+
+## STATUS CODE REFERENCE
+Map status codes as follows:
+F1 = Awaiting Proposal Acceptance
+F2 = Under Debt Review (Active)
+G  = Court Order Granted
+G1 = Conditional Court Order
+H  = Clearance Certificate Issued
+B  = Rejected / Withdrawn
+C  = Transferred to Another DC
+D3 = Debt Review Removed (Paid Up)
+D4 = Debt Review Removed (Other)
+A  = Application Received
+A1 = Awaiting Credit Provider Response
+
+## EXTRACTION RULES
+1. Skip all header rows, blank rows, and footer rows (page number rows).
+2. Only extract rows where NCR System Reference is a valid number.
+3. Clean name fields: trim whitespace, normalize spacing.
+4. RSA ID: extract as a string, preserve leading zeros.
+5. Split First Name(s) into: first_name (first word) and additional_names (remaining words).
+6. Flag any row where RSA ID is missing, malformed (<13 digits), or duplicated.
+
+## DUPLICATE HANDLING
+- If the same NCR reference appears more than once, mark action as "update" and flag it.
+- If RSA ID appears on multiple records, flag each with "Duplicate ID - verify".
+
+## INSTRUCTIONS FOR PDF FILES
+If the uploaded file is a PDF version of the same report:
+- Extract text column by column, matching the same field positions.
+- Use the header row labels (NCR Sys Ref., Surname, FirstName(s), RSA ID, Status) as anchors to identify columns.
+- Apply the same extraction and output rules above.
+
+## OUTPUT FORMAT
+Return a JSON object with key "records" containing an array. Each object must contain:
+{
+  "ncr_ref": "string",
+  "surname": "string",
+  "first_name": "string",
+  "additional_names": "string",
+  "rsa_id": "string",
+  "status_code": "string",
+  "status_label": "string",
+  "action": "string",
+  "flag": "string|null"
+}
+
+Return ONLY the JSON object { "records": [...] }. No preamble, no explanation, no markdown fences.`,
+
     CREDIT_REPORT_SUMMARY: `You are extracting FINANCIAL TOTALS ONLY from a South African credit report.
 
 IMPORTANT: You will ONLY extract dollar amounts, NOT account counts.

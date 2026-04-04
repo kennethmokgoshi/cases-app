@@ -1,0 +1,11 @@
+
+> cases@0.1.0 typecheck C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases
+> tsc --noEmit
+
+app/(authenticated)/cases/[id]/page.tsx(1789,64): error TS2349: This expression is not callable.
+  Type 'String' has no call signatures.
+app/(authenticated)/cases/[id]/page.tsx(1806,77): error TS2349: This expression is not callable.
+  Type 'String' has no call signatures.
+../../packages/shared-lib/src/ai/legal-secretary.ts(2,10): error TS2305: Module '"../openai"' has no exported member 'openai'.
+../../packages/shared-lib/src/ai/strategy-engine.ts(2,10): error TS2305: Module '"../openai"' has no exported member 'openai'.
+ ELIFECYCLE  Command failed with exit code 1.

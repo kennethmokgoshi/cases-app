@@ -1,11 +1,12 @@
+// Removed server-only modifier to fix edge build
 import { logger } from '../logger';
 import { convertPdfToImages, extractTextFromPdf } from '../pdf-image';
-import { openai } from './client';
+import { getOpenAI } from './client';
 import { PROMPTS } from './prompts';
 import { parseAIResponse, buildVerificationReport } from './utils';
 import { identifyDocumentPages, splitPdf } from './pdf-process';
 
-export type DocType = 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'ZENOWETHU_POA' | 'PROOF_OF_RESIDENCE';
+export type DocType = 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'ZENOWETHU_POA' | 'PROOF_OF_RESIDENCE' | 'DHS_SUMMARY_REPORT';
 
 /**
  * Analyze a document (ID, POA, or Credit Report) and extract structured data
@@ -61,7 +62,8 @@ export async function analyzeDocument(
                 contentParts.push({ type: 'text', text: `[EXTRACTED TEXT CONTENT]\n\n${extractedText.substring(0, 20000)}` });
             }
 
-            response = await openai.chat.completions.create({
+        const openai = getOpenAI();
+        response = await openai.chat.completions.create({
                 model: 'gpt-4o',
                 messages: [{ role: 'user', content: contentParts }],
                 max_tokens: 3500,
@@ -70,7 +72,8 @@ export async function analyzeDocument(
             });
         } else {
             logger.info(`🖼️ Analyzing ${documentType} as image...`);
-            response = await openai.chat.completions.create({
+        const openai = getOpenAI();
+        response = await openai.chat.completions.create({
                 model: 'gpt-4o',
                 messages: [{
                     role: 'user',
@@ -187,6 +190,7 @@ export async function batchAnalyzeDocuments(
 export async function identifyCreditReportType(base64Pdf: string): Promise<{ type: DocType; bureauName: string }> {
     try {
         const text = await extractTextFromPdf(base64Pdf, 5);
+        const openai = getOpenAI();
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages: [{

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import NextAuth from "next-auth"
-import { authConfig, logger } from "@zenowethu/shared-lib"
+import { authConfig } from "@zenowethu/shared-lib/src/auth";
+import { logger } from "@zenowethu/shared-lib/src/logger";
 
 const { auth } = NextAuth(authConfig)
 

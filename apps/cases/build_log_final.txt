@@ -1,0 +1,182 @@
+
+> cases@0.1.0 build C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases
+> next build
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ⚠ turbopack.root should be absolute, using: C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main
+   ▲ Next.js 16.0.6 (Turbopack)
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     · clientTraceMetadata
+     · serverActions
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Turbopack build encountered 1 warnings:
+./packages/shared-lib/src/integrations/ghl-service.ts:91:47
+Module not found: Can't resolve '@zenowethu/plan-engine'
+[0m [90m 89 |[39m             [90m// @ts-ignore — plan-engine resolved at runtime via pnpm workspace[39m
+ [90m 90 |[39m             [36mconst[39m pkgName [33m=[39m [32m'@zenowethu/plan-engine'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 91 |[39m             [36mconst[39m { handlePlanEvent } [33m=[39m [36mawait[39m [36mimport[39m(pkgName)[33m;[39m
+ [90m    |[39m                                               [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 92 |[39m             [36mawait[39m handlePlanEvent({
+ [90m 93 |[39m                 caseId[33m:[39m caseRecord[33m.[39mid[33m,[39m
+ [90m 94 |[39m                 planId[33m:[39m [32m''[39m[33m,[39m[0m
+
+
+
+Import trace:
+  App Route:
+    ./packages/shared-lib/src/integrations/ghl-service.ts
+    ./apps/cases/app/api/cases/[id]/send-file-requests/route.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ ✓ Compiled successfully in 78s
+   Running TypeScript ...
+   Collecting page data using 3 workers ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   Generating static pages using 3 workers (0/116) ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   Generating static pages using 3 workers (29/116) 
+   Generating static pages using 3 workers (58/116) 
+   Generating static pages using 3 workers (87/116) 
+ ✓ Generating static pages using 3 workers (116/116) in 11.0s
+   Finalizing page optimization ...
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\_not-found\page.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\@opentelemetry+api@1.9.0\node_modules\@opentelemetry\api' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\next@16.0.6_@babel+core@7.2_c9511ce4dbe6aa7812b816cea8ab3649\node_modules\@opentelemetry\api'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\@opentelemetry+api@1.9.0\\node_modules\\@opentelemetry\\api',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\next@16.0.6_@babel+core@7.2_c9511ce4dbe6aa7812b816cea8ab3649\\node_modules\\@opentelemetry\\api'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\_global-error\page.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\next@16.0.6_@babel+core@7.2_c9511ce4dbe6aa7812b816cea8ab3649\node_modules\next' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\apps\cases\node_modules\next'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\next@16.0.6_@babel+core@7.2_c9511ce4dbe6aa7812b816cea8ab3649\\node_modules\\next',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\apps\\cases\\node_modules\\next'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\(authenticated)\accounts\batches\[id]\page.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\@prisma+client@5.22.0_prisma@5.22.0\node_modules\@prisma\client' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\apps\cases\node_modules\@prisma\client'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\@prisma+client@5.22.0_prisma@5.22.0\\node_modules\\@prisma\\client',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\apps\\cases\\node_modules\\@prisma\\client'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\admin\dhs-import\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\js-tokens@4.0.0\node_modules\js-tokens' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\@babel+code-frame@7.29.0\node_modules\js-tokens'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\js-tokens@4.0.0\\node_modules\\js-tokens',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\@babel+code-frame@7.29.0\\node_modules\\js-tokens'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\admin\xds\sync\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\tslib@2.8.1\node_modules\tslib' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\ast-types@0.13.4\node_modules\tslib'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\tslib@2.8.1\\node_modules\\tslib',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\ast-types@0.13.4\\node_modules\\tslib'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\cases\[id]\compare-analysis\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\once@1.4.0\node_modules\once' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\end-of-stream@1.4.5\node_modules\once'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\once@1.4.0\\node_modules\\once',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\end-of-stream@1.4.5\\node_modules\\once'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\dhs\lookup\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\basic-ftp@5.1.0\node_modules\basic-ftp' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\get-uri@6.0.5\node_modules\basic-ftp'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\basic-ftp@5.1.0\\node_modules\\basic-ftp',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\get-uri@6.0.5\\node_modules\\basic-ftp'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\dhs\transfer\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\parent-module@1.0.1\node_modules\parent-module' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\import-fresh@3.3.1\node_modules\parent-module'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\parent-module@1.0.1\\node_modules\\parent-module',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\import-fresh@3.3.1\\node_modules\\parent-module'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\documents\[id]\analyze\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\@babel+helper-validator-identifier@7.28.5\node_modules\@babel\helper-validator-identifier' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\node_modules\@babel\helper-validator-identifier'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\@babel+helper-validator-identifier@7.28.5\\node_modules\\@babel\\helper-validator-identifier',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\node_modules\\@babel\\helper-validator-identifier'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\documents\extract\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\esprima@4.0.1\node_modules\esprima' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\node_modules\esprima'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\esprima@4.0.1\\node_modules\\esprima',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\node_modules\\esprima'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\documents\reanalyze\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\import-fresh@3.3.1\node_modules\import-fresh' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\node_modules\import-fresh'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\import-fresh@3.3.1\\node_modules\\import-fresh',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\node_modules\\import-fresh'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\documents\upload\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\once@1.4.0\node_modules\once' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\node_modules\once'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\once@1.4.0\\node_modules\\once',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\node_modules\\once'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\nct\epurse\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\proxy-from-env@1.1.0\node_modules\proxy-from-env' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\node_modules\proxy-from-env'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\proxy-from-env@1.1.0\\node_modules\\proxy-from-env',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\node_modules\\proxy-from-env'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\nct\filing\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\streamx@2.23.0\node_modules\streamx' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\node_modules\streamx'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\streamx@2.23.0\\node_modules\\streamx',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\node_modules\\streamx'
+}
+ ⚠ Failed to copy traced files for C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\server\app\api\nct\status\route.js Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\yargs-parser@21.1.1\node_modules\yargs-parser' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\node_modules\yargs-parser'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\yargs-parser@21.1.1\\node_modules\\yargs-parser',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\node_modules\\yargs-parser'
+}
+
+> Build error occurred
+Error: EPERM: operation not permitted, symlink 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\node_modules\.pnpm\@next+env@16.0.6\node_modules\@next\env' -> 'C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases\.next\standalone\node_modules\.pnpm\next@16.0.6_@babel+core@7.2_c9511ce4dbe6aa7812b816cea8ab3649\node_modules\@next\env'
+    at ignore-listed frames {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\node_modules\\.pnpm\\@next+env@16.0.6\\node_modules\\@next\\env',
+  dest: 'C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\.next\\standalone\\node_modules\\.pnpm\\next@16.0.6_@babel+core@7.2_c9511ce4dbe6aa7812b816cea8ab3649\\node_modules\\@next\\env'
+}
+ ELIFECYCLE  Command failed with exit code 1.

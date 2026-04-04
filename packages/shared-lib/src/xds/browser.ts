@@ -3,7 +3,7 @@
  * Manages the Puppeteer singleton and XDS login flow.
  */
 
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { Browser, Page } from 'puppeteer';
 import { XdsCredentials } from './types';
 import { logger } from '../logger';
 import { getXDSCredentials } from '../integrations/xds-config';
@@ -15,6 +15,7 @@ let xdsBrowser: Browser | null = null;
 
 export async function getXdsBrowser(): Promise<Browser> {
     if (!xdsBrowser) {
+        const puppeteer = require('puppeteer');
         xdsBrowser = await puppeteer.launch({
             headless: true,
             args: [

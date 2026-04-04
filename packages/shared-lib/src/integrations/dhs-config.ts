@@ -1,4 +1,3 @@
-import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
 
 interface DHSCredentials {
@@ -18,6 +17,7 @@ export async function getDHSCredentials(): Promise<DHSCredentials> {
     }
 
     try {
+        const { prisma } = require('@zenowethu/database');
         const settings = await prisma.systemSettings.findMany({
             where: { category: 'dhs' },
             select: { key: true, value: true }

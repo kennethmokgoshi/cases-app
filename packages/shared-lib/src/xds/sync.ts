@@ -9,10 +9,6 @@
  *       notify all admins (in-app + email) that a new file was created
  */
 
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
-import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
 import { XdsCreditReportEntry, XdsSyncResult, XdsSyncDetail } from './types';
 import { getXdsBrowser, getXdsCredentials, loginToXds, closeXdsBrowser } from './browser';
@@ -21,6 +17,7 @@ import { scrapeXdsSearchHistory } from './scraper';
 // ─── File Number Generation ────────────────────────────────────────────────────
 
 async function generateFileNumber(): Promise<string> {
+    const { prisma } = require('@zenowethu/database');
     const year = new Date().getFullYear();
     const prefix = `ZDM-${year}-`;
 
@@ -50,6 +47,7 @@ async function notifyAdminsNewFile(params: {
     fileNumber: string;
     caseId: string;
 }): Promise<void> {
+    const { prisma } = require('@zenowethu/database');
     const { consumerFirstName, consumerLastName, idNumber, fileNumber, caseId } = params;
     const consumerName = `${consumerFirstName} ${consumerLastName}`;
 
@@ -159,6 +157,10 @@ async function savePdfToDisk(
     fileName: string,
     buffer: Buffer
 ): Promise<{ filePath: string; fileUrl: string }> {
+    const { writeFile, mkdir } = require('fs/promises');
+    const { join } = require('path');
+    const { existsSync } = require('fs');
+
     // Determine storage root — same convention as the upload route
     // In production the app's CWD is /app (inside Docker), storage mounts at /storage
     const storageDirs = [
@@ -191,6 +193,7 @@ async function uploadToCaseFile(
     caseId: string,
     entry: XdsCreditReportEntry
 ): Promise<void> {
+    const { prisma } = require('@zenowethu/database');
     const { filePath: _fp, fileUrl } = await savePdfToDisk(caseId, entry.fileName, entry.pdfBuffer);
 
     await prisma.document.create({
@@ -213,6 +216,7 @@ async function uploadToCaseFile(
 async function createNewCaseFile(
     entry: XdsCreditReportEntry
 ): Promise<{ caseId: string; fileNumber: string }> {
+    const { prisma } = require('@zenowethu/database');
     // Parse first/last name from the consumer name (best-effort)
     const nameParts = entry.consumerName.trim().split(/\s+/);
     const firstName = nameParts[0] || 'Unknown';
@@ -334,6 +338,7 @@ export async function runXdsSync(options?: { targetDate?: Date }): Promise<XdsSy
             try {
                 // Look up existing case by client ID number
                 let existingCase: { id: string; fileNumber: string } | null = null;
+                const { prisma } = require('@zenowethu/database');
 
                 if (entry.idNumber) {
                     const client = await prisma.client.findUnique({

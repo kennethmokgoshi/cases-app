@@ -1,0 +1,101 @@
+
+> cases@0.1.0 typecheck C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases
+> tsc --noEmit
+
+app/(authenticated)/cases/[id]/page.tsx(22,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'SavingsAuditResult'.
+app/(authenticated)/cases/[id]/page.tsx(1789,64): error TS2349: This expression is not callable.
+  Type 'String' has no call signatures.
+app/(authenticated)/cases/[id]/page.tsx(1806,77): error TS2349: This expression is not callable.
+  Type 'String' has no call signatures.
+app/(authenticated)/cases/[id]/SavingsAuditCard.tsx(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'SavingsAuditResult'.
+app/(authenticated)/page.tsx(1,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/accounts/batches/[id]/post/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/accounts/import/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/api-keys/[id]/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/api-keys/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/compliance/ncrdc/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/credit-providers/[id]/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/credit-providers/route.test.ts(26,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/credit-providers/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/dhs-import/apply/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/dhs-import/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/credit-bureaus/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/dhs/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/dhs/route.ts(6,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'invalidateDHSCredentialsCache'.
+app/api/admin/settings/ghl/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/ghl/route.ts(2,30): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'invalidateGHLCredentialsCache'.
+app/api/admin/settings/letterhead/route.test.ts(31,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/letterhead/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/maxdc/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/xds/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/settings/xds/route.ts(4,30): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'invalidateXDSCredentialsCache'.
+app/api/admin/sync-members/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/admin/users/[id]/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/draft/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/draft/route.ts(4,16): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'draftLegalDocument'.
+app/api/ai/draft/route.ts(4,36): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'getAutonomyDecision'.
+app/api/ai/plan/[planId]/approve/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/[planId]/start/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/[planId]/step/[stepId]/approve/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/[planId]/step/[stepId]/breakpoint/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/[planId]/step/[stepId]/resume/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/[planId]/submit-info/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/case/[caseId]/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/generate/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/plan/ready/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/strategy/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/ai/strategy/route.ts(4,16): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'generateCaseStrategy'.
+app/api/auth/[...nextauth]/route.ts(1,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'handlers'.
+app/api/b2b-dashboard/stats/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/b2b/clients/search/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/b2b/reporting/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/b2b/stats/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/apply-updates/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/comments/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/compare-analysis/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/compare-analysis/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'analyzeCombinedDocument'.
+app/api/cases/[id]/compare-analysis/route.ts(4,35): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'batchAnalyzeDocuments'.
+app/api/cases/[id]/compare-analysis/route.ts(4,58): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'extractDocumentsFromCombinedPdf'.
+app/api/cases/[id]/dc-email-bounce/route.ts(14,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/dc-notification/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/dccp-referral/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/debt-review/[docId]/approve/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/debt-review/[docId]/send-consumer/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/debt-review/debt-review-actions.test.ts(26,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/debt-review/generate/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/debt-review/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/debt-review/send-creditors/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/documents/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/form16/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/send-file-requests/route.ts(13,33): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'GhlService'.
+app/api/cases/[id]/send-file-requests/route.ts(13,45): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/[id]/status/route.ts(10,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/move/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/route.ts(3,62): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/cases/search/route.ts(4,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/documents/[id]/update-summary/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/groups/[id]/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/groups/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/notifications/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/projects/[id]/delete-cases/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/projects/bulk-delete/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/reports/advanced/export/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/reports/advanced/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/reports/preview/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'auth'.
+app/api/v1/cases/[id]/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'validateApiKey'.
+app/api/v1/cases/[id]/route.ts(2,26): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'hasPermission'.
+app/api/v1/cases/[id]/route.ts(2,41): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'apiError'.
+app/api/v1/cases/[id]/route.ts(2,51): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'apiSuccess'.
+app/api/v1/cases/[id]/status/route.ts(2,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'validateApiKey'.
+app/api/v1/cases/[id]/status/route.ts(2,26): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'hasPermission'.
+app/api/v1/cases/[id]/status/route.ts(2,41): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'apiError'.
+app/api/v1/cases/[id]/status/route.ts(2,51): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'apiSuccess'.
+app/api/v1/cases/route.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'validateApiKey'.
+app/api/v1/cases/route.ts(3,26): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'hasPermission'.
+app/api/v1/cases/route.ts(3,41): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'apiError'.
+app/api/v1/cases/route.ts(3,51): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'apiSuccess'.
+middleware.ts(3,10): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'authConfig'.
+../../packages/plan-engine/src/actions/ghl.ts(4,3): error TS2305: Module '"@zenowethu/shared-lib"' has no exported member 'getGHLCredentials'.
+../../packages/shared-lib/src/ai/legal-secretary.ts(2,10): error TS2305: Module '"../openai"' has no exported member 'openai'.
+../../packages/shared-lib/src/ai/strategy-engine.ts(2,10): error TS2305: Module '"../openai"' has no exported member 'openai'.
+ ELIFECYCLE  Command failed with exit code 1.

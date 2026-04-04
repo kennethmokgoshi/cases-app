@@ -1,4 +1,3 @@
-import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
 
 interface XDSCredentials {
@@ -19,6 +18,7 @@ export async function getXDSCredentials(): Promise<XDSCredentials> {
     }
 
     try {
+        const { prisma } = require('@zenowethu/database');
         const settings = await prisma.systemSettings.findMany({
             where: { category: 'xds' },
             select: { key: true, value: true }

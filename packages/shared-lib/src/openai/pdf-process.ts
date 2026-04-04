@@ -1,7 +1,8 @@
+// Removed server-only modifier to fix edge build
 import { PDFDocument } from 'pdf-lib';
 import { convertPdfToImages, extractTextFromPdf } from '../pdf-image';
 import { logger } from '../logger';
-import { openai } from './client';
+import { getOpenAI } from './client';
 import { IDENTIFICATION_PROMPT } from './prompts';
 
 /**
@@ -85,6 +86,7 @@ export async function identifyDocumentPages(
 
         onProgress?.('🤖 Grouping and preparing documents for AI...', 20);
 
+        const openai = getOpenAI();
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages: messages,

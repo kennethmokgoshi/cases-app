@@ -1,4 +1,3 @@
-import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
 
 interface NCTCredentials {
@@ -19,6 +18,7 @@ export async function getNCTCredentials(): Promise<NCTCredentials> {
     }
 
     try {
+        const { prisma } = require('@zenowethu/database');
         const settings = await prisma.systemSettings.findMany({
             where: { category: 'nct' },
             select: { key: true, value: true }

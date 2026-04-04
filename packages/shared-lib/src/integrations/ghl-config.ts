@@ -1,4 +1,3 @@
-import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
 
 interface GHLCredentials {
@@ -20,6 +19,7 @@ export async function getGHLCredentials(): Promise<GHLCredentials> {
     }
 
     try {
+        const { prisma } = require('@zenowethu/database');
         const settings = await prisma.systemSettings.findMany({
             where: { category: 'ghl' },
             select: { key: true, value: true }

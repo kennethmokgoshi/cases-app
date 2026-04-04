@@ -1,5 +1,5 @@
 
-import { openai } from '../openai';
+import { getOpenAI } from '../openai';
 import { logger } from '../logger';
 import { CaseStrategyResponse } from './strategy-engine';
 
@@ -152,6 +152,7 @@ Output your draft in the following JSON format:
 export async function draftLegalDocument(request: DraftingRequest): Promise<DraftResponse> {
     try {
         const prompt = buildPrompt(request);
+        const openai = getOpenAI();
 
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',

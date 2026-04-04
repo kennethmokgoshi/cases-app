@@ -36,6 +36,7 @@ const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: stri
     'BANK_STATEMENT': { label: 'Bank Statement', color: 'bg-indigo-500/20 text-indigo-300', icon: '🏦' },
     'PROOF_OF_RESIDENCE': { label: 'Proof of Residence', color: 'bg-teal-500/20 text-teal-300', icon: '🏠' },
     'COMBINED': { label: 'Combined File', color: 'bg-orange-500/20 text-orange-300', icon: '📦' },
+    'DHS_SUMMARY_REPORT': { label: 'DHS Summary Report', color: 'bg-rose-500/20 text-rose-300', icon: '📋' },
     'OTHER': { label: 'Other Document', color: 'bg-gray-500/20 text-gray-300', icon: '📄' } };
 
 const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: string }[] = [
@@ -54,6 +55,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     const [extracting, setExtracting] = useState(false);
     const [reanalyzing, setReanalyzing] = useState<string | null>(null); // Track specific doc ID being re-analyzed
     const [uploadType, setUploadType] = useState('OTHER');
+    const [dhsAnalyzing, setDhsAnalyzing] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [extractionProgress, setExtractionProgress] = useState(0);
@@ -87,6 +89,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const effectiveType = typeOverride ?? uploadType;
         setUploading(true);
         setError('');
         setSuccess('');
@@ -94,7 +97,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('type', typeOverride ?? uploadType);
+            formData.append('type', effectiveType);
 
             const res = await fetch(`/api/cases/${caseId}/documents`, {
                 method: 'POST',
@@ -102,7 +105,31 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
 
             if (!res.ok) throw new Error('Upload failed');
 
-            setSuccess('Document uploaded successfully');
+            const { document: uploadedDoc } = await res.json();
+
+            // DHS Summary Reports: auto-trigger AI analysis immediately after upload
+            if (effectiveType === 'DHS_SUMMARY_REPORT' && uploadedDoc?.id) {
+                setDhsAnalyzing(true);
+                setSuccess('DHS file uploaded — running AI extraction...');
+                try {
+                    const analyzeRes = await fetch(`/api/documents/${uploadedDoc.id}/analyze`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ analysisType: 'DHS_SUMMARY_REPORT' })
+                    });
+                    const analyzeData = await analyzeRes.json();
+                    if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Analysis failed');
+                    const count = analyzeData.data?.records?.length ?? 0;
+                    setSuccess(`DHS extraction complete — ${count} consumer record${count !== 1 ? 's' : ''} extracted.`);
+                } catch (analyzeErr: any) {
+                    setError(`Upload succeeded but AI analysis failed: ${analyzeErr.message}`);
+                } finally {
+                    setDhsAnalyzing(false);
+                }
+            } else {
+                setSuccess('Document uploaded successfully');
+            }
+
             fetchDocuments();
         } catch (e) {
             setError('Failed to upload document');
@@ -521,13 +548,20 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                         <option value="PAYSLIP" className="bg-zeno-navy text-white">Payslip</option>
                         <option value="BANK_STATEMENT" className="bg-zeno-navy text-white">Bank Statement</option>
                         <option value="PROOF_OF_RESIDENCE" className="bg-zeno-navy text-white">Proof of Residence</option>
+                        <option value="DHS_SUMMARY_REPORT" className="bg-zeno-navy text-white">DHS Summary Report (XLS/PDF)</option>
                         <option value="OTHER" className="bg-zeno-navy text-white">Other Document</option>
                     </select>
                     <label className="flex-1">
                         <span className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-sm cursor-pointer transition-colors inline-flex items-center gap-2">
-                            {uploading ? '⏳ Uploading...' : '📤 Choose File'}
+                            {dhsAnalyzing ? '🤖 Extracting records...' : uploading ? '⏳ Uploading...' : '📤 Choose File'}
                         </span>
-                        <input type="file" accept=".pdf,image/*" onChange={handleUpload} disabled={uploading} className="sr-only" />
+                        <input
+                            type="file"
+                            accept={uploadType === 'DHS_SUMMARY_REPORT' ? '.pdf,.xls,.xlsx' : '.pdf,image/*'}
+                            onChange={handleUpload}
+                            disabled={uploading || dhsAnalyzing}
+                            className="sr-only"
+                        />
                     </label>
                 </div>
             </div>
@@ -541,11 +575,15 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                         const typeInfo = getDocTypeInfo(doc.type);
                         const extractedInfo = doc.extractedData ? JSON.parse(doc.extractedData) : null;
 
+                        const dhsRecords: any[] = extractedInfo?.records ?? [];
+                        const isDhs = doc.type === 'DHS_SUMMARY_REPORT';
+
                         return (
                             <div
                                 key={doc.id}
-                                className="flex items-center gap-4 p-4 bg-zeno-navy/30 rounded-lg border border-white/5 hover:border-white/10 transition-colors"
+                                className={`p-4 bg-zeno-navy/30 rounded-lg border transition-colors ${isDhs ? 'border-rose-500/20 hover:border-rose-500/30' : 'border-white/5 hover:border-white/10'}`}
                             >
+                            <div className="flex items-center gap-4">
                                 <div className="text-2xl">{typeInfo.icon}</div>
                                 <div className="flex-1 min-w-0 group relative">
                                     <div className="flex items-center gap-2 mb-1">
@@ -613,6 +651,53 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                                         </button>
                                     )}
                                 </div>
+                            </div>
+
+                            {/* DHS records preview table */}
+                            {isDhs && dhsRecords.length > 0 && (
+                                <div className="mt-3 border-t border-rose-500/20 pt-3">
+                                    <p className="text-xs text-rose-300 font-semibold mb-2">
+                                        {dhsRecords.length} consumer record{dhsRecords.length !== 1 ? 's' : ''} extracted
+                                    </p>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-xs text-left">
+                                            <thead>
+                                                <tr className="text-gray-500 border-b border-white/5">
+                                                    <th className="pb-1 pr-3 font-medium">NCR Ref</th>
+                                                    <th className="pb-1 pr-3 font-medium">Name</th>
+                                                    <th className="pb-1 pr-3 font-medium">RSA ID</th>
+                                                    <th className="pb-1 pr-3 font-medium">Status</th>
+                                                    <th className="pb-1 pr-3 font-medium">Action</th>
+                                                    <th className="pb-1 font-medium">Flag</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {dhsRecords.slice(0, 10).map((rec: any, i: number) => (
+                                                    <tr key={i} className="border-b border-white/5 last:border-0">
+                                                        <td className="py-1 pr-3 text-gray-300">{rec.ncr_ref}</td>
+                                                        <td className="py-1 pr-3 text-white">{rec.surname}, {rec.first_name}</td>
+                                                        <td className="py-1 pr-3 text-gray-400 font-mono">{rec.rsa_id}</td>
+                                                        <td className="py-1 pr-3">
+                                                            <span className="px-1.5 py-0.5 rounded bg-white/10 text-gray-300">{rec.status_code}</span>
+                                                        </td>
+                                                        <td className="py-1 pr-3">
+                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${rec.action === 'create' ? 'bg-green-500/20 text-green-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                                                {rec.action}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-1 text-rose-400 text-[10px]">{rec.flag ?? '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        {dhsRecords.length > 10 && (
+                                            <p className="text-xs text-gray-500 mt-1 italic">
+                                                …and {dhsRecords.length - 10} more records
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             </div>
                         );
                     })

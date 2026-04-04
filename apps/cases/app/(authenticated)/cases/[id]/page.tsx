@@ -1786,10 +1786,10 @@ export default function CaseDetailPage() {
                                     const services = caseData.services ? JSON.parse(caseData.services) : [];
                                     if (services.length === 0) return <p className="text-sm text-gray-500 italic">No services selected</p>;
                                     if (services.length === 1) {
-                                        const s = SERVICES_MAP.find(sm => sm.id === services[0]);
+                                        const sName = SERVICES_MAP[services[0] as keyof typeof SERVICES_MAP];
                                         return (
                                             <div className="p-3 bg-zeno-cyan/10 border border-zeno-cyan/30 rounded-lg">
-                                                <p className="text-white font-medium">{s?.name || services[0]}</p>
+                                                <p className="text-white font-medium">{sName || services[0]}</p>
                                             </div>
                                         );
                                     }
@@ -1803,9 +1803,9 @@ export default function CaseDetailPage() {
                                             </div>
                                             <div className="mt-2 pt-2 border-t border-zeno-cyan/20 space-y-1">
                                                 {services.slice(0, 3).map((sid: string) => {
-                                                    const sm = SERVICES_MAP.find(s => s.id === sid);
+                                                    const sName = SERVICES_MAP[sid as keyof typeof SERVICES_MAP];
                                                     return (
-                                                        <p key={sid} className="text-[11px] text-gray-400">• {sm?.name || sid}</p>
+                                                        <p key={sid} className="text-[11px] text-gray-400">• {sName || sid}</p>
                                                     );
                                                 })}
                                                 {services.length > 3 && (

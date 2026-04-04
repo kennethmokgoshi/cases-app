@@ -1,0 +1,79 @@
+
+> cases@0.1.0 build C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases
+> next build
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ⚠ turbopack.root should be absolute, using: C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main
+   ▲ Next.js 16.0.6 (Turbopack)
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     · clientTraceMetadata
+     · serverActions
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Turbopack build encountered 1 warnings:
+./packages/shared-lib/src/integrations/ghl-service.ts:90:47
+Module not found: Can't resolve '@zenowethu/plan-engine'
+[0m [90m 88 |[39m         [36mtry[39m {
+ [90m 89 |[39m             [90m// @ts-ignore — plan-engine resolved at runtime via pnpm workspace[39m
+[31m[1m>[22m[39m[90m 90 |[39m             [36mconst[39m { handlePlanEvent } [33m=[39m [36mawait[39m [36mimport[39m([32m'@zenowethu/plan-engine'[39m)[33m;[39m
+ [90m    |[39m                                               [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 91 |[39m             [36mawait[39m handlePlanEvent({
+ [90m 92 |[39m                 caseId[33m:[39m caseRecord[33m.[39mid[33m,[39m
+ [90m 93 |[39m                 planId[33m:[39m [32m''[39m[33m,[39m[0m
+
+
+
+Import trace:
+  App Route:
+    ./packages/shared-lib/src/integrations/ghl-service.ts
+    ./apps/cases/app/api/cases/[id]/send-file-requests/route.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+
+> Build error occurred
+Error: Turbopack build failed with 2 errors:
+./packages/shared-lib/src/openai/extraction.ts:1:1
+Ecmascript file had an error
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [32m'server-only'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { logger } [36mfrom[39m [32m'../logger'[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m { convertPdfToImages[33m,[39m extractTextFromPdf } [36mfrom[39m [32m'../pdf-image'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { getOpenAI } [36mfrom[39m [32m'./client'[39m[33m;[39m[0m
+
+You're importing a component that needs "server-only". That only works in a Server Component which is not supported in the pages/ directory. Read more: https://nextjs.org/docs/app/building-your-application/rendering/server-components
+
+
+
+Import trace:
+  App Route:
+    ./packages/shared-lib/src/openai/extraction.ts
+    ./apps/cases/app/api/admin/dhs-import/route.ts
+
+
+./packages/shared-lib/src/openai/pdf-process.ts:1:1
+Ecmascript file had an error
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [32m'server-only'[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { [33mPDFDocument[39m } [36mfrom[39m [32m'pdf-lib'[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m { convertPdfToImages[33m,[39m extractTextFromPdf } [36mfrom[39m [32m'../pdf-image'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { logger } [36mfrom[39m [32m'../logger'[39m[33m;[39m[0m
+
+You're importing a component that needs "server-only". That only works in a Server Component which is not supported in the pages/ directory. Read more: https://nextjs.org/docs/app/building-your-application/rendering/server-components
+
+
+
+Import trace:
+  App Route:
+    ./packages/shared-lib/src/openai/pdf-process.ts
+    ./packages/shared-lib/src/openai/index.ts
+    ./apps/cases/app/api/dhs/lookup/route.ts
+
+
+    at <unknown> (./packages/shared-lib/src/openai/extraction.ts:1:1)
+    at <unknown> (./packages/shared-lib/src/openai/pdf-process.ts:1:1)
+ ELIFECYCLE  Command failed with exit code 1.

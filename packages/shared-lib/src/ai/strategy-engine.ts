@@ -1,5 +1,5 @@
 
-import { openai } from '../openai';
+import { getOpenAI } from '../openai';
 import { logger } from '../logger';
 
 export interface CaseStrategyRequest {
@@ -92,6 +92,7 @@ Output your recommendation in the following JSON format ONLY:
 }
 `;
 
+        const openai = getOpenAI();
         const response = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages: [
