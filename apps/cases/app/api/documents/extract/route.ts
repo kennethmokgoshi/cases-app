@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth } from '@zenowethu/shared-lib';
-import { extractDocumentsFromCombinedPdf, analyzeDocument, createLogger } from '@zenowethu/shared-lib';
+import { createLogger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib/src/auth';
+import { extractDocumentsFromCombinedPdf, analyzeDocument } from '@zenowethu/shared-lib/src/openai';
 import { writeFile, mkdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';

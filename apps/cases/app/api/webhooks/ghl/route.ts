@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { GhlService, createLogger } from '@zenowethu/shared-lib';
+import { createLogger } from '@zenowethu/shared-lib';
+import { GhlService } from '@zenowethu/shared-lib/src/integrations';
 
 const logger = createLogger('api/webhooks/ghl');
 

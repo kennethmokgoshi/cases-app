@@ -1,5 +1,5 @@
 import { logger } from '@zenowethu/shared-lib';
-import { auth } from '@zenowethu/shared-lib'
+import { auth } from '@zenowethu/shared-lib/src/auth';
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 

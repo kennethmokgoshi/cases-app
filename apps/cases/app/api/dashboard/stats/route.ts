@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { createLogger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib/src/auth';
 
 const logger = createLogger('api/dashboard/stats');
 

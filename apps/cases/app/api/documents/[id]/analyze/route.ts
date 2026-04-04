@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 
 export const maxDuration = 300; // Allow 5 minutes for heavy analysis
-import { auth } from '@zenowethu/shared-lib';
-import { analyzeDocument, analyzeCombinedDocument, createLogger, calculateSavingsAudit } from '@zenowethu/shared-lib';
+import { createLogger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib/src/auth';
+import { analyzeDocument, analyzeCombinedDocument, PROMPTS } from '@zenowethu/shared-lib/src/openai';
+import { getOpenAI } from '@zenowethu/shared-lib/src/openai/client';
+import { calculateSavingsAudit } from '@zenowethu/shared-lib/src/ai/savings-engine';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { parseDhsXls, dhsRowsToCsv } from '../../../../../lib/dhs-xls-parser';
 
 const logger = createLogger('api/documents/[id]/analyze');
 export const runtime = 'nodejs';
@@ -142,11 +146,49 @@ export async function POST(
                 logger.info(`   - Total Future Savings: R${savingsAudit.totalFutureSavings.toFixed(2)}`);
             }
 
+        } else if (docType === 'DHS_SUMMARY_REPORT') {
+            logger.info('📋 Analyzing DHS Debt Counsellor Summary Report...');
+            const isXls = document.mimeType === 'application/vnd.ms-excel'
+                || document.mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                || document.fileName?.toLowerCase().endsWith('.xls')
+                || document.fileName?.toLowerCase().endsWith('.xlsx');
+
+            if (isXls) {
+                logger.info('📊 Parsing XLS file server-side...');
+                const dhsRows = parseDhsXls(fileBuffer);
+                const csvText = dhsRowsToCsv(dhsRows);
+
+                logger.info(`   Extracted ${dhsRows.length} data rows from XLS`);
+
+                const openaiClient = getOpenAI();
+                const response = await openaiClient.chat.completions.create({
+                    model: 'gpt-4o',
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: PROMPTS.DHS_SUMMARY_REPORT },
+                            { type: 'text', text: `[CSV DATA]\n\n${csvText}` }
+                        ]
+                    }],
+                    max_tokens: 8000,
+                    temperature: 0,
+                    response_format: { type: 'json_object' }
+                });
+                const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
+                analysis = { records: parsed.records ?? [] };
+            } else {
+                // PDF path — use the standard analyzeDocument flow
+                const result = await analyzeDocument(base64File, 'DHS_SUMMARY_REPORT' as any, document.mimeType);
+                analysis = { records: result.data?.records ?? [] };
+            }
+
+            logger.info(`✅ DHS extraction complete — ${(analysis.records as any[]).length} records`);
+
         } else {
             // Standard single-pass for other docs
             const result = await analyzeDocument(base64File, docType as any, document.mimeType);
             analysis = result.data;
-            
+
             if (result.identifiedType || result.bureauName) {
                 await prisma.document.update({
                     where: { id: documentId },

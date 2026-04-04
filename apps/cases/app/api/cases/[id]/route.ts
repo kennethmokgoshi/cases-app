@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger, sendStatusChangeNotification } from '@zenowethu/shared-lib';
+import { createLogger, sendStatusChangeNotification } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib/src/auth';
 import { CasePatchSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 

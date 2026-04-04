@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { createLogger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib/src/auth';
 import bcrypt from 'bcryptjs';
 
 const logger = createLogger('api/users/profile');

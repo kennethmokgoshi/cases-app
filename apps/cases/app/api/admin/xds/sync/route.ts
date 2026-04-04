@@ -17,7 +17,9 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth, createLogger, runXdsSync } from '@zenowethu/shared-lib';
+import { createLogger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib/src/auth';
+import { runXdsSync } from '@zenowethu/shared-lib/src/xds/sync';
 import { z } from 'zod';
 
 const logger = createLogger('api/admin/xds/sync');

@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { sendStatusChangeNotification  } from '@zenowethu/shared-lib';
-import { getStatusByCode } from '@zenowethu/shared-lib';
+import { sendStatusChangeNotification, getStatusByCode, createLogger } from '@zenowethu/shared-lib';
+import { auth } from '@zenowethu/shared-lib/src/auth';
 import {
     analyzeCombinedDocument,
     analyzeDocument,
     batchAnalyzeDocuments,
     extractDocumentsFromCombinedPdf
-} from '@zenowethu/shared-lib';
+} from '@zenowethu/shared-lib/src/openai';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import busboy from 'busboy';
 import { Readable } from 'stream';
-import { auth, createLogger } from '@zenowethu/shared-lib';
 
 const logger = createLogger('api/documents/upload');
 

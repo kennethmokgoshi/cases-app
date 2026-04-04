@@ -7,9 +7,10 @@
  */
 
 import { NextResponse } from 'next/server';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, sendStatusChangeNotification, lookupDCFromNCR  } from '@zenowethu/shared-lib';
+import { createLogger, sendStatusChangeNotification } from '@zenowethu/shared-lib';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR } from '@zenowethu/shared-lib/src/dhs';
+import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
-import { addWorkingDays, createLogger } from '@zenowethu/shared-lib';
 import path, { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -377,7 +378,7 @@ export async function POST(request: Request) {
 
                 if (analyzedDocsWithContent.length > 0) {
                     logger.info(`Docs for analysis: ${analyzedDocsWithContent.length}`);
-                    const { analyzeMultipleDocumentsAsCombined } = require('@zenowethu/shared-lib');
+                    const { analyzeMultipleDocumentsAsCombined } = require('@zenowethu/shared-lib/src/openai');
 
                     try {
                         const analysis = await analyzeMultipleDocumentsAsCombined(analyzedDocsWithContent as any);
