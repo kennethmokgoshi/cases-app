@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { auth, createLogger, openai, PROMPTS, analyzeDocument } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
+import { analyzeDocument, PROMPTS } from '@zenowethu/shared-lib/src/openai';
+import { getOpenAI } from '@zenowethu/shared-lib/src/openai/client';
 import { prisma } from '@zenowethu/database';
 import busboy from 'busboy';
 import { parseDhsXls, dhsRowsToCsv, dumpXlsAsText } from '../../../../lib/dhs-xls-parser';
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
                 );
             }
 
-            const response = await openai.chat.completions.create({
+            const response = await getOpenAI().chat.completions.create({
                 model: 'gpt-4o',
                 messages: [{
                     role: 'user',
