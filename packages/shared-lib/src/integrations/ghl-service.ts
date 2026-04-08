@@ -86,8 +86,8 @@ export class GhlService {
 
         // Notify AI Plan Engine of inbound event
         try {
-            // @ts-ignore — plan-engine resolved at runtime via pnpm workspace
             const pkgName = '@zenowethu/plan-engine';
+            // @ts-ignore — plan-engine resolved at runtime via pnpm workspace
             const { handlePlanEvent } = await import(pkgName);
             await handlePlanEvent({
                 caseId: caseRecord.id,
