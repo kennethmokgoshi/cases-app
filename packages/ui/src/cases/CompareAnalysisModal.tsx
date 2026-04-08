@@ -66,6 +66,13 @@ export function CompareAnalysisModal({
     const [analysisComplete, setAnalysisComplete] = useState(false);
     const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
     const [caseData, setCaseData] = useState<CaseData | null>(propCaseData || null);
+    const [selectedModel, setSelectedModel] = useState<string>('google/gemini-pro-1.5');
+
+    const AVAILABLE_MODELS = [
+        { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro (Best for Docs)', provider: 'Google' },
+        { id: 'gpt-4o', name: 'GPT-4o (Standard)', provider: 'OpenAI' },
+        { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (Legal)', provider: 'Anthropic' },
+    ];
 
     // Store AI-extracted values separately
     const [aiValues, setAiValues] = useState<{
@@ -246,7 +253,8 @@ export function CompareAnalysisModal({
         try {
             const response = await fetch(`/api/cases/${caseId}/compare-analysis`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelId: selectedModel })
             });
 
             if (!response.ok) {
@@ -576,16 +584,31 @@ export function CompareAnalysisModal({
                     {comparison && (
                         <div className="flex items-center gap-3 mb-6">
                             {!analysisComplete && !isLoading && (
-                                <button
-                                    onClick={runAnalysis}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                                    </svg>
-                                    Run AI Analysis
-                                </button>
+                                <div className="flex flex-col gap-3 bg-gray-800/50 p-4 rounded-lg border border-gray-700 w-full">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs font-semibold text-gray-400 uppercase">Analysis Model</label>
+                                        <select 
+                                            className="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-48"
+                                            value={selectedModel}
+                                            onChange={(e) => setSelectedModel(e.target.value)}
+                                        >
+                                            {AVAILABLE_MODELS.map(m => (
+                                                <option key={m.id} value={m.id}>{m.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <button
+                                        onClick={runAnalysis}
+                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2 self-start"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                        </svg>
+                                        Run AI Analysis
+                                    </button>
+                                </div>
                             )}
+
                             {isLoading && (
                                 <div className="flex flex-col gap-2 w-full max-w-md">
                                     <div className="flex items-center justify-between text-xs text-blue-400 font-medium">
@@ -600,12 +623,19 @@ export function CompareAnalysisModal({
                                     </div>
                                     <div className="flex items-center gap-2 text-blue-400 font-medium text-sm mt-1">
                                         <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                                        {progressMessage || 'Analyzing documents... This may take a minute.'}
+                                        Processing documents... This may take a minute.
                                     </div>
                                 </div>
                             )}
+
                             {analysisComplete && (
-                                <>
+                                <div className="flex flex-wrap items-center gap-3 w-full">
+                                    <div className="flex flex-col gap-1 mr-4">
+                                        <label className="text-xs font-semibold text-gray-400 uppercase">Model Used</label>
+                                        <div className="text-sm font-medium text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded-lg border border-blue-400/20">
+                                            {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name}
+                                        </div>
+                                    </div>
                                     <button
                                         onClick={selectAllChanged}
                                         className="text-sm px-3 py-1.5 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition"
@@ -628,7 +658,7 @@ export function CompareAnalysisModal({
                                     <span className="text-sm text-gray-500 ml-auto">
                                         {selectedFields.size} field(s) selected for update
                                     </span>
-                                </>
+                                </div>
                             )}
                         </div>
                     )}

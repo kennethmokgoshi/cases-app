@@ -285,13 +285,27 @@ function PartnerNewCaseComponent() {
 
     const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'allCombined' | 'optional', file: File | null) => {
         if (type === 'optional' && file) {
+            // Check for duplicates in the optional list
+            const isDuplicate = uploadedFiles.optional.some(existing => 
+                existing.name === file.name && existing.size === file.size
+            );
+            if (isDuplicate) return;
+
             setUploadedFiles(prev => ({
                 ...prev,
                 optional: [...prev.optional, file]
             }));
-        } else if (file) {
+        } else {
+            // Can be file or null (for removal)
             setUploadedFiles(prev => ({ ...prev, [type]: file }));
         }
+    };
+
+    const handleRemoveOptionalFile = (index: number) => {
+        setUploadedFiles(prev => ({
+            ...prev,
+            optional: prev.optional.filter((_, i) => i !== index)
+        }));
     };
 
     const handleCreateCase = async () => {
@@ -584,8 +598,9 @@ function PartnerNewCaseComponent() {
                             <div className="mt-6 p-4 bg-zeno-navy rounded-lg border border-zeno-cyan/30">
                                 <p className="text-sm text-gray-400 mb-1">Case will be created under:</p>
                                 <p className="text-zeno-cyan font-bold">
-                                    {selectedYear} {selectedMonth} → {selectedParent?.name}
-                                    {selectedSubprojectId && ` → ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                    {selectedParent?.name}
+                                    {selectedSubprojectId && ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                    {` ${selectedMonth} ${selectedYear}`}
                                 </p>
                                 <p className="text-sm text-gray-400 mt-2">Services: {selectedServices.length} selected</p>
                             </div>
@@ -756,7 +771,16 @@ function PartnerNewCaseComponent() {
                                         <p className="text-zeno-cyan font-medium">Click to upload Combined PDF</p>
                                         <p className="text-sm text-gray-400 mt-1">Ideally contains ID and POA</p>
                                         {uploadedFiles.allCombined && (
-                                            <p className="text-green-400 text-sm mt-2">✓ {uploadedFiles.allCombined.name}</p>
+                                            <div className="mt-3 flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg py-1.5 px-3">
+                                                <span className="text-green-400 text-sm truncate max-w-[200px]">✓ {uploadedFiles.allCombined.name}</span>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => { e.preventDefault(); handleFileChange('allCombined', null); }}
+                                                    className="text-gray-400 hover:text-red-400 transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                </button>
+                                            </div>
                                         )}
                                     </label>
                                 </div>
@@ -777,7 +801,16 @@ function PartnerNewCaseComponent() {
                                             <div className="text-3xl mb-2">🆔</div>
                                             <p className="text-zeno-cyan text-sm">Click to upload ID</p>
                                             {uploadedFiles.id && (
-                                                <p className="text-green-400 text-xs mt-1">✓ {uploadedFiles.id.name}</p>
+                                                <div className="mt-2 flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg py-1 px-2 mx-auto">
+                                                    <span className="text-green-400 text-xs truncate max-w-[120px]">✓ {uploadedFiles.id.name}</span>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={(e) => { e.preventDefault(); handleFileChange('id', null); }}
+                                                        className="text-gray-400 hover:text-red-400 transition-colors"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                    </button>
+                                                </div>
                                             )}
                                         </label>
                                     </div>
@@ -797,7 +830,16 @@ function PartnerNewCaseComponent() {
                                             <div className="text-3xl mb-2">📋</div>
                                             <p className="text-zeno-cyan text-sm">Click to upload POA</p>
                                             {uploadedFiles.poa && (
-                                                <p className="text-green-400 text-xs mt-1">✓ {uploadedFiles.poa.name}</p>
+                                                <div className="mt-2 flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg py-1 px-2 mx-auto">
+                                                    <span className="text-green-400 text-xs truncate max-w-[120px]">✓ {uploadedFiles.poa.name}</span>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={(e) => { e.preventDefault(); handleFileChange('poa', null); }}
+                                                        className="text-gray-400 hover:text-red-400 transition-colors"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                    </button>
+                                                </div>
                                             )}
                                         </label>
                                     </div>
@@ -815,9 +857,18 @@ function PartnerNewCaseComponent() {
                                         />
                                         <label htmlFor="report-upload" className="cursor-pointer">
                                             <div className="text-3xl mb-2">📊</div>
-                                            <p className="text-zeno-cyan text-sm">Click to upload Report</p>
+                                            <p className="text-zeno-cyan text-sm">Click to upload Credit Report</p>
                                             {uploadedFiles.creditReport && (
-                                                <p className="text-green-400 text-xs mt-1">✓ {uploadedFiles.creditReport.name}</p>
+                                                <div className="mt-2 flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg py-1 px-2 mx-auto max-w-[200px]">
+                                                    <span className="text-green-400 text-xs truncate">✓ {uploadedFiles.creditReport.name}</span>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={(e) => { e.preventDefault(); handleFileChange('creditReport', null); }}
+                                                        className="text-gray-400 hover:text-red-400 transition-colors"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                    </button>
+                                                </div>
                                             )}
                                         </label>
                                     </div>
@@ -840,10 +891,24 @@ function PartnerNewCaseComponent() {
                                         <label htmlFor="optional-upload" className="cursor-pointer">
                                             <div className="text-3xl mb-2">📁</div>
                                             <p className="text-zeno-cyan text-sm">Add optional files</p>
-                                            {uploadedFiles.optional.length > 0 && (
-                                                <p className="text-green-400 text-xs mt-1">✓ {uploadedFiles.optional.length} files</p>
-                                            )}
+                                            <p className="text-xs text-gray-400 mt-1">Select multiple if needed</p>
                                         </label>
+                                        {uploadedFiles.optional.length > 0 && (
+                                            <div className="mt-4 border-t border-white/10 pt-4 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                                {uploadedFiles.optional.map((file, idx) => (
+                                                    <div key={`${file.name}-${idx}`} className="flex items-center justify-between gap-2 bg-white/5 border border-white/10 rounded-lg py-1.5 px-3">
+                                                        <span className="text-gray-300 text-xs truncate text-left flex-1">✓ {file.name}</span>
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={(e) => { e.preventDefault(); handleRemoveOptionalFile(idx); }}
+                                                            className="text-gray-500 hover:text-red-400 transition-colors"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

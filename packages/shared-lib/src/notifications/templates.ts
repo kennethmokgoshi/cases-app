@@ -332,26 +332,36 @@ Kind regards,
         statusCode: 'REQUEST_FILE_DC',
         statusName: 'Request File from DC',
         smsTemplate: 'N/A',
-        emailSubject: 'URGENT: Request for File & Form 17.7 - {clientName} ({idNumber})',
+        emailSubject: 'File Transfer Request: {clientName} (ID: {idNumber}) — Documents Required',
         emailTemplate: `Dear {dcName},
 
-We are attending to the credit repair matter for {clientName} (ID: {idNumber}).
+I hope this message finds you well. Thank you so much for the work you have already put into managing the debt review matter for {clientName} (ID: {idNumber}) — we genuinely appreciate the effort and dedication that goes into supporting consumers through this process.
 
-We kindly request you to provide us with the following documents as soon as possible:
+We are writing to kindly request the transfer of the complete consumer file to Zenowethu Debt Management (NCRDC3693), as the consumer has approached us to continue with their debt review matter.
 
-1. The complete file for this consumer
-2. Form 17.7 (Notice to Credit Bureaux)
-3. All supporting documentation on record
+Please could you assist us by providing the following documents at your earliest convenience:
+
+1. Form 16 — Application for Debt Review
+2. Form 17.1 — Notification to Credit Providers and Payment Distribution Agency
+3. Form 17.2 — Rejection of Application for Debt Review (if applicable)
+4. Form 17.7 — Notice to Credit Bureaux
+5. The complete consumer file, including all correspondence and supporting documentation
+6. Any court orders, consent orders, or restructuring proposals in place
+7. All credit provider account schedules and statements on record
+8. Any other documents relevant to this consumer's debt review matter
 
 Consumer Details:
-• Name: {clientName}
+• Full Name: {clientName}
 • ID Number: {idNumber}
-• Ref: {fileNumber}
+• Our Reference: {fileNumber}
 
-We look forward to your prompt response.
+Please do not hesitate to reach out should you require any further information or authorisation from the consumer. We are happy to assist in making this transition as smooth as possible.
+
+Thank you very much for your cooperation and assistance — it is truly appreciated.
 
 Kind regards,
-{companyName} Team`,
+{companyName} Team
+Tel: {phone}`,
         sendToClient: false,
         sendToPartner: false,
         isUrgent: true },

@@ -193,7 +193,7 @@ export async function GET(request: Request) {
             const branch = branches.join(' ');
 
             if (year || month || source || branch) {
-                return [year, month, source, branch].filter(Boolean).join(' ');
+                return [source, branch, month, year].filter(Boolean).join(' ');
             }
 
             // Fallback for untyped or complex paths

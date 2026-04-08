@@ -49,9 +49,10 @@ model Client {
   idNumber       String        @unique
   email             String?
   alternativeEmail  String?
-  phone             String?
-  alternativePhone  String?
-  whatsappNumber    String?
+  phone              String?
+  alternativePhone   String?
+  alternativePhone2  String?
+  whatsappNumber     String?
   telegramNumber    String?
   ghlContactId   String?
   address        String?
@@ -101,6 +102,7 @@ model Case {
   cb_status               String?
   cb_statusDate           DateTime?
   ncrdcNo                 String?
+  ncrSysRef               String?
   dhsStatus               String?
   dhsDaysCounter          String?
   debtReviewDate          DateTime?
@@ -181,12 +183,30 @@ model Document {
   analyzedAt    DateTime?
   extractedData String?
   uploadedById  String?
+  isAdminOnly   Boolean   @default(false)
   case          Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
   uploadedBy    User?     @relation(fields: [uploadedById], references: [id])
+  accessGrants  DocumentAccessGrant[]
 
   @@index([caseId])
   @@index([type])
   @@index([uploadedById])
+  @@index([isAdminOnly])
+}
+
+model DocumentAccessGrant {
+  id         String   @id @default(cuid())
+  documentId String
+  userId     String
+  grantedAt  DateTime @default(now())
+  grantedBy  String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation("DocumentAccessGrantee", fields: [userId], references: [id])
+  granter    User     @relation("DocumentAccessGranter", fields: [grantedBy], references: [id])
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
 }
 
 model CaseProject {
@@ -252,6 +272,8 @@ model User {
   approvedPlans             CasePlan[]          @relation("PlanApprover")
   approvedDebtReviewDocs    DebtReviewDocument[] @relation("DebtReviewDocumentApprover")
   caseAssignments           CaseAssignment[]
+  documentAccessGrants      DocumentAccessGrant[] @relation("DocumentAccessGrantee")
+  grantedDocumentAccess     DocumentAccessGrant[] @relation("DocumentAccessGranter")
 }
 
 model CaseAssignment {
@@ -1051,4 +1073,188 @@ model CasePlanEvent {
 
   @@index([planId])
   @@index([eventType])
+}
+
+// ============================================================
+// DCCP — DC Credit Protect insurance integration
+// ============================================================
+
+enum DCCPPolicyType {
+  CLI      // Credit Life Insurance replacement
+  AIP      // Assistance Income Protector
+  FUNERAL  // Funeral Cover (Individual or Family)
+}
+
+enum DCCPPolicyStatus {
+  DRAFT       // captured locally, not yet submitted to DCCP portal
+  SUBMITTED   // sent to DCCP portal, awaiting confirmation
+  ACTIVE      // confirmed active by DCCP
+  LAPSED      // policy lapsed (2 missed premiums)
+  CANCELLED   // cancelled by client or DC
+}
+
+enum DCCPFuneralCoverType {
+  INDIVIDUAL
+  FAMILY
+}
+
+model DCCPPolicy {
+  id              String            @id @default(cuid())
+  caseId          String?           // optional link to a debt review case
+  clientId        String?           // optional link to Client record
+  policyType      DCCPPolicyType
+  status          DCCPPolicyStatus  @default(DRAFT)
+  policyNumber    String?           // assigned by DCCP after submission
+
+  // Client personal details (captured at time of policy)
+  clientFirstName  String
+  clientLastName   String
+  clientIdNumber   String
+  clientDob        DateTime
+  clientEmail      String?
+  clientPhone      String
+  clientAddress    String
+
+  // Employment details (required for AIP)
+  employerName     String?
+  employmentType   String?           // "PERMANENT" only for AIP
+  employedSince    DateTime?
+
+  // Debit order
+  bankName         String?
+  accountNumber    String?
+  accountType      String?           // "CHEQUE" | "SAVINGS"
+  debitOrderDate   Int?              // preferred day of month (1-31)
+
+  // AIP-specific fields
+  aipCoverAmount   Int?              // 5000 | 10000 | 15000 (monthly benefit)
+
+  // Funeral-specific fields
+  funeralCoverType DCCPFuneralCoverType?
+  funeralCoverAmount Int?            // 10000 | 20000 | 30000
+
+  // Financials
+  retailPremium    Decimal           @db.Decimal(10, 2)
+  referralFee      Decimal           @db.Decimal(10, 2)  // our commission
+
+  // Waiting period waiver
+  previousInsurerName     String?
+  previousPolicyNumber    String?
+  previousPolicySchedule  Boolean   @default(false)
+
+  // Timestamps
+  inceptionDate    DateTime?         // 1st of month cover starts
+  submittedAt      DateTime?         // when pushed to DCCP portal
+  confirmedAt      DateTime?         // when DCCP confirmed active
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  creditAccounts   DCCPCreditAccount[]
+  funeralDependants DCCPFuneralDependant[]
+
+  @@index([policyType])
+  @@index([status])
+  @@index([clientIdNumber])
+  @@index([caseId])
+}
+
+model DCCPCreditAccount {
+  id              String      @id @default(cuid())
+  policyId        String
+  creditProvider  String      // e.g. "ABSA", "Capitec", "African Bank"
+  accountNumber   String?
+  accountType     String      // e.g. "Personal Loan", "Credit Card", "Store Account"
+  outstandingBalance Decimal  @db.Decimal(10, 2)
+  currentPremium  Decimal     @db.Decimal(10, 2)  // what client currently pays
+  newPremium      Decimal     @db.Decimal(10, 2)  // DCCP replacement premium
+  saving          Decimal     @db.Decimal(10, 2)  // currentPremium - newPremium
+
+  policy          DCCPPolicy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+}
+
+model DCCPFuneralDependant {
+  id           String      @id @default(cuid())
+  policyId     String
+  relationship String      // "SPOUSE" | "CHILD_14_21" | "CHILD_7_13" | "CHILD_0_6" | "STILLBORN"
+  firstName    String
+  lastName     String
+  idNumber     String?
+  dob          DateTime?
+  coverAmount  Int         // payout amount for this dependant
+
+  policy       DCCPPolicy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+}
+
+model DCCPCredential {
+  id        String   @id @default(cuid())
+  username  String
+  password  String   // AES-256 encrypted at application layer
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DCCPCommissionRecord {
+  id              String    @id @default(cuid())
+  month           String    // "2026-04" format
+  policyId        String
+  policyType      DCCPPolicyType
+  clientName      String
+  policyNumber    String?
+  retailPremium   Decimal   @db.Decimal(10, 2)
+  referralFee     Decimal   @db.Decimal(10, 2)
+  isPaid          Boolean   @default(false)
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([month])
+  @@index([policyId])
+  @@index([isPaid])
+}
+
+model DCCPMonthlyCommissionSummary {
+  id              String    @id @default(cuid())
+  month           String    @unique  // "2026-04"
+  totalPolicies   Int       @default(0)
+  cliPolicies     Int       @default(0)
+  aipPolicies     Int       @default(0)
+  funeralPolicies Int       @default(0)
+  totalPremium    Decimal   @db.Decimal(10, 2) @default(0)
+  totalFee        Decimal   @db.Decimal(10, 2) @default(0)
+  isPaid          Boolean   @default(false)
+  paidAt          DateTime?
+  reportConfirmedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([month])
+  @@index([isPaid])
+}
+
+// ============================================================
+// AI PROVIDER MANAGEMENT — Multi-provider AI routing
+// ============================================================
+
+model AiProvider {
+  id              String   @id @default(cuid())
+  name            String   // Display name e.g. "OpenRouter", "OpenAI Direct"
+  provider        String   // "openai" | "openrouter" | "anthropic" | "google"
+  apiKey          String   // Stored masked in GET responses
+  baseUrl         String?  // Override base URL (required for OpenRouter)
+  isActive        Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+  // JSON map of task → model ID e.g. { "document_analysis": "gpt-4o", "legal_drafting": "anthropic/claude-opus-4" }
+  taskAssignments Json     @default("{}")
+  // JSON array of model IDs available for this provider
+  models          Json     @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([provider])
+  @@index([isActive])
 }

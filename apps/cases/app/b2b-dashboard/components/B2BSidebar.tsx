@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
@@ -13,31 +13,64 @@ const logger = {
     debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
 };
 
+// Types for the project hierarchy
+type ProjectNode = {
+    id: string;
+    name: string;
+    type: string;
+    parentId: string | null;
+    _count?: { cases: number };
+};
+
+type BranchNode = {
+    name: string;
+    projectId: string;
+    totalCases: number;
+    years: YearNode[];
+};
+
+type YearNode = {
+    name: string;
+    projectId: string;
+    totalCases: number;
+    months: MonthNode[];
+};
+
+type MonthNode = {
+    name: string;
+    projectId: string;
+    cases: number;
+};
+
+// Month sort order for consistent ordering
+const MONTH_ORDER: Record<string, number> = {
+    'January': 1, 'February': 2, 'March': 3, 'April': 4,
+    'May': 5, 'June': 6, 'July': 7, 'August': 8,
+    'September': 9, 'October': 10, 'November': 11, 'December': 12,
+};
+
 export function B2BSidebar() {
     const pathname = usePathname();
     const { data: session } = useSession();
 
     const allMenuItems = [
-        { label: 'Dashboard', href: '/b2b-dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
-        { label: 'Submit Referral', href: '/b2b-dashboard/cases/new', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-        { label: 'Cases', href: '/b2b-dashboard/cases', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
-        { label: 'My Cases', href: '/b2b-dashboard/cases?filter=my-cases', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+        { label: 'My Cases', href: '/b2b-dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
         { label: 'Reporting', href: '/b2b-dashboard/reporting', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', managerOnly: true },
-        { label: 'Reports', href: '/b2b-dashboard/reports', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', adminOnly: true },
     ];
 
     // Filter menu - show Reports to admins, Reporting to managers
     const menuItems = allMenuItems.filter(item => {
-        if (item.adminOnly) return session?.user?.isAdmin;
-        if (item.managerOnly) return session?.user?.isManager || session?.user?.isAdmin;
+        if ((item as any).adminOnly) return session?.user?.isAdmin;
+        if ((item as any).managerOnly) return session?.user?.isManager || session?.user?.isAdmin;
         return true;
     });
 
     const [timelineData, setTimelineData] = useState<any>({});
-    const [projectData, setProjectData] = useState<any[]>([]);
-    const [viewMode, setViewMode] = useState<'TIME' | 'SOURCE'>('TIME');
+    const [projectData, setProjectData] = useState<ProjectNode[]>([]);
+    const [viewMode, setViewMode] = useState<'TIME' | 'SOURCE'>('SOURCE');
     const [expandedYears, setExpandedYears] = useState<string[]>([]);
-    const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
+    // Track expanded branches and their years: "branchId" or "branchId:year"
+    const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (session?.user) {
@@ -68,17 +101,186 @@ export function B2BSidebar() {
                 })
                 .catch(err => logger.error('Failed to fetch cases for timeline:', err));
 
-            // Fetch projects for source view
+            // Fetch ALL projects for source view (including those with 0 cases - we need the hierarchy)
             fetch('/api/projects?flat=true&slim=true')
                 .then(res => res.json())
                 .then(data => {
                     if (Array.isArray(data)) {
-                        setProjectData(data.filter(p => (p._count?.cases || 0) > 0));
+                        setProjectData(data);
                     }
                 })
                 .catch(err => logger.error('Failed to fetch projects for source view:', err));
         }
     }, [session]);
+
+    // Build the Branch → Year → Month hierarchy from flat project data
+    const branchHierarchy = useMemo<BranchNode[]>(() => {
+        if (projectData.length === 0) return [];
+
+        // Build a lookup map
+        const byId = new Map<string, ProjectNode>();
+        const childrenOf = new Map<string, ProjectNode[]>();
+
+        projectData.forEach(p => {
+            byId.set(p.id, p);
+            if (p.parentId) {
+                const existing = childrenOf.get(p.parentId) || [];
+                existing.push(p);
+                childrenOf.set(p.parentId, existing);
+            }
+        });
+
+        // Find all BRANCH or FOLDER type nodes that could be branches
+        // Also consider: some projects might just be named after branches without the BRANCH type
+        // The hierarchy is: ROOT > ACQUISITION_SOURCE > BRANCH > YEAR > MONTH
+        // Or sometimes: ROOT > ACQUISITION_SOURCE > YEAR > MONTH (no branch level)
+
+        // Strategy: Walk the tree from leaves (MONTH nodes with cases) upward to find the structure
+        // Better strategy: Find BRANCH-type nodes and build down, or find root sources and build down
+
+        const branches: BranchNode[] = [];
+
+        // Find branch-level nodes (type === BRANCH or FOLDER that are children of ACQUISITION_SOURCE)
+        const branchNodes = projectData.filter(p => p.type === 'BRANCH' || p.type === 'FOLDER');
+
+        // For each branch, find its Year and Month children
+        for (const branch of branchNodes) {
+            const yearChildren = (childrenOf.get(branch.id) || [])
+                .filter(c => c.type === 'YEAR')
+                .sort((a, b) => b.name.localeCompare(a.name)); // Most recent year first
+
+            if (yearChildren.length === 0) continue; // Skip folders without year structure
+
+            const years: YearNode[] = [];
+
+            for (const year of yearChildren) {
+                const monthChildren = (childrenOf.get(year.id) || [])
+                    .filter(c => c.type === 'MONTH')
+                    .sort((a, b) => (MONTH_ORDER[b.name] || 99) - (MONTH_ORDER[a.name] || 99)); // Most recent month first
+
+                const months: MonthNode[] = monthChildren.map(m => ({
+                    name: m.name,
+                    projectId: m.id,
+                    cases: m._count?.cases || 0,
+                }));
+
+                // Year total = sum of its month cases + direct year cases
+                const yearDirectCases = year._count?.cases || 0;
+                const yearTotalCases = months.reduce((sum, m) => sum + m.cases, 0) + yearDirectCases;
+
+                if (yearTotalCases > 0 || months.some(m => m.cases > 0)) {
+                    years.push({
+                        name: year.name,
+                        projectId: year.id,
+                        totalCases: yearTotalCases,
+                        months: months.filter(m => m.cases > 0),
+                    });
+                }
+            }
+
+            // Branch total = sum of all year totals + direct branch cases
+            const branchDirectCases = branch._count?.cases || 0;
+            const branchTotalCases = years.reduce((sum, y) => sum + y.totalCases, 0) + branchDirectCases;
+
+            if (branchTotalCases > 0) {
+                branches.push({
+                    name: branch.name,
+                    projectId: branch.id,
+                    totalCases: branchTotalCases,
+                    years: years.filter(y => y.totalCases > 0),
+                });
+            }
+        }
+
+        // Also handle cases where YEAR nodes are direct children of ACQUISITION_SOURCE (no branch level)
+        // Find ACQUISITION_SOURCE nodes
+        const sourceNodes = projectData.filter(p => p.type === 'ACQUISITION_SOURCE');
+        for (const source of sourceNodes) {
+            const directYearChildren = (childrenOf.get(source.id) || [])
+                .filter(c => c.type === 'YEAR');
+
+            if (directYearChildren.length === 0) continue;
+
+            // Check if this source already has branches we've processed
+            const sourceBranches = (childrenOf.get(source.id) || [])
+                .filter(c => c.type === 'BRANCH' || c.type === 'FOLDER');
+            if (sourceBranches.length > 0) continue; // Already handled above
+
+            const years: YearNode[] = [];
+            for (const year of directYearChildren.sort((a, b) => b.name.localeCompare(a.name))) {
+                const monthChildren = (childrenOf.get(year.id) || [])
+                    .filter(c => c.type === 'MONTH')
+                    .sort((a, b) => (MONTH_ORDER[b.name] || 99) - (MONTH_ORDER[a.name] || 99));
+
+                const months: MonthNode[] = monthChildren.map(m => ({
+                    name: m.name,
+                    projectId: m.id,
+                    cases: m._count?.cases || 0,
+                }));
+
+                const yearDirectCases = year._count?.cases || 0;
+                const yearTotalCases = months.reduce((sum, m) => sum + m.cases, 0) + yearDirectCases;
+
+                if (yearTotalCases > 0) {
+                    years.push({
+                        name: year.name,
+                        projectId: year.id,
+                        totalCases: yearTotalCases,
+                        months: months.filter(m => m.cases > 0),
+                    });
+                }
+            }
+
+            const sourceDirectCases = source._count?.cases || 0;
+            const sourceTotalCases = years.reduce((sum, y) => sum + y.totalCases, 0) + sourceDirectCases;
+
+            if (sourceTotalCases > 0) {
+                // Use source name as "branch" name (e.g., "Letsatsi Referrals")
+                // Clean up the name
+                let displayName = source.name;
+                displayName = displayName.replace(/\s*Referrals?\s*/i, '').trim() || source.name;
+
+                branches.push({
+                    name: displayName,
+                    projectId: source.id,
+                    totalCases: sourceTotalCases,
+                    years,
+                });
+            }
+        }
+
+        // Sort branches alphabetically
+        return branches.sort((a, b) => a.name.localeCompare(b.name));
+    }, [projectData]);
+
+    // Auto-expand current year in branches on first load
+    useEffect(() => {
+        if (branchHierarchy.length > 0 && expandedNodes.size === 0) {
+            const currentYear = new Date().getFullYear().toString();
+            const newExpanded = new Set<string>();
+            // Auto-expand all branches and current year
+            branchHierarchy.forEach(branch => {
+                newExpanded.add(branch.projectId);
+                const currentYearNode = branch.years.find(y => y.name === currentYear);
+                if (currentYearNode) {
+                    newExpanded.add(`${branch.projectId}:${currentYearNode.name}`);
+                }
+            });
+            setExpandedNodes(newExpanded);
+        }
+    }, [branchHierarchy]);
+
+    const toggleNode = (key: string) => {
+        setExpandedNodes(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    };
 
     const toggleYear = (year: string) => {
         setExpandedYears((prev: string[]) =>
@@ -86,13 +288,19 @@ export function B2BSidebar() {
         );
     };
 
-    const toggleProject = (id: string) => {
-        setExpandedProjects((prev: string[]) =>
-            prev.includes(id) ? prev.filter((p: string) => p !== id) : [...prev, id]
-        );
-    };
-
     const sortedYears = Object.keys(timelineData).sort((a, b) => b.localeCompare(a));
+
+    // Chevron icon component
+    const Chevron = ({ expanded }: { expanded: boolean }) => (
+        <svg
+            className={`w-3 h-3 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+        >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+    );
 
     return (
         <aside className="fixed inset-y-0 left-0 w-64 bg-zeno-gray border-r border-white/10 z-50 flex flex-col overflow-y-auto">
@@ -130,22 +338,105 @@ export function B2BSidebar() {
                     );
                 })}
 
-                {/* Timeline Section */}
+                {/* Sources / Timeline Section */}
                 <div className="pt-6 border-t border-white/5">
                     <div className="flex items-center justify-between mb-4 px-2">
                         <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">
-                            {viewMode === 'TIME' ? 'Timeline' : 'Sources'}
+                            {viewMode === 'SOURCE' ? 'Sources' : 'Timeline'}
                         </h3>
                         <button
                             onClick={() => setViewMode((prev: 'TIME' | 'SOURCE') => prev === 'TIME' ? 'SOURCE' : 'TIME')}
                             className="text-[10px] text-zeno-cyan hover:text-white transition-colors border border-zeno-cyan/30 rounded px-1.5 py-0.5 bg-zeno-cyan/5 whitespace-nowrap"
                         >
-                            {viewMode === 'TIME' ? 'Sort by Source' : 'Sort by Date'}
+                            {viewMode === 'SOURCE' ? 'Sort by Date' : 'Sort by Source'}
                         </button>
                     </div>
 
-                    <div className="space-y-1">
-                        {viewMode === 'TIME' ? (
+                    <div className="space-y-0.5">
+                        {viewMode === 'SOURCE' ? (
+                            /* ═══════════════════════════════════════════
+                               SOURCES VIEW: Branch → Year → Month
+                               ═══════════════════════════════════════════ */
+                            branchHierarchy.length === 0 ? (
+                                <p className="text-xs text-gray-600 px-3 py-2 italic">No sources found</p>
+                            ) : (
+                                branchHierarchy.map(branch => {
+                                    const branchExpanded = expandedNodes.has(branch.projectId);
+                                    return (
+                                        <div key={branch.projectId}>
+                                            {/* ── Branch Level ── */}
+                                            <button
+                                                onClick={() => toggleNode(branch.projectId)}
+                                                className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-md transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <Chevron expanded={branchExpanded} />
+                                                    <svg className="w-3.5 h-3.5 text-zeno-cyan/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                                    </svg>
+                                                    <span className="font-semibold truncate">{branch.name}</span>
+                                                </div>
+                                                <span className="text-[10px] bg-zeno-cyan/10 text-zeno-cyan px-1.5 py-0.5 rounded font-medium shrink-0 ml-2">
+                                                    {branch.totalCases}
+                                                </span>
+                                            </button>
+
+                                            {/* ── Year Level ── */}
+                                            {branchExpanded && (
+                                                <div className="ml-3 pl-3 border-l border-white/5 mt-0.5 space-y-0.5">
+                                                    {branch.years.map(year => {
+                                                        const yearKey = `${branch.projectId}:${year.name}`;
+                                                        const yearExpanded = expandedNodes.has(yearKey);
+                                                        return (
+                                                            <div key={yearKey}>
+                                                                <div className="flex items-center">
+                                                                    <button
+                                                                        onClick={() => toggleNode(yearKey)}
+                                                                        className="flex-1 flex items-center justify-between px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors group"
+                                                                    >
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Chevron expanded={yearExpanded} />
+                                                                            <svg className="w-3 h-3 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                            </svg>
+                                                                            <span className="font-medium">{year.name}</span>
+                                                                        </div>
+                                                                        <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded group-hover:bg-white/10 transition-colors">
+                                                                            {year.totalCases}
+                                                                        </span>
+                                                                    </button>
+                                                                </div>
+
+                                                                {/* ── Month Level ── */}
+                                                                {yearExpanded && (
+                                                                    <div className="ml-3 pl-3 border-l border-white/5 mt-0.5 space-y-0.5">
+                                                                        {year.months.map(month => (
+                                                                            <Link
+                                                                                key={month.projectId}
+                                                                                href={`/b2b-dashboard/cases?projectId=${month.projectId}`}
+                                                                                className="flex items-center justify-between px-3 py-1.5 text-xs text-gray-500 hover:text-white transition-colors rounded-md hover:bg-white/5"
+                                                                            >
+                                                                                <span>{month.name}</span>
+                                                                                <span className="text-[10px] text-gray-600">
+                                                                                    {month.cases}
+                                                                                </span>
+                                                                            </Link>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )
+                        ) : (
+                            /* ═══════════════════════════════════════════
+                               TIMELINE VIEW: Year → Month  (unchanged)
+                               ═══════════════════════════════════════════ */
                             sortedYears.map(year => (
                                 <div key={year} className="group">
                                     <button
@@ -153,14 +444,7 @@ export function B2BSidebar() {
                                         className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                                     >
                                         <div className="flex items-center gap-2">
-                                            <svg
-                                                className={`w-3 h-3 transition-transform ${expandedYears.includes(year) ? 'rotate-90' : ''}`}
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                            </svg>
+                                            <Chevron expanded={expandedYears.includes(year)} />
                                             <span className="font-medium">{year}</span>
                                         </div>
                                         <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded group-hover:bg-white/10 transition-colors">
@@ -185,19 +469,6 @@ export function B2BSidebar() {
                                         </div>
                                     )}
                                 </div>
-                            ))
-                        ) : (
-                            projectData.map(project => (
-                                <Link
-                                    key={project.id}
-                                    href={`/b2b-dashboard/cases?projectId=${project.id}`}
-                                    className="flex items-center justify-between px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors rounded-md hover:bg-white/5"
-                                >
-                                    <span className="truncate">{project.name}</span>
-                                    <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded">
-                                        {project._count?.cases || 0}
-                                    </span>
-                                </Link>
                             ))
                         )}
                     </div>

@@ -98,13 +98,19 @@ export async function GET(request: Request) {
                 if (!allowedList.includes(projectId)) {
                     return NextResponse.json({ error: 'Forbidden: You do not have access to this project' }, { status: 403 });
                 }
-                where.projects = { some: { projectId: projectId } };
+                // Include the project itself + all its descendants
+                const projectAndDescendants = [projectId, ...getDescendantIds(projectId)];
+                // Only include IDs the user is allowed to see
+                const effectiveIds = projectAndDescendants.filter(id => allowedList.includes(id));
+                where.projects = { some: { projectId: { in: effectiveIds } } };
             } else {
                 where.projects = { some: { projectId: { in: allowedList } } };
             }
         } else if (projectId) {
             // Admin requesting a specific project bypasses membership but filters by ID
-            where.projects = { some: { projectId: projectId } };
+            // Include the project itself + all its descendants so parent folders show child cases
+            const projectAndDescendants = [projectId, ...getDescendantIds(projectId)];
+            where.projects = { some: { projectId: { in: projectAndDescendants } } };
         }
 
         // Apply filters
@@ -283,7 +289,7 @@ export async function GET(request: Request) {
             const branch = branches.join(' ');
 
             if (year || month || source || branch) {
-                return [year, month, source, branch].filter(Boolean).join(' ');
+                return [source, branch, month, year].filter(Boolean).join(' ');
             }
 
             // Fallback for untyped or complex paths

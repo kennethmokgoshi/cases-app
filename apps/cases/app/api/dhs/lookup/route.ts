@@ -27,7 +27,7 @@ const getFilePath = (fileUrl: string) => {
 // Force dependency rebuild for lib/dhs.ts
 export async function POST(request: Request) {
     try {
-        const { idNumber, caseId, action } = await request.json();
+        const { idNumber, caseId, action, useAiExtraction = false } = await request.json();
 
         if (!idNumber) {
             return NextResponse.json(
@@ -330,9 +330,9 @@ export async function POST(request: Request) {
 
             logger.info(`Document Check: ID=${!!idDoc}, POA=${!!poaDoc}, OTHER=${otherDocs.length}`);
 
-            // 2. Attempt Extraction if missing
-            if (missingDocs.length > 0 && otherDocs.length > 0) {
-                logger.info(`Missing ${missingDocs.join(', ')}. Attempting extraction from ${otherDocs.length} 'Other' documents...`);
+            // 2. Attempt AI Extraction only if explicitly approved by user/AI plan
+            if (missingDocs.length > 0 && otherDocs.length > 0 && useAiExtraction) {
+                logger.info(`Missing ${missingDocs.join(', ')}. AI extraction approved — attempting extraction from ${otherDocs.length} 'Other' documents...`);
 
                 // Prepare docs for analysis
                 const docsToAnalyze = otherDocs.map(d => ({
@@ -437,9 +437,15 @@ export async function POST(request: Request) {
                 if (!idDoc) stillMissing.push('ID');
                 if (!poaDoc) stillMissing.push('POA');
 
+                const aiNote = missingDocs.length > 0 && otherDocs.length > 0 && !useAiExtraction
+                    ? ' Other uploaded documents were found that may contain these — enable AI extraction to auto-detect them, or upload the documents manually.'
+                    : '';
+
                 return NextResponse.json({
                     success: false,
-                    message: `Cannot request transfer. Missing mandatory documents: ${stillMissing.join(', ')}. Please upload them or ensure they are clear in 'Other' files.`
+                    message: `Cannot request transfer. Missing mandatory documents: ${stillMissing.join(', ')}. Please upload them directly or ask staff to review uploaded files.${aiNote}`,
+                    missingDocs: stillMissing,
+                    canUseAiExtraction: missingDocs.length > 0 && otherDocs.length > 0 && !useAiExtraction
                 });
             }
 
@@ -452,21 +458,23 @@ export async function POST(request: Request) {
             });
             const badEmails = badEmailSettings.map(s => s.value.toLowerCase().trim());
 
-            // Email resolution chain: case record → DB history → NCR website
+            // Email resolution chain (priority order):
+            // 1st — lastKnownEmail (most recently confirmed working email for this DC)
+            // 2nd — DB history (confirmed working email across other cases with same NCRDC)
+            // 3rd — case.dcEmail (from DHS auto-fill, may be outdated)
+            // 4th — NCR public register (ncr.org.za live lookup, last resort)
             let resolvedEmail: string | null = null;
             let emailSource = '';
 
             const isGoodEmail = (e: string | null | undefined): e is string =>
                 !!e && e.trim().length > 0 && !badEmails.includes(e.toLowerCase().trim());
 
-            if (isGoodEmail(caseData.dcEmail)) {
-                resolvedEmail = caseData.dcEmail;
-                emailSource = 'case record';
-            } else if (isGoodEmail(caseData.lastKnownEmail)) {
+            if (isGoodEmail(caseData.lastKnownEmail)) {
+                // Priority 1: last confirmed working email
                 resolvedEmail = caseData.lastKnownEmail;
                 emailSource = 'last known email';
             } else if (caseData.ncrdcNo) {
-                // Try DB history — find most recent working email for this NCRDC across other cases
+                // Priority 2: DB history — most recent working email for this NCRDC across other cases
                 const previousCase = await prisma.case.findFirst({
                     where: {
                         ncrdcNo: caseData.ncrdcNo,
@@ -482,9 +490,13 @@ export async function POST(request: Request) {
                     resolvedEmail = previousCase.dcEmail;
                     emailSource = 'database history';
                     logger.info(`Resolved DC email from DB history for NCRDC ${caseData.ncrdcNo}: ${resolvedEmail}`);
+                } else if (isGoodEmail(caseData.dcEmail)) {
+                    // Priority 3: dcEmail from DHS auto-fill
+                    resolvedEmail = caseData.dcEmail;
+                    emailSource = 'case record (DHS auto-fill)';
                 } else {
-                    // Final fallback — NCR public register
-                    logger.info(`No DB email found — trying NCR website for NCRDC ${caseData.ncrdcNo}`);
+                    // Priority 4: NCR public register — live lookup on ncr.org.za
+                    logger.info(`No DB or case email found — trying NCR website for NCRDC ${caseData.ncrdcNo}`);
                     const ncrResult = await lookupDCFromNCR(caseData.ncrdcNo);
                     if (ncrResult.found && ncrResult.email && isGoodEmail(ncrResult.email)) {
                         resolvedEmail = ncrResult.email;
@@ -492,6 +504,10 @@ export async function POST(request: Request) {
                         logger.info(`Resolved DC email from NCR website: ${resolvedEmail}`);
                     }
                 }
+            } else if (isGoodEmail(caseData.dcEmail)) {
+                // Priority 3 fallback when no ncrdcNo available
+                resolvedEmail = caseData.dcEmail;
+                emailSource = 'case record (DHS auto-fill)';
             }
 
             if (!resolvedEmail) {
@@ -540,7 +556,7 @@ export async function POST(request: Request) {
                     data: {
                         caseId,
                         userId: (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id || '',
-                        content: `[SYSTEM] Email sent to DC (${caseData.dcEmail}) requesting complete file and Form 17.7. Status updated to 'Request File from DC'.`
+                        content: `[SYSTEM] Email sent to DC (${resolvedEmail}) [source: ${emailSource}] requesting: Form 16, Form 17.1, Form 17.2, Form 17.7, complete consumer file, court/consent orders, account schedules, and all supporting documentation. Status updated to 'Request File from DC'. Next update: +5 working days.`
                     }
                 });
 

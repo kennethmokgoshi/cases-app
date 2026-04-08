@@ -16,13 +16,64 @@ const logger = createLogger('api/dhs/transfer');
 
 export async function POST(request: Request) {
     try {
-        const { caseId, idNumber, poaDocumentId, idDocumentId } = await request.json();
+        const { caseId, idNumber, poaDocumentId, idDocumentId, planStepId } = await request.json();
 
         if (!caseId || !idNumber) {
             return NextResponse.json(
                 { error: 'Case ID and ID number are required' },
                 { status: 400 }
             );
+        }
+
+        // Plan gate: if an active AI plan exists for this case, the DHS transfer
+        // MUST originate from an approved plan step — not from a direct UI button press.
+        const activePlan = await prisma.casePlan.findFirst({
+            where: {
+                caseId,
+                status: { in: ['APPROVED', 'IN_PROGRESS'] },
+            },
+            include: {
+                steps: {
+                    where: { actionType: 'DHS_TRANSFER_REQUEST' },
+                    select: { id: true, status: true },
+                },
+            },
+        });
+
+        if (activePlan) {
+            if (!planStepId) {
+                return NextResponse.json(
+                    {
+                        error: 'This case has an active AI plan. The DHS transfer must be executed through the approved plan — not directly. Please open the AI Plan tab and run the DHS Transfer step from there.',
+                        requiresPlanApproval: true,
+                        planId: activePlan.id,
+                    },
+                    { status: 403 }
+                );
+            }
+
+            // Verify the provided planStepId is legitimate and in the correct state
+            const planStep = await prisma.casePlanStep.findFirst({
+                where: {
+                    id: planStepId,
+                    planId: activePlan.id,
+                    actionType: 'DHS_TRANSFER_REQUEST',
+                    status: 'IN_PROGRESS',
+                },
+            });
+
+            if (!planStep) {
+                return NextResponse.json(
+                    {
+                        error: 'Invalid or unapproved plan step. The DHS_TRANSFER_REQUEST step must be IN_PROGRESS (approved and executing) to proceed.',
+                        requiresPlanApproval: true,
+                        planId: activePlan.id,
+                    },
+                    { status: 403 }
+                );
+            }
+
+            logger.info(`Plan gate passed: step ${planStepId} is IN_PROGRESS on approved plan ${activePlan.id}`);
         }
 
         // Get the case and documents

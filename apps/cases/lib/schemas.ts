@@ -50,6 +50,7 @@ export const ClientUpdateSchema = z.object({
     alternativeEmail: emailField,
     phone: saPhoneNumber,
     alternativePhone: saPhoneNumber,
+    alternativePhone2: saPhoneNumber,
     whatsappNumber: saPhoneNumber,
     telegramNumber: saPhoneNumber,
     address: optionalString,

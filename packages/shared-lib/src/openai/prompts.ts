@@ -174,8 +174,20 @@ IMPORTANT:
 - ADDITIONALLY: For each field listed in _occurrences, list ALL values you found across the entire document and how many times each appeared. Example: if surname appeared as 'THWALA' twice and 'TWALA' once, list both. If all occurrences of a field are the same, just list that one value.`,
 
     CREDIT_REPORT: `You are analyzing a MAJOR South African credit bureau report (e.g. XDS, Experian, TransUnion, or CPB).
-        
+
 CRITICAL: Use the specific sections below to extract data.
+
+0. **CREDIT SCORE**
+   - Look for "Credit Score", "Score", "Risk Score", or "Bureau Score" section.
+   - score: The numeric credit score (e.g. 612). Use 0 if not found.
+   - band: Map the score to a band:
+       0–499 → "Poor"
+       500–579 → "Below Average"
+       580–669 → "Average"
+       670–739 → "Good"
+       740–999 → "Great"
+       Not found → "Unknown"
+   - suppressors: List ALL listed score suppressor codes or descriptions shown on the report (e.g. ["Adverse listing", "High utilisation", "Recent enquiries"]). Empty array if none found.
 
 1. **CODIX RESULTS**
    - Look for "Codix Results" section.
@@ -220,14 +232,28 @@ CRITICAL: Use the specific sections below to extract data.
    - employer: Employer name with the most RECENT date.
    - occupation: Occupation from the most RECENT date.
 
-7. **OPEN ACCOUNT DETAILS** (Manual Scan)
-   - Scan the report for OPEN/ACTIVE/ARREARS accounts.
+7. **ADVERSE LISTINGS** (Separate from open accounts)
+   - Look for accounts coded as: "Handed Over", "Written Off", "Judgment", "Administration", "Bad Debt", "Default".
+   - For each adverse listing extract:
+     - creditor: credit provider name
+     - accountNumber: account/reference number
+     - adverseCode: the specific adverse classification (e.g. "Handed Over", "Written Off", "Judgment")
+     - adverseDate: date the adverse listing was placed (YYYY-MM-DD or NA)
+     - lastPaymentDate: date of last payment recorded (YYYY-MM-DD or NA)
+     - openBalance: total outstanding balance (number)
+     - overdueBalance: overdue / arrears amount (number)
+     - monthsInArrears: number of months in arrears (number, 0 if not applicable)
+     - paymentHistory: 24-month payment history string (e.g. "CCCCCC333300" or NA)
+     - status: current status label from the report
+
+8. **OPEN ACCOUNT DETAILS** (Manual Scan)
+   - Scan the report for OPEN/ACTIVE/ARREARS accounts (exclude adverse/written-off accounts already in section 7).
    - Extract details for each.
    - For each account, also extract the 24-month payment history code string if available.
    - **INSURANCE AUDIT**: Extract the "Insurance", "Credit Life", or "Monthly Fee" specifically related to the account if visible.
    - **SAVINGS METRICS**: Extract the **"Contract Start Date"** and **"Contract Term"** (e.g., 72 months) or "Months Remaining".
 
-8. **ENQUIRY HISTORY**
+9. **ENQUIRY HISTORY**
    - Look for "Enquiries", "Credit Enquiries", or "Search History" section.
    - Extract ALL enquiries from the last 12 months.
    - For each: date, enquirer name (credit provider), enquiry type, and reason.
@@ -237,6 +263,11 @@ IMPORTANT: For ALL string fields not found, use "NA". For number fields not foun
 
 Output JSON:
 {
+  "creditScore": {
+    "score": number,
+    "band": "string (Poor | Below Average | Average | Good | Great | Unknown)",
+    "suppressors": ["string"]
+  },
   "codixResult": { "outcome": "string", "reason": "string" },
   "debtRestructuring": {
     "ncrdcNo": "string",
@@ -266,6 +297,20 @@ Output JSON:
     "employer": "string",
     "occupation": "string"
   },
+  "adverseListings": [
+    {
+      "creditor": "string",
+      "accountNumber": "string",
+      "adverseCode": "string (e.g. Handed Over | Written Off | Judgment | Administration)",
+      "adverseDate": "string (YYYY-MM-DD or NA)",
+      "lastPaymentDate": "string (YYYY-MM-DD or NA)",
+      "openBalance": number,
+      "overdueBalance": number,
+      "monthsInArrears": number,
+      "paymentHistory": "string (24-month code string or NA)",
+      "status": "string"
+    }
+  ],
   "accounts": [
     {
       "creditor": "string",
@@ -274,8 +319,8 @@ Output JSON:
       "installment": number,
       "insurancePremium": number,
       "contractStart": "string (YYYY-MM-DD)",
-      "contractTerm": number (Total months),
-      "remainingMonths": number (Months remaining),
+      "contractTerm": number,
+      "remainingMonths": number,
       "arrearsAmount": number,
       "status": "string",
       "paymentHistory": "string (24-month code string e.g. CCCCCC000122C, or NA if not found)",

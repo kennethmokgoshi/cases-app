@@ -19,7 +19,13 @@ export * from './ai/legal-secretary';
 export * from './ai/autonomy-engine';
 export * from './ai/savings-engine';
 
+// AI Provider Management
+export * from './ai/provider-client';
+
 export * from './metrics';
 
 // XDS Credit Bureau Integration
 export * from './xds';
+
+// Dispute letter generation (CreditFix AI)
+export * from './disputes';

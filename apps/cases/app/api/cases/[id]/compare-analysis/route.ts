@@ -44,6 +44,8 @@ export async function POST(
                     }
 
                     const { id: caseId } = await params;
+                    const { modelId } = await request.clone().json().catch(() => ({}));
+
                     sendUpdate({ type: 'progress', message: '🔍 Fetching case documents...' }, 2);
 
                     // Fetch case with client and documents
@@ -102,7 +104,7 @@ export async function POST(
                         const fileBuffer = await readFile(filePath);
                         const base64Pdf = fileBuffer.toString('base64');
 
-                        analysis = await extractDocumentsFromCombinedPdf(base64Pdf, onProgress);
+                        analysis = await extractDocumentsFromCombinedPdf(base64Pdf, onProgress, modelId);
                     } else {
                         // Use batch analysis on separate documents
                         const docsForAnalysis = [];
@@ -127,7 +129,7 @@ export async function POST(
                             return;
                         }
 
-                        analysis = await batchAnalyzeDocuments(docsForAnalysis as any, onProgress);
+                        analysis = await batchAnalyzeDocuments(docsForAnalysis as any, onProgress, modelId);
                     }
 
                     // Handle different return structures

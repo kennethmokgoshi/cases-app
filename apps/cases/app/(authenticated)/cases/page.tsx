@@ -38,6 +38,15 @@ type Case = {
         phone: string | null;
     };
     category: string;
+    projects: {
+        projectId: string;
+        isPrimary: boolean;
+        project: {
+            id: string;
+            name: string;
+            fullPath?: string;
+        };
+    }[];
 };
 
 const CASE_CATEGORIES = [
@@ -55,12 +64,14 @@ function CasesContent() {
     const urlMonth = searchParams.get('month');
     const urlSource = searchParams.get('source');
     const urlFilter = searchParams.get('filter');
+    const urlProjectId = searchParams.get('projectId');
 
     const { data: session } = useSession();
     const [cases, setCases] = useState<Case[]>([]);
     const [filteredCases, setFilteredCases] = useState<Case[]>([]);
     const [loading, setLoading] = useState(true);
     const [mounted, setMounted] = useState(false);
+    const [projectName, setProjectName] = useState<string>('');
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -75,9 +86,6 @@ function CasesContent() {
     const [monthFilter, setMonthFilter] = useState<string>(urlMonth || 'ALL');
     const [sourceFilter, setSourceFilter] = useState<string>(urlSource || 'ALL');
 
-    // Case status filter
-    const [caseStatusFilter, setCaseStatusFilter] = useState<Set<string>>(new Set(['ACTIVE', 'COMPLETED', 'CLOSED', 'CANCELLED']));
-    const [showCaseStatusDropdown, setShowCaseStatusDropdown] = useState(false);
     const [showStatusDropdown, setShowStatusDropdown] = useState(false);
     const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set());
 
@@ -107,6 +115,7 @@ function CasesContent() {
                 const params = new URLSearchParams();
                 if (urlFilter) params.set('filter', urlFilter);
                 if (urlSearch) params.set('search', urlSearch);
+                if (urlProjectId) params.set('projectId', urlProjectId);
                 if (statusFilter !== 'ALL') params.set('status', statusFilter);
                 if (selectedStatuses.size > 0) params.set('status', Array.from(selectedStatuses).join(','));
                 if (categoryFilter !== 'ALL') params.set('category', categoryFilter);
@@ -129,7 +138,27 @@ function CasesContent() {
             }
         }
         fetchData();
-    }, [urlFilter, urlSearch, selectedStatuses, categoryFilter, serviceFilter]);
+    }, [urlFilter, urlSearch, urlProjectId, selectedStatuses, categoryFilter, serviceFilter]);
+
+    // Fetch project name when filtering by projectId
+    useEffect(() => {
+        if (!urlProjectId) {
+            setProjectName('');
+            return;
+        }
+        async function fetchProjectName() {
+            try {
+                const res = await fetch(`/api/projects/${urlProjectId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setProjectName(data.name || 'Project Cases');
+                }
+            } catch (e) {
+                // fallback handled below
+            }
+        }
+        fetchProjectName();
+    }, [urlProjectId]);
 
     // Client-side filtering
     useEffect(() => {
@@ -155,14 +184,9 @@ function CasesContent() {
             } catch (e) {}
         }
 
-        filtered = filtered.filter(c => {
-            const cs = c.status === 'COMPLETED' ? 'COMPLETED' : c.status === 'CLOSED' ? 'CLOSED' : c.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE';
-            return caseStatusFilter.has(cs);
-        });
-
         setFilteredCases(filtered);
         setCurrentPage(1);
-    }, [searchTerm, statusFilter, categoryFilter, serviceFilter, caseStatusFilter, cases]);
+    }, [searchTerm, statusFilter, categoryFilter, serviceFilter, cases]);
 
     const getStatusInfo = (code: string) => {
         return WORKFLOW_STATUSES.find(s => s.code === code) || { name: code, category: 'INTAKE' as StatusCategory };
@@ -203,7 +227,7 @@ function CasesContent() {
         <div className="space-y-6">
             <div className="flex justify-between items-center text-white">
                 <div>
-                    <h1 className="text-3xl font-bold">All Cases</h1>
+                    <h1 className="text-3xl font-bold">{urlProjectId ? (projectName || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.fullPath || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.name || 'Project Cases') : 'All Cases'}</h1>
                     <p className="text-gray-400 text-sm">Showing {paginated.length} of {filteredCases.length}</p>
                 </div>
                 <Link href="/cases/new" className="px-6 py-3 bg-zeno-cyan text-zeno-navy font-bold rounded-lg hover:bg-cyan-400 transition-all">+ New Case</Link>
@@ -268,30 +292,9 @@ function CasesContent() {
                         <thead className="bg-zeno-blue/30 border-b border-white/5 text-gray-400 uppercase text-[10px] font-bold tracking-wider">
                             <tr>
                                 <th className="px-4 py-3 w-10">#</th>
-                                {['fileNumber', 'client', 'status', 'services', 'updated', 'caseStatus', 'nextUpdate'].map(col => {
-                                    const labels:any = {fileNumber: 'File #', client: 'Client', status: 'Process Status', services: 'Type', updated: 'Last Updated', caseStatus: 'Case Status', nextUpdate: 'Next Update'};
-                                    if (col === 'caseStatus') return (
-                                        <th key={col} className="px-4 py-3 relative">
-                                            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowCaseStatusDropdown(!showCaseStatusDropdown)}>
-                                                Case Status <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
-                                            </div>
-                                            {showCaseStatusDropdown && (
-                                                <div className="absolute top-full left-0 mt-1 bg-zeno-navy border border-white/10 rounded-lg shadow-xl p-2 space-y-1 min-w-[120px] z-50">
-                                                    {['ACTIVE', 'COMPLETED', 'CLOSED', 'CANCELLED'].map(s => (
-                                                        <label key={s} className="flex items-center gap-2 cursor-pointer hover:bg-white/5 px-2 py-1 rounded">
-                                                            <input type="checkbox" checked={caseStatusFilter.has(s)} onChange={() => {
-                                                                const next = new Set(caseStatusFilter);
-                                                                if (next.has(s)) next.delete(s); else next.add(s);
-                                                                setCaseStatusFilter(next);
-                                                            }} className="w-3 h-3 rounded" />
-                                                            <span className="text-[10px]">{s}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </th>
-                                    );
-                                    return <th key={col} className="px-4 py-3 cursor-pointer hover:text-white" onClick={() => handleSort(col)}>{labels[col]} {sortBy === col && (sortDirection === 'asc' ? '↑' : '↓')}</th>;
+                                {['fileNumber', 'client', 'status', 'services', 'updated', 'project', 'nextUpdate'].map(col => {
+                                    const labels:any = {fileNumber: 'File #', client: 'Client', status: 'Process Status', services: 'Type', updated: 'Last Updated', project: 'Project', nextUpdate: 'Next Update'};
+                                    return <th key={col} className="px-4 py-3 cursor-pointer hover:text-white" onClick={() => handleSort(col as any)}>{labels[col]} {sortBy === col && (sortDirection === 'asc' ? '↑' : '↓')}</th>;
                                 })}
                             </tr>
                         </thead>
@@ -315,9 +318,16 @@ function CasesContent() {
                                         </td>
                                         <td className="px-4 py-4 text-gray-400 text-xs">{new Date(c.updatedAt).toLocaleDateString()}</td>
                                         <td className="px-4 py-4">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.status === 'COMPLETED' ? 'bg-purple-500/20 text-purple-300' : 'bg-green-500/20 text-green-300'}`}>
-                                                {c.status === 'COMPLETED' ? 'COMPLETED' : c.status === 'CLOSED' ? 'CLOSED' : c.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE'}
-                                            </span>
+                                            {(() => {
+                                                const primary = c.projects?.find(p => p.isPrimary) || c.projects?.[0];
+                                                if (!primary) return <span className="text-gray-600 italic text-xs">—</span>;
+                                                const label = primary.project.fullPath || primary.project.name;
+                                                return (
+                                                    <Link href={`/cases?projectId=${primary.project.id}`} className="text-zeno-cyan hover:underline text-xs font-medium">
+                                                        {label}
+                                                    </Link>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-4 py-4 text-xs">
                                             {c.nextUpdate ? <span className={new Date(c.nextUpdate) < new Date() ? 'text-red-400 font-bold' : 'text-zeno-cyan'}>{new Date(c.nextUpdate).toLocaleDateString()}</span> : '-'}

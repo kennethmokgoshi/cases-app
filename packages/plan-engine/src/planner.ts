@@ -108,7 +108,11 @@ Valid actionTypes: DHS_SEARCH, DHS_TRANSFER_REQUEST, REQUEST_FILE_FROM_DC, STATU
 
   const steps: PlanStepDefinition[] = (raw.steps || []).map((s: PlanStepDefinition) => ({
     ...s,
-    requiresApproval: s.category === 'LEGAL_LETTER' ? true : (s.requiresApproval || false),
+    // DHS actions and legal letters always require explicit human approval before execution
+    requiresApproval:
+      s.category === 'LEGAL_LETTER' || s.category === 'DHS_ACTION'
+        ? true
+        : (s.requiresApproval || false),
   }));
 
   logger.info(`[Planner] Case ${caseId}: ${steps.length} steps, type: ${raw.caseType}`);

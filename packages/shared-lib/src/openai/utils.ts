@@ -1,5 +1,149 @@
 import { logger } from '../logger';
 
+// ---------------------------------------------------------------------------
+// Document validation helpers
+// ---------------------------------------------------------------------------
+
+export interface ValidationResult {
+    isValid: boolean;
+    warnings: string[];
+    flags: string[];
+}
+
+/**
+ * Validates an extracted POA document for completeness.
+ * Checks for: client signature, witness signatures, date, and ID number.
+ */
+export function validatePOA(poaData: any): ValidationResult {
+    const warnings: string[] = [];
+    const flags: string[] = [];
+
+    if (!poaData) {
+        return { isValid: false, warnings: [], flags: ['POA data is missing or could not be extracted'] };
+    }
+
+    // Required fields
+    if (!poaData.idNumber || poaData.idNumber === 'NA') {
+        flags.push('Client ID number not found on POA — required for bureau correspondence');
+    }
+
+    if (!poaData.names || poaData.names === 'NA') {
+        flags.push('Client name not found on POA');
+    }
+
+    // Signature / witness fields (if the AI extracted them)
+    if (poaData.signed === false || poaData.clientSigned === false) {
+        flags.push('POA does not appear to be signed by the client');
+    }
+
+    if (poaData.witnessCount !== undefined && poaData.witnessCount < 2) {
+        flags.push(`Only ${poaData.witnessCount} witness signature(s) found — 2 witnesses required for a valid POA`);
+    } else if (poaData.witnesses !== undefined && Array.isArray(poaData.witnesses) && poaData.witnesses.length < 2) {
+        flags.push(`Only ${poaData.witnesses.length} witness signature(s) found — 2 witnesses required`);
+    }
+
+    if (!poaData.dateSigned && !poaData.date && !poaData.signingDate) {
+        warnings.push('Date of signing not visible on POA — confirm with original document');
+    }
+
+    // Salary data present is a positive sign (Zenowethu POA captures income)
+    if (poaData.grossSalary === 0 && poaData.netSalary === 0) {
+        warnings.push('No salary information found on POA — may be a generic POA without income declaration');
+    }
+
+    const isValid = flags.length === 0;
+    return { isValid, warnings, flags };
+}
+
+/**
+ * Validates a Proof of Residence document.
+ * Checks: document date within 3 months, name on document, no PO Box only.
+ */
+export function validateProofOfResidence(porData: any): ValidationResult {
+    const warnings: string[] = [];
+    const flags: string[] = [];
+
+    if (!porData) {
+        return { isValid: false, warnings: [], flags: ['Proof of Residence data missing or could not be extracted'] };
+    }
+
+    // Check document date
+    if (!porData.documentDate || porData.documentDate === 'NA') {
+        flags.push('Document date not found — Proof of Residence must not be older than 3 months');
+    } else {
+        const docDate = new Date(porData.documentDate);
+        if (!isNaN(docDate.getTime())) {
+            const threeMonthsAgo = new Date();
+            threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+            if (docDate < threeMonthsAgo) {
+                flags.push(`Proof of Residence is dated ${porData.documentDate} — older than 3 months. A recent document is required.`);
+            }
+        } else {
+            warnings.push(`Document date "${porData.documentDate}" could not be parsed — verify manually`);
+        }
+    }
+
+    // Client name present
+    if (!porData.clientName || porData.clientName === 'NA') {
+        flags.push('Consumer name not visible on Proof of Residence document');
+    }
+
+    // Address check — PO Box only is not acceptable
+    const address = String(porData.address || '').toLowerCase();
+    if (!address || address === 'na') {
+        flags.push('No address found on Proof of Residence document');
+    } else if (address.startsWith('p.o.') || address.startsWith('po box') || address.startsWith('p o box')) {
+        flags.push('Only a PO Box address found — a physical residential address is required');
+    }
+
+    // Issuer present
+    if (!porData.issuer || porData.issuer === 'NA') {
+        warnings.push('Issuing institution not identified — confirm document is from a recognised source (municipality, bank, telco)');
+    }
+
+    const isValid = flags.length === 0;
+    return { isValid, warnings, flags };
+}
+
+/**
+ * Validates a credit bureau report document.
+ * Checks: within 30 days, from a registered NCR bureau, ID number present.
+ */
+export function validateCreditReport(creditReportData: any, bureauName?: string): ValidationResult {
+    const warnings: string[] = [];
+    const flags: string[] = [];
+
+    if (!creditReportData) {
+        return { isValid: false, warnings: [], flags: ['Credit report data missing or could not be extracted'] };
+    }
+
+    // Registered NCR bureaus
+    const registeredBureaus = ['experian', 'transunion', 'xds', 'compuscan', 'cpb', 'vericred'];
+    if (bureauName) {
+        const b = bureauName.toLowerCase();
+        if (!registeredBureaus.some((rb) => b.includes(rb))) {
+            warnings.push(`Bureau "${bureauName}" is not one of the known NCR-registered bureaus — verify registration`);
+        }
+    }
+
+    // ID number present
+    const idNum = creditReportData.consumer?.idNumber || creditReportData._occurrences?.idNumber?.[0]?.value;
+    if (!idNum || idNum === 'NA') {
+        flags.push('Consumer ID number not found on credit report — required for cross-document verification');
+    }
+
+    // Report date — some reports don't explicitly show a "report date" but use today if none found
+    // We flag if no accounts at all (empty report)
+    const accounts = creditReportData.accounts || [];
+    const adverse = creditReportData.adverseListings || [];
+    if (accounts.length === 0 && adverse.length === 0) {
+        warnings.push('No accounts found on credit report — report may be blank, corrupted, or not fully extracted');
+    }
+
+    const isValid = flags.length === 0;
+    return { isValid, warnings, flags };
+}
+
 /**
  * Validates a South African ID number using the Luhn Algorithm.
  * Returns true if the ID is mathematically valid.

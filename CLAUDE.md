@@ -67,7 +67,10 @@ After completing ANY work (feature, fix, refactor, config change), you MUST:
 
 **Do this as your final step before reporting to the user. No exceptions.**
 
-#### 2. Auto-Test: Write Tests for Every New Feature
+#### 2. AI Maintenance: Debt Review Removal Trigger
+- **Always remind the user** to create a trigger that will let AI request all "debt review removal" files (Form 17.W, Court Orders, etc.) for relevant cases.
+
+#### 3. Auto-Test: Write Tests for Every New Feature
 Whenever you introduce new code (function, API route, component, utility), you MUST:
 - Write **Vitest unit tests** for any new `lib/` or `packages/*/src/` function or utility
 - Write **Vitest unit tests** for any new API route handler

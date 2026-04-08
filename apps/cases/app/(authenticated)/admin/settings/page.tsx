@@ -36,6 +36,19 @@ interface GHLSettings {
     ghl_password: string;
 }
 
+interface XdsSettings {
+    xds_username: string;
+    xds_password: string;
+    xds_portal_url: string;
+}
+
+interface XdsSyncSummary {
+    processed: number;
+    newFilesCreated: number;
+    existingFilesUpdated: number;
+    errorCount: number;
+}
+
 export default function SettingsPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
@@ -73,6 +86,20 @@ export default function SettingsPage() {
     const [bureauLastUpdated, setBureauLastUpdated] = useState<Date | null>(null);
     const [bureauIsDefault, setBureauIsDefault] = useState(true);
 
+    // XDS state
+    const [xdsSettings, setXdsSettings] = useState<XdsSettings>({ xds_username: '', xds_password: '', xds_portal_url: 'https://portal.xds.co.za' });
+    const [hasXdsPassword, setHasXdsPassword] = useState(false);
+    const [xdsLastUpdated, setXdsLastUpdated] = useState<Date | null>(null);
+    const [xdsSaving, setXdsSaving] = useState(false);
+    const [showXdsPassword, setShowXdsPassword] = useState(false);
+    const [xdsSyncing, setXdsSyncing] = useState(false);
+    const [xdsSyncResult, setXdsSyncResult] = useState<XdsSyncSummary | null>(null);
+    const [xdsSyncError, setXdsSyncError] = useState<string | null>(null);
+
+    // DC Profile state
+    const [dcProfile, setDcProfile] = useState({ ncrdcNo: '', dcName: '', dcOrganisation: '' });
+    const [dcProfileSaving, setDcProfileSaving] = useState(false);
+
     // Letterhead state
     const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
     const [letterheadUpdatedAt, setLetterheadUpdatedAt] = useState<Date | null>(null);
@@ -87,7 +114,7 @@ export default function SettingsPage() {
     }, []);
 
     useEffect(() => {
-        if (status === 'authenticated' && !session?.user?.isAdmin) {
+        if (status === 'authenticated' && !session?.user?.isAdmin && !(session?.user as any)?.isExecutive) {
             router.push('/');
         }
     }, [session, status, router]);
@@ -99,7 +126,7 @@ export default function SettingsPage() {
     const fetchSettings = async () => {
         setLoading(true);
         try {
-            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings(), fetchBureauSettings()]);
+            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings(), fetchBureauSettings(), fetchDcProfile(), fetchXdsSettings()]);
         } catch (error) {
             logger.error('Error fetching settings:', error);
         } finally {
@@ -175,6 +202,131 @@ export default function SettingsPage() {
             setMessage({ type: 'error', text: 'An error occurred while removing the letterhead' });
         } finally {
             setLetterheadSaving(false);
+        }
+    };
+
+    const fetchDcProfile = async () => {
+        try {
+            const res = await fetch('/api/admin/settings/dc-profile');
+            if (res.ok) {
+                const data = await res.json();
+                setDcProfile({
+                    ncrdcNo: data.settings.dc_ncrdcNo || '',
+                    dcName: data.settings.dc_name || '',
+                    dcOrganisation: data.settings.dc_organisation || '',
+                });
+            }
+        } catch (error) {
+            logger.error('Error fetching DC profile:', error);
+        }
+    };
+
+    const fetchXdsSettings = async () => {
+        try {
+            const res = await fetch('/api/admin/settings/xds');
+            if (res.ok) {
+                const data = await res.json();
+                setHasXdsPassword(!!(data.settings.xds_password && data.settings.xds_password.includes('•')));
+                setXdsSettings({
+                    xds_username: data.settings.xds_username || '',
+                    xds_password: '',
+                    xds_portal_url: data.settings.xds_portal_url || 'https://portal.xds.co.za',
+                });
+                if (data.lastUpdated) setXdsLastUpdated(new Date(data.lastUpdated));
+            }
+        } catch (error) {
+            logger.error('Error fetching XDS settings:', error);
+        }
+    };
+
+    const handleSaveXds = async () => {
+        setXdsSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/xds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: xdsSettings.xds_username,
+                    password: xdsSettings.xds_password,
+                    portalUrl: xdsSettings.xds_portal_url,
+                }),
+            });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'XDS credentials saved successfully!' });
+                fetchXdsSettings();
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to save XDS credentials' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while saving XDS credentials' });
+        } finally {
+            setXdsSaving(false);
+        }
+    };
+
+    const handleResetXds = async () => {
+        if (!confirm('Are you sure you want to clear XDS credentials?')) return;
+        setXdsSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/xds', { method: 'DELETE' });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'XDS credentials cleared' });
+                setXdsSettings({ xds_username: '', xds_password: '', xds_portal_url: 'https://portal.xds.co.za' });
+                setHasXdsPassword(false);
+                setXdsLastUpdated(null);
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to clear XDS credentials' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while clearing XDS credentials' });
+        } finally {
+            setXdsSaving(false);
+        }
+    };
+
+    const handleRunXdsSync = async () => {
+        if (!confirm('Run XDS sync now? This will log in to the XDS portal and process today\'s credit reports.')) return;
+        setXdsSyncing(true);
+        setXdsSyncResult(null);
+        setXdsSyncError(null);
+        try {
+            const res = await fetch('/api/admin/xds/sync', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                setXdsSyncResult(data.summary);
+            } else {
+                setXdsSyncError(data.error || data.details || 'Sync failed');
+            }
+        } catch {
+            setXdsSyncError('Network error — could not reach the sync endpoint');
+        } finally {
+            setXdsSyncing(false);
+        }
+    };
+
+    const handleSaveDcProfile = async () => {
+        setDcProfileSaving(true);
+        setMessage(null);
+        try {
+            const res = await fetch('/api/admin/settings/dc-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ncrdcNo: dcProfile.ncrdcNo, dcName: dcProfile.dcName, dcOrganisation: dcProfile.dcOrganisation }),
+            });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'DC profile saved successfully!' });
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to save DC profile' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while saving DC profile' });
+        } finally {
+            setDcProfileSaving(false);
         }
     };
 
@@ -469,7 +621,7 @@ export default function SettingsPage() {
         );
     }
 
-    if (!session?.user?.isAdmin) {
+    if (!session?.user?.isAdmin && !(session?.user as any)?.isExecutive) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="text-center">
@@ -506,6 +658,69 @@ export default function SettingsPage() {
             )}
 
             <div className="space-y-8">
+                {/* DC Profile Section */}
+                {(session?.user?.isAdmin || (session?.user as any)?.isExecutive) && (
+                    <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-2xl">
+                                🪪
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-bold text-white">Portal DC Profile</h2>
+                                    <span className="px-2 py-0.5 text-xs font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40 rounded-full">
+                                        Admin only
+                                    </span>
+                                </div>
+                                <p className="text-gray-400 text-sm mt-0.5">
+                                    The debt counsellor who owns this portal. Used as the default DC on DHS imports when "My own NCRDC" is selected.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1">NCRDC Number</label>
+                                <input
+                                    type="text"
+                                    value={dcProfile.ncrdcNo}
+                                    onChange={(e) => setDcProfile((p) => ({ ...p, ncrdcNo: e.target.value }))}
+                                    placeholder="NCRDC3693"
+                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-zeno-orange"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1">Debt Counsellor Name</label>
+                                <input
+                                    type="text"
+                                    value={dcProfile.dcName}
+                                    onChange={(e) => setDcProfile((p) => ({ ...p, dcName: e.target.value }))}
+                                    placeholder="Aaron Nzotho"
+                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-zeno-orange"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1">Organisation / Trading Name</label>
+                                <input
+                                    type="text"
+                                    value={dcProfile.dcOrganisation}
+                                    onChange={(e) => setDcProfile((p) => ({ ...p, dcOrganisation: e.target.value }))}
+                                    placeholder="Zenowethu Debt Management"
+                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-zeno-orange"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end">
+                            <button
+                                onClick={handleSaveDcProfile}
+                                disabled={dcProfileSaving}
+                                className="px-5 py-2 bg-zeno-orange text-white text-sm font-bold rounded-lg hover:bg-orange-500 transition-colors disabled:opacity-50"
+                            >
+                                {dcProfileSaving ? 'Saving...' : 'Save DC Profile'}
+                            </button>
+                        </div>
+                    </section>
+                )}
+
                 {/* Letterhead Section — ADMIN and EXECUTIVE only */}
                 {(session?.user?.isAdmin || session?.user?.isExecutive) && (
                     <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
@@ -1009,6 +1224,163 @@ export default function SettingsPage() {
                         </button>
                     </div>
                 </section>
+
+                {/* XDS Credit Bureau Section — Admin & Executive only */}
+                {(session?.user?.isAdmin || (session?.user as any)?.isExecutive) && (
+                    <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-2xl">
+                                📊
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-bold text-white">XDS Credit Bureau</h2>
+                                    <span className="px-2 py-0.5 text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full">
+                                        Admin &amp; Executive only
+                                    </span>
+                                </div>
+                                <p className="text-gray-400 text-sm mt-0.5">
+                                    Credentials for the XDS portal daily sync. Reports are pulled from Search History and matched to existing case files automatically.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Portal URL */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    Portal URL
+                                </label>
+                                <input
+                                    type="text"
+                                    value={xdsSettings.xds_portal_url}
+                                    onChange={(e) => setXdsSettings({ ...xdsSettings, xds_portal_url: e.target.value })}
+                                    className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                    placeholder="https://portal.xds.co.za"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Username */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        XDS Username
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={xdsSettings.xds_username}
+                                        onChange={(e) => setXdsSettings({ ...xdsSettings, xds_username: e.target.value })}
+                                        className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                        placeholder="Enter username"
+                                    />
+                                </div>
+
+                                {/* Password */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        XDS Password
+                                        {hasXdsPassword && (
+                                            <span className="ml-2 text-xs text-green-400">(Password saved)</span>
+                                        )}
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type={showXdsPassword ? 'text' : 'password'}
+                                            value={xdsSettings.xds_password}
+                                            onChange={(e) => setXdsSettings({ ...xdsSettings, xds_password: e.target.value })}
+                                            className="w-full px-4 py-3 pr-12 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                            placeholder={hasXdsPassword ? 'Enter new password to change' : 'Enter password'}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowXdsPassword(!showXdsPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                        >
+                                            {showXdsPassword ? '🙈' : '👁️'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {mounted && xdsLastUpdated && (
+                                <div className="pt-1 text-sm text-gray-500">
+                                    Last updated: {xdsLastUpdated.toLocaleString()}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Save / Reset */}
+                        <div className="flex items-center gap-4 mt-6 pt-6 border-t border-zeno-blue/30">
+                            <button
+                                onClick={handleSaveXds}
+                                disabled={xdsSaving}
+                                className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {xdsSaving ? 'Saving...' : 'Save XDS Credentials'}
+                            </button>
+                            <button
+                                onClick={handleResetXds}
+                                disabled={xdsSaving}
+                                className="px-6 py-3 bg-zeno-dark/50 border border-red-500/50 text-red-400 font-semibold rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Reset
+                            </button>
+                        </div>
+
+                        {/* Run Sync Now */}
+                        <div className="mt-6 pt-6 border-t border-zeno-blue/30">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <p className="text-sm font-medium text-white">Manual Sync</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                        Pulls today&apos;s credit reports from XDS Search History and matches them to case files.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleRunXdsSync}
+                                    disabled={xdsSyncing}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600/20 border border-emerald-500/50 text-emerald-400 font-semibold text-sm rounded-lg hover:bg-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                >
+                                    {xdsSyncing ? (
+                                        <>
+                                            <span className="w-4 h-4 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
+                                            Running…
+                                        </>
+                                    ) : (
+                                        <>▶ Run Sync Now</>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* Sync result */}
+                            {xdsSyncResult && (
+                                <div className="mt-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                                    <p className="text-sm font-semibold text-emerald-400 mb-2">Sync completed</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        {[
+                                            { label: 'Processed', value: xdsSyncResult.processed },
+                                            { label: 'New files', value: xdsSyncResult.newFilesCreated },
+                                            { label: 'Updated', value: xdsSyncResult.existingFilesUpdated },
+                                            { label: 'Errors', value: xdsSyncResult.errorCount },
+                                        ].map(({ label, value }) => (
+                                            <div key={label} className="text-center">
+                                                <p className="text-2xl font-bold text-white">{value}</p>
+                                                <p className="text-xs text-gray-400">{label}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {xdsSyncError && (
+                                <div className="mt-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                                    <p className="text-sm font-semibold text-red-400 mb-1">Sync failed</p>
+                                    <p className="text-xs text-gray-400">{xdsSyncError}</p>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                )}
             </div>
 
             {/* Info Box */}

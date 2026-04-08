@@ -85,7 +85,7 @@ export async function GET(
             const branch = branches.join(' ');
 
             if (year || month || source || branch) {
-                return [year, month, source, branch].filter(Boolean).join(' ');
+                return [source, branch, month, year].filter(Boolean).join(' ');
             }
             return parts.map(p => clean(p.name)).filter(Boolean).join(' ');
         };
@@ -643,7 +643,7 @@ export async function PATCH(
             const branch = branches.join(' ');
 
             if (year || month || source || branch) {
-                return [year, month, source, branch].filter(Boolean).join(' ');
+                return [source, branch, month, year].filter(Boolean).join(' ');
             }
             return parts.map(p => clean(p.name)).filter(Boolean).join(' ');
         };

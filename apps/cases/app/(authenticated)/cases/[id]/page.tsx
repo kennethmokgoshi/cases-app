@@ -53,8 +53,8 @@ type CaseDetail = {
     serviceFeeCollectedBy: string;
     partnerSplitPercent: number;
     // DHS Information
-    // DHS Information
     ncrdcNo: string | null;
+    ncrSysRef: string | null;
     dhsStatus: string | null;
     dhsDaysCounter: string | null;
     debtCounsellorName: string | null;
@@ -103,6 +103,8 @@ type CaseDetail = {
         idNumber: string;
         email: string | null;
         phone: string | null;
+        alternativePhone: string | null;
+        alternativePhone2: string | null;
         whatsappNumber: string | null;
         telegramNumber: string | null;
         address: string | null;
@@ -114,7 +116,7 @@ type CaseDetail = {
             id: string;
             name: string;
             type: string;
-            fullPath?: string; // Full hierarchical path: "Letsatsi Alberton 1 December 2025"
+            parent?: { id: string; name: string } | null;
             members?: Array<{
                 userId: string;
                 role: string;
@@ -172,6 +174,8 @@ type EditFormData = {
     lastName: string;
     email: string;
     phone: string;
+    alternativePhone: string;
+    alternativePhone2: string;
     whatsappNumber: string;
     telegramNumber: string;
     address: string;
@@ -244,6 +248,8 @@ export default function CaseDetailPage() {
         lastName: '',
         email: '',
         phone: '',
+        alternativePhone: '',
+        alternativePhone2: '',
         whatsappNumber: '',
         telegramNumber: '',
         address: '',
@@ -704,6 +710,8 @@ export default function CaseDetailPage() {
             lastName: caseData.client.lastName || '',
             email: caseData.client.email || '',
             phone: caseData.client.phone || '',
+            alternativePhone: caseData.client.alternativePhone || '',
+            alternativePhone2: caseData.client.alternativePhone2 || '',
             whatsappNumber: caseData.client.whatsappNumber || '',
             telegramNumber: caseData.client.telegramNumber || '',
             address: caseData.client.address || '',
@@ -1087,6 +1095,8 @@ export default function CaseDetailPage() {
                         idNumber: editForm.idNumber,
                         email: editForm.email || null,
                         phone: editForm.phone || null,
+                        alternativePhone: editForm.alternativePhone || null,
+                        alternativePhone2: editForm.alternativePhone2 || null,
                         whatsappNumber: editForm.whatsappNumber || null,
                         telegramNumber: editForm.telegramNumber || null,
                         address: editForm.address || null
@@ -1607,7 +1617,34 @@ export default function CaseDetailPage() {
                         )}
                     </div>
 
-
+                    {/* Project card — always visible */}
+                    <div className="bg-zeno-blue/20 rounded-xl border border-white/5 px-5 py-4">
+                        <div className="flex items-center gap-2 mb-3">
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Project</span>
+                        </div>
+                        {caseData.projects.length === 0 ? (
+                            <p className="text-sm text-gray-600 italic">No project assigned</p>
+                        ) : (
+                            <div className="space-y-1.5">
+                                {caseData.projects.map((cp) => (
+                                    <div
+                                        key={cp.project.id}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg ${cp.isPrimary ? 'bg-zeno-cyan/10 border border-zeno-cyan/20' : 'bg-white/5'}`}
+                                    >
+                                        <svg className={`w-3.5 h-3.5 shrink-0 ${cp.isPrimary ? 'text-zeno-cyan' : 'text-gray-500'}`} fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                                        </svg>
+                                        <span className={`text-sm font-medium leading-tight ${cp.isPrimary ? 'text-zeno-cyan' : 'text-gray-300'}`}>
+                                            {(cp.project as any).fullPath || cp.project.name}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Client Information -> Contact Information */}
                     <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6">
@@ -1667,6 +1704,26 @@ export default function CaseDetailPage() {
                                         />
                                     </div>
                                     <div>
+                                        <label className="text-xs text-gray-500 uppercase">Alt. Number 1</label>
+                                        <input
+                                            type="tel"
+                                            value={editForm.alternativePhone}
+                                            onChange={(e) => setEditForm({ ...editForm, alternativePhone: e.target.value })}
+                                            className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                            placeholder="0821234567"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 uppercase">Alt. Number 2</label>
+                                        <input
+                                            type="tel"
+                                            value={editForm.alternativePhone2}
+                                            onChange={(e) => setEditForm({ ...editForm, alternativePhone2: e.target.value })}
+                                            className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                            placeholder="0821234567"
+                                        />
+                                    </div>
+                                    <div>
                                         <label className="text-xs text-gray-500 uppercase flex items-center gap-2">
                                             <span className="text-green-500">📱</span> WhatsApp
                                         </label>
@@ -1715,6 +1772,18 @@ export default function CaseDetailPage() {
                                         <div>
                                             <label className="text-xs text-gray-500 uppercase">Phone</label>
                                             <p className="text-white">{caseData.client.phone}</p>
+                                        </div>
+                                    )}
+                                    {caseData.client.alternativePhone && (
+                                        <div>
+                                            <label className="text-xs text-gray-500 uppercase">Alt. Number 1</label>
+                                            <p className="text-white">{caseData.client.alternativePhone}</p>
+                                        </div>
+                                    )}
+                                    {caseData.client.alternativePhone2 && (
+                                        <div>
+                                            <label className="text-xs text-gray-500 uppercase">Alt. Number 2</label>
+                                            <p className="text-white">{caseData.client.alternativePhone2}</p>
                                         </div>
                                     )}
                                     {caseData.client.whatsappNumber && (
@@ -2474,6 +2543,12 @@ export default function CaseDetailPage() {
                                                 <div className="text-xs text-gray-400 mb-1">NCRDC NO</div>
                                                 <div className="text-sm text-white font-medium">{caseData.ncrdcNo || 'Not set'}</div>
                                             </div>
+                                            {caseData.ncrSysRef && (
+                                                <div>
+                                                    <div className="text-xs text-gray-400 mb-1">NCR SYS REF</div>
+                                                    <div className="text-sm text-white font-mono">{caseData.ncrSysRef}</div>
+                                                </div>
+                                            )}
                                             <div>
                                                 <div className="text-xs text-gray-400 mb-1">PREVIOUS STATUS</div>
                                                 <div className="text-sm text-white font-medium">{caseData.dhsPreviousStatus || 'Not set'}</div>

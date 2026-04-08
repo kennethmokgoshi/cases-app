@@ -441,13 +441,27 @@ function NewCaseWithAIComponent() {
 
     const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'allCombined' | 'optional', file: File | null) => {
         if (type === 'optional' && file) {
+            // Check for duplicates in the optional list
+            const isDuplicate = uploadedFiles.optional.some(existing => 
+                existing.name === file.name && existing.size === file.size
+            );
+            if (isDuplicate) return;
+
             setUploadedFiles(prev => ({
                 ...prev,
                 optional: [...prev.optional, file]
             }));
-        } else if (file) {
+        } else {
+            // Can be file or null (for removal)
             setUploadedFiles(prev => ({ ...prev, [type]: file }));
         }
+    };
+
+    const handleRemoveOptionalFile = (index: number) => {
+        setUploadedFiles(prev => ({
+            ...prev,
+            optional: prev.optional.filter((_, i) => i !== index)
+        }));
     };
 
     // Check if required documents are uploaded based on mode
@@ -1103,10 +1117,10 @@ function NewCaseWithAIComponent() {
                         <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
                             <p className="text-sm text-gray-400 mb-1">Case will be created under:</p>
                             <p className="text-white font-medium">
-                                {selectedYear} {selectedMonth}
-                                {selectedParent && ` → ${selectedParent.name}`}
+                                {selectedParent && selectedParent.name}
                                 {selectedSubprojectId && subprojects.find(s => s.id === selectedSubprojectId) &&
-                                    ` → ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                    ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                {` ${selectedMonth} ${selectedYear}`}
                             </p>
                             <p className="text-sm text-gray-400 mt-2">
                                 Services: <span className="text-zeno-cyan">{selectedServices.length} selected</span>
@@ -1167,8 +1181,17 @@ function NewCaseWithAIComponent() {
                                     />
                                     <label htmlFor="id-upload" className="cursor-pointer">
                                         {uploadedFiles.id ? (
-                                            <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2">
-                                                <span>✓</span> {uploadedFiles.id.name}
+                                            <div className="flex flex-col items-center">
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2 mb-1">
+                                                    <span>✓</span> {uploadedFiles.id.name}
+                                                </div>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFileChange('id', null); }}
+                                                    className="text-xs text-red-400 hover:text-red-300 transition-colors bg-red-400/10 px-2 py-0.5 rounded"
+                                                >
+                                                    Remove
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="text-gray-400">
@@ -1192,8 +1215,17 @@ function NewCaseWithAIComponent() {
                                     />
                                     <label htmlFor="poa-upload" className="cursor-pointer">
                                         {uploadedFiles.poa ? (
-                                            <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2">
-                                                <span>✓</span> {uploadedFiles.poa.name}
+                                            <div className="flex flex-col items-center">
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2 mb-1">
+                                                    <span>✓</span> {uploadedFiles.poa.name}
+                                                </div>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFileChange('poa', null); }}
+                                                    className="text-xs text-red-400 hover:text-red-300 transition-colors bg-red-400/10 px-2 py-0.5 rounded"
+                                                >
+                                                    Remove
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="text-gray-400">
@@ -1217,8 +1249,17 @@ function NewCaseWithAIComponent() {
                                     />
                                     <label htmlFor="credit-upload" className="cursor-pointer">
                                         {uploadedFiles.creditReport ? (
-                                            <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2">
-                                                <span>✓</span> {uploadedFiles.creditReport.name}
+                                            <div className="flex flex-col items-center">
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2 mb-1">
+                                                    <span>✓</span> {uploadedFiles.creditReport.name}
+                                                </div>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFileChange('creditReport', null); }}
+                                                    className="text-xs text-red-400 hover:text-red-300 transition-colors bg-red-400/10 px-2 py-0.5 rounded"
+                                                >
+                                                    Remove
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="text-gray-400">
@@ -1247,9 +1288,18 @@ function NewCaseWithAIComponent() {
                                         </div>
                                     </label>
                                     {uploadedFiles.optional.length > 0 && (
-                                        <div className="mt-2 text-xs text-left">
-                                            {uploadedFiles.optional.map((f, i) => (
-                                                <div key={i} className="text-gray-300 truncate">• {f.name}</div>
+                                        <div className="mt-4 border-t border-white/5 pt-4 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                            {uploadedFiles.optional.map((file, idx) => (
+                                                <div key={`${file.name}-${idx}`} className="flex items-center justify-between gap-2 bg-white/5 border border-white/10 rounded-lg py-1.5 px-3">
+                                                    <span className="text-gray-300 text-xs truncate text-left flex-1">✓ {file.name}</span>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveOptionalFile(idx); }}
+                                                        className="text-gray-500 hover:text-red-400 transition-colors"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                    </button>
+                                                </div>
                                             ))}
                                         </div>
                                     )}
@@ -1270,9 +1320,18 @@ function NewCaseWithAIComponent() {
                                     />
                                     <label htmlFor="combined-upload" className="cursor-pointer">
                                         {uploadedFiles.allCombined ? (
-                                            <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2">
-                                                <span className="text-2xl">✓</span>
-                                                <span className="text-lg">{uploadedFiles.allCombined.name}</span>
+                                            <div className="flex flex-col items-center">
+                                                <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2 mb-2">
+                                                    <span className="text-2xl">✓</span>
+                                                    <span className="text-lg">{uploadedFiles.allCombined.name}</span>
+                                                </div>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFileChange('allCombined', null); }}
+                                                    className="px-4 py-1.5 bg-red-400/10 text-red-400 hover:bg-red-400/20 rounded-lg text-sm transition-all"
+                                                >
+                                                    Remove & Upload Different File
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="text-gray-400">

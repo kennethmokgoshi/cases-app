@@ -11,6 +11,12 @@ const logger = {
     debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
 };
 
+type DocumentAccessGrant = {
+    userId: string;
+    grantedAt: string;
+    user: { id: string; firstName: string; lastName: string; email: string };
+};
+
 type Document = {
     id: string;
     type: string;
@@ -21,6 +27,8 @@ type Document = {
     uploadedAt: string;
     analyzedAt: string | null;
     extractedData: string | null;
+    isAdminOnly: boolean;
+    accessGrants?: DocumentAccessGrant[];
 };
 
 const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
@@ -61,6 +69,11 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     const [extractionProgress, setExtractionProgress] = useState(0);
     const [extractionMessage, setExtractionMessage] = useState('');
     const [mounted, setMounted] = useState(false);
+    const [uploadAdminOnly, setUploadAdminOnly] = useState(false);
+    const [accessModal, setAccessModal] = useState<{ doc: Document } | null>(null);
+    const [accessEmail, setAccessEmail] = useState('');
+    const [accessLoading, setAccessLoading] = useState(false);
+    const [allUsers, setAllUsers] = useState<{ id: string; firstName: string; lastName: string; email: string }[]>([]);
 
     // Track client-side hydration
     useEffect(() => {
@@ -98,6 +111,9 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('type', effectiveType);
+            if (isAdmin && uploadAdminOnly) {
+                formData.append('isAdminOnly', 'true');
+            }
 
             const res = await fetch(`/api/cases/${caseId}/documents`, {
                 method: 'POST',
@@ -348,6 +364,64 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
         }
     };
 
+    const openAccessModal = async (doc: Document) => {
+        setAccessModal({ doc });
+        setAccessEmail('');
+        setAccessLoading(true);
+        try {
+            const res = await fetch('/api/users?flat=true');
+            if (res.ok) {
+                const data = await res.json();
+                setAllUsers(data.filter((u: any) => !u.isAdmin));
+            }
+        } catch { /* ignore */ } finally {
+            setAccessLoading(false);
+        }
+    };
+
+    const handleGrantAccess = async (documentId: string, userId: string) => {
+        setAccessLoading(true);
+        try {
+            const res = await fetch(`/api/cases/${caseId}/documents/access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ documentId, userId, action: 'grant' })
+            });
+            if (!res.ok) throw new Error('Failed to grant access');
+            setSuccess('Access granted');
+            fetchDocuments();
+            // Refresh modal doc
+            const updated = await fetch(`/api/cases/${caseId}/documents`).then(r => r.json());
+            const updatedDoc = updated.documents?.find((d: Document) => d.id === documentId);
+            if (updatedDoc) setAccessModal({ doc: updatedDoc });
+        } catch {
+            setError('Failed to grant access');
+        } finally {
+            setAccessLoading(false);
+        }
+    };
+
+    const handleRevokeAccess = async (documentId: string, userId: string) => {
+        setAccessLoading(true);
+        try {
+            const res = await fetch(`/api/cases/${caseId}/documents/access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ documentId, userId, action: 'revoke' })
+            });
+            if (!res.ok) throw new Error('Failed to revoke access');
+            setSuccess('Access revoked');
+            fetchDocuments();
+            const updated = await fetch(`/api/cases/${caseId}/documents`).then(r => r.json());
+            const updatedDoc = updated.documents?.find((d: Document) => d.id === documentId);
+            if (updatedDoc) setAccessModal({ doc: updatedDoc });
+        } catch {
+            setError('Failed to revoke access');
+        } finally {
+            setAccessLoading(false);
+        }
+    };
+
     const handleUpdateType = async (docId: string, newType: string) => {
         try {
             const res = await fetch(`/api/cases/${caseId}/documents?documentId=${docId}`, {
@@ -564,6 +638,20 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                         />
                     </label>
                 </div>
+                {/* Admin-only toggle — only visible to admins */}
+                {isAdmin && (
+                    <label className="mt-3 flex items-center gap-2 cursor-pointer w-fit select-none">
+                        <div
+                            onClick={() => setUploadAdminOnly(v => !v)}
+                            className={`relative w-9 h-5 rounded-full transition-colors ${uploadAdminOnly ? 'bg-amber-500' : 'bg-white/20'}`}
+                        >
+                            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${uploadAdminOnly ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                        <span className={`text-xs font-medium ${uploadAdminOnly ? 'text-amber-400' : 'text-gray-400'}`}>
+                            🔒 Private — admin eyes only
+                        </span>
+                    </label>
+                )}
             </div>
 
             {/* Documents List */}
@@ -590,6 +678,11 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                                         <span className={`text-xs px-2 py-0.5 rounded ${typeInfo.color}`}>
                                             {typeInfo.label}
                                         </span>
+                                        {doc.isAdminOnly && (
+                                            <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium flex items-center gap-1">
+                                                🔒 Admin Only
+                                            </span>
+                                        )}
                                         {/* Type Edit Dropdown */}
                                         <div className="relative inline-block text-left opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button className="text-gray-400 hover:text-white p-1">
@@ -641,6 +734,14 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                                     >
                                         Download
                                     </a>
+                                    {isAdmin && doc.isAdminOnly && (
+                                        <button
+                                            onClick={() => openAccessModal(doc)}
+                                            className="px-3 py-1.5 text-xs font-medium rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+                                        >
+                                            Manage Access
+                                        </button>
+                                    )}
                                     {isAdmin && (
                                         <button
                                             onClick={() => handleDelete(doc.id)}
@@ -703,6 +804,86 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                     })
                 )}
             </div>
+
+            {/* Access Management Modal */}
+            {accessModal && isAdmin && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-zeno-navy border border-white/10 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-white font-semibold text-base">🔒 Manage Access</h2>
+                                <p className="text-gray-400 text-xs mt-0.5 truncate max-w-xs">{accessModal.doc.fileName}</p>
+                            </div>
+                            <button
+                                onClick={() => setAccessModal(null)}
+                                className="text-gray-400 hover:text-white transition-colors text-lg leading-none"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Currently granted users */}
+                        <div className="mb-4">
+                            <p className="text-xs font-medium text-gray-400 uppercase mb-2">Users with access</p>
+                            {(accessModal.doc.accessGrants ?? []).length === 0 ? (
+                                <p className="text-xs text-gray-500 italic">No one has been granted access yet.</p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {(accessModal.doc.accessGrants ?? []).map((grant) => (
+                                        <li key={grant.userId} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2">
+                                            <div>
+                                                <p className="text-sm text-white">{grant.user.firstName} {grant.user.lastName}</p>
+                                                <p className="text-xs text-gray-400">{grant.user.email}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleRevokeAccess(accessModal.doc.id, grant.userId)}
+                                                disabled={accessLoading}
+                                                className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                                            >
+                                                Revoke
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        {/* Grant access to another user */}
+                        <div>
+                            <p className="text-xs font-medium text-gray-400 uppercase mb-2">Grant access to a user</p>
+                            {accessLoading ? (
+                                <p className="text-xs text-gray-500 italic">Loading users...</p>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <select
+                                        value={accessEmail}
+                                        onChange={(e) => setAccessEmail(e.target.value)}
+                                        className="flex-1 px-3 py-2 bg-zeno-gray border border-white/20 rounded-lg text-white text-sm [color-scheme:dark] [&>option]:bg-zeno-navy [&>option]:text-white"
+                                    >
+                                        <option value="">Select a user...</option>
+                                        {allUsers
+                                            .filter(u => !(accessModal.doc.accessGrants ?? []).some(g => g.userId === u.id))
+                                            .map(u => (
+                                                <option key={u.id} value={u.id}>
+                                                    {u.firstName} {u.lastName} ({u.email})
+                                                </option>
+                                            ))}
+                                    </select>
+                                    <button
+                                        onClick={() => {
+                                            if (accessEmail) handleGrantAccess(accessModal.doc.id, accessEmail);
+                                        }}
+                                        disabled={!accessEmail || accessLoading}
+                                        className="px-4 py-2 text-sm font-medium rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors disabled:opacity-40"
+                                    >
+                                        Grant
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -156,7 +156,7 @@ I can see your credit profile and help you understand exactly what is affecting 
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typing]);
 
-  const sendMessage = (text?: string) => {
+  const sendMessage = async (text?: string) => {
     const content = text ?? input.trim();
     if (!content) return;
 
@@ -165,34 +165,33 @@ I can see your credit profile and help you understand exactly what is affecting 
     setInput("");
     setTyping(true);
 
-    const lower = content.toLowerCase();
-    let responseText = `Thank you for your question about **"${content}"**.
+    try {
+      const res = await fetch('/api/ai-coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content, language }),
+      });
+      const data = await res.json();
+      const responseText = res.ok
+        ? (data.reply ?? 'Sorry, I could not generate a response.')
+        : (data.error ?? 'AI service is temporarily unavailable. Please try again.');
 
-Based on your credit profile and South African law, here is what I can tell you:
-
-The National Credit Act (NCA) grants you specific rights when it comes to this matter. Under Section 72, you are entitled to challenge any inaccurate, outdated, or unlawfully listed information on your credit report.
-
-**Relevant to your situation:**
-- Your TransUnion score is currently 648 — in the "Good" range but with room to improve
-- I can see 4 negative items on your combined bureau reports
-- 1 of these may qualify for a prescription challenge
-
-Would you like me to create a specific action plan for this? I can also draft a formal dispute letter if needed.
-
-*Credo AI is powered by your actual credit data. Always consult a legal professional for complex matters.*`;
-
-    if (lower.includes("prescri")) responseText = SAMPLE_RESPONSES.prescription;
-    else if (lower.includes("default") || lower.includes("how long")) responseText = SAMPLE_RESPONSES.default;
-
-    setTimeout(() => {
-      setTyping(false);
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: "assistant",
         content: responseText,
         timestamp: new Date(),
       }]);
-    }, 1800);
+    } catch {
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        role: "assistant",
+        content: 'Connection error. Please check your internet and try again.',
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setTyping(false);
+    }
   };
 
   return (

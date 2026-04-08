@@ -28,6 +28,7 @@ export async function GET(
                 include: {
                     project: {
                         include: {
+                            parent: { select: { id: true, name: true } },
                             members: {
                                 include: {
                                     user: {
@@ -126,7 +127,7 @@ export async function GET(
 
             const clean = (name: string) => {
                 let s = name;
-                if (s === 'Letsatsi Referrals') s = 'Letsatsi';
+                if (s.startsWith('Letsatsi Finance') || s === 'Letsatsi Referrals') s = 'Letsatsi';
                 s = s.replace(/My Cases\s*-?\s*/gi, '').trim();
                 return s;
             };
@@ -142,7 +143,7 @@ export async function GET(
             const branch = branches.join(' ');
 
             if (year || month || source || branch) {
-                return [year, month, source, branch].filter(Boolean).join(' ');
+                return [source, branch, month, year].filter(Boolean).join(' ');
             }
             return parts.map(p => clean(p.name)).filter(Boolean).join(' ');
         };
@@ -275,6 +276,7 @@ export async function PATCH(
                             lastName: client.lastName,
                             phone: client.phone || existingByIdNumber.phone,
                             alternativePhone: client.alternativePhone || (existingByIdNumber as any).alternativePhone,
+                            alternativePhone2: client.alternativePhone2 || (existingByIdNumber as any).alternativePhone2,
                             email: client.email || existingByIdNumber.email,
                             alternativeEmail: client.alternativeEmail || (existingByIdNumber as any).alternativeEmail,
                             address: client.address || existingByIdNumber.address,
@@ -499,6 +501,7 @@ export async function PATCH(
             if (client.alternativeEmail !== undefined) clientUpdateData.alternativeEmail = client.alternativeEmail || null;
             if (client.phone !== undefined) clientUpdateData.phone = client.phone || null;
             if (client.alternativePhone !== undefined) clientUpdateData.alternativePhone = client.alternativePhone || null;
+            if (client.alternativePhone2 !== undefined) clientUpdateData.alternativePhone2 = client.alternativePhone2 || null;
             if (client.whatsappNumber !== undefined) clientUpdateData.whatsappNumber = client.whatsappNumber || null;
             if (client.telegramNumber !== undefined) clientUpdateData.telegramNumber = client.telegramNumber || null;
             if (client.address !== undefined) clientUpdateData.address = client.address || null;
@@ -765,7 +768,7 @@ export async function PATCH(
             const branch = branches.join(' ');
 
             if (year || month || source || branch) {
-                return [year, month, source, branch].filter(Boolean).join(' ');
+                return [source, branch, month, year].filter(Boolean).join(' ');
             }
             return parts.map(p => clean(p.name)).filter(Boolean).join(' ');
         };

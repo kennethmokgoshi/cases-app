@@ -1,11 +1,28 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-02 (Bug fix: case search dropdown returning no results for case-insensitive name matches)
+> Last updated: 2026-04-08 (Admin-only document privacy — isAdminOnly flag, DocumentAccessGrant model, filtered GET API, upload flag, access grant/revoke endpoint, UI toggle + lock badge + Manage Access modal)
 
 ---
 
 ## ✅ Completed
+
+### Admin-Only Document Privacy (2026-04-08)
+- [x] **`packages/database/prisma/schema.prisma`** — Added `isAdminOnly Boolean @default(false)` to `Document` model + new `DocumentAccessGrant` model (per-user access grants with granter tracking). Relations added to `User`.
+- [x] **`migrations/20260408_add_admin_only_documents/migration.sql`** — Migration: adds column, index, and `DocumentAccessGrant` table with FK constraints.
+- [x] **`GET /api/cases/[id]/documents`** — Non-admin users only receive documents where `isAdminOnly=false` OR they have an explicit `DocumentAccessGrant`. Admins see all + access grant lists.
+- [x] **`POST /api/cases/[id]/documents`** — Accepts `isAdminOnly=true` form field; only admins can set it.
+- [x] **`POST /api/cases/[id]/documents/access`** — New endpoint to grant/revoke user access to admin-only documents. Admin-only. Body: `{ documentId, userId, action: 'grant'|'revoke' }`.
+- [x] **`packages/ui/src/DocumentsTab.tsx`** — Admin sees "Private — admin eyes only" toggle before upload. Admin-only docs show `🔒 Admin Only` badge. Admin sees "Manage Access" button on private docs; opens a modal listing granted users with Revoke, plus a user dropdown to grant new access.
+- **Security**: Non-admins cannot discover admin-only documents via the API (server-side filter). The file URL itself is also inaccessible to non-admins since they never receive it.
+
+### XDS Credit Bureau Integration (2026-04-07)
+- [x] **`packages/shared-lib/src/xds/`** — Full Puppeteer scraper service (types, browser login, search history scraper, sync orchestrator) following identical pattern to DHS integration
+- [x] **`packages/shared-lib/src/integrations/xds-config.ts`** — Cached credential store (60s TTL, DB → env fallback) with `getXDSCredentials()` + `invalidateXDSCredentialsCache()` — identical to `dhs-config.ts`
+- [x] **`GET/POST/DELETE /api/admin/settings/xds`** — XDS credentials CRUD. Calls `invalidateXDSCredentialsCache()` on save/delete so new password is effective immediately
+- [x] **`POST/GET /api/admin/xds/sync`** — Triggers daily sync. Requires Admin or Executive session, OR `X-Cron-Secret` header for automated cron
+- [x] **Admin Settings UI** — XDS card in `/admin/settings` (Admin & Executive): portal URL + username + password, save/reset, "Run Sync Now" with live result tiles
+- [x] **Executive access to Settings page** — Redirect and access guard updated to allow `isAdmin || isExecutive`
 
 ### Bug Fix — Case Search Case-Sensitivity (2026-04-02)
 - [x] **`/api/cases/search`** — Added `mode: 'insensitive'` to all Prisma `contains` filters (fileNumber, firstName, lastName, idNumber, phone, email). Previously, searching "dikili" would not match "MASITHEMBE DIKILI" because PostgreSQL's default collation is case-sensitive. The fix makes the search dropdown consistent with the table's client-side filtering.
@@ -274,7 +291,7 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 - [x] No app files modified — all 5 apps import unchanged from `@zenowethu/shared-lib`
 
 ### 🔴 Immediate (Do First)
-- All immediate tasks completed (production hardening + E2E coverage). See below for remaining items.
+- [ ] **AI-Driven File Requests**: Create a trigger that will let AI request all "debt review removal" files (Form 17.W, Court Orders, etc.) for relevant cases.
 
 ### 🟡 Short Term (1-2 Weeks)
 

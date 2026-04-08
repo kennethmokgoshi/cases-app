@@ -1,7 +1,6 @@
-// Removed server-only modifier to fix edge build
 import { logger } from '../logger';
 import { convertPdfToImages, extractTextFromPdf } from '../pdf-image';
-import { getOpenAI } from './client';
+import { getAiClientForTask } from '../ai/provider-client';
 import { PROMPTS } from './prompts';
 import { parseAIResponse, buildVerificationReport } from './utils';
 import { identifyDocumentPages, splitPdf } from './pdf-process';
@@ -15,7 +14,8 @@ export async function analyzeDocument(
     base64Image: string,
     documentType: DocType,
     mimeType?: string,
-    onProgress?: (msg: string, progress?: number) => void
+    onProgress?: (msg: string, progress?: number) => void,
+    customModelId?: string
 ): Promise<{ data: any; bureauName?: string; identifiedType?: DocType }> {
     try {
         const isPdf = base64Image.startsWith('JVBERi0') || mimeType === 'application/pdf';
@@ -24,7 +24,7 @@ export async function analyzeDocument(
 
         if (documentType === 'CREDIT_REPORT' && isPdf) {
             onProgress?.('🔍 Identifying credit report type...');
-            const idResult = await identifyCreditReportType(base64Image);
+            const idResult = await identifyCreditReportType(base64Image, customModelId);
             identifiedType = idResult.type;
             bureauName = idResult.bureauName;
             onProgress?.(`📑 Identified as: ${bureauName}`);
@@ -62,9 +62,9 @@ export async function analyzeDocument(
                 contentParts.push({ type: 'text', text: `[EXTRACTED TEXT CONTENT]\n\n${extractedText.substring(0, 20000)}` });
             }
 
-        const openai = getOpenAI();
-        response = await openai.chat.completions.create({
-                model: 'gpt-4o',
+            const { client, model } = await getAiClientForTask('document_analysis');
+            response = await client.chat.completions.create({
+                model: customModelId || model,
                 messages: [{ role: 'user', content: contentParts }],
                 max_tokens: 3500,
                 temperature: 0.1,
@@ -72,9 +72,9 @@ export async function analyzeDocument(
             });
         } else {
             logger.info(`🖼️ Analyzing ${documentType} as image...`);
-        const openai = getOpenAI();
-        response = await openai.chat.completions.create({
-                model: 'gpt-4o',
+            const { client, model } = await getAiClientForTask('document_analysis');
+            response = await client.chat.completions.create({
+                model: customModelId || model,
                 messages: [{
                     role: 'user',
                     content: [
@@ -105,7 +105,8 @@ export async function analyzeDocument(
  */
 export async function extractDocumentsFromCombinedPdf(
     base64Pdf: string,
-    onProgress?: (msg: string, progress?: number) => void
+    onProgress?: (msg: string, progress?: number) => void,
+    customModelId?: string
 ): Promise<{
     extractedDocuments: Array<any>;
     analysis: any;
@@ -122,7 +123,7 @@ export async function extractDocumentsFromCombinedPdf(
             const docInfo = pageInfo.documents.find(d => d.type === doc.type && (d.startPage - 1) <= doc.pageCount);
             const analysisType = doc.type === 'ZENOWETHU_POA' ? 'POA' : doc.type;
 
-            const docResult = await analyzeDocument(doc.base64Pdf, analysisType as any, 'application/pdf');
+            const docResult = await analyzeDocument(doc.base64Pdf, analysisType as any, 'application/pdf', undefined, customModelId);
             const data = docResult.data;
             const bureauName = docResult.bureauName || docInfo?.bureauName || docInfo?.description;
 
@@ -154,7 +155,8 @@ export async function extractDocumentsFromCombinedPdf(
  */
 export async function batchAnalyzeDocuments(
     documents: Array<{ base64: string; type: DocType; mimeType?: string }>,
-    onProgress?: (msg: string, progress?: number) => void
+    onProgress?: (msg: string, progress?: number) => void,
+    customModelId?: string
 ): Promise<any> {
     const results: any = {};
     for (let i = 0; i < documents.length; i++) {
@@ -163,7 +165,7 @@ export async function batchAnalyzeDocuments(
         onProgress?.(`🔍 Analyzing ${doc.type} (${i + 1}/${documents.length})...`, progress);
 
         try {
-            const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType);
+            const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType, undefined, customModelId);
             const data = extracted.data;
             if (doc.type === 'ID') results.id = data;
             else if (doc.type === 'POA') results.poa = data;
@@ -187,12 +189,12 @@ export async function batchAnalyzeDocuments(
 /**
  * Specifically identifies the type of credit report (Major vs Other)
  */
-export async function identifyCreditReportType(base64Pdf: string): Promise<{ type: DocType; bureauName: string }> {
+export async function identifyCreditReportType(base64Pdf: string, customModelId?: string): Promise<{ type: DocType; bureauName: string }> {
     try {
         const text = await extractTextFromPdf(base64Pdf, 5);
-        const openai = getOpenAI();
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
+        const { client, model } = await getAiClientForTask('document_analysis');
+        const response = await client.chat.completions.create({
+            model: customModelId || model,
             messages: [{
                 role: 'user',
                 content: [

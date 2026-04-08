@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -32,9 +32,21 @@ type DhsRecord = {
     selectedAction: 'update' | 'create' | 'skip';
 };
 
+type DcOwner = {
+    ncrdcNo: string;
+    debtCounsellorName: string;
+    dcTradingName: string;
+};
+
 type Stats = { total: number; matched: number; unmatched: number; statusChanged: number };
 type SortField = 'ncr_ref' | 'surname' | 'status_code' | 'currentDhsStatus' | 'selectedAction';
 type SortDir = 'asc' | 'desc';
+
+const DEFAULT_DC: DcOwner = {
+    ncrdcNo: 'NCRDC3693',
+    debtCounsellorName: 'Aaron Nzotho',
+    dcTradingName: 'Zenowethu Debt Management',
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +65,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const ALL_STATUSES = ['A', 'A1', 'B', 'C', 'D3', 'D4', 'F1', 'F2', 'G', 'G1', 'H'];
+const PORTAL_OWNER_ACCEPTED = new Set(['A', 'C', 'D3', 'D4']);
 
 const STATUS_LABELS: Record<string, string> = {
     F1: 'Awaiting Proposal Acceptance',
@@ -80,6 +93,32 @@ function StatusBadge({ code }: { code: string | null }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DhsImportPage() {
+    // Portal's own DC (loaded from admin settings)
+    const [portalDc, setPortalDc] = useState<DcOwner>(DEFAULT_DC);
+    const [portalDcLoaded, setPortalDcLoaded] = useState(false);
+
+    // DC ownership
+    const [dc, setDc] = useState<DcOwner>({ ncrdcNo: '', debtCounsellorName: '', dcTradingName: '' });
+    const [dcConfirmed, setDcConfirmed] = useState(false);
+    const [isPortalOwner, setIsPortalOwner] = useState(true);
+
+    // Load portal DC from settings on mount
+    useEffect(() => {
+        fetch('/api/admin/settings/dc-profile')
+            .then((r) => r.ok ? r.json() : null)
+            .then((data) => {
+                if (data?.settings) {
+                    setPortalDc({
+                        ncrdcNo: data.settings.dc_ncrdcNo || DEFAULT_DC.ncrdcNo,
+                        debtCounsellorName: data.settings.dc_name || DEFAULT_DC.debtCounsellorName,
+                        dcTradingName: data.settings.dc_organisation || DEFAULT_DC.dcTradingName,
+                    });
+                }
+                setPortalDcLoaded(true);
+            })
+            .catch(() => setPortalDcLoaded(true));
+    }, []);
+
     // Upload state
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
@@ -106,6 +145,8 @@ export default function DhsImportPage() {
     // Apply state
     const [applying, setApplying] = useState(false);
     const [applyResult, setApplyResult] = useState<{ updated: number; created: number; skipped: number; errors: string[] } | null>(null);
+    const [dhsProjectName, setDhsProjectName] = useState<string | null>(null);
+    const [showResultModal, setShowResultModal] = useState(false);
 
     // ── Handlers ───────────────────────────────────────────────────────────
 
@@ -126,6 +167,7 @@ export default function DhsImportPage() {
 
     const handleImport = async () => {
         if (!file) return;
+        if (!dcConfirmed) { setError('Please confirm the debt counsellor ownership before extracting.'); return; }
         setLoading(true);
         setError('');
         setRecords(null);
@@ -182,7 +224,16 @@ export default function DhsImportPage() {
 
     const handleApply = async () => {
         if (!records || selected.size === 0) return;
-        if (!confirm(`Apply actions to ${selected.size} selected record(s)?`)) return;
+
+        // Warn before creating new files
+        const creates = records.filter((r) => selected.has(r.rsa_id) && r.selectedAction === 'create');
+        if (creates.length > 0) {
+            const names = creates.slice(0, 3).map((r) => `${r.surname}, ${r.first_name}`).join('; ');
+            const more = creates.length > 3 ? ` and ${creates.length - 3} more` : '';
+            if (!confirm(`This will create ${creates.length} new case file(s):\n${names}${more}\n\nConfirm?`)) return;
+        } else {
+            if (!confirm(`Apply actions to ${selected.size} selected record(s)?`)) return;
+        }
 
         setApplying(true);
         setApplyResult(null);
@@ -206,11 +257,13 @@ export default function DhsImportPage() {
             const res = await fetch('/api/admin/dhs-import/apply', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ actions }),
+                body: JSON.stringify({ actions, dc: isPortalOwner ? portalDc : dc, isPortalOwner }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Apply failed');
             setApplyResult(data.results);
+            setDhsProjectName(data.dhsProjectName ?? null);
+            setShowResultModal(true);
             setSelected(new Set());
         } catch (err: any) {
             setError(err.message);
@@ -305,13 +358,121 @@ export default function DhsImportPage() {
                     )}
                     <input ref={inputRef} type="file" accept=".xls,.xlsx,.pdf" onChange={handleFileChange} className="hidden" />
                 </div>
+                {/* ── DC Ownership ──────────────────────────────────────── */}
+                {file && (
+                    <div className="mt-5 border-t border-white/5 pt-5">
+                        <p className="text-sm font-semibold text-white mb-1">Who owns this DHS report?</p>
+
+                        {/* Ownership toggle */}
+                        <div className="flex gap-3 mb-5">
+                            <button
+                                type="button"
+                                onClick={() => { setIsPortalOwner(true); setDcConfirmed(false); }}
+                                className={`flex-1 px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${isPortalOwner ? 'bg-zeno-orange/15 border-zeno-orange/50 text-zeno-orange' : 'bg-black/20 border-white/10 text-gray-400 hover:border-white/20 hover:text-white'}`}
+                            >
+                                <span className="block font-semibold mb-0.5">My own NCRDC files</span>
+                                <span className="text-xs opacity-70">I am the portal owner uploading my own data</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setIsPortalOwner(false); setDcConfirmed(false); }}
+                                className={`flex-1 px-4 py-3 rounded-xl border text-sm font-medium transition-colors text-left ${!isPortalOwner ? 'bg-blue-500/15 border-blue-500/40 text-blue-300' : 'bg-black/20 border-white/10 text-gray-400 hover:border-white/20 hover:text-white'}`}
+                            >
+                                <span className="block font-semibold mb-0.5">Another DC's data</span>
+                                <span className="text-xs opacity-70">Enter the debt counsellor's details below</span>
+                            </button>
+                        </div>
+
+                        {/* My own NCRDC — show read-only DC info from settings */}
+                        {isPortalOwner && (
+                            <div className="mb-4">
+                                {!portalDcLoaded ? (
+                                    <p className="text-xs text-gray-500">Loading DC profile...</p>
+                                ) : (
+                                    <div className="bg-zeno-orange/5 border border-zeno-orange/20 rounded-xl px-5 py-4 flex flex-wrap gap-x-8 gap-y-2 mb-3">
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-0.5">NCRDC Number</p>
+                                            <p className="text-sm font-semibold text-white">{portalDc.ncrdcNo}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-0.5">Debt Counsellor</p>
+                                            <p className="text-sm font-semibold text-white">{portalDc.debtCounsellorName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-0.5">Organisation</p>
+                                            <p className="text-sm font-semibold text-white">{portalDc.dcTradingName}</p>
+                                        </div>
+                                        <div className="w-full">
+                                            <p className="text-xs text-amber-400/80">⚠️ Statuses A, C, D3, D4 will be marked as <strong>Accepted via DHS</strong>. To update these details go to <a href="/admin/settings" className="underline hover:text-amber-300">Admin → Settings → Portal DC Profile</a>.</p>
+                                        </div>
+                                    </div>
+                                )}
+                                <label className={`inline-flex items-center gap-3 cursor-pointer px-4 py-2.5 rounded-lg border transition-colors ${dcConfirmed ? 'bg-green-500/10 border-green-500/30' : 'bg-white/5 border-white/10 hover:border-white/20'}`}>
+                                    <input type="checkbox" checked={dcConfirmed} onChange={(e) => setDcConfirmed(e.target.checked)} className="w-4 h-4 rounded text-zeno-orange" />
+                                    <span className={`text-sm font-medium ${dcConfirmed ? 'text-green-300' : 'text-gray-300'}`}>
+                                        {dcConfirmed
+                                            ? `✓ Confirmed — these are my own DHS files (${portalDc.ncrdcNo})`
+                                            : `I confirm these are my own DHS files for ${portalDc.ncrdcNo || '…'}`}
+                                    </span>
+                                </label>
+                            </div>
+                        )}
+
+                        {/* Another DC's data — show editable fields */}
+                        {!isPortalOwner && (
+                            <div className="mb-4">
+                                <p className="text-xs text-gray-500 mb-3">Enter the debt counsellor details for the owner of this report.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">NCRDC Number</label>
+                                        <input
+                                            value={dc.ncrdcNo}
+                                            onChange={(e) => { setDc((p) => ({ ...p, ncrdcNo: e.target.value })); setDcConfirmed(false); }}
+                                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-400"
+                                            placeholder="NCRDC…"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Debt Counsellor Name</label>
+                                        <input
+                                            value={dc.debtCounsellorName}
+                                            onChange={(e) => { setDc((p) => ({ ...p, debtCounsellorName: e.target.value })); setDcConfirmed(false); }}
+                                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-400"
+                                            placeholder="Full name"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Organisation</label>
+                                        <input
+                                            value={dc.dcTradingName}
+                                            onChange={(e) => { setDc((p) => ({ ...p, dcTradingName: e.target.value })); setDcConfirmed(false); }}
+                                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-400"
+                                            placeholder="Trading name"
+                                        />
+                                    </div>
+                                </div>
+                                <label className={`inline-flex items-center gap-3 cursor-pointer px-4 py-2.5 rounded-lg border transition-colors ${dcConfirmed ? 'bg-green-500/10 border-green-500/30' : 'bg-white/5 border-white/10 hover:border-white/20'}`}>
+                                    <input type="checkbox" checked={dcConfirmed} onChange={(e) => setDcConfirmed(e.target.checked)} className="w-4 h-4 rounded text-zeno-orange" />
+                                    <span className={`text-sm font-medium ${dcConfirmed ? 'text-green-300' : 'text-gray-300'}`}>
+                                        {dcConfirmed
+                                            ? `✓ Confirmed — this report belongs to ${dc.ncrdcNo || '…'} (${dc.dcTradingName || '…'})`
+                                            : `I confirm this report belongs to ${dc.ncrdcNo || '…'} and I am authorised to process it`}
+                                    </span>
+                                </label>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="mt-4 flex justify-end">
                     <button
                         onClick={handleImport}
-                        disabled={!file || loading}
+                        disabled={!file || !dcConfirmed || loading || (!isPortalOwner && (!dc.ncrdcNo.trim() || !dc.debtCounsellorName.trim() || !dc.dcTradingName.trim()))}
                         className="px-6 py-2.5 bg-zeno-orange text-white font-bold rounded-lg hover:bg-orange-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                        {loading ? (<><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Extracting &amp; comparing...</>) : '🤖 Extract &amp; Compare with DB'}
+                        {loading
+                            ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Extracting &amp; comparing...</>
+                            : <>🤖 Extract &amp; Compare with DB</>}
                     </button>
                 </div>
             </div>
@@ -319,16 +480,80 @@ export default function DhsImportPage() {
             {/* Error */}
             {error && <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 text-sm">{error}</div>}
 
-            {/* Apply result */}
-            {applyResult && (
-                <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-sm space-y-1">
-                    <p className="text-green-300 font-semibold">✅ Actions applied successfully</p>
-                    <p className="text-gray-400">Updated: <span className="text-white font-medium">{applyResult.updated}</span> &nbsp;|&nbsp; Created: <span className="text-white font-medium">{applyResult.created}</span> &nbsp;|&nbsp; Skipped: <span className="text-white font-medium">{applyResult.skipped}</span></p>
-                    {applyResult.errors.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                            {applyResult.errors.map((e, i) => <p key={i} className="text-rose-400 text-xs">{e}</p>)}
+            {/* ── Apply Result Modal ──────────────────────────────────── */}
+            {showResultModal && applyResult && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        onClick={() => setShowResultModal(false)}
+                    />
+                    {/* Modal card */}
+                    <div className="relative bg-[#0d1829] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        {/* Green top bar */}
+                        <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 to-green-400" />
+
+                        <div className="p-7">
+                            {/* Icon + title */}
+                            <div className="flex items-start gap-4 mb-6">
+                                <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-2xl shrink-0">
+                                    ✅
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">Actions Applied Successfully</h2>
+                                    <p className="text-gray-400 text-sm mt-0.5">All selected records have been processed.</p>
+                                </div>
+                            </div>
+
+                            {/* Stats grid */}
+                            <div className="grid grid-cols-3 gap-3 mb-6">
+                                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-center">
+                                    <p className="text-2xl font-bold text-amber-300">{applyResult.updated}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">Updated</p>
+                                </div>
+                                <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-center">
+                                    <p className="text-2xl font-bold text-green-300">{applyResult.created}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">Created</p>
+                                </div>
+                                <div className="bg-gray-500/10 border border-gray-500/20 rounded-xl px-4 py-3 text-center">
+                                    <p className="text-2xl font-bold text-gray-400">{applyResult.skipped}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">Skipped</p>
+                                </div>
+                            </div>
+
+                            {/* Errors — only if any */}
+                            {applyResult.errors.length > 0 && (
+                                <div className="mb-5 bg-rose-500/10 border border-rose-500/20 rounded-xl p-4">
+                                    <p className="text-rose-400 text-xs font-semibold mb-2">⚠️ {applyResult.errors.length} error(s)</p>
+                                    <div className="space-y-1 max-h-28 overflow-y-auto">
+                                        {applyResult.errors.map((e, i) => (
+                                            <p key={i} className="text-rose-300 text-xs">{e}</p>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Buttons */}
+                            <div className="flex flex-col gap-2">
+                                {dhsProjectName && (
+                                    <Link
+                                        href="/admin/projects"
+                                        onClick={() => setShowResultModal(false)}
+                                        className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white font-medium rounded-xl transition-colors text-sm text-center flex items-center justify-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                                        Visit project: <span className="text-white font-semibold">{dhsProjectName}</span>
+                                    </Link>
+                                )}
+                                <button
+                                    onClick={() => setShowResultModal(false)}
+                                    className="w-full py-2.5 bg-zeno-orange hover:bg-orange-500 text-white font-bold rounded-xl transition-colors text-sm"
+                                >
+                                    Done
+                                </button>
+                            </div>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
 
@@ -471,6 +696,9 @@ export default function DhsImportPage() {
                                             <td className="px-3 py-2.5">
                                                 <StatusBadge code={rec.status_code} />
                                                 <p className="text-gray-500 text-xs mt-0.5">{rec.status_label}</p>
+                                                {isPortalOwner && PORTAL_OWNER_ACCEPTED.has(rec.status_code) && (
+                                                    <p className="text-emerald-400 text-xs mt-0.5 font-medium">✓ Accepted via DHS</p>
+                                                )}
                                             </td>
                                             <td className="px-3 py-2.5">
                                                 {rec.dbMatch.found ? (

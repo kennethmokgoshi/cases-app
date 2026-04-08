@@ -21,19 +21,49 @@ export async function GET(
         }
 
         const { id: caseId } = await params;
+        const isAdmin = session.user.isAdmin === true || session.user.role === 'ADMIN';
 
-        const documents = await prisma.document.findMany({
-            where: { caseId },
-            orderBy: { uploadedAt: 'desc' },
-            select: {
-                id: true,
-                type: true,
-                fileName: true,
-                fileUrl: true,
-                fileSize: true,
-                uploadedAt: true,
-                uploadedById: true }
-        });
+        // Build visibility filter: admins see all; others only see non-admin-only docs
+        // or docs where they have an explicit access grant
+        const where: Record<string, unknown> = { caseId };
+        if (!isAdmin) {
+            where.OR = [
+                { isAdminOnly: false },
+                { accessGrants: { some: { userId: session.user.id } } }
+            ];
+        }
+
+        const baseSelect = {
+            id: true,
+            type: true,
+            fileName: true,
+            fileUrl: true,
+            fileSize: true,
+            uploadedAt: true,
+            uploadedById: true,
+            isAdminOnly: true,
+        } as const;
+
+        const documents = isAdmin
+            ? await prisma.document.findMany({
+                where,
+                orderBy: { uploadedAt: 'desc' },
+                select: {
+                    ...baseSelect,
+                    accessGrants: {
+                        select: {
+                            userId: true,
+                            grantedAt: true,
+                            user: { select: { id: true, firstName: true, lastName: true, email: true } }
+                        }
+                    }
+                }
+            })
+            : await prisma.document.findMany({
+                where,
+                orderBy: { uploadedAt: 'desc' },
+                select: baseSelect
+            });
 
         return NextResponse.json({ documents });
 
@@ -114,6 +144,9 @@ export async function POST(
 
         const file = files[0];
         const docType = fields.type || 'OTHER';
+        const isAdmin = session.user.isAdmin === true || session.user.role === 'ADMIN';
+        // Only admins can mark documents as admin-only
+        const isAdminOnly = isAdmin && fields.isAdminOnly === 'true';
 
         if (!file) {
             logger.error(`[UPLOAD_TRACE] No file found in buffer. Fields found: ${Object.keys(fields).join(', ')}`);
@@ -149,7 +182,8 @@ export async function POST(
                 fileUrl,
                 fileSize: file.buffer.length,
                 mimeType: file.type || 'application/octet-stream',
-                uploadedById: session.user.id, // Track who uploaded the document
+                uploadedById: session.user.id,
+                isAdminOnly,
             }
         });
 

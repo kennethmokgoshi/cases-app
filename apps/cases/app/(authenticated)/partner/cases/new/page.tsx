@@ -1114,10 +1114,10 @@ function NewCaseWithAIComponent() {
                         <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
                             <p className="text-sm text-gray-400 mb-1">Case will be created under:</p>
                             <p className="text-white font-medium">
-                                {selectedYear} {selectedMonth}
-                                {selectedParent && ` → ${selectedParent.name}`}
+                                {selectedParent && selectedParent.name}
                                 {selectedSubprojectId && subprojects.find(s => s.id === selectedSubprojectId) &&
-                                    ` → ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                    ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                {` ${selectedMonth} ${selectedYear}`}
                             </p>
                             <p className="text-sm text-gray-400 mt-2">
                                 Services: <span className="text-zeno-cyan">{selectedServices.length} selected</span>

@@ -1,8 +1,16 @@
+import path from 'path';
+import fs from 'fs';
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
+import { requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
 import { stepRegistry } from '../step-registry';
 import type { ActionContext } from '../step-registry';
 import type { StepExecutionResult } from '../types';
+
+const resolveUploadPath = (fileUrl: string): string => {
+  const relative = fileUrl.replace(/^\/uploads\//, '');
+  return path.join(process.cwd(), 'storage', 'uploads', relative);
+};
 
 stepRegistry.register('DHS_SEARCH', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
@@ -36,30 +44,93 @@ stepRegistry.register('DHS_SEARCH', async (ctx: ActionContext): Promise<StepExec
 stepRegistry.register(
   'DHS_TRANSFER_REQUEST',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
+    const { caseId, planId, stepId, caseRecord } = ctx;
+    logger.info(`[DHS_TRANSFER_REQUEST] Case ${caseId}: executing approved DHS transfer (plan ${planId}, step ${stepId})`);
+
     try {
-      const { caseId, caseRecord, actionParams } = ctx;
-      const targetDC = (actionParams.targetDC as string) || 'Zenowethu';
-      logger.info(`[DHS_TRANSFER_REQUEST] Case ${caseId}: requesting transfer to ${targetDC}`);
+      // Load full case with documents
+      const caseData = await prisma.case.findUnique({
+        where: { id: caseId },
+        include: { documents: true },
+      });
+
+      if (!caseData) return { success: false, error: 'Case not found' };
+
+      // Resolve POA document — prefer ZENOWETHU_POA, fall back to POA
+      const poaDoc =
+        caseData.documents.find((d) => d.type === 'ZENOWETHU_POA') ||
+        caseData.documents.find((d) => d.type === 'POA' || d.fileName?.toLowerCase().includes('poa'));
+
+      // Resolve ID document
+      const idDoc =
+        caseData.documents.find((d) => d.type === 'ID') ||
+        caseData.documents.find(
+          (d) => d.fileName?.toLowerCase().includes('id') && !d.fileName?.toLowerCase().includes('credit'),
+        );
+
+      if (!poaDoc || !idDoc) {
+        const missing = [!poaDoc && 'POA', !idDoc && 'ID'].filter(Boolean).join(', ');
+        return { success: false, error: `Missing required documents: ${missing}` };
+      }
+
+      const poaPath = resolveUploadPath(poaDoc.fileUrl);
+      const idPath = resolveUploadPath(idDoc.fileUrl);
+
+      if (!fs.existsSync(poaPath)) return { success: false, error: `POA file not found on disk: ${poaPath}` };
+      if (!fs.existsSync(idPath)) return { success: false, error: `ID file not found on disk: ${idPath}` };
+
+      // Execute DHS Puppeteer automation
+      const result = await requestTransfer(caseData.client?.idNumber || caseRecord.client.idNumber, poaPath, idPath);
+
+      await closeBrowser();
+
+      if (!result.success) {
+        return { success: false, error: result.message || 'DHS transfer request failed' };
+      }
+
+      // Update case status
+      const prevStatus = caseData.status;
+      await prisma.case.update({
+        where: { id: caseId },
+        data: { dhsStatus: 'PENDING', status: 'DHS_REQUESTED' },
+      });
+
+      await prisma.workflowLog.create({
+        data: {
+          caseId,
+          fromStatus: prevStatus,
+          toStatus: 'DHS_REQUESTED',
+          action: 'AI_PLAN_DHS_TRANSFER',
+          userId: caseRecord.assignedToId,
+          notes: `DHS transfer submitted via approved AI Plan (plan: ${planId}, step: ${stepId})`,
+        },
+      });
+
       await prisma.caseComment.create({
         data: {
           caseId,
           userId: caseRecord.assignedToId || 'system',
-          content: `[AI Plan] DHS Transfer Request initiated to DC: ${targetDC}`,
+          content: `[AI Plan] DHS Transfer Request submitted successfully. Case status updated to DHS_REQUESTED. DHS reference: ${result.requestId || 'N/A'}`,
           type: 'AI_PLAN',
           isInternal: true,
           activityType: 'DHS_TRANSFER_REQUEST',
         },
       });
+
       return {
         success: true,
         result: {
           action: 'DHS_TRANSFER_REQUEST',
-          targetDC,
-          initiatedAt: new Date().toISOString(),
+          dhsRequestId: result.requestId,
+          fromStatus: prevStatus,
+          toStatus: 'DHS_REQUESTED',
+          submittedAt: new Date().toISOString(),
         },
       };
     } catch (err: unknown) {
+      await closeBrowser().catch(() => {});
       const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error(`[DHS_TRANSFER_REQUEST] Case ${caseId} failed: ${message}`);
       return { success: false, error: message };
     }
   },
