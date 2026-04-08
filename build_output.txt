@@ -1,0 +1,54 @@
+
+> cases@0.1.0 build C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases
+> next build
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ⚠ turbopack.root should be absolute, using: C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main
+   ▲ Next.js 16.0.6 (Turbopack)
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     · clientTraceMetadata
+     · serverActions
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Turbopack build encountered 1 warnings:
+./packages/shared-lib/src/integrations/ghl-service.ts:91:47
+Module not found: Can't resolve '@zenowethu/plan-engine'
+[0m [90m 89 |[39m             [90m// @ts-ignore — plan-engine resolved at runtime via pnpm workspace[39m
+ [90m 90 |[39m             [36mconst[39m pkgName [33m=[39m [32m'@zenowethu/plan-engine'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 91 |[39m             [36mconst[39m { handlePlanEvent } [33m=[39m [36mawait[39m [36mimport[39m(pkgName)[33m;[39m
+ [90m    |[39m                                               [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 92 |[39m             [36mawait[39m handlePlanEvent({
+ [90m 93 |[39m                 caseId[33m:[39m caseRecord[33m.[39mid[33m,[39m
+ [90m 94 |[39m                 planId[33m:[39m [32m''[39m[33m,[39m[0m
+
+
+
+Import trace:
+  App Route:
+    ./packages/shared-lib/src/integrations/ghl-service.ts
+    ./apps/cases/app/api/cases/[id]/send-file-requests/route.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ ✓ Compiled successfully in 42s
+   Running TypeScript ...
+Failed to compile.
+
+../../packages/plan-engine/src/actions/cases.ts:83:53
+Type error: Property 'client' does not exist on type '{ documents: { caseId: string; type: string; isAdminOnly: boolean; id: string; fileName: string; fileUrl: string; fileSize: number; mimeType: string; uploadedAt: Date; analyzedAt: Date; extractedData: string; uploadedById: string; }[]; } & { ...; }'. Did you mean 'clientId'?
+
+[0m [90m 81 |[39m
+ [90m 82 |[39m       [90m// Execute DHS Puppeteer automation[39m
+[31m[1m>[22m[39m[90m 83 |[39m       [36mconst[39m result [33m=[39m [36mawait[39m requestTransfer(caseData[33m.[39mclient[33m?[39m[33m.[39midNumber [33m||[39m caseRecord[33m.[39mclient[33m.[39midNumber[33m,[39m poaPath[33m,[39m idPath)[33m;[39m
+ [90m    |[39m                                                     [31m[1m^[22m[39m
+ [90m 84 |[39m
+ [90m 85 |[39m       [36mawait[39m closeBrowser()[33m;[39m
+ [90m 86 |[39m[0m
+Next.js build worker exited with code: 1 and signal: null
+C:\Visual Studio Code\06 March 2026\FromGIt\cases-app-main\apps\cases:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  cases@0.1.0 build: `next build`
+Exit status 1

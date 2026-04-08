@@ -76,7 +76,7 @@ export async function GET(request: Request) {
     const status = searchParams.get('status') ?? undefined
     const policyType = searchParams.get('policyType') ?? undefined
 
-    const where = {
+    const where: any = {
       ...(status ? { status } : {}),
       ...(policyType ? { policyType } : {}),
     }
