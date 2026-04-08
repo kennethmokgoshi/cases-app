@@ -80,7 +80,7 @@ stepRegistry.register(
       if (!fs.existsSync(idPath)) return { success: false, error: `ID file not found on disk: ${idPath}` };
 
       // Execute DHS Puppeteer automation
-      const result = await requestTransfer(caseData.client?.idNumber || caseRecord.client.idNumber, poaPath, idPath);
+      const result = await requestTransfer(caseRecord.client.idNumber, poaPath, idPath);
 
       await closeBrowser();
 
