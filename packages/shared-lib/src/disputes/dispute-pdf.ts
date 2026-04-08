@@ -886,7 +886,7 @@ export async function generateAllDisputeLetters(
             adverseCode: listing.adverseCode,
             adverseDate: listing.adverseDate,
             lastPaymentDate: listing.lastPaymentDate,
-            openBalance: listing.openBalance,
+            outstandingBalance: listing.openBalance,
             overdueBalance: listing.overdueBalance,
             bureauName,
             disputeGrounds: listing.grounds,
