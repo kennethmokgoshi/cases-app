@@ -281,7 +281,10 @@ function SidebarInner() {
 
                 <nav className="flex-1 p-4 space-y-6">
                     {/* Main Navigation */}
-                    <SidebarNav session={session} />
+                    <SidebarNav
+                        session={session}
+                        insuranceUrl={process.env.NEXT_PUBLIC_INSURANCE_URL ?? ''}
+                    />
 
                     {/* Projects Header with View Toggle */}
                     <div className="flex items-center justify-between px-2 mb-3">

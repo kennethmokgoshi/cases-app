@@ -49,4 +49,16 @@ export const prisma = globalForPrisma.prisma ?? (createPrismaClient() as unknown
 const nodeEnv = (globalThis as any).process?.env?.NODE_ENV as string | undefined
 if (nodeEnv !== 'production') globalForPrisma.prisma = prisma
 
+// Gracefully disconnect on process exit so connections are released back to PostgreSQL.
+// Critical for dev: prevents "too many clients" errors across hot reloads and server restarts.
+const proc = globalThis as any
+if (!proc.__prismaDisconnectRegistered) {
+    proc.__prismaDisconnectRegistered = true
+    const disconnect = () => { prisma.$disconnect().catch(() => {}) }
+    proc.process?.on?.('beforeExit', disconnect)
+    proc.process?.on?.('SIGINT', disconnect)
+    proc.process?.on?.('SIGTERM', disconnect)
+    proc.process?.on?.('SIGUSR2', disconnect) // nodemon/ts-node restart signal
+}
+
 export { PrismaClient, Prisma }

@@ -165,6 +165,7 @@ function NewCaseWithAIComponent() {
         creditReport?: File;
         bankStatement?: File;
         payslip?: File;
+        por?: File;
         form16?: File;
         form171?: File;
         form172?: File;
@@ -233,8 +234,12 @@ function NewCaseWithAIComponent() {
         message: string;
         code: string;
     } | null>(null);
+    const [showErrorModal, setShowErrorModal] = useState(false);
+    const [successCaseId, setSuccessCaseId] = useState<string | null>(null);
 
     // Warning for missing documents in combined upload
+    const [isManualEntry, setIsManualEntry] = useState(false);
+    const [manualMode, setManualMode] = useState(false); // true = Add File Manually path (simplified B2B-style)
     const [missingDocsWarning, setMissingDocsWarning] = useState<string | null>(null);
     const [dhsMessage, setDhsMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
@@ -413,7 +418,7 @@ function NewCaseWithAIComponent() {
         // REMOVED: Reseting Year/Month
     }, [selectedParentId]);
 
-    const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'bankStatement' | 'payslip' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
+    const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'bankStatement' | 'payslip' | 'por' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
         if (type === 'optional' && file) {
             setUploadedFiles(prev => ({
                 ...prev,
@@ -474,6 +479,151 @@ function NewCaseWithAIComponent() {
             alert('Failed to create project structure. Please try again.');
         } finally {
             setCreatingProject(false);
+        }
+    };
+
+    const handleAddFileManually = async () => {
+        if (!selectedParentId || !selectedYear || !selectedMonth) {
+            alert('Please select a parent project, year, and month');
+            return;
+        }
+
+        setCreatingProject(true);
+
+        try {
+            // Build the project path (same as handleContinueToUpload)
+            const baseProjectId = selectedSubprojectId || selectedParentId;
+
+            const yearRes = await fetch('/api/projects/ensure-path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parentId: baseProjectId, name: selectedYear, type: 'YEAR' })
+            });
+            if (!yearRes.ok) throw new Error('Failed to create year project');
+            const yearProject = await yearRes.json();
+
+            const monthRes = await fetch('/api/projects/ensure-path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parentId: yearProject.id, name: selectedMonth, type: 'MONTH' })
+            });
+            if (!monthRes.ok) throw new Error('Failed to create month project');
+            const monthProject = await monthRes.json();
+
+            setFinalProjectId(monthProject.id);
+            setManualMode(true);
+            setFormData({
+                surname: '', names: '', idNumber: '', cellNumber: '', whatsappNumber: '',
+                email: '', alternativeEmail: '', alternativePhone: '', address: '', employer: '',
+                employeeNo: '', grossSalary: '', netSalary: '', salaryPayDate: '',
+                affordabilityStatus: '', category: 'Standard', closedAccounts: 0,
+                openAccounts: 0, prescribedAccounts: 0, ncrdcNo: '', serviceFee: '',
+                instalments: 1, totalDebtAmount: '', totalMonthlyInstallment: '',
+                cb_ncrdcNo: '', cb_debtCounsellor: '', cb_contactNo: '',
+                cb_applicationDate: '', cb_status: '', cb_statusDate: ''
+            });
+            setUploadedFiles({ optional: [] });
+            setStep(2);
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        } catch (error) {
+            logger.error('Error initializing manual case from step 1:', error);
+            alert('Failed to initialize case. Please try again.');
+        } finally {
+            setCreatingProject(false);
+        }
+    };
+
+    const handleCreateManualCase = async () => {
+        if (!formData.surname || !formData.names || !formData.idNumber) {
+            alert('Please fill in Surname, Full Names, and ID Number');
+            return;
+        }
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            // Create temp case shell
+            const tempCase = await fetch('/api/cases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client: { firstName: 'Manual', lastName: 'Entry', idNumber: `MANUAL-${Date.now()}` },
+                    projectId: finalProjectId,
+                    acquisitionType,
+                    partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
+                    partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0
+                })
+            });
+            if (!tempCase.ok) throw new Error('Failed to initialize case');
+            const tempCaseData = await tempCase.json();
+            const caseId = tempCaseData.id;
+
+            // Upload any attached files (no AI analysis)
+            const hasFiles = uploadedFiles.id || uploadedFiles.poa || uploadedFiles.creditReport ||
+                uploadedFiles.payslip || uploadedFiles.bankStatement || uploadedFiles.por ||
+                uploadedFiles.form16 || uploadedFiles.form171 || uploadedFiles.form172 ||
+                uploadedFiles.form177 || uploadedFiles.clearance || uploadedFiles.optional.length > 0;
+            if (hasFiles) {
+                const fd = new FormData();
+                fd.append('caseId', caseId);
+                fd.append('skipAnalysis', 'true');
+                if (uploadedFiles.id) fd.append('file_ID', uploadedFiles.id);
+                if (uploadedFiles.poa) fd.append('file_POA', uploadedFiles.poa);
+                if (uploadedFiles.creditReport) fd.append('file_CREDIT_REPORT', uploadedFiles.creditReport);
+                if (uploadedFiles.payslip) fd.append('files', uploadedFiles.payslip);
+                if (uploadedFiles.bankStatement) fd.append('files', uploadedFiles.bankStatement);
+                if (uploadedFiles.por) fd.append('files', uploadedFiles.por);
+                if (uploadedFiles.form16) fd.append('files', uploadedFiles.form16);
+                if (uploadedFiles.form171) fd.append('files', uploadedFiles.form171);
+                if (uploadedFiles.form172) fd.append('files', uploadedFiles.form172);
+                if (uploadedFiles.form177) fd.append('files', uploadedFiles.form177);
+                if (uploadedFiles.clearance) fd.append('files', uploadedFiles.clearance);
+                uploadedFiles.optional.forEach(f => fd.append('files', f));
+                await fetch('/api/documents/upload', { method: 'POST', body: fd });
+            }
+
+            // Patch case with real data
+            const res = await fetch(`/api/cases/${caseId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client: {
+                        firstName: formData.names.split(' ')[0],
+                        lastName: formData.surname,
+                        idNumber: formData.idNumber,
+                        email: formData.email || null,
+                        phone: formData.cellNumber || null,
+                        address: formData.address || null,
+                        employer: formData.employer || null,
+                        grossSalary: formData.grossSalary || null,
+                        netSalary: formData.netSalary || null,
+                        salaryPayDate: formData.salaryPayDate || null,
+                        type: formData.category
+                    },
+                    services: selectedServices,
+                    serviceFee: formData.serviceFee || null,
+                    instalments: formData.instalments || 1,
+                    totalDebtAmount: formData.totalDebtAmount ? Number(formData.totalDebtAmount) : 0,
+                    totalMonthlyInstallment: formData.totalMonthlyInstallment ? Number(formData.totalMonthlyInstallment) : 0
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 409 && data.code === 'DUPLICATE_ID_NUMBER') {
+                    setDuplicateError(data);
+                    return;
+                }
+                setSubmitError({ title: '❌ Error', message: data.error || 'Failed to create case', code: data.code || 'ERROR' });
+                return;
+            }
+
+            router.push(`/cases/${data.id}`);
+        } catch (error) {
+            logger.error('Manual case creation error:', error);
+            setSubmitError({ title: '❌ Connection Error', message: 'Failed to create case. Please try again.', code: 'NETWORK_ERROR' });
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -823,6 +973,7 @@ function NewCaseWithAIComponent() {
                 cb_applicationDate: '',
                 cb_status: '',
                 cb_statusDate: '' });
+            setIsManualEntry(true);
             setStep(3);
             window.scrollTo({ top: 0, behavior: 'instant' });
         } catch (error) {
@@ -933,6 +1084,7 @@ function NewCaseWithAIComponent() {
         const emailVal = formData.email?.trim();
         if (!emailVal || emailVal === 'NA') {
             setSubmitError({ title: '❌ Email Required', message: 'Please enter the client\'s email address before creating the case.', code: 'MISSING_EMAIL' });
+            setShowErrorModal(true);
             return;
         }
 
@@ -1026,11 +1178,12 @@ function NewCaseWithAIComponent() {
                 }
 
                 setSubmitError({ title: errorTitle, message: errorMessage, code: errorData.code });
+                setShowErrorModal(true);
                 return;
             }
 
-            // Success - Redirect to the new (or merged) case
-            router.push(`/cases/${data.id}`);
+            // Success - show success modal then redirect
+            setSuccessCaseId(data.id);
         } catch (error) {
             logger.error('Error:', error);
             setSubmitError({
@@ -1038,6 +1191,7 @@ function NewCaseWithAIComponent() {
                 message: 'Failed to create case. Please check your internet connection and try again.',
                 code: 'NETWORK_ERROR'
             });
+            setShowErrorModal(true);
         } finally {
             setSubmitting(false);
         }
@@ -1058,14 +1212,14 @@ function NewCaseWithAIComponent() {
                     ← Back to Cases
                 </Link>
                 <h1 className="text-3xl font-bold text-white mb-2">Add New Case</h1>
-                <p className="text-gray-400">AI-powered document analysis for instant data extraction</p>
+                <p className="text-gray-400">{manualMode ? 'Manual entry — fill in details and optionally attach documents' : 'AI-powered document analysis for instant data extraction'}</p>
             </div>
 
             {/* Progress Steps */}
             <div className="mb-8 flex items-center justify-between">
                 {[
                     { num: 1, label: 'Select Period & Source' },
-                    { num: 2, label: 'Upload Documents' },
+                    { num: 2, label: manualMode ? 'Enter Details & Upload' : 'Upload Documents' },
                     { num: 3, label: 'Review & Edit' },
                 ].map((s, i) => (
                     <div key={s.num} className="flex items-center">
@@ -1256,7 +1410,20 @@ function NewCaseWithAIComponent() {
                         </div>
                     )}
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-between items-center gap-4">
+                        <button
+                            onClick={handleAddFileManually}
+                            disabled={!selectedParentId || !selectedYear || !selectedMonth || selectedServices.length === 0 || creatingProject}
+                            className={`
+                                px-8 py-3 rounded-lg font-bold text-white transition-all
+                                ${!selectedParentId || !selectedYear || !selectedMonth || selectedServices.length === 0 || creatingProject
+                                    ? 'bg-gray-700 cursor-not-allowed opacity-50'
+                                    : 'bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-900/20'
+                                }
+                            `}
+                        >
+                            {creatingProject ? 'Initializing...' : 'Add File Manually'}
+                        </button>
                         <button
                             onClick={handleContinueToUpload}
                             disabled={!selectedParentId || !selectedYear || !selectedMonth || selectedServices.length === 0 || creatingProject}
@@ -1268,14 +1435,272 @@ function NewCaseWithAIComponent() {
                                 }
                             `}
                         >
-                            {creatingProject ? 'Initializing...' : 'Continue to Upload Documents'}
+                            {creatingProject ? 'Initializing...' : 'Continue with AI'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Step 2: Manual Entry — simplified B2B-style form */}
+            {step === 2 && manualMode && (
+                <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-semibold text-white">Enter Case Details</h2>
+                        <div className="text-xs px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            Manual Entry
+                        </div>
+                    </div>
+
+                    {submitError && (
+                        <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
+                            <div className="text-xl">⚠️</div>
+                            <div>
+                                <h4 className="font-bold text-red-400 text-sm">{submitError.title}</h4>
+                                <p className="text-gray-300 text-sm mt-1 whitespace-pre-wrap">{submitError.message}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Personal Information */}
+                    <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
+                        <h3 className="text-sm font-bold text-zeno-cyan uppercase tracking-wider mb-4">Personal Information</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Surname <span className="text-red-400">*</span></label>
+                                <input
+                                    type="text"
+                                    value={formData.surname}
+                                    onChange={(e) => setFormData({ ...formData, surname: e.target.value })}
+                                    placeholder="Enter surname"
+                                    className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Full Names <span className="text-red-400">*</span></label>
+                                <input
+                                    type="text"
+                                    value={formData.names}
+                                    onChange={(e) => setFormData({ ...formData, names: e.target.value })}
+                                    placeholder="Enter full names"
+                                    className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">ID Number <span className="text-red-400">*</span></label>
+                                <input
+                                    type="text"
+                                    value={formData.idNumber}
+                                    onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
+                                    placeholder="0000000000000"
+                                    maxLength={13}
+                                    className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none font-mono"
+                                />
+                                {formData.idNumber.length > 0 && formData.idNumber.length !== 13 && (
+                                    <p className="text-xs text-red-400 mt-1">SA ID number must be 13 digits</p>
+                                )}
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Cell Number</label>
+                                <input
+                                    type="text"
+                                    value={formData.cellNumber}
+                                    onChange={(e) => setFormData({ ...formData, cellNumber: e.target.value })}
+                                    placeholder="0821234567"
+                                    className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs text-gray-400 mb-1">Email</label>
+                                <input
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                    placeholder="email@example.com"
+                                    className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Upload Documents (optional — no AI) */}
+                    <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
+                        <h3 className="text-sm font-bold text-zeno-cyan uppercase tracking-wider mb-1">Upload Documents</h3>
+                        <p className="text-xs text-gray-500 mb-4">Optional — files will be stored but not analyzed by AI</p>
+
+                        <div className="flex bg-zeno-navy p-1 rounded-lg mb-4 w-fit">
+                            <button
+                                className={`px-4 py-2 rounded-md text-sm transition-all ${uploadMode === 'separate' ? 'bg-gray-700 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                onClick={() => setUploadMode('separate')}
+                            >
+                                Separate Files
+                            </button>
+                            <button
+                                className={`px-4 py-2 rounded-md text-sm transition-all ${uploadMode === 'combined' ? 'bg-gray-700 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                                onClick={() => setUploadMode('combined')}
+                            >
+                                One Combined PDF
+                            </button>
+                        </div>
+
+                        {uploadMode === 'separate' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Reusable slot renderer */}
+                                {([
+                                    { key: 'id',           label: 'ID Copy',                              icon: '🆔', hint: 'Click to upload ID',           accept: '.pdf,image/*', span: false },
+                                    { key: 'poa',          label: 'Zenowethu POA',                        icon: '📋', hint: 'Click to upload POA',          accept: '.pdf,image/*', span: false },
+                                    { key: 'creditReport', label: 'Credit Report (Experian, XDS, ClearScore, TransUnion, etc.)', icon: '📊', hint: 'Click to upload Credit Report', subhint: 'AI will automatically identify the bureau and category', accept: '.pdf', span: true },
+                                    { key: 'payslip',      label: 'Payslip',                              icon: '💸', hint: 'Click to upload Payslip',       accept: '.pdf,image/*', span: false },
+                                    { key: 'bankStatement',label: 'Bank Statement',                        icon: '🏦', hint: 'Click to upload Statement',    accept: '.pdf,image/*', span: false },
+                                    { key: 'por',          label: 'Proof of Residence',                   icon: '🏠', hint: 'Click to upload PoR',           accept: '.pdf,image/*', span: false },
+                                    { key: 'form16',       label: 'Form 16',                              icon: '📄', hint: 'Click to upload Form 16',       accept: '.pdf,image/*', span: false },
+                                    { key: 'form171',      label: 'Form 17.1',                            icon: '📄', hint: 'Click to upload Form 17.1',     accept: '.pdf,image/*', span: false },
+                                    { key: 'form172',      label: 'Form 17.2',                            icon: '📄', hint: 'Click to upload Form 17.2',     accept: '.pdf,image/*', span: false },
+                                    { key: 'form177',      label: 'Form 17.7',                            icon: '📄', hint: 'Click to upload Form 17.7',     accept: '.pdf,image/*', span: false },
+                                    { key: 'clearance',    label: 'Clearance Certificate (Form 17.W)',    icon: '🏆', hint: 'Click to upload Clearance',     accept: '.pdf,image/*', span: false },
+                                ] as { key: keyof typeof uploadedFiles; label: string; icon: string; hint: string; subhint?: string; accept: string; span: boolean }[]).map(({ key, label, icon, hint, subhint, accept, span }) => {
+                                    const file = uploadedFiles[key] as File | undefined;
+                                    return (
+                                        <div key={key} className={`space-y-1 ${span ? 'md:col-span-2' : ''}`}>
+                                            <label className="block text-xs font-medium text-gray-400">{label}</label>
+                                            <div className={`relative border-2 border-dashed rounded-lg p-5 text-center transition-colors ${file ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                                {file ? (
+                                                    <div className="flex items-center justify-between gap-2 px-1">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <span className="text-zeno-cyan text-sm">✓</span>
+                                                            <span className="text-zeno-cyan text-xs font-medium truncate">{file.name}</span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setUploadedFiles(prev => ({ ...prev, [key]: undefined }))}
+                                                            className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 hover:text-red-300 transition-colors text-xs font-bold"
+                                                            title="Remove file"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <input
+                                                            type="file"
+                                                            id={`m-${key}-upload`}
+                                                            className="hidden"
+                                                            accept={accept}
+                                                            onChange={(e) => {
+                                                                const f = e.target.files?.[0];
+                                                                if (f) handleFileChange(key as any, f);
+                                                                e.target.value = '';
+                                                            }}
+                                                        />
+                                                        <label htmlFor={`m-${key}-upload`} className="cursor-pointer block">
+                                                            <span className="text-2xl block mb-1">{icon}</span>
+                                                            <span className="text-xs text-gray-400">{hint}</span>
+                                                            {subhint && <span className="block text-[10px] text-gray-600 mt-1">{subhint}</span>}
+                                                        </label>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                {/* Other Files — multi-upload with individual delete */}
+                                <div className="space-y-1 md:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-400">Other Files</label>
+                                    <div className="border-2 border-dashed rounded-lg p-5 border-white/10 hover:border-white/30 transition-colors">
+                                        <input
+                                            type="file"
+                                            id="m-opt-upload"
+                                            className="hidden"
+                                            multiple
+                                            onChange={(e) => {
+                                                if (e.target.files) {
+                                                    const incoming = Array.from(e.target.files);
+                                                    setUploadedFiles(prev => {
+                                                        const existing = prev.optional.map(f => f.name);
+                                                        const unique = incoming.filter(f => !existing.includes(f.name));
+                                                        return { ...prev, optional: [...prev.optional, ...unique] };
+                                                    });
+                                                }
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                        <label htmlFor="m-opt-upload" className="cursor-pointer block text-center">
+                                            <span className="text-2xl block mb-1">📁</span>
+                                            <span className="text-xs text-gray-400">Add optional files</span>
+                                            <span className="block text-[10px] text-gray-600 mt-1">Select multiple if needed</span>
+                                        </label>
+                                        {uploadedFiles.optional.length > 0 && (
+                                            <div className="mt-3 space-y-1">
+                                                {uploadedFiles.optional.map((f, i) => (
+                                                    <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-1.5">
+                                                        <span className="text-xs text-gray-300 truncate">{f.name}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setUploadedFiles(prev => ({ ...prev, optional: prev.optional.filter((_, idx) => idx !== i) }))}
+                                                            className="ml-2 flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors text-xs font-bold"
+                                                            title="Remove"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${uploadedFiles.allCombined ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                {uploadedFiles.allCombined ? (
+                                    <div className="flex items-center justify-between gap-2 px-2">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-zeno-cyan text-xl">✓</span>
+                                            <span className="text-zeno-cyan font-medium truncate">{uploadedFiles.allCombined.name}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setUploadedFiles(prev => ({ ...prev, allCombined: undefined }))}
+                                            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors text-sm font-bold"
+                                            title="Remove"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <input type="file" id="m-combined-upload" className="hidden" onChange={(e) => { handleFileChange('allCombined', e.target.files?.[0] || null); e.target.value = ''; }} accept=".pdf" />
+                                        <label htmlFor="m-combined-upload" className="cursor-pointer block">
+                                            <span className="text-4xl block mb-3">📑</span>
+                                            <span className="text-base font-medium text-white block mb-1">Click to upload Combined PDF</span>
+                                            <span className="text-sm text-gray-400">Ideally contains ID and POA</span>
+                                        </label>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex gap-4">
+                        <button
+                            onClick={() => { setStep(1); setManualMode(false); window.scrollTo({ top: 0, behavior: 'instant' }); }}
+                            className="px-6 py-3 rounded-lg font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all text-sm"
+                            disabled={submitting}
+                        >
+                            Back
+                        </button>
+                        <button
+                            onClick={handleCreateManualCase}
+                            disabled={!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.length !== 13 || submitting}
+                            className={`flex-1 px-8 py-3 rounded-lg font-bold text-white transition-all ${!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.length !== 13 || submitting ? 'bg-gray-700 cursor-not-allowed opacity-50' : 'bg-zeno-cyan hover:bg-cyan-600 shadow-lg shadow-cyan-900/20'}`}
+                        >
+                            {submitting ? 'Creating Case...' : 'Create Case'}
                         </button>
                     </div>
                 </div>
             )}
 
             {/* Step 2: Upload Documents */}
-            {step === 2 && (
+            {step === 2 && !manualMode && (
                 <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6">
                     <h2 className="text-xl font-semibold text-white mb-6">Upload Documents</h2>
 
@@ -1618,10 +2043,18 @@ function NewCaseWithAIComponent() {
             {step === 3 && (
                 <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-semibold text-white">Review Extracted Data</h2>
-                        <div className="text-xs px-3 py-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
-                            AI Extraction Complete
-                        </div>
+                        <h2 className="text-xl font-semibold text-white">
+                            {isManualEntry ? 'New Case Details' : 'Review Extracted Data'}
+                        </h2>
+                        {isManualEntry ? (
+                            <div className="text-xs px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                Manual Entry
+                            </div>
+                        ) : (
+                            <div className="text-xs px-3 py-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+                                AI Extraction Complete
+                            </div>
+                        )}
                     </div>
 
                     {missingDocsWarning && (
@@ -1634,18 +2067,9 @@ function NewCaseWithAIComponent() {
                         </div>
                     )}
 
-                    {submitError && (
-                        <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
-                            <div className="text-xl">⚠️</div>
-                            <div>
-                                <h4 className="font-bold text-red-400 text-sm">{submitError.title}</h4>
-                                <p className="text-gray-300 text-sm mt-1 whitespace-pre-wrap">{submitError.message}</p>
-                            </div>
-                        </div>
-                    )}
 
-                    {/* Add More Documents & Re-Analyze Section */}
-                    <div className="mb-6 p-4 bg-indigo-900/20 border border-indigo-500/30 rounded-lg">
+                    {/* Add More Documents & Re-Analyze Section — hidden for manual entry */}
+                    {!isManualEntry && <div className="mb-6 p-4 bg-indigo-900/20 border border-indigo-500/30 rounded-lg">
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                                 <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1719,7 +2143,7 @@ function NewCaseWithAIComponent() {
                                 )}
                             </button>
                         </div>
-                    </div>
+                    </div>}
 
                     {identityReport.length > 0 && (
                         <div className="mb-8 p-4 bg-zeno-navy/50 border border-white/5 rounded-lg animate-in slide-in-from-top-2 duration-300">
@@ -2186,6 +2610,50 @@ function NewCaseWithAIComponent() {
                                 Cancel
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Modal */}
+            {showErrorModal && submitError && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div className="bg-[#1a1a2e] border border-red-500/40 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+                        <div className="flex items-start gap-4 mb-5">
+                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-xl">
+                                ⚠️
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-red-400 font-bold text-base mb-1">{submitError.title}</h3>
+                                <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">{submitError.message}</p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => { setShowErrorModal(false); setSubmitError(null); }}
+                                className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-sm transition-colors"
+                            >
+                                Close &amp; Fix
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Success Modal */}
+            {successCaseId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div className="bg-[#1a1a2e] border border-green-500/40 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 text-center">
+                        <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center text-4xl mx-auto mb-4">
+                            ✅
+                        </div>
+                        <h3 className="text-green-400 font-bold text-xl mb-2">File Created!</h3>
+                        <p className="text-gray-300 text-sm mb-6">The case has been successfully created and is ready to view.</p>
+                        <button
+                            onClick={() => router.push(`/cases/${successCaseId}`)}
+                            className="w-full px-5 py-3 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold text-sm transition-colors"
+                        >
+                            Open Case File
+                        </button>
                     </div>
                 </div>
             )}

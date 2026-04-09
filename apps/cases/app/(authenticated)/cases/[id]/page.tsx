@@ -1363,6 +1363,7 @@ export default function CaseDetailPage() {
     const currentStatus = getStatusByCode(caseData.status);
     const primaryProject = caseData.projects.find(p => p.isPrimary);
     const secondaryProjects = caseData.projects.filter(p => !p.isPrimary);
+    const hasAIAnalysis = caseData.documents.some(d => d.extractedData !== null);
 
     return (
         <div className="max-w-7xl mx-auto">
@@ -1430,11 +1431,23 @@ export default function CaseDetailPage() {
                             )}
                             <button
                                 onClick={() => setShowCompareModal(true)}
-                                className="px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded hover:bg-purple-500/20 text-sm flex items-center gap-2 transition-colors"
-                                title="Re-Analyze & Compare"
+                                className={hasAIAnalysis
+                                    ? "px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded hover:bg-purple-500/20 text-sm flex items-center gap-2 transition-colors"
+                                    : "px-3 py-1.5 bg-amber-400 border border-amber-300 text-gray-900 rounded hover:bg-amber-300 text-sm flex items-center gap-2 transition-colors font-semibold shadow-[0_0_12px_rgba(251,191,36,0.5)]"
+                                }
+                                title={hasAIAnalysis ? "Re-Analyse with AI & Compare" : "Analyse documents with GPT-4o AI"}
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-                                Re-Analyze
+                                {hasAIAnalysis ? (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                                        Re-Analyse
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                                        Analyse with AI
+                                    </>
+                                )}
                             </button>
                             <button
                                 onClick={startEditing}
@@ -1597,18 +1610,9 @@ export default function CaseDetailPage() {
                                                     caseData.r350Status === 'TOLD' ? '📞 Told' : caseData.r350Status}
                                     </p>
                                 </div>
-                                {caseData.acquisitionType === 'B2B' && (
-                                    <div>
-                                        <span className="text-xs text-gray-500 uppercase">Fee Split</span>
-                                        <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Revenue Share</p>
-                                        <p className="text-white">{caseData.partnerSplitPercent}-{100 - caseData.partnerSplitPercent} (Partner-Zenowethu)</p>
-                                    </div>
-                                )}
                                 <div>
-                                    <span className="text-xs text-gray-500 uppercase">
-                                        {(caseData.partnerName || '').toLowerCase().includes('letsatsi') ? 'Service Fee' : 'Quote'}
-                                    </span>
-                                    <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Total Amount</p>
+                                    <span className="text-xs text-gray-500 uppercase">Service Fee</span>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Service Fee</p>
                                     <p className="text-white font-semibold">
                                         {caseData.serviceFee ? `R ${parseFloat(caseData.serviceFee).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R 0.00'}
                                     </p>
@@ -1630,9 +1634,10 @@ export default function CaseDetailPage() {
                         ) : (
                             <div className="space-y-1.5">
                                 {caseData.projects.map((cp) => (
-                                    <div
+                                    <Link
                                         key={cp.project.id}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg ${cp.isPrimary ? 'bg-zeno-cyan/10 border border-zeno-cyan/20' : 'bg-white/5'}`}
+                                        href={`/cases?projectId=${cp.project.id}`}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${cp.isPrimary ? 'bg-zeno-cyan/10 border border-zeno-cyan/20 hover:bg-zeno-cyan/20' : 'bg-white/5 hover:bg-white/10'}`}
                                     >
                                         <svg className={`w-3.5 h-3.5 shrink-0 ${cp.isPrimary ? 'text-zeno-cyan' : 'text-gray-500'}`} fill="currentColor" viewBox="0 0 20 20">
                                             <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
@@ -1640,7 +1645,10 @@ export default function CaseDetailPage() {
                                         <span className={`text-sm font-medium leading-tight ${cp.isPrimary ? 'text-zeno-cyan' : 'text-gray-300'}`}>
                                             {(cp.project as any).fullPath || cp.project.name}
                                         </span>
-                                    </div>
+                                        <svg className={`w-3 h-3 ml-auto shrink-0 ${cp.isPrimary ? 'text-zeno-cyan/50' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </Link>
                                 ))}
                             </div>
                         )}
@@ -3205,6 +3213,7 @@ export default function CaseDetailPage() {
                         onClose={() => setShowCompareModal(false)}
                         caseId={caseData.id}
                         caseData={caseData}
+                        isFirstAnalysis={!hasAIAnalysis}
                         onUpdateComplete={() => {
                             refreshCaseData();
                             setActivityUpdate(prev => prev + 1);
@@ -3212,6 +3221,7 @@ export default function CaseDetailPage() {
                     />
                 )
             }
+
         </div >
     );
 }

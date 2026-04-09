@@ -4,7 +4,13 @@ import { logger } from '../logger'
 // DCCP — DC Credit Protect portal configuration
 // Production portal: https://portal.colms.co.za/arsys/shared/login.jsp?/arsys/
 // Demo portal:       https://demo.pontis.co.za/arsys
+//
+// Credentials are PER USER — each staff member has their own
+// DCCP portal login. Stored in the DCCPCredential table.
 // ============================================================
+
+export const DCCP_PORTAL_URL_PRODUCTION = 'https://portal.colms.co.za/arsys/shared/login.jsp?/arsys/'
+export const DCCP_PORTAL_URL_DEMO = 'https://demo.pontis.co.za/arsys'
 
 export interface DCCPCredentials {
   username: string
@@ -12,42 +18,61 @@ export interface DCCPCredentials {
   portalUrl: string
 }
 
-let credentialsCache: DCCPCredentials | null = null
-let lastFetchTime = 0
+// Per-user credential cache: userId → { creds, fetchedAt }
+const userCredentialCache = new Map<string, { creds: DCCPCredentials; fetchedAt: number }>()
 const CACHE_TTL = 60_000 // 1 minute
 
-export async function getDCCPCredentials(): Promise<DCCPCredentials> {
+/**
+ * Fetch DCCP portal credentials for a specific user.
+ * Falls back to env vars if no DB record exists (useful for dev/testing).
+ */
+export async function getDCCPCredentialsForUser(userId: string): Promise<DCCPCredentials | null> {
   const now = Date.now()
-  if (credentialsCache && now - lastFetchTime < CACHE_TTL) {
-    return credentialsCache
+  const cached = userCredentialCache.get(userId)
+  if (cached && now - cached.fetchedAt < CACHE_TTL) {
+    return cached.creds
   }
 
   try {
     const { prisma } = require('@zenowethu/database')
-    const cred = await prisma.dCCPCredential.findFirst({ where: { isActive: true } })
+    const record = await prisma.dCCPCredential.findUnique({
+      where: { userId },
+      select: { username: true, password: true, portalUrl: true, isActive: true },
+    })
 
-    credentialsCache = {
-      username: cred?.username ?? process.env.DCCP_USERNAME ?? '',
-      password: cred?.password ?? process.env.DCCP_PASSWORD ?? '',
-      portalUrl: process.env.DCCP_PORTAL_URL ?? 'https://portal.colms.co.za/arsys/shared/login.jsp?/arsys/',
+    if (!record || !record.isActive) {
+      logger.warn('[DCCP Config] No active credential found for user', { userId })
+      return null
     }
-    lastFetchTime = now
-    logger.info('[DCCP Config] Credentials loaded')
-    return credentialsCache
+
+    const creds: DCCPCredentials = {
+      username: record.username,
+      password: record.password, // Encrypted — decrypted at service layer
+      portalUrl: record.portalUrl ?? DCCP_PORTAL_URL_PRODUCTION,
+    }
+    userCredentialCache.set(userId, { creds, fetchedAt: now })
+    logger.info('[DCCP Config] Credentials loaded for user', { userId })
+    return creds
   } catch (error) {
-    logger.error('[DCCP Config] Failed to fetch credentials from DB, falling back to env', error)
-    return {
-      username: process.env.DCCP_USERNAME ?? '',
-      password: process.env.DCCP_PASSWORD ?? '',
-      portalUrl: process.env.DCCP_PORTAL_URL ?? 'https://portal.colms.co.za/arsys/shared/login.jsp?/arsys/',
-    }
+    logger.error('[DCCP Config] Failed to fetch user credentials from DB', { userId, error })
+    return null
   }
 }
 
-export function invalidateDCCPCredentialsCache(): void {
-  credentialsCache = null
-  lastFetchTime = 0
-  logger.info('[DCCP Config] Credentials cache invalidated')
+/**
+ * Invalidate the credential cache for a specific user (call after save/update).
+ */
+export function invalidateDCCPCredentialsCacheForUser(userId: string): void {
+  userCredentialCache.delete(userId)
+  logger.info('[DCCP Config] Credentials cache cleared for user', { userId })
+}
+
+/**
+ * Check whether a user has DCCP credentials configured.
+ */
+export async function hasDCCPCredentials(userId: string): Promise<boolean> {
+  const creds = await getDCCPCredentialsForUser(userId)
+  return creds !== null && creds.username.length > 0
 }
 
 // ============================================================

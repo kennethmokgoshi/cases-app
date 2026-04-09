@@ -79,11 +79,39 @@ export async function POST(request: Request) {
                 );
             }
 
+            // === Override: if CURRENT DC is our own NCRDC, consumer is already with us → Accepted ===
+            // Covers two cases:
+            // 1. debtCounsellor populated from scrape → use ncrRegistrationNo
+            // 2. debtCounsellor null (DC popup click failed) → fall back to case's stored ncrdcNo
+            {
+                const dcSettings = await prisma.setting.findMany({ where: { category: 'dc_profile' } });
+                const ownNcrdc = (dcSettings.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                const scrapedDC = result.debtCounsellor?.ncrRegistrationNo?.trim().toUpperCase() || '';
+                const storedDC = (caseData?.ncrdcNo || '').trim().toUpperCase();
+                const effectiveDC = scrapedDC || storedDC;
+                if (result.found && effectiveDC === ownNcrdc && result.status !== 'ACCEPTED' && result.status !== 'AUTO_TRANSFERRED') {
+                    logger.info(`✅ CURRENT DC (${effectiveDC}) matches own NCRDC — overriding status to ACCEPTED`);
+                    result.status = 'ACCEPTED';
+                    result.combinedStatus = 'Accepted';
+                    result.message = 'Accepted';
+                }
+            }
+
             // === Apply Logic Rules 1-10 ===
             if (caseId && caseData) {
                 const updateData: any = {};
                 const comments: string[] = [];
                 let notifyManager = false;
+
+                // Detect if this file has been requested via DHS before
+                const wasPreviouslyRequestedViaDHS =
+                    caseData.dhsStatus === 'Requested via DHS' ||
+                    caseData.dhsStatus === 'Requested Again via DHS' ||
+                    caseData.status === 'REQUESTED_VIA_DHS';
+
+                const dhsRequestLabel = wasPreviouslyRequestedViaDHS
+                    ? 'Requested Again via DHS'
+                    : 'Requested via DHS';
 
                 // Rule 1: No Records Found -> Not Requested -> Request File
                 if (!result.found) {
@@ -98,23 +126,35 @@ export async function POST(request: Request) {
                         const poaPath = getFilePath(poa.fileUrl);
                         const idPath = getFilePath(idDoc.fileUrl);
 
-                        comments.push('DHS Check: No records found. Attempting to auto-request transfer...');
+                        const attemptLabel = wasPreviouslyRequestedViaDHS
+                            ? 'No records found (previously requested). Attempting to request again via DHS...'
+                            : 'No records found. Attempting to auto-request transfer...';
+                        comments.push(`DHS Check: ${attemptLabel}`);
 
                         // Attempt to request transfer
                         const requestResult = await requestTransfer(idNumber, poaPath, idPath);
 
                         if (requestResult.success) {
                             updateData.status = 'REQUESTED_VIA_DHS';
-                            updateData.dhsStatus = 'Requested via DHS';
+                            updateData.dhsStatus = dhsRequestLabel;
                             updateData.nextUpdate = addWorkingDays(new Date(), 5);
-                            comments.push('Success: Transfer requested via DHS. Next update set to +5 working days.');
+                            const successLabel = wasPreviouslyRequestedViaDHS
+                                ? `Success: Transfer requested again via DHS. Next update set to +5 working days.`
+                                : `Success: Transfer requested via DHS. Next update set to +5 working days.`;
+                            comments.push(successLabel);
                         } else {
-                            comments.push(`Failed to request transfer: ${requestResult.message}`);
+                            const failLabel = wasPreviouslyRequestedViaDHS
+                                ? `Failed to re-request transfer: ${requestResult.message}`
+                                : `Failed to request transfer: ${requestResult.message}`;
+                            comments.push(failLabel);
                             updateData.dhsStatus = 'Not Requested';
                         }
                     } else {
                         updateData.dhsStatus = 'Not Requested';
-                        comments.push('DHS Check: Not requested. Cannot auto-request: Missing POA or ID document.');
+                        const missingLabel = wasPreviouslyRequestedViaDHS
+                            ? 'DHS Check: File was previously requested but no records found. Cannot re-request: Missing POA or ID document.'
+                            : 'DHS Check: Not requested. Cannot auto-request: Missing POA or ID document.';
+                        comments.push(missingLabel);
                     }
                 }
                 // Rules 2-10: Records Found
@@ -134,7 +174,7 @@ export async function POST(request: Request) {
                         }
                     }
 
-                    updateData.dhsStatus = result.status === 'PENDING' ? 'Pending' :
+                    updateData.dhsStatus = result.status === 'PENDING' ? dhsRequestLabel :
                         result.status === 'AUTO_TRANSFERRED' ? 'Auto Transferred' :
                             result.status === 'ACCEPTED' ? 'Accepted' :
                                 result.status === 'DECLINED' ? 'Declined Via DHS' : result.status;
@@ -152,15 +192,18 @@ export async function POST(request: Request) {
                         else if (counter.includes('4 Day')) daysToAdd = 1; // Rule 7
 
                         updateData.nextUpdate = addWorkingDays(new Date(), daysToAdd);
-                        // Sync workflow status to 'Requested via DHS' when pending
+                        // Sync workflow status
                         updateData.status = 'REQUESTED_VIA_DHS';
                         // Create comment with the 3 KEY COLUMNS
                         const dhsID = result.consumer?.identityNo || 'Not found';
                         const dhsDC = result.debtCounsellor?.ncrRegistrationNo || 'Not found';
                         const dhsStatus = result.requestStatus || 'Unknown';
                         comments.push(`DHS Extracted Data: ID=${dhsID}, CURRENT DC=${dhsDC}, REQUEST STATUS=${dhsStatus}`);
-                        // Also add the old format comment for context
-                        comments.push(`DHS Check: Pending (${counter || 'New'}). Status updated to 'Requested via DHS'. Next update set to +${daysToAdd} working days.`);
+                        // Status label in comment reflects prior request history
+                        const pendingLabel = wasPreviouslyRequestedViaDHS
+                            ? `DHS Check via DHS: Pending (${counter || 'New'}) — this file was previously requested. Status updated to '${dhsRequestLabel}'. Next update set to +${daysToAdd} working days.`
+                            : `DHS Check: Pending (${counter || 'New'}). Status updated to '${dhsRequestLabel}'. Next update set to +${daysToAdd} working days.`;
+                        comments.push(pendingLabel);
                     }
 
                     // Rule 8: Auto Transferred

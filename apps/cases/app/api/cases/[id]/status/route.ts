@@ -69,6 +69,7 @@ export async function PATCH(
             },
             include: {
                 client: true,
+                documents: true,
                 projects: {
                     include: {
                         project: true

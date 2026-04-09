@@ -396,23 +396,45 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
             if (tableData.length > 0) {
                 logger.info('Table data rows:', tableData.length);
 
-                // tableData[0] = header/filter row
-                // tableData[1] = FIRST data row (most recent request)
-                // Don't check for ID - just use tableData[1] directly!
+                // tableData[0] = header row
+                // tableData[1..N] = data rows (may be multiple transfer records)
+                // Priority: Accepted/Auto Transferred > Pending, prefer row matching exact ID
                 let dataRow: string[] | null = null;
                 let lastMatchingIndex = 1;
 
-                if (tableData.length >= 2 && tableData[1]) {
-                    // Use second element (first data row)
-                    dataRow = tableData[1];
-                    lastMatchingIndex = 1;
-                    logger.info('✅ Using tableData[1] as FIRST DATA ROW (tableData[0] is header)');
+                if (tableData.length >= 2) {
+                    const dataRows = tableData.slice(1); // skip header
+                    const statusPriority = (row: string[]) => {
+                        const s = (row[9] || '').toLowerCase();
+                        if (s.includes('accepted') || s.includes('approved') || s.includes('auto')) return 0;
+                        if (s.includes('pending')) return 1;
+                        if (s.includes('declined') || s.includes('rejected')) return 2;
+                        return 3;
+                    };
+                    // Sort: exact ID match first, then by status priority
+                    const sorted = dataRows
+                        .map((row, i) => ({ row, origIndex: i + 1 }))
+                        .filter(({ row }) => row.length > 5)
+                        .sort((a, b) => {
+                            const aMatchId = (a.row[3] || '').replace(/\s/g, '').includes(idNumber) ? 0 : 1;
+                            const bMatchId = (b.row[3] || '').replace(/\s/g, '').includes(idNumber) ? 0 : 1;
+                            if (aMatchId !== bMatchId) return aMatchId - bMatchId;
+                            return statusPriority(a.row) - statusPriority(b.row);
+                        });
+
+                    if (sorted.length > 0) {
+                        dataRow = sorted[0].row;
+                        lastMatchingIndex = sorted[0].origIndex;
+                        logger.info(`✅ Selected row index ${lastMatchingIndex} (status priority: ${statusPriority(dataRow)}, id match: ${(dataRow[3] || '').includes(idNumber)})`);
+                    } else {
+                        logger.info('❌ tableData does not have enough rows');
+                    }
                 } else {
                     logger.info('❌ tableData does not have enough rows');
                 }
 
                 if (dataRow) {
-                    logger.info('🎯 FIRST ROW ONLY - Index:', lastMatchingIndex);
+                    logger.info('🎯 SELECTED ROW - Index:', lastMatchingIndex);
                     logger.info('📋 Data row:', JSON.stringify(dataRow));
 
                     logger.info('\n========== DETAILED COLUMN ANALYSIS ==========');

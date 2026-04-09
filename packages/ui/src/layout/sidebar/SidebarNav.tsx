@@ -5,9 +5,11 @@ import { usePathname } from 'next/navigation';
 
 type SidebarNavProps = {
     session: any;
+    /** Base URL of the insurance app. Defaults to '' (relative — correct when already in the insurance app). */
+    insuranceUrl?: string;
 };
 
-export function SidebarNav({ session }: SidebarNavProps) {
+export function SidebarNav({ session, insuranceUrl = '' }: SidebarNavProps) {
     const pathname = usePathname();
 
     return (
@@ -152,6 +154,14 @@ export function SidebarNav({ session }: SidebarNavProps) {
                                 </svg>
                                 Credit Accounts
                             </Link>
+                        </li>
+                        <li>
+                            <a href={`${insuranceUrl}/dccp`} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${pathname.startsWith('/dccp') ? 'bg-cyan-500/10 text-cyan-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                DC Credit Protect
+                            </a>
                         </li>
                         <li>
                             <Link href="/insurance-assessments" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${pathname.startsWith('/insurance-assessments') ? 'bg-emerald-500/10 text-emerald-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>

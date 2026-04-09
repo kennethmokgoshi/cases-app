@@ -22,6 +22,9 @@ export * from './ai/savings-engine';
 // AI Provider Management
 export * from './ai/provider-client';
 
+// B2B File Created Trigger — AI Employee
+export * from './ai/b2b-trigger';
+
 export * from './metrics';
 
 // XDS Credit Bureau Integration

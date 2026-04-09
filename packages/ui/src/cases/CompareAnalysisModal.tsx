@@ -25,6 +25,15 @@ interface ComparisonData {
     restructuring: ComparisonField[];
 }
 
+interface CaseDocument {
+    id: string;
+    type: string;
+    fileName: string;
+    fileUrl: string;
+    extractedData: string | null;
+    uploadedAt: string;
+}
+
 interface CaseData {
     id: string;
     client: {
@@ -43,6 +52,17 @@ interface CaseData {
     cb_applicationDate: string | null;
     cb_status: string | null;
     cb_statusDate: string | null;
+    documents?: CaseDocument[];
+}
+
+interface DocumentComparisonEntry {
+    type: string;
+    label: string;
+    fileName: string | null;
+    hadPreviousAnalysis: boolean;
+    hasNewAnalysis: boolean;
+    previousDataSize: number | null;
+    newDataSize: number | null;
 }
 
 interface CompareAnalysisModalProps {
@@ -50,6 +70,7 @@ interface CompareAnalysisModalProps {
     onClose: () => void;
     caseId: string;
     caseData?: CaseData;
+    isFirstAnalysis?: boolean;
     onUpdateComplete: () => void;
 }
 
@@ -58,6 +79,7 @@ export function CompareAnalysisModal({
     onClose,
     caseId,
     caseData: propCaseData,
+    isFirstAnalysis = false,
     onUpdateComplete
 }: CompareAnalysisModalProps) {
     const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +88,9 @@ export function CompareAnalysisModal({
     const [analysisComplete, setAnalysisComplete] = useState(false);
     const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
     const [caseData, setCaseData] = useState<CaseData | null>(propCaseData || null);
-    const [selectedModel, setSelectedModel] = useState<string>('google/gemini-pro-1.5');
+    const [rawAnalysis, setRawAnalysis] = useState<any | null>(null);
+    const [documentComparison, setDocumentComparison] = useState<DocumentComparisonEntry[]>([]);
+    const [selectedModel, setSelectedModel] = useState<string>(isFirstAnalysis ? 'gpt-4o' : 'google/gemini-pro-1.5');
 
     const AVAILABLE_MODELS = [
         { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro (Best for Docs)', provider: 'Google' },
@@ -90,6 +114,8 @@ export function CompareAnalysisModal({
         if (isOpen) {
             setAnalysisComplete(false);
             setAiValues(null);
+            setRawAnalysis(null);
+            setDocumentComparison([]);
             setSelectedFields(new Set());
             setError(null);
         }
@@ -326,7 +352,40 @@ export function CompareAnalysisModal({
             });
 
             setAiValues(newAiValues);
+            setRawAnalysis(data.rawAnalysis || null);
             setAnalysisComplete(true);
+
+            // Build document comparison (for re-analysis only)
+            if (!isFirstAnalysis && data.rawAnalysis && caseData) {
+                const docTypes = [
+                    { type: 'ID', label: 'Identity Document', analysisKey: 'id' },
+                    { type: 'POA', label: 'Proof of Address', analysisKey: 'poa' },
+                    { type: 'CREDIT_REPORT', label: 'Credit Report', analysisKey: 'creditReport' },
+                    { type: 'COMBINED', label: 'Combined Document', analysisKey: null },
+                ];
+                const docs = (caseData as any).documents as CaseDocument[] | undefined || [];
+                const entries: DocumentComparisonEntry[] = docTypes
+                    .map(({ type, label, analysisKey }) => {
+                        const doc = docs.find(d => d.type === type);
+                        if (!doc && !data.rawAnalysis[analysisKey ?? '']) return null;
+                        const hadPrevious = doc ? doc.extractedData !== null : false;
+                        const newData = analysisKey ? data.rawAnalysis[analysisKey] : null;
+                        const hasNew = newData !== null && newData !== undefined && Object.keys(newData || {}).length > 0;
+                        const previousDataSize = hadPrevious && doc?.extractedData ? new Blob([doc.extractedData]).size : null;
+                        const newDataSize = hasNew ? new Blob([JSON.stringify(newData)]).size : null;
+                        return {
+                            type,
+                            label,
+                            fileName: doc?.fileName || null,
+                            hadPreviousAnalysis: hadPrevious,
+                            hasNewAnalysis: hasNew,
+                            previousDataSize,
+                            newDataSize,
+                        } as DocumentComparisonEntry;
+                    })
+                    .filter((e): e is DocumentComparisonEntry => e !== null);
+                setDocumentComparison(entries);
+            }
 
             // Auto-select all changed fields
             const comparison = buildComparisonDataWithAiValues(newAiValues);
@@ -550,9 +609,23 @@ export function CompareAnalysisModal({
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
                     <div>
-                        <h2 className="text-xl font-bold text-white">Re-Analyze & Compare</h2>
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            {isFirstAnalysis ? (
+                                <>
+                                    <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                                    Analyse with AI (GPT-4o)
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                                    Re-Analyse & Compare
+                                </>
+                            )}
+                        </h2>
                         <p className="text-sm text-gray-400 mt-1">
-                            Review current data and compare with AI-extracted values from documents
+                            {isFirstAnalysis
+                                ? 'Run AI analysis on documents to extract and populate case data'
+                                : 'Compare existing data with a fresh AI re-analysis of documents'}
                         </p>
                     </div>
                     <button
@@ -599,12 +672,18 @@ export function CompareAnalysisModal({
                                     </div>
                                     <button
                                         onClick={runAnalysis}
-                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2 self-start"
+                                        className={isFirstAnalysis
+                                            ? "px-6 py-2 bg-amber-400 text-gray-900 rounded-lg font-semibold hover:bg-amber-300 transition flex items-center gap-2 self-start shadow-[0_0_12px_rgba(251,191,36,0.4)]"
+                                            : "px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2 self-start"
+                                        }
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isFirstAnalysis
+                                                ? "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                                                : "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                                            } />
                                         </svg>
-                                        Run AI Analysis
+                                        {isFirstAnalysis ? 'Analyse with AI' : 'Run AI Analysis'}
                                     </button>
                                 </div>
                             )}
@@ -672,6 +751,72 @@ export function CompareAnalysisModal({
                         </>
                     )}
 
+                    {/* Document Split Comparison — only shown after re-analysis completes */}
+                    {!isFirstAnalysis && analysisComplete && documentComparison.length > 0 && (
+                        <div className="mt-6">
+                            <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 border-b border-gray-700 pb-2">
+                                Documents Discovered
+                            </h4>
+                            <div className="space-y-3">
+                                {documentComparison.map((entry) => {
+                                    const canReplace = entry.hadPreviousAnalysis && entry.hasNewAnalysis;
+                                    const nothingToReplace = !entry.hadPreviousAnalysis && entry.hasNewAnalysis;
+                                    const nothingToReplaceWith = entry.hadPreviousAnalysis && !entry.hasNewAnalysis;
+
+                                    return (
+                                        <div key={entry.type} className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 flex flex-col gap-2">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="font-medium text-white">{entry.label}</span>
+                                                    {entry.fileName && (
+                                                        <span className="ml-2 text-xs text-gray-500 truncate max-w-xs inline-block">{entry.fileName}</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <span className={`px-2 py-1 rounded font-medium ${entry.hadPreviousAnalysis ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50' : 'bg-gray-800 text-gray-500 border border-gray-700'}`}>
+                                                        {entry.hadPreviousAnalysis ? '✓ Previously Analysed' : '— Not Previously Analysed'}
+                                                    </span>
+                                                    <span className={`px-2 py-1 rounded font-medium ${entry.hasNewAnalysis ? 'bg-green-900/40 text-green-300 border border-green-700/50' : 'bg-gray-800 text-gray-500 border border-gray-700'}`}>
+                                                        {entry.hasNewAnalysis ? '✓ Found in Re-Analysis' : '— Not Found in Re-Analysis'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Size comparison */}
+                                            <div className="flex items-center gap-6 text-xs text-gray-400">
+                                                <span>
+                                                    Previous data size:{' '}
+                                                    <span className="text-gray-200 font-medium">
+                                                        {entry.previousDataSize !== null ? `${Math.round(entry.previousDataSize / 1024 * 10) / 10} KB` : '—'}
+                                                    </span>
+                                                </span>
+                                                <span>
+                                                    New data size:{' '}
+                                                    <span className="text-gray-200 font-medium">
+                                                        {entry.newDataSize !== null ? `${Math.round(entry.newDataSize / 1024 * 10) / 10} KB` : '—'}
+                                                    </span>
+                                                </span>
+                                            </div>
+
+                                            {/* Replace status message */}
+                                            <div className="text-xs mt-1">
+                                                {nothingToReplace && (
+                                                    <span className="text-amber-400 italic">New document discovered — nothing to replace (no previous analysis exists)</span>
+                                                )}
+                                                {nothingToReplaceWith && (
+                                                    <span className="text-red-400 italic">Document was found in previous analysis but was not discovered in re-analysis — nothing to replace with</span>
+                                                )}
+                                                {canReplace && (
+                                                    <span className="text-green-400">Both analyses found this document — field-level updates can be applied above</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Loading case data */}
                     {!caseData && (
                         <div className="text-center py-12">
@@ -684,7 +829,7 @@ export function CompareAnalysisModal({
                 {/* Footer */}
                 <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800 bg-gray-900/50">
                     <div className="text-sm text-gray-500">
-                        {!analysisComplete && 'Click "Run AI Analysis" to extract values from documents'}
+                        {!analysisComplete && (isFirstAnalysis ? 'Click "Analyse with AI" to extract data from documents using GPT-4o' : 'Click "Run AI Analysis" to compare documents with current case data')}
                         {analysisComplete && 'Select fields and click "Apply Updates" to save changes'}
                     </div>
                     <div className="flex items-center gap-3">

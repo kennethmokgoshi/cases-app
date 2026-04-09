@@ -293,6 +293,13 @@ export const CaseMoveSchema = z.object({
         .min(1, 'At least one case ID is required'),
     targetProjectId: z.string().min(1, 'Target project ID is required') });
 
+// ─── Case follow schema ───────────────────────────────────────────────────────
+
+export const CaseFollowSchema = z.object({
+    inAppNotifications: z.boolean().optional().default(true),
+    emailNotifications: z.boolean().optional().default(false)
+});
+
 // ─── Apply-updates schema (AI re-analysis field writes) ───────────────────────
 
 // Allowed field names are validated at route level; here we validate the shape

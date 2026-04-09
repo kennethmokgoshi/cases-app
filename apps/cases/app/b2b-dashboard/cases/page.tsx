@@ -90,6 +90,8 @@ export default function B2BMyCasesPage() {
     const yearFilter = searchParams.get('year');
     const monthFilter = searchParams.get('month');
     const projectIdFilter = searchParams.get('projectId');
+    const projectIdsFilter = searchParams.get('projectIds');
+    const projectIdsSet = projectIdsFilter ? new Set(projectIdsFilter.split(',').filter(Boolean)) : null;
     const filterParam = searchParams.get('filter');
 
     const filteredCases = cases.filter(c => {
@@ -107,12 +109,17 @@ export default function B2BMyCasesPage() {
             if (monthName !== monthFilter) return false;
         }
 
-        // 3. Filter by Project
+        // 3. Filter by single Project (month-level click)
         if (projectIdFilter) {
             if (!c.projects?.some(p => p.project.id === projectIdFilter)) return false;
         }
 
-        // 4. Tab Filter
+        // 4. Filter by multiple Projects (branch-level or year-level click)
+        if (projectIdsSet && projectIdsSet.size > 0) {
+            if (!c.projects?.some(p => projectIdsSet.has(p.project.id))) return false;
+        }
+
+        // 5. Tab Filter
         if (filter === 'all') return true;
         if (filter === 'my_cases') return c.createdById === session?.user?.id;
         if (filter === 'new') return c.status === 'NEW_LEAD';
