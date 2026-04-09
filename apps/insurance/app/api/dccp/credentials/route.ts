@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@zenowethu/database'
 import { auth } from '@zenowethu/shared-lib'
 import { logger } from '@zenowethu/shared-lib/src/logger'
-import { invalidateDCCPCredentialsCacheForUser } from '@zenowethu/shared-lib/src/integrations/dccp-config'
+import { invalidateDCCPCredentialsCache } from '@zenowethu/shared-lib/src/integrations/dccp-config'
 import { dccpService } from '@zenowethu/shared-lib/src/integrations/dccp'
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
     })
 
     // Clear the in-memory cache so the next automation call fetches fresh credentials
-    invalidateDCCPCredentialsCacheForUser(session.user.id)
+    invalidateDCCPCredentialsCache(session.user.id)
 
     logger.info('[DCCP Credentials] Saved for user', { userId: session.user.id })
 
@@ -151,7 +151,7 @@ export async function DELETE() {
       where: { userId: session.user.id },
     })
 
-    invalidateDCCPCredentialsCacheForUser(session.user.id)
+    invalidateDCCPCredentialsCache(session.user.id)
     logger.info('[DCCP Credentials] Removed for user', { userId: session.user.id })
 
     return NextResponse.json({ removed: true })
