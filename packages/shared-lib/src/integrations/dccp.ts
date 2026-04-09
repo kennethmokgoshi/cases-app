@@ -1,5 +1,5 @@
 import { logger } from '../logger'
-import { getDCCPCredentialsForUser } from './dccp-config'
+import { getDCCPCredentials } from './dccp-config'
 import type { DCCPCredentials } from './dccp-config'
 import type {
   DCCPCliPolicyInput,
@@ -94,7 +94,7 @@ export class DCCPService {
    * Used when triggering automation from an API route (userId from session).
    */
   private async loginAsUser(userId: string): Promise<{ browser: unknown; page: unknown }> {
-    const creds = await getDCCPCredentialsForUser(userId)
+    const creds = await getDCCPCredentials(userId)
     if (!creds) {
       throw new Error(
         `[DCCP] No DCCP credentials configured for user ${userId}. The user must add their DCCP portal username and password in Account Settings.`,

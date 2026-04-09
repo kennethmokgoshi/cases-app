@@ -26,7 +26,7 @@ const CACHE_TTL = 60_000 // 1 minute
  * Fetch DCCP portal credentials for a specific user.
  * Falls back to env vars if no DB record exists (useful for dev/testing).
  */
-export async function getDCCPCredentialsForUser(userId: string): Promise<DCCPCredentials | null> {
+export async function getDCCPCredentials(userId: string): Promise<DCCPCredentials | null> {
   const now = Date.now()
   const cached = userCredentialCache.get(userId)
   if (cached && now - cached.fetchedAt < CACHE_TTL) {
@@ -62,7 +62,7 @@ export async function getDCCPCredentialsForUser(userId: string): Promise<DCCPCre
 /**
  * Invalidate the credential cache for a specific user (call after save/update).
  */
-export function invalidateDCCPCredentialsCacheForUser(userId: string): void {
+export function invalidateDCCPCredentialsCache(userId: string): void {
   userCredentialCache.delete(userId)
   logger.info('[DCCP Config] Credentials cache cleared for user', { userId })
 }
@@ -71,7 +71,7 @@ export function invalidateDCCPCredentialsCacheForUser(userId: string): void {
  * Check whether a user has DCCP credentials configured.
  */
 export async function hasDCCPCredentials(userId: string): Promise<boolean> {
-  const creds = await getDCCPCredentialsForUser(userId)
+  const creds = await getDCCPCredentials(userId)
   return creds !== null && creds.username.length > 0
 }
 
