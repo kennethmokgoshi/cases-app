@@ -84,7 +84,7 @@ export async function POST(request: Request) {
             // 1. debtCounsellor populated from scrape → use ncrRegistrationNo
             // 2. debtCounsellor null (DC popup click failed) → fall back to case's stored ncrdcNo
             {
-                const dcSettings = await prisma.setting.findMany({ where: { category: 'dc_profile' } });
+                const dcSettings = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
                 const ownNcrdc = (dcSettings.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
                 const scrapedDC = result.debtCounsellor?.ncrRegistrationNo?.trim().toUpperCase() || '';
                 const storedDC = (caseData?.ncrdcNo || '').trim().toUpperCase();

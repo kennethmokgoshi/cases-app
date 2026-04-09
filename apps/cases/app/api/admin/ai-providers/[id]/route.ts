@@ -13,7 +13,7 @@ const AiProviderUpdateSchema = z.object({
     baseUrl: z.string().url().optional().nullable(),
     isActive: z.boolean().optional(),
     isDefault: z.boolean().optional(),
-    taskAssignments: z.record(z.string()).optional(),
+    taskAssignments: z.record(z.string(), z.string()).optional(),
     models: z.array(z.string()).optional(),
 });
 
