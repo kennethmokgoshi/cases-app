@@ -35,7 +35,6 @@ const nextConfig: any = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
-    outputFileTracingRoot: path.join(__dirname, "../../"),
   },
   async headers() {
     return [

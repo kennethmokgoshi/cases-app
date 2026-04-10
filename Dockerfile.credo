@@ -66,7 +66,7 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 RUN cd packages/database && npx prisma generate
-RUN cd apps/credo && pnpm run build
+RUN pnpm --filter credo build
 
 # ── runner stage ──────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS runner
