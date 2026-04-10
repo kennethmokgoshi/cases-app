@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cases",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "C:\\Users\\Kenneth\\AppData\\Local\\Microsoft\\WinGet\\Packages\\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\\node-v24.13.1-win-x64\\pnpm.cmd", "--dir", "C:\\Visual Studio Code\\19 Feb 2026\\FromGIt\\cases-app-main", "--filter", "cases", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "insurance",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "C:\\Users\\Kenneth\\AppData\\Local\\Microsoft\\WinGet\\Packages\\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\\node-v24.13.1-win-x64\\pnpm.cmd", "--dir", "C:\\Visual Studio Code\\19 Feb 2026\\FromGIt\\cases-app-main", "--filter", "insurance", "dev"],
+      "port": 3001
+    },
+    {
+      "name": "legal",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "C:\\Users\\Kenneth\\AppData\\Local\\Microsoft\\WinGet\\Packages\\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\\node-v24.13.1-win-x64\\pnpm.cmd", "--dir", "C:\\Visual Studio Code\\19 Feb 2026\\FromGIt\\cases-app-main", "--filter", "legal", "dev"],
+      "port": 3002
+    },
+    {
+      "name": "forensic-audit",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "C:\\Users\\Kenneth\\AppData\\Local\\Microsoft\\WinGet\\Packages\\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\\node-v24.13.1-win-x64\\pnpm.cmd", "--dir", "C:\\Visual Studio Code\\19 Feb 2026\\FromGIt\\cases-app-main", "--filter", "forensic-audit", "dev"],
+      "port": 3003
+    },
+    {
+      "name": "finance",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "C:\\Users\\Kenneth\\AppData\\Local\\Microsoft\\WinGet\\Packages\\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\\node-v24.13.1-win-x64\\pnpm.cmd", "--dir", "C:\\Visual Studio Code\\19 Feb 2026\\FromGIt\\cases-app-main", "--filter", "finance", "dev"],
+      "port": 3004
+    }
+  ]
+}

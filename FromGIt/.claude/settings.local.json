@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat playwright-report/results.json)",
+      "Bash(git add apps/cases/app/(authenticated)/partner/cases/new/ apps/cases/app/(authenticated)/cases/new/)",
+      "Bash(awk '{print $NF}')",
+      "Bash(timeout 180 powershell.exe -ExecutionPolicy Bypass -Command \"pnpm run test:e2e 2>&1\")",
+      "Bash(timeout 240 powershell.exe -ExecutionPolicy Bypass -Command \"cd ''D:\\Visual Studio Code\\02 Mar 2026\\FromGIt\\cases-app-main\\apps\\cases''; & pnpm exec playwright test 2>&1 | Tee-Object -FilePath test-output.log\")",
+      "Bash(pnpm exec playwright test e2e/cases.spec.ts:46 e2e/intake-flow.spec.ts:19 e2e/intake-flow.spec.ts:50 e2e/cross-app-flows.spec.ts:12 --reporter=line)",
+      "Bash(timeout 90 pnpm exec playwright test e2e/analysis.spec.ts -g \"uploads and triggers\" --reporter=line)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(timeout 90 pnpm exec playwright test e2e/test-cases-page.spec.ts --reporter=line)",
+      "Bash(pnpm exec playwright test --reporter=list)",
+      "Bash(tee final-test-results.txt)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

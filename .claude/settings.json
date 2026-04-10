@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/packages/shared-lib/src/statuses\"/*.ts)",
+      "Bash(pnpm --filter credo dev)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3005/register)",
+      "Bash(find 'c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main' -name *.pdf -o -name *form* -o -name *Form*)",
+      "Bash(grep \"\\\\.ts$\")",
+      "Bash(New-Item -ItemType Directory -Force -Path \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/api/cases/[id]/form16\")",
+      "Bash(ls \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/credo/app/\\(dashboard\\)\")",
+      "Bash(grep -r role 'c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/lib' --include=*.ts -l)",
+      "Bash(taskkill /F /IM \"node.exe\" /FI \"WINDOWTITLE eq npx prisma*\")",
+      "Bash(ls \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/\\(authenticated\\)/admin/settings/\")",
+      "Bash(\"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/public/uploads/letterhead/.gitkeep\")",
+      "Bash(pnpm --filter cases test --run)",
+      "Bash(grep -r \"rate-tables\\\\|credit-providers\" 'c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/packages/ui/src' --include=*.tsx -l)",
+      "Bash(grep -r \"rate-tables\\\\|credit-providers\" 'c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases' --include=*.tsx -l)",
+      "Bash(ls \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/\\(authenticated\\)/admin/\")",
+      "Bash(pnpm test:*)",
+      "Bash(ls -la \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/\\(authenticated\\)/cases/[id]/\")",
+      "Bash(mkdir -p \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/api/cases/[id]/debt-review/generate\")",
+      "Bash(mkdir -p \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/api/cases/[id]/debt-review/[docId]/approve\")",
+      "Bash(mkdir -p \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/api/cases/[id]/debt-review/[docId]/send-consumer\")",
+      "Bash(mkdir -p \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/api/cases/[id]/debt-review/send-creditors\")",
+      "Bash(find 'c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps/cases/app/api/admin/credit-providers' -name *.test.ts)",
+      "Bash(pnpm --filter cases test --reporter=verbose)",
+      "Bash(pnpm --filter @zenowethu/plan-engine exec tsc --noEmit)",
+      "Bash(grep -r '\"\"typecheck\"\"' \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/packages\" --include=\"package.json\" -l)",
+      "Bash(grep -r '\"\"typecheck\"\"' \"c:/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/apps\" --include=\"package.json\" -l)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(gh run:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",
+      "c:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\admin\\credit-providers"
+    ]
+  }
+}

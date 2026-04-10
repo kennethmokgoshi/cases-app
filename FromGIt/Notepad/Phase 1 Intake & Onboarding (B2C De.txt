@@ -1,0 +1,47 @@
+Phase 1: Intake & Onboarding (B2C Dealership Channel)
+Operational Steps:
+
+Submission: The F&I Manager logs into the Zenowethu B2B Portal (with restricted access to only their dealership's branch project) and creates a new case. They upload the consumer's ID and the recent Credit Bureau report.###= This is a great idea this can be our improvement for those dealerships that we will be dealing with on a B2B level but for now) that portal is meant for B2B what B2C does is they give the client Zenowethu's number and the client contacts Zenowethu or the F&I or sales person gives Zenowethu the clients number 
+
+
+Client Notification: The consumer immediately receives a branded SMS/WhatsApp welcoming them to Zenowethu (referencing the dealership). correct depending on who loaded the client Staff or B2B ( dealership in this case)
+System Mechanics (Cases App):
+
+Routing: POST /api/cases is called. The system detects acquisitionType: 'B2B' and links the case to the specific Dealership's projectId.
+Attribution: The system attributes the source to the Dealership for future commission/revenue splits.
+AI Extraction: The uploaded credit report triggers POST /api/documents/[id]/analyze. The OpenAI processor parses the PDF, extracting the consumer's accounts, outstanding balances, and specifically flags the "D3 - Referred to Court" indicator and the date it was applied.
+Automated Comms: The Notifications module (packages/shared-lib/src/notifications.ts) fires the NEW_LEAD welcome template to the consumer via GoHighLevel integration.
+Phase 2: Assessment & Strategy (Identifying the Loophole)
+Operational Steps:
+
+Review: A Zenowethu Assessor opens the case in the Cases App. They look at the AI summary and see the D3 flag is over 4 months old.
+Verification: The Assessor uses the integrated DHS (Debt Help System) lookup to verify the Debt Counsellor of record and confirms no court order was ever uploaded or finalized.
+Strategy Selection: Based on the National Credit Act (NCA), if a D3 status is not finalized with a court order within a reasonable timeframe (usually 60-90 days), the process is considered abandoned. The Assessor moves the case to the Legal App and sets the workflow strategy to "Debt Review Removal - Abandoned Process".
+System Mechanics (Cases App & Shared Lib):
+
+DHS Integration: The Assessor clicks "Check DHS". The system uses Puppeteer (packages/shared-lib/src/dhs.ts) to scrape the NCR database in real-time, pulling the exact dates and the assigned Debt Counsellor's details directly into the Case file.
+Status Update: The case status changes to ASSESSMENT_COMPLETE and the system auto-assigns it to the Legal department.
+Phase 3: The Legal / Administrative Workflow (Clearing the D3)
+Operational Steps:
+
+Preparation: The Zenowethu Legal team generates a formal letter of demand (LOD) addressed to the Debt Counsellor of record, citing the NCA timeline violations and demanding an immediate Form 17.W (Withdrawal) or an update to the NCR portal.
+Escalation (If ignored): If the Debt Counsellor ignores the request or refuses (since D3 usually requires a court rejection to clear), Zenowethu's legal team prepares a High Court application to set aside the debt review due to abandonment and failure to prosecute the restructuring.
+Credit Bureau Update: Once the court order is obtained (or the NCR portal is forced to update), Zenowethu submits the clearance to the Credit Bureaus (TransUnion, Experian, etc.).
+System Mechanics (Legal App):
+
+Document Generation: The Legal app triggers a PDF generation template, pulling the client data, the Debt Counsellor's scraped info, and standard legal clauses to instantly create the Letter of Demand.
+Task Tracking: A countdown SLA timer is started. If the Debt Counsellor does not respond within the stipulated 7-14 days, the system alerts the Legal Agent to escalate to court proceedings.
+Court Pipeline: The case is tracked through the legal pipeline (DRAFTING_AFFIDAVITS ➔ COURT_DATE_SET ➔ AWAITING_ORDER).
+Phase 4: Resolution & Dealership Follow-up
+Operational Steps:
+
+Clearance: The credit bureaus confirm the Debt Review flag is removed. The consumer's credit score recovers.
+Notification: The Zenowethu Agent marks the core task as SUCCESS.
+Handback: The F&I Manager at the dealership is notified that the client is now clear and ready to re-apply for vehicle finance.
+System Mechanics (Monorepo wide):
+
+Status Sync: The Case status is updated to CLEARED_READY_FOR_FINANCE.
+Partner Notification: The system sends an automated email/SMS to the F&I Manager containing a summary of the cleared profile.
+Invoicing (Finance App): The Finance App automatically generates an invoice (/api/finance/invoices) for the Debt Review Removal service. Depending on the B2B agreement, this is either billed to the client direct or deducted from the dealership's kickback.
+Does this accurately reflect your real-world process and how you want the system apps to handle it? If yes, I can proceed to map out the remaining scenarios (Prescription, Paid Judgments, Unlawful Listings, Improved Financial Status, etc.) in a consolidated artifact file.
+
