@@ -28,6 +28,7 @@ type Document = {
     analyzedAt: string | null;
     extractedData: string | null;
     isAdminOnly: boolean;
+    uploadedById?: string | null;
     accessGrants?: DocumentAccessGrant[];
 };
 
