@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "on" },
@@ -23,7 +24,7 @@ const securityHeaders = [
   },
 ];
 
-const nextConfig: NextConfig = {
+const nextConfig: any = {
   output: "standalone",
   transpilePackages: ["@zenowethu/shared-lib"],
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
@@ -34,6 +35,7 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
+    outputFileTracingRoot: path.join(__dirname, "../../"),
   },
   async headers() {
     return [
