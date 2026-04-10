@@ -36,12 +36,10 @@ export async function GET(req: NextRequest) {
             }
         });
 
-        if (!consumer) {
-            return NextResponse.json({ error: 'Consumer not found' }, { status: 404 });
-        }
+        const consumerResult = consumer as any;
+        const client = consumerResult?.linkedClient;
 
-        const client = consumer.linkedClient;
-        if (!client) {
+        if (!consumer || !client) {
             // No linked client yet — return empty/ready stats
             return NextResponse.json({
                 stats: [

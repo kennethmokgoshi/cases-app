@@ -69,6 +69,7 @@ model Client {
   payments        Payment[]
   invoices        Invoice[]
   consumerAccount ConsumerAccount?
+  creditAccounts  CreditAccount[]
 }
 
 model Case {
@@ -721,6 +722,7 @@ model CreditAccount {
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @updatedAt
   case               Case                         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  client             Client                       @relation(fields: [clientId], references: [id])
   creditProvider     CreditProvider?              @relation(fields: [creditProviderId], references: [id])
   documents          CreditAccountDocument[]
   assessmentAccounts InsuranceAssessmentAccount[]
