@@ -32,3 +32,9 @@ export * from './xds';
 
 // Dispute letter generation (CreditFix AI)
 export * from './disputes';
+
+// Power of Attorney generation
+export * from './poa';
+
+// Demo Data
+export * from './demo-data';

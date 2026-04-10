@@ -25,6 +25,8 @@ export default function AccountSettings() {
         lastName: '',
         email: '',
         phone: '',
+        idNumber: '',
+        address: '',
         avatarUrl: '',
         currentPassword: '',
         newPassword: '',
@@ -42,6 +44,8 @@ export default function AccountSettings() {
                         lastName: data.lastName || '',
                         email: data.email || '',
                         phone: data.phone || '',
+                        idNumber: data.idNumber || '',
+                        address: data.address || '',
                         avatarUrl: data.avatarUrl || '' }));
                 }
             } catch (error) {
@@ -77,6 +81,8 @@ export default function AccountSettings() {
                     lastName: formData.lastName,
                     email: formData.email,
                     phone: formData.phone,
+                    idNumber: formData.idNumber,
+                    address: formData.address,
                     avatarUrl: formData.avatarUrl,
                     currentPassword: formData.currentPassword,
                     newPassword: formData.newPassword }) });
@@ -173,6 +179,38 @@ export default function AccountSettings() {
                                     onChange={handleChange}
                                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan transition-colors"
                                 />
+                            </div>
+                        </div>
+
+                        {/* Wesbank POA fields — required for sending Wesbank Power of Attorney */}
+                        <div className="mt-4 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                            <p className="text-xs text-amber-400 font-semibold mb-3">
+                                Required for Wesbank POA — fill in your personal details so you can generate Wesbank Powers of Attorney for clients.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-400">Your SA ID Number</label>
+                                    <input
+                                        type="text"
+                                        name="idNumber"
+                                        value={formData.idNumber}
+                                        onChange={handleChange}
+                                        placeholder="e.g. 8001015009087"
+                                        maxLength={13}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-400 transition-colors"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-400">Your Residential Address</label>
+                                    <input
+                                        type="text"
+                                        name="address"
+                                        value={formData.address}
+                                        onChange={handleChange}
+                                        placeholder="e.g. 123 Main Street, Mabopane, 0190"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-400 transition-colors"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </section>

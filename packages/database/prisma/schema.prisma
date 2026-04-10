@@ -249,6 +249,8 @@ model User {
   lastLogin                 DateTime?
   b2bPartnerId              String?
   phone                     String?
+  idNumber                  String?             // SA ID number — required for Wesbank POA
+  address                   String?             // Residential address — required for Wesbank POA
   role                      String              @default("MEMBER")
   userType                  String              @default("STAFF")
   avatarUrl                 String?

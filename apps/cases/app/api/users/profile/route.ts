@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
                 lastName: true,
                 email: true,
                 phone: true,
+                idNumber: true,
+                address: true,
                 avatarUrl: true,
                 organization: true,
                 role: true,
@@ -47,7 +49,7 @@ export async function PUT(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { firstName, lastName, email, phone, avatarUrl, currentPassword, newPassword } = body;
+        const { firstName, lastName, email, phone, idNumber, address, avatarUrl, currentPassword, newPassword } = body;
 
         const originalUser = await prisma.user.findUnique({
             where: { id: session.user.id }
@@ -59,9 +61,11 @@ export async function PUT(request: NextRequest) {
 
         const updateData: any = {};
         if (firstName) updateData.firstName = firstName;
-        if (lastName) updateData.lastName = lastName;
-        if (email) updateData.email = email.toLowerCase();
-        if (phone) updateData.phone = phone;
+        if (lastName)  updateData.lastName  = lastName;
+        if (email)     updateData.email     = email.toLowerCase();
+        if (phone)     updateData.phone     = phone;
+        if (idNumber !== undefined) updateData.idNumber = idNumber;
+        if (address  !== undefined) updateData.address  = address;
         if (avatarUrl) updateData.avatarUrl = avatarUrl;
 
         // Handle password change
@@ -87,6 +91,8 @@ export async function PUT(request: NextRequest) {
                 lastName: true,
                 email: true,
                 phone: true,
+                idNumber: true,
+                address: true,
                 avatarUrl: true }
         });
 
