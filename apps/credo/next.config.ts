@@ -24,9 +24,10 @@ const securityHeaders = [
   },
 ];
 
-const nextConfig: any = {
+const nextConfig: NextConfig = {
   output: "standalone",
-  transpilePackages: ["@zenowethu/shared-lib", "@zenowethu/database", "@zenowethu/config"],
+  outputFileTracingRoot: path.join(__dirname, "../../"),
+  transpilePackages: ["@zenowethu/shared-lib", "@zenowethu/database", "@zenowethu/config", "@zenowethu/ui", "@zenowethu/plan-engine"],
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
   turbopack: {
     root: "../../",
