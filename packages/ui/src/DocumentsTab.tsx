@@ -577,13 +577,16 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                                 <div className="min-w-0">
                                     <p className={`text-sm font-medium ${bureau.accent}`}>{bureau.name}</p>
                                     {uploaded ? (
-                                        <p className="text-xs text-gray-400 truncate">{uploaded.fileName}</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-bold uppercase tracking-wider">Already Uploaded</span>
+                                            <p className="text-xs text-gray-400 truncate max-w-[120px]">{uploaded.fileName}</p>
+                                        </div>
                                     ) : (
                                         <p className="text-xs text-gray-500 italic">Not uploaded</p>
                                     )}
                                 </div>
                                 <label className="shrink-0 cursor-pointer">
-                                    <span className={`px-2 py-1 text-xs rounded transition-colors ${uploaded ? 'bg-white/10 text-gray-300 hover:bg-white/20' : `${bureau.accent} bg-white/10 hover:bg-white/20`}`}>
+                                    <span className={`px-2 py-1 text-xs rounded transition-colors ${uploaded ? 'bg-white/10 text-gray-300 hover:bg-white/20' : `${bureau.accent} bg-white/10 hover:bg-white/20 font-bold`}`}>
                                         {uploading && uploadType === bureau.type ? '⏳' : uploaded ? 'Replace' : 'Upload'}
                                     </span>
                                     <input
@@ -742,7 +745,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                                             Manage Access
                                         </button>
                                     )}
-                                    {isAdmin && (
+                                    {(isAdmin || (doc.uploadedById === session?.user?.id)) && (
                                         <button
                                             onClick={() => handleDelete(doc.id)}
                                             disabled={!!reanalyzing}

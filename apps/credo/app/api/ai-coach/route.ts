@@ -58,13 +58,45 @@ export async function POST(req: NextRequest) {
             try {
                 const consumer = await prisma.consumerAccount.findUnique({
                     where: { id: consumerId },
-                    select: { firstName: true, province: true, language: true, linkedClient: { select: { grossSalary: true, netSalary: true } } },
+                    select: { 
+                        firstName: true, 
+                        province: true, 
+                        language: true, 
+                        linkedClient: { 
+                            include: { 
+                                cases: {
+                                    orderBy: { updatedAt: 'desc' },
+                                    select: { fileNumber: true, description: true, status: true }
+                                },
+                                creditAccounts: {
+                                    select: { creditorName: true, accountType: true, outstandingBalance: true, status: true }
+                                }
+                            } 
+                        } 
+                    },
                 });
                 if (consumer) {
-                    consumerContext = `\n\nConsumer context: Name is ${consumer.firstName}, province: ${consumer.province ?? 'unknown'}, preferred language: ${consumer.language}.`;
+                    const client = consumer.linkedClient;
+                    const caseSummary = client?.cases.map(c => `[${c.fileNumber}] ${c.description} - Status: ${c.status}`).join('\n') || 'None';
+                    const accountSummary = client?.creditAccounts.map(a => `${a.creditorName} (${a.accountType}): R${a.outstandingBalance} - Status: ${a.status}`).join('\n') || 'None';
+
+                    consumerContext = `
+
+### Consumer Profile:
+- **Name:** ${consumer.firstName}
+- **Province:** ${consumer.province ?? 'Unknown'}
+- **Language:** ${consumer.language}
+
+### Active Cases:
+${caseSummary}
+
+### Credit Accounts Found:
+${accountSummary}
+
+Use this information to provide personalized advice. If the user has negative items or active disputes, reference them by name.`;
                 }
-            } catch {
-                // Non-fatal — proceed without context
+            } catch (err) {
+                 console.error('[AI Coach Context Error]', err);
             }
         }
 

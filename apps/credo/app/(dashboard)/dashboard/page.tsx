@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { DEMO_BUREAUS, DEMO_CASES, DEMO_STATS, DEMO_ACTIVITIES } from "@/lib/credo-demo-data";
 
 /* ─── Score Ring ─────────────────────────────────────────────────── */
 function ScoreRing({ score, size = 100 }: { score: number; size?: number }) {
@@ -131,44 +133,54 @@ function ActivityItem({
   );
 }
 
+function ActivityIcon({ type }: { type: string }) {
+  switch (type) {
+    case "CHECK":
+      return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4.5" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+    case "CLOCK":
+      return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 3v3l2 2" stroke="#2563EB" strokeWidth="1.4" strokeLinecap="round" /></svg>;
+    case "SHIELD":
+      return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2L2.5 5v4c0 2.9 2.3 5.5 5.5 6.2 3.2-.7 5.5-3.3 5.5-6.2V5L8 2z" stroke="#C4953A" strokeWidth="1.4" strokeLinejoin="round" /></svg>;
+    case "USER":
+      return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="#7C3AED" strokeWidth="1.4" /><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="#7C3AED" strokeWidth="1.4" strokeLinecap="round" /></svg>;
+    case "ALERT":
+      return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#DC2626" strokeWidth="1.4" /><path d="M8 5v3M8 11v.5" stroke="#DC2626" strokeWidth="1.4" strokeLinecap="round" /></svg>;
+    default:
+      return null;
+  }
+}
+
 /* ─── Page ───────────────────────────────────────────────────────── */
 export default function DashboardPage() {
-  const bureaus = [
-    { name: "TransUnion",  score: 648, change: +12 },
-    { name: "Experian",    score: 622, change: +8  },
-    { name: "XDS",         score: 671, change: +18 },
-    { name: "Lightstone",  score: 635, change: +5  },
-  ];
+  const [data, setData] = useState<{
+    stats: any[];
+    cases: any[];
+    activities: any[];
+    bureaus: any[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const cases = [
-    {
-      id: "CR-2024-001",
-      title: "Judgment Removal — Standard Bank",
-      type: "Judgment Rescission",
-      status: "IN_PROGRESS",
-      step: "Step 3 of 7",
-      daysLeft: 14,
-      bureau: "TransUnion",
-    },
-    {
-      id: "CR-2024-002",
-      title: "Default Dispute — Capitec",
-      type: "Section 72 Dispute",
-      status: "WAITING",
-      step: "Awaiting bureau response",
-      daysLeft: 6,
-      bureau: "Experian",
-    },
-    {
-      id: "CR-2024-003",
-      title: "Debt Review Flag Removal",
-      type: "DHS Clearance",
-      status: "PENDING",
-      step: "Clearance certificate required",
-      daysLeft: null,
-      bureau: "All bureaus",
-    },
-  ];
+  useEffect(() => {
+    async function fetchDashboard() {
+      try {
+        const res = await fetch("/api/consumer/dashboard");
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        }
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDashboard();
+  }, []);
+
+  const bureaus = data?.bureaus || DEMO_BUREAUS;
+  const cases = data?.cases || DEMO_CASES.slice(0, 3);
+  const stats = data?.stats || DEMO_STATS;
+  const activities = data?.activities || DEMO_ACTIVITIES;
 
   const avgScore = Math.round(bureaus.reduce((s, b) => s + b.score, 0) / bureaus.length);
 
@@ -231,30 +243,31 @@ export default function DashboardPage() {
 
       {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
-        {[
-          { label: "Active Cases", value: "3", sub: "2 in progress", color: "#2563EB", bg: "#EFF6FF" },
-          { label: "Disputes Filed", value: "7", sub: "Since joining", color: "#7C3AED", bg: "#F5F3FF" },
-          { label: "Items Removed", value: "4", sub: "Negative items cleared", color: "#059669", bg: "#ECFDF5" },
-          { label: "Months Active", value: "8", sub: "Credit repair journey", color: "#C4953A", bg: "#F6EDD6" },
-        ].map((stat) => (
-          <div key={stat.label} className="stat-card">
-            <div style={{
-              width: 38, height: 38, borderRadius: 9,
-              background: stat.bg,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              marginBottom: 14,
-              color: stat.color,
-              fontSize: "1.125rem",
-              fontWeight: 800,
-            }}>
-              {stat.value}
+        {loading ? (
+          [1, 2, 3, 4].map(i => (
+            <div key={i} className="credo-card" style={{ height: 110, background: "#FAFAFA" }} />
+          ))
+        ) : (
+          stats.map((stat) => (
+            <div key={stat.label} className="stat-card">
+              <div style={{
+                width: 38, height: 38, borderRadius: 9,
+                background: stat.bg,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                marginBottom: 14,
+                color: stat.color,
+                fontSize: "1.125rem",
+                fontWeight: 800,
+              }}>
+                {stat.value}
+              </div>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#0F172A", margin: "0 0 3px" }}>
+                {stat.label}
+              </p>
+              <p style={{ fontSize: "0.75rem", color: "#94A3B8", margin: 0 }}>{stat.sub}</p>
             </div>
-            <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#0F172A", margin: "0 0 3px" }}>
-              {stat.label}
-            </p>
-            <p style={{ fontSize: "0.75rem", color: "#94A3B8", margin: 0 }}>{stat.sub}</p>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Cases + Activity */}
@@ -353,45 +366,25 @@ export default function DashboardPage() {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <ActivityItem
-              iconBg="#ECFDF5"
-              icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 4.5" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-              title="Default removed"
-              subtitle="Capitec — TransUnion confirmed"
-              time="2h ago"
-            />
-            <div style={{ height: 1, background: "#F1F5F9" }} />
-            <ActivityItem
-              iconBg="#EFF6FF"
-              icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 3v3l2 2" stroke="#2563EB" strokeWidth="1.4" strokeLinecap="round" /></svg>}
-              title="Bureau response received"
-              subtitle="Experian — Section 72 dispute"
-              time="1d ago"
-            />
-            <div style={{ height: 1, background: "#F1F5F9" }} />
-            <ActivityItem
-              iconBg="#F6EDD6"
-              icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2L2.5 5v4c0 2.9 2.3 5.5 5.5 6.2 3.2-.7 5.5-3.3 5.5-6.2V5L8 2z" stroke="#C4953A" strokeWidth="1.4" strokeLinejoin="round" /></svg>}
-              title="Document uploaded"
-              subtitle="ID copy — identity verification"
-              time="3d ago"
-            />
-            <div style={{ height: 1, background: "#F1F5F9" }} />
-            <ActivityItem
-              iconBg="#F5F3FF"
-              icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="#7C3AED" strokeWidth="1.4" /><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="#7C3AED" strokeWidth="1.4" strokeLinecap="round" /></svg>}
-              title="Case assigned"
-              subtitle="Debt Review Flag Removal — initiated"
-              time="5d ago"
-            />
-            <div style={{ height: 1, background: "#F1F5F9" }} />
-            <ActivityItem
-              iconBg="#FEF2F2"
-              icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#DC2626" strokeWidth="1.4" /><path d="M8 5v3M8 11v.5" stroke="#DC2626" strokeWidth="1.4" strokeLinecap="round" /></svg>}
-              title="Alert: New hard inquiry"
-              subtitle="FNB — vehicle finance application"
-              time="1w ago"
-            />
+            {loading ? (
+               [1, 2, 3].map(i => <div key={i} style={{ height: 50, background: "#FAFAFA", borderRadius: 8 }} />)
+            ) : (
+              activities.map((act, i) => (
+                <div key={i}>
+                  <ActivityItem
+                    iconBg={act.iconBg}
+                    icon={<ActivityIcon type={act.type} />}
+                    title={act.title}
+                    subtitle={act.subtitle}
+                    time={act.time}
+                  />
+                  {i < activities.length - 1 && <div style={{ height: 1, background: "#F1F5F9", marginTop: 18 }} />}
+                </div>
+              ))
+            )}
+            {(!loading && activities.length === 0) && (
+               <p style={{ fontSize: '0.875rem', color: '#94A3B8', textAlign: 'center', padding: '20px 0' }}>No recent activity found.</p>
+            )}
           </div>
 
           <button style={{

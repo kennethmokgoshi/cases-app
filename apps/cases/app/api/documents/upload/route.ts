@@ -131,8 +131,26 @@ export async function POST(request: Request) {
             const fileName = `${timestamp}-${file.name}`;
             const filePath = join(uploadsDir, fileName);
             const fileUrl = `/uploads/${caseId}/${fileName}`;
+            const fileSize = buffer.length;
 
-            // Save file to disk
+            // Check for duplicates (same case, same filename, same size)
+            const existingDoc = await prisma.document.findFirst({
+                where: {
+                    caseId,
+                    fileName: file.name,
+                    fileSize: fileSize,
+                }
+            });
+
+            if (existingDoc) {
+                logger.info(`♻️  Duplicate detected for ${file.name} (${fileSize} bytes). Skipping write/create.`);
+                savedDocuments.push(existingDoc);
+                // Optionally add to analysis if extractedData is missing? 
+                // For now, simple deduplication is the goal.
+                continue;
+            }
+
+            logger.info(`[UPLOAD_TRACE] 7. Writing to disk...`);
             await writeFile(filePath, buffer);
 
             // Determine document type from fieldName OR filename

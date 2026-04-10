@@ -183,7 +183,7 @@ function NewCaseWithAIComponent() {
 
     // B2B Partners list
     const B2B_PARTNERS = [
-        { id: 'letsatsi', name: 'Letsatsi Finance', splitPercent: 50 },
+        { id: 'letsatsi', name: 'Letsatsi', splitPercent: 50 },
         { id: 'shosholoza', name: 'Shosholoza Finance', splitPercent: 50 },
         { id: 'future_finance', name: 'Future Finance', splitPercent: 50 },
     ];
@@ -365,9 +365,9 @@ function NewCaseWithAIComponent() {
     // Helper functions to get partner and branch names from selected projects
     const getPartnerNameFromProject = (): string | null => {
         if (!selectedParent) return null;
-        // Extract partner name from project (e.g., "Letsatsi Referrals" -> "Letsatsi Finance")
+        // Extract partner name from project (e.g., "Letsatsi" -> "Letsatsi")
         const name = selectedParent.name;
-        if (name.toLowerCase().includes('letsatsi')) return 'Letsatsi Finance';
+        if (name.toLowerCase().includes('letsatsi')) return 'Letsatsi';
         if (name.toLowerCase().includes('shosholoza')) return 'Shosholoza Finance';
         if (name.toLowerCase().includes('future')) return 'Future Finance';
         return name; // Return as-is if no match

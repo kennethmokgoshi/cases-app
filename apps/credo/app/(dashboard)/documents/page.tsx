@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DEMO_DOCS } from "@/lib/credo-demo-data";
 
 type DocCategory = "ALL" | "IDENTITY" | "INCOME" | "BUREAU" | "LEGAL" | "CORRESPONDENCE";
 
@@ -13,20 +14,7 @@ const CATEGORIES: { key: DocCategory; label: string }[] = [
   { key: "CORRESPONDENCE", label: "Correspondence" },
 ];
 
-const DOCS = [
-  { id: 1, name: "South African ID Copy",            category: "IDENTITY",     size: "1.2 MB",  date: "10 Jan 2026", type: "pdf",  locked: false },
-  { id: 2, name: "Proof of Residence — Municipality", category: "IDENTITY",    size: "840 KB",  date: "10 Jan 2026", type: "pdf",  locked: false },
-  { id: 3, name: "Latest Payslip — March 2026",       category: "INCOME",      size: "220 KB",  date: "5 Mar 2026",  type: "pdf",  locked: false },
-  { id: 4, name: "3-Month Bank Statement — FNB",      category: "INCOME",      size: "3.4 MB",  date: "5 Mar 2026",  type: "pdf",  locked: false },
-  { id: 5, name: "TransUnion Credit Report",          category: "BUREAU",      size: "1.8 MB",  date: "20 Mar 2026", type: "pdf",  locked: false },
-  { id: 6, name: "Experian Credit Report",            category: "BUREAU",      size: "1.6 MB",  date: "20 Mar 2026", type: "pdf",  locked: false },
-  { id: 7, name: "XDS Credit Report",                 category: "BUREAU",      size: "1.5 MB",  date: "20 Mar 2026", type: "pdf",  locked: false },
-  { id: 8, name: "Lightstone Credit Report",          category: "BUREAU",      size: "1.3 MB",  date: "20 Mar 2026", type: "pdf",  locked: false },
-  { id: 9, name: "Rule 49 Rescission Application",    category: "LEGAL",       size: "980 KB",  date: "22 Jan 2026", type: "pdf",  locked: false },
-  { id: 10, name: "Section 72 Dispute — Capitec",     category: "LEGAL",       size: "640 KB",  date: "8 Feb 2026",  type: "pdf",  locked: false },
-  { id: 11, name: "Standard Bank — Judgment Letter",  category: "CORRESPONDENCE", size: "310 KB", date: "2 Jan 2026", type: "pdf", locked: false },
-  { id: 12, name: "Experian — Bureau Response",       category: "CORRESPONDENCE", size: "450 KB", date: "2 Mar 2026", type: "pdf", locked: false },
-];
+const DOCS = DEMO_DOCS;
 
 const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
   IDENTITY: {

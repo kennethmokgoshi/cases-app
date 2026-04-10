@@ -55,9 +55,9 @@ export default function ResourcesPage() {
             let projectId = '';
             let type = ''; // B2B or B2C
 
-            if (org === 'Letsatsi Finance' || org === 'Letsatsi' || org.includes('Letsatsi')) {
+            if (org.includes('Letsatsi')) {
                 type = 'B2B'; // Assuming Partners are B2B
-                // We need to find the project ID for "Letsatsi Finance" or similar.
+                // We need to find the project ID for "Letsatsi" or similar.
                 // Since we don't have it in session, we might need to search for it first.
                 const projectsRes = await fetch(`/api/projects?flat=true`);
                 const allProjects = await projectsRes.json();

@@ -1,45 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { DEMO_BUREAUS, DEMO_NEGATIVE_ITEMS, DEMO_PAYMENT_PROFILE } from "@/lib/credo-demo-data";
 
 type Bureau = "transunion" | "experian" | "xds" | "lightstone";
 
-const BUREAUS: { key: Bureau; name: string; score: number; lastPulled: string }[] = [
-  { key: "transunion",  name: "TransUnion",  score: 648, lastPulled: "20 Mar 2026" },
-  { key: "experian",    name: "Experian",    score: 622, lastPulled: "20 Mar 2026" },
-  { key: "xds",         name: "XDS",         score: 671, lastPulled: "20 Mar 2026" },
-  { key: "lightstone",  name: "Lightstone",  score: 635, lastPulled: "20 Mar 2026" },
-];
-
-const NEGATIVE_ITEMS = [
-  {
-    id: 1, type: "Judgment", creditor: "Standard Bank", amount: "R 28 500", date: "2022-04-15",
-    bureau: "TransUnion", status: "DISPUTED", isPrescribed: false,
-    description: "Unsecured personal loan default judgment",
-  },
-  {
-    id: 2, type: "Default", creditor: "Capitec Bank", amount: "R 6 200", date: "2021-01-10",
-    bureau: "Experian", status: "IN_REVIEW", isPrescribed: false,
-    description: "Credit facility — 90-day default listing",
-  },
-  {
-    id: 3, type: "Debt Review", creditor: "Multiple creditors", amount: "—", date: "2020-06-01",
-    bureau: "All bureaus", status: "PENDING_CLEARANCE", isPrescribed: false,
-    description: "Debt review flag — clearance certificate required",
-  },
-  {
-    id: 4, type: "Default", creditor: "Edgars / Edcon", amount: "R 1 840", date: "2020-09-14",
-    bureau: "XDS", status: "PRESCRIBED", isPrescribed: true,
-    description: "Retail account default — may be prescribed",
-  },
-];
-
-const PAYMENT_PROFILE = [
-  { creditor: "Nedbank Home Loan",     balance: "R 1 240 000", payment: "R 9 800",  status: "CURRENT",   months: 24 },
-  { creditor: "FNB Vehicle Finance",   balance: "R 185 000",   payment: "R 4 200",  status: "CURRENT",   months: 18 },
-  { creditor: "Standard Bank CC",      balance: "R 12 400",    payment: "R 800",    status: "CURRENT",   months: 12 },
-  { creditor: "Mr Price Account",      balance: "R 0",         payment: "R 0",      status: "PAID_UP",   months: 36 },
-];
+const BUREAUS: { key: Bureau; name: string; score: number; lastPulled: string }[] = DEMO_BUREAUS as any;
+const NEGATIVE_ITEMS = DEMO_NEGATIVE_ITEMS;
+const PAYMENT_PROFILE = DEMO_PAYMENT_PROFILE;
 
 function ScoreGauge({ score, size = 88 }: { score: number; size?: number }) {
   const max = 999;

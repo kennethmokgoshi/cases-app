@@ -44,6 +44,7 @@ export interface CaseStrategyResponse {
         templateKey: string;
         recipient: string;
     }>;
+    requiredDocuments: string[]; // List of documents needed for this strategy (e.g. Form 17.W, Court Order)
 }
 
 /**
@@ -76,6 +77,12 @@ STRATEGY GUIDELINES:
 2. DEBT REVIEW REMOVAL: If the client has paid up all accounts but is still "stuck" on DHS or has a Form 17.W, recommend the clearance path.
 3. RECKLESS LENDING: If the monthly installments exceed the client's net income, flag for reckless lending forensic audit.
 4. VOLUNTARY WITHDRAWAL: If the client is no longer over-indebted, suggest a court application for debt review removal.
+5. ABANDONED PROCESS: If the client is under debt review (DHS Status indicates D3 or similar) but no court order exists and it has been > 4 months, flag as Abandoned Process and request Form 17.W.
+
+For "DEBT REVIEW REMOVAL" or "ABANDONED PROCESS" strategies, always include:
+- "Form 17.W" in requiredDocuments.
+- "Court Order" if a court application is recommended.
+- "Form 17.1" and "Form 17.2" if current status is unclear.
 
 Output your recommendation in the following JSON format ONLY:
 {
@@ -88,7 +95,8 @@ Output your recommendation in the following JSON format ONLY:
   "successProbability": 0-100,
   "suggestedNotifications": [
     { "channel": "SMS", "templateKey": "strategy_update", "recipient": "client_phone" }
-  ]
+  ],
+  "requiredDocuments": ["Document name 1", "Document name 2"]
 }
 `;
 

@@ -200,11 +200,80 @@ function LoginForm() {
                 <>
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: "spin 1s linear infinite" }}>
                     <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
-                    <path d="M8 2a6 6 0 016 6" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M8 2a6 6 0 016 8" stroke="white" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                   Signing in...
                 </>
               ) : "Sign in"}
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "8px 0" }}>
+              <div style={{ flex: 1, height: 1, background: "#E2E8F0" }} />
+              <span style={{ fontSize: "0.75rem", color: "#94A3B8", fontWeight: 500 }}>OR</span>
+              <div style={{ flex: 1, height: 1, background: "#E2E8F0" }} />
+            </div>
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setEmail("demo@credo.co.za");
+                setPassword("password123");
+                setTimeout(() => {
+                  const form = document.querySelector('form');
+                  form?.requestSubmit();
+                }, 100);
+              }}
+              style={{
+                width: "100%", padding: "11px 0",
+                background: "#E4EDF8",
+                color: "#0B1D35", fontWeight: 600, fontSize: "0.9375rem",
+                border: "1px solid #C8D9EF", borderRadius: 9,
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                transition: "background-color 150ms",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#D8E5F5"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#E4EDF8"; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2.5C4.96 2.5 2.5 4.96 2.5 8s2.46 5.5 5.5 5.5 5.5-2.46 5.5-5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M11.5 2.5l2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5.5 8l1.5 1.5 3-3" stroke="#C4953A" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Try Static Demo
+            </button>
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setEmail("lindiwe@pilot.credo.co.za");
+                setPassword("password123");
+                setTimeout(() => {
+                  const form = document.querySelector('form');
+                  form?.requestSubmit();
+                }, 100);
+              }}
+              style={{
+                marginTop: 10,
+                width: "100%", padding: "11px 0",
+                background: "linear-gradient(135deg, #0B1D35, #1E4470)",
+                color: "#FFFFFF", fontWeight: 600, fontSize: "0.9375rem",
+                border: "none", borderRadius: 9,
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                transition: "opacity 150ms",
+                boxShadow: "0 4px 12px rgba(11,29,53,0.15)",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.9"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 15A7 7 0 108 1a7 7 0 000 14z" stroke="#C4953A" strokeWidth="1.5"/>
+                <path d="M8 4v4m0 0l2 2m-2-2L6 10" stroke="#C4953A" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              Standard Pilot (Real Data)
             </button>
           </form>
 

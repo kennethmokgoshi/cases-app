@@ -1,104 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { DEMO_CASES } from "@/lib/credo-demo-data";
 
-const CASES = [
-  {
-    id: "CR-2024-001",
-    title: "Judgment Removal — Standard Bank",
-    type: "Judgment Rescission",
-    status: "IN_PROGRESS",
-    bureau: "TransUnion",
-    openedDate: "10 Jan 2026",
-    daysOpen: 73,
-    daysLeft: 14,
-    progress: 43,
-    steps: [
-      { label: "Case opened",                  done: true,  date: "10 Jan" },
-      { label: "Documents collected",           done: true,  date: "15 Jan" },
-      { label: "Rule 49 application drafted",   done: true,  date: "22 Jan" },
-      { label: "Filed with Magistrate's Court", done: false, date: null     },
-      { label: "Court hearing",                 done: false, date: null     },
-      { label: "Rescission order granted",      done: false, date: null     },
-      { label: "Bureau removal confirmed",      done: false, date: null     },
-    ],
-    updates: [
-      { date: "22 Jan", text: "Rule 49 application completed and ready for filing." },
-      { date: "15 Jan", text: "All supporting documents received. ID, payslip, bank statement confirmed." },
-      { date: "10 Jan", text: "Case opened. Initial assessment complete. Judgment amount: R 28 500." },
-    ],
-  },
-  {
-    id: "CR-2024-002",
-    title: "Default Dispute — Capitec",
-    type: "Section 72 Dispute",
-    status: "WAITING",
-    bureau: "Experian",
-    openedDate: "5 Feb 2026",
-    daysOpen: 47,
-    daysLeft: 6,
-    progress: 60,
-    steps: [
-      { label: "Case opened",                done: true,  date: "5 Feb"  },
-      { label: "Section 72 letter drafted",  done: true,  date: "8 Feb"  },
-      { label: "Letter sent to bureau",      done: true,  date: "10 Feb" },
-      { label: "Bureau investigation",       done: false, date: null     },
-      { label: "Bureau response received",   done: false, date: null     },
-      { label: "Default removed",            done: false, date: null     },
-    ],
-    updates: [
-      { date: "10 Feb", text: "Section 72 dispute letter sent to Experian. 20-business-day clock starts." },
-      { date: "8 Feb",  text: "Dispute letter drafted. Grounds: incorrect balance and dates." },
-      { date: "5 Feb",  text: "Case opened. Default listing confirmed: R 6 200 — Capitec credit facility." },
-    ],
-  },
-  {
-    id: "CR-2024-003",
-    title: "Debt Review Flag Removal",
-    type: "DHS Clearance",
-    status: "PENDING",
-    bureau: "All bureaus",
-    openedDate: "1 Mar 2026",
-    daysOpen: 23,
-    daysLeft: null,
-    progress: 20,
-    steps: [
-      { label: "Case opened",                       done: true,  date: "1 Mar"  },
-      { label: "DHS status confirmed",              done: true,  date: "3 Mar"  },
-      { label: "Clearance certificate required",    done: false, date: null     },
-      { label: "Certificate obtained from DC",      done: false, date: null     },
-      { label: "Form 17.7 submitted to bureaus",    done: false, date: null     },
-      { label: "Flag removed from all bureaus",     done: false, date: null     },
-    ],
-    updates: [
-      { date: "3 Mar",  text: "DHS system confirms debt review flag still active. Debt counsellor: M. Khumalo." },
-      { date: "1 Mar",  text: "Case opened. Debt review completed in 2023 but flag never removed." },
-    ],
-  },
-  {
-    id: "CR-2023-008",
-    title: "Prescribed Debt Challenge — Edgars",
-    type: "Prescription Challenge",
-    status: "RESOLVED",
-    bureau: "XDS",
-    openedDate: "10 Aug 2025",
-    daysOpen: 226,
-    daysLeft: null,
-    progress: 100,
-    steps: [
-      { label: "Case opened",                     done: true, date: "10 Aug" },
-      { label: "Prescription assessed",           done: true, date: "12 Aug" },
-      { label: "Challenge letter sent",           done: true, date: "15 Aug" },
-      { label: "Bureau response received",        done: true, date: "2 Sep"  },
-      { label: "Listing removed — XDS confirmed", done: true, date: "8 Sep"  },
-    ],
-    updates: [
-      { date: "8 Sep",  text: "XDS confirmed removal of prescribed listing. Case closed." },
-      { date: "2 Sep",  text: "Bureau acknowledged prescription. Removal approved." },
-      { date: "15 Aug", text: "Prescription challenge letter sent to XDS." },
-    ],
-  },
-];
+const CASES = DEMO_CASES;
+
+// Data moved to @/lib/credo-demo-data
 
 const STATUS_CONFIG: Record<string, { bg: string; color: string; label: string }> = {
   IN_PROGRESS: { bg:"#EFF6FF", color:"#2563EB", label:"In Progress"    },

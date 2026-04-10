@@ -230,6 +230,8 @@ export default function CaseDetailPage() {
     const [fileRequestResult, setFileRequestResult] = useState<{ bureausSent: number; providersSent: number; failures: number; message: string } | null>(null);
     const [sendingAllRequests, setSendingAllRequests] = useState(false);
     const [allRequestsResult, setAllRequestsResult] = useState<{ dcSent: boolean; bureausSent: number; providersSent: number; failures: number; lines: string[] } | null>(null);
+    const [sendingDrrRequests, setSendingDrrRequests] = useState(false);
+    const [drrRequestResult, setDrrRequestResult] = useState<{ bureausSent: number; providersSent: number; dcSent: boolean; failures: number; message: string } | null>(null);
     const [useAiDraft, setUseAiDraft] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -701,6 +703,39 @@ export default function CaseDetailPage() {
             alert('Connection failed. Please try again.');
         } finally {
             setSendingDCNotification(null);
+        }
+    };
+
+    const handleSendDrrFileRequests = async () => {
+        if (!caseData) return;
+        setSendingDrrRequests(true);
+        setDrrRequestResult(null);
+        try {
+            const res = await fetch(`/api/cases/${params.id}/send-drr-requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const { bureausSent, providersSent, dcSent, totalFailures } = data.summary;
+                const parts = [];
+                if (dcSent) parts.push('Debt Counsellor');
+                if (bureausSent > 0) parts.push(`${bureausSent} bureau${bureausSent !== 1 ? 's' : ''}`);
+                if (providersSent > 0) parts.push(`${providersSent} provider${providersSent !== 1 ? 's' : ''}`);
+                
+                const message = parts.length > 0
+                    ? `DRR files requested from ${parts.join(', ')}${totalFailures > 0 ? ` (${totalFailures} failed)` : ''}`
+                    : 'No recipients found.';
+                
+                setDrrRequestResult({ bureausSent, providersSent, dcSent, failures: totalFailures, message });
+                setActivityUpdate(prev => prev + 1);
+            } else {
+                setDrrRequestResult({ bureausSent: 0, providersSent: 0, dcSent: false, failures: 1, message: data.error || 'Failed to send' });
+            }
+        } catch {
+            setDrrRequestResult({ bureausSent: 0, providersSent: 0, dcSent: false, failures: 1, message: 'Connection failed. Please try again.' });
+        } finally {
+            setSendingDrrRequests(false);
         }
     };
 
@@ -1520,7 +1555,7 @@ export default function CaseDetailPage() {
                                         value={editForm.partnerName}
                                         onChange={(e) => setEditForm({ ...editForm, partnerName: e.target.value })}
                                         className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
-                                        placeholder="Letsatsi Finance"
+                                        placeholder="Letsatsi"
                                     />
                                 </div>
                                 <div>
@@ -2351,7 +2386,7 @@ export default function CaseDetailPage() {
                                                     )}
                                                     <button
                                                         onClick={handleSendAllFileRequests}
-                                                        disabled={!isReady || sendingAllRequests || sendingDCNotification !== null || sendingFileRequests}
+                                                        disabled={!isReady || sendingAllRequests || sendingDCNotification !== null || sendingFileRequests || sendingDrrRequests}
                                                         className={`w-full py-2 px-3 border rounded text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${
                                                             isReady 
                                                                 ? 'bg-gradient-to-r from-cyan-600/30 to-indigo-600/30 border-cyan-500/30 text-white hover:from-cyan-600/40 hover:to-indigo-600/40' 
@@ -2370,6 +2405,27 @@ export default function CaseDetailPage() {
                                                             </>
                                                         )}
                                                     </button>
+
+                                                    {/* Specialized DRR Trigger */}
+                                                    {caseData.dhsStatus === 'D3' && (
+                                                        <button
+                                                            onClick={handleSendDrrFileRequests}
+                                                            disabled={sendingDrrRequests || sendingAllRequests}
+                                                            className="w-full py-2 px-3 bg-gradient-to-r from-amber-600/40 to-red-600/40 border border-amber-500/30 text-white rounded text-xs font-bold hover:from-amber-600/50 hover:to-red-600/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                        >
+                                                            {sendingDrrRequests ? (
+                                                                <>
+                                                                    <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                                                                    Requesting DRR Files...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                                                    Request Debt Review Removal Files
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             );
                                         })()}

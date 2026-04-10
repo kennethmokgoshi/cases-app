@@ -158,6 +158,21 @@ export async function POST(
 
         logger.info(`[UPLOAD_TRACE] 6. Parse success: ${file.name} (${file.buffer.length} bytes)`);
 
+        // Check for duplicate (same case, same filename, same size)
+        const fileSize = file.buffer.length;
+        const existingDoc = await prisma.document.findFirst({
+            where: {
+                caseId,
+                fileName: file.name,
+                fileSize: fileSize,
+            }
+        });
+
+        if (existingDoc) {
+            logger.info(`♻️  Duplicate detected for ${file.name} (${fileSize} bytes). Skipping write/create.`);
+            return NextResponse.json({ document: existingDoc });
+        }
+
         // Create uploads directory
         const uploadsDir = join(process.cwd(), 'storage', 'uploads', caseId);
         if (!existsSync(uploadsDir)) {

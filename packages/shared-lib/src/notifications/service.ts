@@ -603,6 +603,147 @@ export async function sendFileRequestEmails(payload: {
     return { bureauResults, providerResults };
 }
 
+/**
+ * Specialized Debt Review Removal (DRR) file request.
+ * Dispatches formal requests to:
+ * 1. The Debt Counsellor (requesting 17.W and Court Orders)
+ * 2. Credit Bureaus (standard request + flag removal query)
+ * 3. Credit Providers (standard request + clearance query)
+ */
+export async function sendDrrRequestEmails(payload: {
+    caseId: string;
+    clientName: string;
+    idNumber: string;
+    fileNumber: string;
+    senderName?: string;
+    dcName?: string | null;
+    dcEmail?: string | null;
+    creditBureauEmails: string[];
+    creditProviderContacts: CreditProviderContact[];
+    allAccounts?: DraftingAccount[];
+}): Promise<FileRequestResult & { dcSent: boolean }> {
+    const emailProvider = await getEmailProvider();
+    const clientParts = payload.clientName.split(' ');
+    const draftingClient = {
+        firstName: clientParts[0] || payload.clientName,
+        lastName:  clientParts.slice(1).join(' ') || '',
+        idNumber:  payload.idNumber,
+    };
+
+    let dcSent = false;
+    const bureauResults: FileRequestResult['bureauResults'] = [];
+    const providerResults: FileRequestResult['providerResults'] = [];
+
+    // 1. Request from Debt Counsellor
+    if (payload.dcEmail) {
+        try {
+            const draft = await draftLegalDocument({
+                client: draftingClient,
+                caseData: { fileNumber: payload.fileNumber },
+                matter: { type: 'Debt Review Removal', creditorName: payload.dcName || 'Debt Counsellor' },
+                documentType: 'DC_DRR_FILE_REQUEST',
+                senderName: payload.senderName,
+                companyName: COMPANY_NAME,
+                companyPhone: COMPANY_PHONE,
+            });
+
+            const res = await emailProvider.send(payload.dcEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content);
+            dcSent = res.success;
+
+            await logNotification({
+                caseId: payload.caseId,
+                channel: 'EMAIL',
+                recipient: payload.dcEmail,
+                recipientType: 'DEBT_COUNSELLOR',
+                statusCode: 'REQUEST_DRR_FILES_DC',
+                message: `[AI] ${draft.subject}`,
+                success: res.success,
+                messageId: res.messageId,
+                error: res.error,
+                provider: res.provider,
+            });
+        } catch (err) {
+            logger.error(`[DRRRequest] Failed to draft or send DC letter for case ${payload.caseId}:`, err);
+        }
+    }
+
+    // 2. Request from Bureaus (Always use AI for DRR context)
+    for (const bureauEmail of payload.creditBureauEmails) {
+        try {
+            const draft = await draftLegalDocument({
+                client: draftingClient,
+                caseData: { fileNumber: payload.fileNumber },
+                matter: { type: 'Debt Review Removal', creditorName: 'Credit Bureau' },
+                documentType: 'BUREAU_FILE_REQUEST',
+                accounts: payload.allAccounts,
+                senderName: payload.senderName,
+                companyName: COMPANY_NAME,
+                companyPhone: COMPANY_PHONE,
+            });
+
+            const res = await emailProvider.send(bureauEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content);
+            bureauResults.push({ email: bureauEmail, success: res.success, error: res.error });
+
+            await logNotification({
+                caseId: payload.caseId,
+                channel: 'EMAIL',
+                recipient: bureauEmail,
+                recipientType: 'PARTNER',
+                statusCode: 'REQUEST_DRR_FILES_BUREAU',
+                message: `[AI] ${draft.subject}`,
+                success: res.success,
+                messageId: res.messageId,
+                error: res.error,
+                provider: res.provider,
+            });
+        } catch (err) {
+            bureauResults.push({ email: bureauEmail, success: false, error: 'Drafting failed' });
+        }
+    }
+
+    // 3. Request from Providers
+    for (const cp of payload.creditProviderContacts) {
+        try {
+            const providerAccounts: DraftingAccount[] = cp.accountNumbers.map(num => ({
+                creditorName: cp.name,
+                accountNumber: num,
+                outstandingBalance: cp.outstandingBalances?.[num],
+            }));
+
+            const draft = await draftLegalDocument({
+                client: draftingClient,
+                caseData: { fileNumber: payload.fileNumber },
+                matter: { type: 'Debt Review Removal', creditorName: cp.name },
+                documentType: 'PROVIDER_FILE_REQUEST',
+                accounts: providerAccounts,
+                senderName: payload.senderName,
+                companyName: COMPANY_NAME,
+                companyPhone: COMPANY_PHONE,
+            });
+
+            const res = await emailProvider.send(cp.email, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content);
+            providerResults.push({ name: cp.name, email: cp.email, success: res.success, error: res.error });
+
+            await logNotification({
+                caseId: payload.caseId,
+                channel: 'EMAIL',
+                recipient: cp.email,
+                recipientType: 'PARTNER',
+                statusCode: 'REQUEST_DRR_FILES_PROVIDER',
+                message: `[AI] ${draft.subject}`,
+                success: res.success,
+                messageId: res.messageId,
+                error: res.error,
+                provider: res.provider,
+            });
+        } catch (err) {
+            providerResults.push({ name: cp.name, email: cp.email, success: false, error: 'Drafting failed' });
+        }
+    }
+
+    return { bureauResults, providerResults, dcSent };
+}
+
 export async function getNotificationHistory(caseId: string) {
     return prisma.notificationLog.findMany({
         where: { caseId },

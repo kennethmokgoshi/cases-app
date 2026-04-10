@@ -139,7 +139,7 @@ function PartnerNewCaseComponent() {
     const getPartnerNameFromProject = (): string | null => {
         if (!selectedParent) return null;
         const name = selectedParent.name;
-        if (name.toLowerCase().includes('letsatsi')) return 'Letsatsi Finance';
+        if (name.toLowerCase().includes('letsatsi')) return 'Letsatsi';
         if (name.toLowerCase().includes('shosholoza')) return 'Shosholoza Finance';
         if (name.toLowerCase().includes('future')) return 'Future Finance';
         return name;

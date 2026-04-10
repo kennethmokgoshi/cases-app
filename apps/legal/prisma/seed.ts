@@ -13,7 +13,7 @@ async function main() {
     // Helper function to determine organization from email domain
     const getOrganization = (email: string): string => {
         const domain = email.toLowerCase().split('@')[1]
-        if (domain?.includes('letsatsifinance')) return 'Letsatsi Finance'
+        if (domain?.includes('letsatsifinance')) return 'Letsatsi'
         if (domain?.includes('futurefinance')) return 'Future Finance'
         if (domain?.includes('shosholoza')) return 'Shosholoza'
         if (domain?.includes('zenowethu')) return 'Zenowethu'
@@ -21,7 +21,7 @@ async function main() {
     }
 
     const users = [
-        // Letsatsi Finance Users
+        // Letsatsi Users
         { username: 'Lesego@letsatsifinance.co.za', firstName: 'Lesego', lastName: 'Nyakalo', email: 'Lesego@letsatsifinance.co.za', isAdmin: false },
         { username: 'mmamy@letsatsifinance.co.za', firstName: 'Mmamy', lastName: 'Matlou', email: 'mmamy@letsatsifinance.co.za', isAdmin: false },
         { username: 'sibongile@letsatsifinance.co.za', firstName: 'Sibongile', lastName: 'Mnyabiso', email: 'sibongile@letsatsifinance.co.za', isAdmin: false },

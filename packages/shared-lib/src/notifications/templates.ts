@@ -25,7 +25,7 @@ export interface NotificationTemplate {
 // {phone} - Company contact phone
 // {virtualAssistantName} - Virtual assistant name (e.g., "Thandi")
 // {services} - Required services (e.g., "Debt Review Flag Removal")
-// {mainSource} - Main source/referral (e.g., "Letsatsi Finance")
+// {mainSource} - Main source/referral (e.g., "Letsatsi")
 
 const TEMPLATES: NotificationTemplate[] = [
     // ===== INTAKE & PAYMENT =====
@@ -79,16 +79,23 @@ Thank you for your enquiry. I am pleased to confirm that your application for **
 • Service Requested: {services}
 • Status: Application Received
 
+**What This Service Involves:**
+To successfully complete your {services}, our team will carry out the following on your behalf:
+
+1. Obtain your full file from your previous debt counsellor (including all forms, court orders, and account schedules)
+2. Submit a clearance request to the NCR Debt Help System (DHS) for formal confirmation that your debt review has been concluded
+3. Request your updated credit reports from all major credit bureaux (TransUnion, Experian, Compuscan)
+4. Formally dispute and request the removal of all debt review flags and adverse listings from your credit profile
+5. Obtain settlement/clearance letters from credit providers where applicable
+6. Confirm in writing once all flags have been successfully removed
+
 Our team is now reviewing your file and will be in touch with you directly within 24-48 hours. If any additional information is required, we will contact you.
 
 If you have any immediate questions in the meantime, please do not hesitate to reach out to us at {phone}.
 
 Kind Regards,
 {partnerUserName}
-{companyName}
-
-
-If you no longer wish to receive these emails you may unsubscribe`,
+{companyName}`,
         sendToClient: true,
         sendToPartner: false,
         isUrgent: false },
@@ -109,16 +116,23 @@ Thank you for reaching out to us. I am pleased to confirm that your application 
 • Service Requested: {services}
 • Status: Application Received
 
+**What This Service Involves:**
+To successfully complete your {services}, our team will carry out the following on your behalf:
+
+1. Obtain your full file from your previous debt counsellor (including all forms, court orders, and account schedules)
+2. Submit a clearance request to the NCR Debt Help System (DHS) for formal confirmation that your debt review has been concluded
+3. Request your updated credit reports from all major credit bureaux (TransUnion, Experian, Compuscan)
+4. Formally dispute and request the removal of all debt review flags and adverse listings from your credit profile
+5. Obtain settlement/clearance letters from credit providers where applicable
+6. Confirm in writing once all flags have been successfully removed
+
 Our team is now reviewing your file and will be in touch with you directly within 24-48 hours. If any additional information is required, we will contact you.
 
 If you have any immediate questions in the meantime, please do not hesitate to reach out to us at {phone}.
 
 Kind Regards,
 {partnerUserName}
-{companyName}
-
-
-If you no longer wish to receive these emails you may unsubscribe`,
+{companyName}`,
         sendToClient: true,
         sendToPartner: false,
         isUrgent: false },

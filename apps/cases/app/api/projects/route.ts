@@ -78,15 +78,13 @@ export async function GET(request: NextRequest) {
         const isAdmin = session.user.role === 'ADMIN' || session.user.isAdmin;
         const isStaff = session.user.userType === 'STAFF';
 
-        // Allow users to see all ACQUISITION_SOURCE projects (Partners) for selection
-        // regardless of direct membership. This fixes the issue where Partners with invalid/stale
-        // assignments see nothing, or where we want to "pull all" sources.
-        const isPublicType = type === 'ACQUISITION_SOURCE';
+        // memberOnly=true forces membership filtering even for admins (used by the new case form dropdown)
+        const isMemberOnly = searchParams.get('memberOnly') === 'true';
 
-        // 1. Admins see everything
-        // 2. Public types (Sources) are accessible to everyone for selection
-        // 3. Staff see everything IF they explicitly ask for 'all' (e.g. for Sidebar/Search)
-        const shouldFilter = !isAdmin && !isPublicType && !(isStaff && isAllRequested);
+        // 1. Admins see everything (unless memberOnly is explicitly requested)
+        // 2. Staff see everything IF they explicitly ask for 'all' (e.g. for Sidebar/Search)
+        // 3. All other users are filtered by project membership
+        const shouldFilter = (!isAdmin || isMemberOnly) && !(isStaff && isAllRequested && !isMemberOnly);
         const whereClause: any = {};
 
         if (shouldFilter) {
@@ -206,14 +204,31 @@ export async function GET(request: NextRequest) {
             return NextResponse.json(childrenWithCounts);
         }
 
-        if (!isAdmin) {
+        if (!isAdmin || isMemberOnly) {
+            // Get the explicit set of project IDs the user is a member of
+            const memberships = await prisma.projectMember.findMany({
+                where: { userId: session.user.id },
+                select: { projectId: true }
+            });
+            const memberProjectIds = memberships.map(m => m.projectId);
+
+            // Also include assigned B2B partner project for partner users
+            if (session.user.b2bPartnerId && !memberProjectIds.includes(session.user.b2bPartnerId)) {
+                memberProjectIds.push(session.user.b2bPartnerId);
+            }
+
             const myProjects = await prisma.project.findMany({
                 where: {
-                    members: { some: { userId: session.user.id } }
+                    id: { in: memberProjectIds },
+                    ...whereClause
                 },
                 include: {
                     parent: true,
-                    children: true,
+                    // Only include children that the user is also a member of
+                    children: {
+                        where: { id: { in: memberProjectIds } },
+                        select: { id: true, name: true, type: true }
+                    },
                     _count: { select: { children: true } },
                     members: {
                         include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } }

@@ -1,11 +1,16 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-08 (Admin-only document privacy — isAdminOnly flag, DocumentAccessGrant model, filtered GET API, upload flag, access grant/revoke endpoint, UI toggle + lock badge + Manage Access modal)
+> Last updated: 2026-04-10 (Project membership gating on new case form dropdown — removed isPublicType bypass, added memberOnly param, children filtered by membership)
 
 ---
 
 ## ✅ Completed
+
+### Project Membership Gating on New Case Form Dropdown (2026-04-10)
+- [x] **`apps/cases/app/api/projects/route.ts`** — Removed `isPublicType` bypass that was leaking all `ACQUISITION_SOURCE` projects to any user querying `?type=ACQUISITION_SOURCE`. Added `memberOnly=true` query param that forces membership filtering even for admins. Fixed non-admin path: children of returned projects are now also filtered to only include projects the user is a member of (prevents seeing subprojects of a parent you have access to but sub-branches you don't).
+- [x] **`apps/cases/app/(authenticated)/cases/new/page.tsx`** — Changed `fetchProjects` to call `/api/projects?memberOnly=true` so the Main Source dropdown always shows only projects the logged-in user is a member of — for both B2B and B2C, and for admins too.
+- **Security**: Users (including admins) can no longer see projects or subprojects they are not a member of in the new case form. This applies to both parent sources (ACQUISITION_SOURCE) and branch/subproject selectors.
 
 ### Admin-Only Document Privacy (2026-04-08)
 - [x] **`packages/database/prisma/schema.prisma`** — Added `isAdminOnly Boolean @default(false)` to `Document` model + new `DocumentAccessGrant` model (per-user access grants with granter tracking). Relations added to `User`.

@@ -26,7 +26,7 @@ export interface DraftingRequest {
         accountNumber?: string | null;
     };
     strategy?: CaseStrategyResponse;
-    documentType: 'LOD' | 'RESCISSION_AFFIDAVIT' | 'PRESCRIPTION_NOTICE' | 'CLEARANCE_DEMAND' | 'BUREAU_FILE_REQUEST' | 'PROVIDER_FILE_REQUEST';
+    documentType: 'LOD' | 'RESCISSION_AFFIDAVIT' | 'PRESCRIPTION_NOTICE' | 'CLEARANCE_DEMAND' | 'BUREAU_FILE_REQUEST' | 'PROVIDER_FILE_REQUEST' | 'DC_DRR_FILE_REQUEST';
     // Extra context used by BUREAU_FILE_REQUEST and PROVIDER_FILE_REQUEST
     accounts?: DraftingAccount[];
     senderName?: string;
@@ -50,6 +50,35 @@ function buildPrompt(request: DraftingRequest): string {
     const company = request.companyName || 'Zenowethu Debt Management';
     const phone = request.companyPhone || '012 035 1824';
     const sender = request.senderName || company;
+
+    if (request.documentType === 'DC_DRR_FILE_REQUEST') {
+        return `
+You are an expert Legal Secretary at ${company} in South Africa. Draft a formal letter to a Debt Counsellor requesting critical documents for a consumer who is currently under an abandoned or stagnant debt review process.
+
+CONSUMER: ${clientFullName} (ID: ${request.client.idNumber})
+DEBT COUNSELLOR: ${request.matter.creditorName}
+OUR REFERENCE: ${request.caseData.fileNumber}
+SENDER: ${sender}, ${company} — Tel: ${phone}
+
+BACKGROUND:
+The consumer's debt review process appears abandoned or stagnant as per DHS/NCR records. We are assisting the consumer to resolve this status.
+
+INSTRUCTIONS:
+1. Formal, authoritative, and professional South African legal tone.
+2. State that we act on behalf of the consumer under a Power of Attorney.
+3. MANDATORY REQUEST: Form 17.W (Withdrawal by Debt Counsellor), any Court Orders (or Draft Orders) served on creditors, and the original 17.1 and 17.2 forms.
+4. Demand a response and the requested files within 2 business days, citing the Debt Counsellor's statutory duty to assist the consumer in resolving stagnant processes.
+5. Use [TODAY_DATE] as the date placeholder.
+6. Sign off from ${sender} on behalf of ${company}.
+
+Output ONLY valid JSON in this format:
+{
+  "subject": "Urgent Request for Debt Review Documentation: ${clientFullName} (${request.client.idNumber})",
+  "content": "Complete formal letter body with date, salutation, paragraphs, and sign-off",
+  "recipientName": "${request.matter.creditorName}",
+  "recipientDetails": "Debt Review Department"
+}`;
+    }
 
     if (request.documentType === 'BUREAU_FILE_REQUEST') {
         const accountsSummary = request.accounts && request.accounts.length > 0

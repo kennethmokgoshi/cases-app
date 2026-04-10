@@ -127,7 +127,7 @@ export async function GET(
 
             const clean = (name: string) => {
                 let s = name;
-                if (s.startsWith('Letsatsi Finance') || s === 'Letsatsi Referrals') s = 'Letsatsi';
+                if (s.startsWith('Letsatsi') || s === 'Letsatsi Referrals' || s === 'Letsatsi Finance') s = 'Letsatsi';
                 s = s.replace(/My Cases\s*-?\s*/gi, '').trim();
                 return s;
             };
