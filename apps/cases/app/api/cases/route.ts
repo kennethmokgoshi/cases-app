@@ -553,7 +553,7 @@ export async function POST(request: Request) {
         }
 
         // Format services for display
-        let servicesText = 'Credit Repair';
+        let servicesText = '';
         if (services && Array.isArray(services) && services.length > 0) {
             servicesText = services.map((s: string) => {
                 return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());

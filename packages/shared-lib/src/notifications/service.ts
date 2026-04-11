@@ -195,7 +195,7 @@ export async function sendStatusChangeNotification(
         phone: COMPANY_PHONE,
         partnerName: payload.partnerName || '',
         virtualAssistantName: VIRTUAL_ASSISTANT_NAME,
-        services: payload.services || 'Credit Repair',
+        services: payload.services || '',
         mainSource: payload.mainSource || payload.partnerName || COMPANY_NAME,
         dcName: payload.dcName || 'Debt Counsellor',
         idNumber: payload.idNumber || '',

@@ -55,10 +55,7 @@ Kind Regards,
 {partnerUserName}
 {mainSource}
 
-(In partnership with Zenowethu Debt Management)
-
-
-If you no longer wish to receive these emails you may unsubscribe`,
+(In partnership with Zenowethu Debt Management)`,
         sendToClient: true,
         sendToPartner: true,
         isUrgent: false },
