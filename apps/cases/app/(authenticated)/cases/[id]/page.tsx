@@ -928,24 +928,39 @@ export default function CaseDetailPage() {
                 const updatedCase = await caseRes.json();
                 setCaseData(updatedCase);
 
-                // Update Edit Form for immediate visual feedback if user decides to edit further
+                // Update edit form for immediate visual feedback
                 setEditForm(prev => ({
                     ...prev,
-                    ncrdcNo: result.data.ncrdcNo || prev.ncrdcNo,
-                    // dhsStatus: result.data.status || prev.dhsStatus, // REMOVED: Do not overwrite Request Status with Consumer Status
+                    ncrdcNo:            result.data.ncrdcNo            || prev.ncrdcNo,
                     debtCounsellorName: result.data.debtCounsellorName || prev.debtCounsellorName,
-                    dcTradingName: result.data.dcTradingName || prev.dcTradingName,
-                    dcEmail: result.data.dcEmail || prev.dcEmail,
-                    dcOperatingStatus: result.data.dcOperatingStatus || prev.dcOperatingStatus,
-                    dcMobile: result.data.dcMobile || prev.dcMobile,
-                    consumerDhsStatus: result.data.status || prev.consumerDhsStatus,
-                    dhsPreviousStatus: result.data.status || prev.dhsPreviousStatus,
+                    dcTradingName:      result.data.dcTradingName      || prev.dcTradingName,
+                    dcEmail:            result.data.dcEmail            || prev.dcEmail,
+                    dcOperatingStatus:  result.data.dcOperatingStatus  || prev.dcOperatingStatus,
+                    dcMobile:           result.data.dcMobile           || prev.dcMobile,
+                    consumerDhsStatus:  result.data.status             || prev.consumerDhsStatus,
+                    dhsPreviousStatus:  result.data.status             || prev.dhsPreviousStatus,
                 }));
 
-                setAutoFillMessage({ type: 'success', text: 'Auto-filled successfully!' });
-                setIsEditingDhs(true); // Open edit mode to show populated fields
+                const filled  = (result.filledFields  as string[] | undefined) ?? [];
+                const missing = (result.emptyFields   as string[] | undefined) ?? [];
+
+                if (missing.length > 0) {
+                    setAutoFillMessage({
+                        type: 'info',
+                        text: `Partial fill — populated: ${filled.join(', ')}. Not found in DHS: ${missing.join(', ')}.`,
+                    });
+                } else {
+                    setAutoFillMessage({ type: 'success', text: `Auto-filled successfully — ${filled.length} fields populated.` });
+                }
+                setIsEditingDhs(true);
             } else {
-                setAutoFillMessage({ type: 'error', text: result.message || 'Failed to auto-fill DHS info' });
+                // Build a helpful message that includes what DHS returned (if anything)
+                const missing = (result.emptyFields as string[] | undefined) ?? [];
+                const baseMsg = result.message || 'Failed to auto-fill DHS info.';
+                const hint    = missing.length > 0
+                    ? ` Fields not returned by DHS: ${missing.join(', ')}.`
+                    : '';
+                setAutoFillMessage({ type: 'error', text: baseMsg + hint });
             }
         } catch (error) {
             log.error({ err: error }, 'Auto-fill error:', error);
@@ -2331,7 +2346,11 @@ export default function CaseDetailPage() {
                                                 )}
                                             </button>
                                             {autoFillMessage && (
-                                                <div className={`text-[10px] px-2 py-0.5 rounded max-w-[180px] text-right ${autoFillMessage.type === 'error' ? 'text-red-400 bg-red-500/10 border border-red-500/20' : autoFillMessage.type === 'success' ? 'text-green-400 bg-green-500/10 border border-green-500/20' : 'text-blue-400 bg-blue-500/10 border border-blue-500/20'}`}>
+                                                <div className={`text-[10px] px-2 py-1 rounded max-w-[260px] text-right leading-relaxed ${
+                                                    autoFillMessage.type === 'error'   ? 'text-red-400 bg-red-500/10 border border-red-500/20' :
+                                                    autoFillMessage.type === 'success' ? 'text-green-400 bg-green-500/10 border border-green-500/20' :
+                                                                                         'text-amber-300 bg-amber-500/10 border border-amber-500/20'
+                                                }`}>
                                                     {autoFillMessage.text}
                                                 </div>
                                             )}
@@ -2515,18 +2534,35 @@ export default function CaseDetailPage() {
                                         )}
 
                                         {/* Send POA Button */}
-                                        <div className="pt-1 border-t border-white/5">
-                                            <p className="text-[10px] text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Power of Attorney</p>
-                                            <button
-                                                onClick={() => setIsPoaModalOpen(true)}
-                                                className="w-full py-1.5 px-3 bg-purple-600/20 border border-purple-600/40 text-purple-300 rounded text-xs font-semibold hover:bg-purple-600/30 transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                </svg>
-                                                Send POA to Client
-                                            </button>
-                                        </div>
+                                        {(() => {
+                                            const poaReady = !!(caseData?.ncrdcNo && caseData?.debtCounsellorName);
+                                            return (
+                                                <div className="pt-1 border-t border-white/5">
+                                                    <p className="text-[10px] text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Power of Attorney</p>
+                                                    <button
+                                                        onClick={() => poaReady && setIsPoaModalOpen(true)}
+                                                        disabled={!poaReady}
+                                                        title={!poaReady ? 'NCRDC No and Debt Counsellor must be set before sending a POA. Run DHS Auto-Fill to populate them.' : undefined}
+                                                        className={`w-full py-1.5 px-3 rounded text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
+                                                            poaReady
+                                                                ? 'bg-purple-600/20 border border-purple-600/40 text-purple-300 hover:bg-purple-600/30 cursor-pointer'
+                                                                : 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed opacity-60'
+                                                        }`}
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                        </svg>
+                                                        Send POA to Client
+                                                        {!poaReady && <span className="ml-1 text-[10px] text-gray-500">(DHS required)</span>}
+                                                    </button>
+                                                    {!poaReady && (
+                                                        <p className="text-[10px] text-amber-500/80 mt-1 text-center">
+                                                            Run DHS Auto-Fill to set NCRDC No &amp; Debt Counsellor
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
 
@@ -3294,6 +3330,9 @@ export default function CaseDetailPage() {
                     clientName={`${caseData.client?.firstName ?? ''} ${caseData.client?.lastName ?? ''}`.trim()}
                     clientEmail={caseData.client?.email}
                     clientPhone={caseData.client?.whatsappNumber ?? caseData.client?.phone}
+                    services={caseData.services}
+                    dcName={caseData.debtCounsellorName}
+                    dcNcrdcNo={caseData.ncrdcNo}
                 />
             )}
 

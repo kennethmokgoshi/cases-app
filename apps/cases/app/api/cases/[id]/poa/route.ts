@@ -94,6 +94,15 @@ export async function POST(
         }
 
         // ---------------------------------------------------------------
+        // DC details for section 4 — use whatever is already stored on the case.
+        // If service is "Debt Review Flag Removal" and DC details are missing,
+        // the UI blocks the send and directs staff to run DHS Auto-Fill first.
+        // ---------------------------------------------------------------
+        const dcName    = caseRecord.debtCounsellorName ?? '';
+        const dcNcrdcNo = caseRecord.ncrdcNo ?? '';
+        const dcPhone   = caseRecord.dcMobile ?? '';
+
+        // ---------------------------------------------------------------
         // Generate PDF
         // ---------------------------------------------------------------
         const clientFullName = `${client.firstName} ${client.lastName}`;
@@ -105,24 +114,28 @@ export async function POST(
         if (type === 'STANDARD') {
             pdfBuffer = await generateStandardPoa({
                 fullName:    clientFullName,
-                idNumber:    client.idNumber,
+                idNumber:    client.idNumber ?? '',
                 dateOfBirth: client.idNumber ? idToDateOfBirth(client.idNumber) : '',
                 address:     client.address ?? '',
                 phone:       client.phone ?? '',
                 email:       client.email ?? '',
-                signedDate:  '', // left blank — client must fill in
+                signedCity:  'Pretoria',
+                signedDate:  today,
+                dcName,
+                dcNcrdcNo,
+                dcPhone,
             });
             fileName = `ZDM_POA_${client.idNumber}_${Date.now()}.pdf`;
         } else {
             pdfBuffer = await generateWesbankPoa({
                 clientFullName: clientFullName,
-                clientIdNumber: client.idNumber,
+                clientIdNumber: client.idNumber ?? '',
                 clientAddress:  client.address ?? '',
                 agentFullName:  `${staffUser!.firstName} ${staffUser!.lastName}`,
                 agentIdNumber:  staffUser!.idNumber!,
                 agentAddress:   staffUser!.address!,
-                signedAtCity:   'MABOPANE',
-                signedDate:     '', // left blank
+                signedAtCity:   'Pretoria',
+                signedDate:     today,
             });
             fileName = `ZDM_Wesbank_POA_${client.idNumber}_${Date.now()}.pdf`;
         }

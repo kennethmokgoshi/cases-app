@@ -16,6 +16,10 @@ interface SendPoaModalProps {
     clientName: string;
     clientEmail?:    string | null;
     clientPhone?:    string | null;
+    // DRR awareness — passed from case record
+    services?:   string | null;   // JSON array string, e.g. '["Debt Review Flag Removal"]'
+    dcName?:     string | null;
+    dcNcrdcNo?:  string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -29,6 +33,9 @@ export function SendPoaModal({
     clientName,
     clientEmail,
     clientPhone,
+    services,
+    dcName,
+    dcNcrdcNo,
 }: SendPoaModalProps) {
     const [poaType,    setPoaType]    = useState<PoaType>('STANDARD');
     const [channel,    setChannel]    = useState<PoaChannel>('EMAIL');
@@ -38,6 +45,15 @@ export function SendPoaModal({
     const [missingFields, setMissingFields] = useState<string[]>([]);
 
     if (!isOpen) return null;
+
+    // ── DRR awareness ────────────────────────────────────────────────────────
+    const serviceList: string[] = (() => {
+        try { return JSON.parse(services ?? '[]'); } catch { return []; }
+    })();
+    const isDRR = serviceList.some(s => s.toLowerCase().includes('flag removal'));
+    const dcMissing = isDRR && (!dcName || !dcNcrdcNo);
+    // Block send when Standard POA is selected for a DRR case with no DC details
+    const sendBlocked = poaType === 'STANDARD' && dcMissing;
 
     const handleSend = async () => {
         setError('');
@@ -150,6 +166,42 @@ export function SendPoaModal({
                         )}
                     </div>
 
+                    {/* DRR — DC details missing warning */}
+                    {isDRR && poaType === 'STANDARD' && (
+                        <div className={`rounded-xl border px-4 py-3 ${dcMissing ? 'border-amber-500/40 bg-amber-500/10' : 'border-green-500/30 bg-green-500/10'}`}>
+                            <div className="flex items-start gap-2">
+                                <span className={`text-lg leading-none mt-0.5 ${dcMissing ? 'text-amber-400' : 'text-green-400'}`}>
+                                    {dcMissing ? '⚠' : '✓'}
+                                </span>
+                                <div>
+                                    <p className={`text-xs font-semibold mb-1 ${dcMissing ? 'text-amber-300' : 'text-green-300'}`}>
+                                        {dcMissing
+                                            ? 'Debt Review Flag Removal — DC details required'
+                                            : 'Debt Review Flag Removal — DC details on file'}
+                                    </p>
+                                    {dcMissing ? (
+                                        <>
+                                            <p className="text-xs text-amber-200 leading-relaxed">
+                                                This case is a <strong>Debt Review Flag Removal</strong>. Section 4 of the Standard POA
+                                                must include the current debt counsellor&apos;s name and NCRDC number so the consumer can authorise
+                                                the transfer.
+                                            </p>
+                                            <p className="text-xs text-amber-200 mt-1.5 leading-relaxed">
+                                                Please run <strong>DHS Auto-Fill</strong> on this case first (use the DHS Lookup button),
+                                                then return here to send the POA.
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <p className="text-xs text-green-200">
+                                            DC: <strong>{dcName}</strong> &nbsp;·&nbsp; NCRDC: <strong>{dcNcrdcNo}</strong>
+                                            <br />Section 4 will be pre-filled automatically.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Delivery Channel */}
                     <div>
                         <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
@@ -245,7 +297,8 @@ export function SendPoaModal({
                     {!success && (
                         <button
                             onClick={handleSend}
-                            disabled={loading || (!clientEmail && !clientPhone)}
+                            disabled={loading || (!clientEmail && !clientPhone) || sendBlocked}
+                            title={sendBlocked ? 'Run DHS Auto-Fill first to get the current debt counsellor details' : undefined}
                             className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                 poaType === 'WESBANK'
                                     ? 'bg-amber-600 hover:bg-amber-500 text-white'

@@ -37,14 +37,14 @@ export async function sendEmailWithAttachments(opts: SendEmailOptions): Promise<
         secure: process.env.SMTP_SECURE === 'true',
         auth: {
             user: process.env.SMTP_USER || '',
-            pass: process.env.SMTP_PASS || '',
+            pass: process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '',
         },
         tls: { rejectUnauthorized: false },
     });
 
     try {
         const info = await transporter.sendMail({
-            from:        process.env.EMAIL_FROM || process.env.SMTP_USER,
+            from:        process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER,
             to:          Array.isArray(opts.to) ? opts.to.join(', ') : opts.to,
             subject:     opts.subject,
             html:        opts.html,
