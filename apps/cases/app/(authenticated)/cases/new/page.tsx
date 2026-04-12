@@ -2016,13 +2016,6 @@ function NewCaseWithAIComponent() {
                             Back
                         </button>
                         <button
-                            onClick={handleManualEntry}
-                            className="flex-1 px-4 py-3 rounded-lg font-medium text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20 transition-all border border-indigo-500/30"
-                            disabled={uploading}
-                        >
-                            Skip & Enter Manually
-                        </button>
-                        <button
                             onClick={handleUploadAndAnalyze}
                             disabled={!hasRequiredDocs || uploading}
                             className={`
