@@ -302,6 +302,8 @@ export default function CaseDetailPage() {
     const [showCompareModal, setShowCompareModal] = useState(false);
     const [isPoaModalOpen, setIsPoaModalOpen] = useState(false);
     const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN' | 'DEBT_REVIEW'>('ACTIVITY');
+    // DC pre-send confirmation
+    const [dcConfirmPending, setDcConfirmPending] = useState<'FILE_REQUEST' | 'INVOICE_REQUEST' | null>(null);
 
     // Tasks & Decline Reason State
     // Tasks & Decline Reason State
@@ -678,9 +680,16 @@ export default function CaseDetailPage() {
         setSendingAllRequests(false);
     };
 
-    const handleDCNotification = async (type: 'FILE_REQUEST' | 'INVOICE_REQUEST') => {
+    // Show confirmation modal before sending — actual send happens in confirmDCNotification
+    const handleDCNotification = (type: 'FILE_REQUEST' | 'INVOICE_REQUEST') => {
         if (!caseData || !caseData.dcEmail) return;
+        setDcConfirmPending(type);
+    };
 
+    const confirmDCNotification = async () => {
+        if (!caseData || !dcConfirmPending) return;
+        const type = dcConfirmPending;
+        setDcConfirmPending(null);
         setSendingDCNotification(type === 'FILE_REQUEST' ? 'FILE' : 'INVOICE');
         try {
             const res = await fetch(`/api/cases/${params.id}/dc-notification`, {
@@ -693,7 +702,6 @@ export default function CaseDetailPage() {
 
             if (res.ok) {
                 alert(result.message || 'Notification sent successfully!');
-                // Trigger activity refresh
                 setActivityUpdate(prev => prev + 1);
             } else {
                 alert(`Failed: ${result.error || 'Unknown error'}`);
@@ -3305,6 +3313,94 @@ export default function CaseDetailPage() {
                     />
                 )
             }
+
+
+            {/* DC Pre-Send Confirmation Modal */}
+            {dcConfirmPending && caseData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div className="bg-[#0e1117] border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+                            <div className="flex items-center gap-2.5">
+                                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                    <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-white">Confirm Debt Counsellor Details</h3>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">
+                                        {dcConfirmPending === 'FILE_REQUEST' ? 'File Request' : 'Invoice Request'} — verify before sending
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setDcConfirmPending(null)}
+                                className="text-gray-600 hover:text-white transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* DC Details grid */}
+                        <div className="px-5 py-4 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                {[
+                                    { label: 'NCR Registration No', value: caseData.ncrdcNo },
+                                    { label: 'Full Name', value: caseData.debtCounsellorName },
+                                    { label: 'Trading Name', value: caseData.dcTradingName },
+                                    { label: 'Operating Status', value: caseData.dcOperatingStatus },
+                                    { label: 'Mobile', value: caseData.dcMobile },
+                                    { label: 'Email', value: caseData.dcEmail },
+                                ].map(({ label, value }) => (
+                                    <div key={label} className="bg-black/20 rounded-lg px-3 py-2">
+                                        <p className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider">{label}</p>
+                                        <p className={`text-xs mt-0.5 ${value ? 'text-white' : 'text-gray-600 italic'}`}>
+                                            {value ?? '—'}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {!caseData.ncrdcNo && (
+                                <p className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
+                                    No NCRDC number on record. Verify this is the correct debt counsellor.
+                                </p>
+                            )}
+                            {caseData.dcOperatingStatus && caseData.dcOperatingStatus !== 'Operating' && (
+                                <p className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
+                                    Status is &quot;{caseData.dcOperatingStatus}&quot; — confirm before sending.
+                                </p>
+                            )}
+
+                            <p className="text-[10px] text-gray-500">
+                                Email will be sent to: <span className="text-zeno-cyan font-mono">{caseData.dcEmail}</span>
+                            </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-800">
+                            <button
+                                onClick={() => setDcConfirmPending(null)}
+                                className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDCNotification}
+                                className="px-5 py-2 bg-indigo-600/20 border border-indigo-600/40 text-indigo-300 rounded text-sm font-semibold hover:bg-indigo-600/30 transition-all flex items-center gap-2"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                Confirm &amp; Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div >
     );

@@ -1,11 +1,34 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-10 (Project membership gating on new case form dropdown — removed isPublicType bypass, added memberOnly param, children filtered by membership)
+> Last updated: 2026-04-12 (POA Generator — 2-page branded PDF, email + WhatsApp delivery)
 
 ---
 
 ## ✅ Completed
+
+### POA Generator — Branded PDF, Email & WhatsApp Delivery (2026-04-12)
+- [x] **`packages/shared-lib/src/poa/poa-generator.ts`** — Completely rebuilt from scratch. Embeds `Letterhead.pdf` as background on every page. Covers pre-printed letterhead text (DATED AT / SIGNATURE) with a white rectangle (y=60–440). Standard POA: 2 pages (Principal Details + 7 Powers on p1; Authorization + Checklist + Declaration + single signature on p2). Wesbank POA: 2 pages.
+- [x] **`apps/cases/app/api/cases/[id]/poa/route.ts`** — POST endpoint: validates type (STANDARD/WESBANK) + channel (EMAIL/WHATSAPP), checks client/staff profile completeness, generates PDF, sends via SMTP or WhatsApp/SMS via GHL. Logs activity as SYSTEM comment.
+- [x] **`apps/cases/app/api/poa/download/[filename]/route.ts`** — Serves PDFs from `/tmp/poa/` for WhatsApp download links (sanitised filename, no path traversal).
+- [x] **`apps/cases/lib/email-with-attachments.ts`** — SMTP transporter with nodemailer; falls back to mock log in dev. Supports both `SMTP_PASSWORD` and `SMTP_PASS` env var names.
+- [x] **`apps/cases/.env.local`** — Added SMTP vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `NEXT_PUBLIC_APP_URL`).
+- [x] **Production DB** — `idNumber` and `address` columns added to `User` table via direct SQL (`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS ...`).
+- [x] **`apps/cases/public/templates/poa/`** — `Letterhead.pdf`, `ZDM_POA_Colour_Online.pdf`, `POA_Wesbank_Template.pdf` committed as static assets.
+
+### DC Verification — Admin Page & Pre-Send Confirmation (2026-04-12)
+- [x] **`packages/database/prisma/schema.prisma`** — Added 3 new nullable fields to the `Case` model: `dcTel` (office telephone), `lastUsedTel` (previous tel), `dcProvince` (province), `lastUsedMobile` (previous mobile). Migration SQL generated; run with `pnpm db:migrate` in `packages/database` when `DATABASE_URL` is available.
+- [x] **`GET /api/admin/debt-counsellors`** — Aggregates all cases that have a `dcEmail` or `ncrdcNo`, groups by NCRDC number (deduplicates), and returns one record per debt counsellor with full contact details and a `caseCount`. Admin-only.
+- [x] **`PATCH /api/admin/debt-counsellors`** — Accepts updated DC contact fields and applies them to all cases sharing the same `ncrdcNo`. Zod-validated. Admin-only.
+- [x] **`/admin/debt-counsellors` page** — Full-featured admin page: searchable DC registry (by NCRDC, name, trading name, email, province), status colour badges (Operating/Cancelled/Suspended), case count per DC, inline edit modal with all fields (identity + contact). Shows "last used" previous contact details alongside current ones.
+- [x] **Admin dashboard** — "DC Verification" tile added to `/admin` hub page.
+- [x] **Case detail page** — "DC: Request File" and "DC: Request Invoice" buttons now open a confirmation modal first, showing all on-record DC details (NCRDC, name, trading name, status, mobile, email) before the email is dispatched. Warnings shown if status is not "Operating" or NCRDC is missing.
+
+### AI Analysis Employment Data Consistency (2026-04-12)
+- [x] **`apps/cases/app/api/cases/[id]/compare-analysis/route.ts`** — Added PAYSLIP and BANK_STATEMENT to document query filter. Added employment section to comparison response (employer, grossSalary, netSalary, salaryDate) sourced from `analysis.payslip` (primary) and `analysis.bankStatement` (fallback). Fixed batch analysis type cast to allow PAYSLIP/BANK_STATEMENT.
+- [x] **`apps/cases/app/api/cases/[id]/apply-updates/route.ts`** — Added `employer`, `grossSalary`, `netSalary` to `CLIENT_FIELDS` so they are correctly routed to the client record on apply. Added decimal parsing for salary fields.
+- [x] **`apps/cases/app/api/documents/reanalyze/route.ts`** — SEPARATE mode: added PAYSLIP/BANK_STATEMENT to document update mapping. Single mode: added PAYSLIP/BANK_STATEMENT to supported types list and `fullAnalysis` mapping. `updateClientData`: propagates payslip employer/grossSalary/netSalary and bankStatement fallback to client record.
+- [x] **`packages/ui/src/cases/CompareAnalysisModal.tsx`** — Added `employer`, `grossSalary`, `netSalary` to `CaseData` interface. Added `employment` section to `ComparisonData`. Employment fields built in both `buildComparisonData` and `buildComparisonDataWithAiValues`. Employment mapped from API response. "Employment & Financial" section rendered in comparison table between Personal Info and Credit Bureau. All select/apply logic updated to include employment.
 
 ### Project Membership Gating on New Case Form Dropdown (2026-04-10)
 - [x] **`apps/cases/app/api/projects/route.ts`** — Removed `isPublicType` bypass that was leaking all `ACQUISITION_SOURCE` projects to any user querying `?type=ACQUISITION_SOURCE`. Added `memberOnly=true` query param that forces membership filtering even for admins. Fixed non-admin path: children of returned projects are now also filtered to only include projects the user is a member of (prevents seeing subprojects of a parent you have access to but sub-branches you don't).

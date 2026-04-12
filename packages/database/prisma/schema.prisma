@@ -111,8 +111,12 @@ model Case {
   dcTradingName           String?
   dcEmail                 String?
   lastKnownEmail          String?
+  lastUsedMobile          String?
   dcOperatingStatus       String?
   dcMobile                String?
+  dcTel                   String?
+  lastUsedTel             String?
+  dcProvince              String?
   consumerDhsStatus       String?
   requestedDhsStatus      String?
   dhsPreviousStatus       String?
