@@ -1,11 +1,20 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-10 (Project membership gating on new case form dropdown — removed isPublicType bypass, added memberOnly param, children filtered by membership)
+> Last updated: 2026-04-12 (POA Generator — 2-page branded PDF, email + WhatsApp delivery)
 
 ---
 
 ## ✅ Completed
+
+### POA Generator — Branded PDF, Email & WhatsApp Delivery (2026-04-12)
+- [x] **`packages/shared-lib/src/poa/poa-generator.ts`** — Completely rebuilt from scratch. Embeds `Letterhead.pdf` as background on every page. Covers pre-printed letterhead text (DATED AT / SIGNATURE) with a white rectangle (y=60–440). Standard POA: 2 pages (Principal Details + 7 Powers on p1; Authorization + Checklist + Declaration + single signature on p2). Wesbank POA: 2 pages.
+- [x] **`apps/cases/app/api/cases/[id]/poa/route.ts`** — POST endpoint: validates type (STANDARD/WESBANK) + channel (EMAIL/WHATSAPP), checks client/staff profile completeness, generates PDF, sends via SMTP or WhatsApp/SMS via GHL. Logs activity as SYSTEM comment.
+- [x] **`apps/cases/app/api/poa/download/[filename]/route.ts`** — Serves PDFs from `/tmp/poa/` for WhatsApp download links (sanitised filename, no path traversal).
+- [x] **`apps/cases/lib/email-with-attachments.ts`** — SMTP transporter with nodemailer; falls back to mock log in dev. Supports both `SMTP_PASSWORD` and `SMTP_PASS` env var names.
+- [x] **`apps/cases/.env.local`** — Added SMTP vars (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, NEXT_PUBLIC_APP_URL).
+- [x] **Production DB** — `idNumber` and `address` columns added to `User` table via direct SQL.
+- [x] **`apps/cases/public/templates/poa/`** — `Letterhead.pdf` committed as static asset.
 
 ### Project Membership Gating on New Case Form Dropdown (2026-04-10)
 - [x] **`apps/cases/app/api/projects/route.ts`** — Removed `isPublicType` bypass that was leaking all `ACQUISITION_SOURCE` projects to any user querying `?type=ACQUISITION_SOURCE`. Added `memberOnly=true` query param that forces membership filtering even for admins. Fixed non-admin path: children of returned projects are now also filtered to only include projects the user is a member of (prevents seeing subprojects of a parent you have access to but sub-branches you don't).

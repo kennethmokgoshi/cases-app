@@ -5,8 +5,8 @@ import { join } from 'path';
 /**
  * GET /api/poa/download/[filename]
  *
- * Serves a POA PDF from /tmp/poa/ — used for WhatsApp download links.
- * Files are temporary and only persist for the lifetime of the container.
+ * Serves POA PDFs that were saved to /tmp/poa/ during WhatsApp delivery.
+ * Filename is validated to prevent path traversal attacks.
  */
 export async function GET(
     _request: NextRequest,
@@ -14,21 +14,22 @@ export async function GET(
 ) {
     const { filename } = await params;
 
-    // Sanitise: only allow safe filenames (no path traversal)
-    if (!/^[\w\-\.]+\.pdf$/i.test(filename)) {
+    // Strict allowlist: only alphanumeric, hyphens, underscores, dots — must end in .pdf
+    if (!/^[\w\-]+\.pdf$/i.test(filename)) {
         return NextResponse.json({ error: 'Invalid filename' }, { status: 400 });
     }
 
-    try {
-        const filePath = join('/tmp', 'poa', filename);
-        const fileBuffer = await readFile(filePath);
+    const filePath = join('/tmp', 'poa', filename);
 
+    try {
+        const fileBuffer = await readFile(filePath);
         return new NextResponse(fileBuffer, {
             status: 200,
             headers: {
                 'Content-Type': 'application/pdf',
-                'Content-Disposition': `attachment; filename="${filename}"`,
-                'Content-Length': fileBuffer.length.toString(),
+                'Content-Disposition': `inline; filename="${filename}"`,
+                'Content-Length': String(fileBuffer.length),
+                'Cache-Control': 'private, max-age=86400',
             },
         });
     } catch {
