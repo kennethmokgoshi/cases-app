@@ -23,6 +23,10 @@ export interface StandardPoaInput {
     email:       string;
     signedCity?: string;
     signedDate?: string;   // DD/MM/YYYY — pre-fill today's date
+    // Section 4 — Transfer Authorization (pre-filled when service = Debt Review Flag Removal)
+    dcName?:    string;
+    dcNcrdcNo?: string;
+    dcPhone?:   string;
 }
 
 export interface WesbankPoaInput {
@@ -296,11 +300,11 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
         regular, 10, ML, y, CW, 14,
     );
     y -= 4;
-    y = drawField(p2, 'CURRENT DEBT COUNSELLOR — FULL NAME', '', regular, bold, ML, y, CW);
-    y = drawFieldPair(p2, 'NCRDC REGISTRATION NUMBER', '', 'COUNSELLOR CONTACT NUMBER', '', regular, bold, y);
+    y = drawField(p2, 'CURRENT DEBT COUNSELLOR — FULL NAME', input.dcName ?? '', regular, bold, ML, y, CW);
+    y = drawFieldPair(p2, 'NCRDC REGISTRATION NUMBER', input.dcNcrdcNo ?? '', 'COUNSELLOR CONTACT NUMBER', input.dcPhone ?? '', regular, bold, y);
 
     // Note
-    y -= 2;
+    y -= 10;
     y = drawWrapped(
         p2,
         'Note: Complete this section only if you are currently under debt review with another debt counsellor and wish to transfer your file to Zenowethu Debt Management.',
