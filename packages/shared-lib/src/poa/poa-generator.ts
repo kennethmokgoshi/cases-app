@@ -310,6 +310,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     // Section 5
     y -= 10;
     y = drawSectionHeader(p2, '5.   REQUIRED DOCUMENTS CHECKLIST', bold, y);
+    y -= 6;
     p2.drawText('Please ensure the following certified documents are attached to this form:', { x: ML, y, size: 10, font: regular, color: BLACK });
     y -= 16;
 
@@ -326,6 +327,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     // Section 6
     y -= 8;
     y = drawSectionHeader(p2, '6.   DECLARATION', bold, y);
+    y -= 6;
     p2.drawText('I, the Principal, hereby confirm that:', { x: ML, y, size: 10, font: regular, color: BLACK });
     y -= 16;
 
