@@ -244,6 +244,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     // ── Section 2: POWERS GRANTED ────────────────────────────────────────────
     y -= 6;
     y = drawSectionHeader(p1, '2.   POWERS GRANTED TO THE AGENT', bold, y);
+    y -= 6;
 
     const powers = [
         'Obtain credit data from any credit bureau; manage credit information; provide financial advice; lodge disputes and negotiate settlement amounts and/or payment arrangements with credit providers pertaining to clearing my credit report of all incorrect, irregular and/or unlawful listings.',
@@ -278,6 +279,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
 
     // Section 3
     y = drawSectionHeader(p2, '3.   AUTHORIZATION — CREDIT BUREAU ACCESS', bold, y);
+    y -= 6;
     y = drawWrapped(
         p2,
         'I consent that the Debt Counsellor and/or the Agent may obtain and update my credit records from any and all registered credit bureaus and from any other registers containing my credit information. I further consent that the Debt Counsellor, the firm and its associates may send me marketing and promotional materials.',
@@ -287,6 +289,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     // Section 4
     y -= 8;
     y = drawSectionHeader(p2, '4.   TRANSFER AUTHORIZATION — COMPLETE ONLY IF TRANSFERRING COUNSELLOR', bold, y);
+    y -= 6;
     y = drawWrapped(
         p2,
         'I consent that the Debt Counsellor may request my debt review file from my current debt counsellor in order to transfer my file to Zenowethu Debt Management. Please complete the details of your current debt counsellor below:',
