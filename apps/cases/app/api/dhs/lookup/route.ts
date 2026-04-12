@@ -305,52 +305,86 @@ export async function POST(request: Request) {
             const scrapeResult = await scrapeDetailedConsumerInfo(idNumber);
 
             if (!scrapeResult.success || !scrapeResult.data) {
-                result = { success: false, message: scrapeResult.message || 'Failed to extract data' };
+                result = {
+                    success: false,
+                    message: scrapeResult.message || 'DHS portal did not return data. The consumer may not be registered in the NCR Debt Help System, or the portal may be temporarily unavailable.',
+                };
             } else {
                 const data = scrapeResult.data;
-                let lastUsedEmail = data.dcEmail;
 
-                // Implement DC LAST USED EMAIL Logic
-                if (data.ncrdcNo) {
-                    const previousCase = await prisma.case.findFirst({
-                        where: {
-                            ncrdcNo: data.ncrdcNo,
-                            dcEmail: { not: null, gt: '' }, // Exclude null and empty
-                            id: { not: caseId } // Exclude current case
-                        },
-                        orderBy: { createdAt: 'desc' },
-                        select: { dcEmail: true }
-                    });
-
-                    if (previousCase?.dcEmail) {
-                        lastUsedEmail = previousCase.dcEmail;
-                        logger.info(`Found previous email for DC ${data.ncrdcNo}: ${lastUsedEmail}`);
-                    }
-                }
-
-                // Update Case if ID provided
-                if (caseId) {
-                    await prisma.case.update({
-                        where: { id: caseId },
-                        data: {
-                            ncrdcNo: data.ncrdcNo,
-                            dhsPreviousStatus: data.status,
-                            consumerDhsStatus: data.status,
-                            debtCounsellorName: data.dcFullName || data.debtCounsellorName,
-                            dcTradingName: data.dcTradingName,
-                            dcOperatingStatus: data.dcOperatingStatus,
-                            dcMobile: data.dcMobile,
-                            dcEmail: data.dcEmail,
-                            lastKnownEmail: lastUsedEmail
-                        }
-                    });
-                }
-
-                result = {
-                    success: true,
-                    data: { ...data, lastUsedEmail },
-                    message: 'DHS Information Auto-filled successfully'
+                // ── Check which fields were actually populated ──────────────────
+                const dcName = data.dcFullName || data.debtCounsellorName || '';
+                const fieldStatus = {
+                    'NCRDC No':           !!data.ncrdcNo,
+                    'DC Name':            !!dcName,
+                    'DC Trading Name':    !!data.dcTradingName,
+                    'DC Mobile':          !!data.dcMobile,
+                    'DC Email':           !!data.dcEmail,
+                    'Operating Status':   !!data.dcOperatingStatus,
+                    'Consumer DHS Status':!!data.status,
                 };
+                const filledFields  = Object.entries(fieldStatus).filter(([, v]) => v).map(([k]) => k);
+                const emptyFields   = Object.entries(fieldStatus).filter(([, v]) => !v).map(([k]) => k);
+                const anyDataFound  = filledFields.length > 0;
+
+                logger.info(`[DHS auto-fill] Filled: ${filledFields.join(', ') || 'none'} | Empty: ${emptyFields.join(', ') || 'none'}`);
+
+                if (!anyDataFound) {
+                    // DHS connected but returned nothing useful — treat as a soft failure
+                    result = {
+                        success: false,
+                        message: 'DHS connected but returned no information for this consumer. They may not be listed under an active debt review in the NCR Debt Help System.',
+                        filledFields,
+                        emptyFields,
+                    };
+                } else {
+                    let lastUsedEmail = data.dcEmail;
+
+                    // DC last-used email logic
+                    if (data.ncrdcNo) {
+                        const previousCase = await prisma.case.findFirst({
+                            where: {
+                                ncrdcNo: data.ncrdcNo,
+                                dcEmail: { not: null, gt: '' },
+                                id: { not: caseId },
+                            },
+                            orderBy: { createdAt: 'desc' },
+                            select: { dcEmail: true },
+                        });
+                        if (previousCase?.dcEmail) {
+                            lastUsedEmail = previousCase.dcEmail;
+                            logger.info(`Found previous email for DC ${data.ncrdcNo}: ${lastUsedEmail}`);
+                        }
+                    }
+
+                    // Persist to case
+                    if (caseId) {
+                        await prisma.case.update({
+                            where: { id: caseId },
+                            data: {
+                                ncrdcNo:           data.ncrdcNo,
+                                dhsPreviousStatus: data.status,
+                                consumerDhsStatus: data.status,
+                                debtCounsellorName:data.dcFullName || data.debtCounsellorName,
+                                dcTradingName:     data.dcTradingName,
+                                dcOperatingStatus: data.dcOperatingStatus,
+                                dcMobile:          data.dcMobile,
+                                dcEmail:           data.dcEmail,
+                                lastKnownEmail:    lastUsedEmail,
+                            },
+                        });
+                    }
+
+                    result = {
+                        success: true,
+                        data: { ...data, lastUsedEmail },
+                        filledFields,
+                        emptyFields,
+                        message: emptyFields.length > 0
+                            ? `Partial auto-fill: ${filledFields.length} of ${filledFields.length + emptyFields.length} fields populated.`
+                            : 'DHS Information Auto-filled successfully.',
+                    };
+                }
             }
         } else if (action === 'search') {
             // Search for consumer (for new transfer)
