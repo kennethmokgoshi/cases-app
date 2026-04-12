@@ -791,6 +791,18 @@ export async function PATCH(
                 const creatorName = updatedCase.createdBy
                     ? `${updatedCase.createdBy.firstName} ${updatedCase.createdBy.lastName}`
                     : 'Zenowethu Team';
+                // Parse services from stored JSON and format for display
+                let servicesText = '';
+                if ((updatedCase as any).services) {
+                    try {
+                        const storedServices: string[] = JSON.parse((updatedCase as any).services);
+                        if (Array.isArray(storedServices) && storedServices.length > 0) {
+                            servicesText = storedServices.map(s =>
+                                s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                            ).join(', ');
+                        }
+                    } catch { /* leave blank if parse fails */ }
+                }
                 sendStatusChangeNotification({
                     caseId: updatedCase.id,
                     clientName: `${updatedCase.client.firstName} ${updatedCase.client.lastName}`,
@@ -802,6 +814,8 @@ export async function PATCH(
                     partnerName: updatedCase.partnerName,
                     partnerUserName: creatorName,
                     isB2B: updatedCase.acquisitionType === 'B2B',
+                    isCreatedByPartner: false,
+                    services: servicesText,
                     mainSource: notifSource,
                     senderName: creatorName,
                     senderEmail: 'updates@zenowethu.co.za'
