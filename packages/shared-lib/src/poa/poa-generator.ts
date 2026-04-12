@@ -256,10 +256,10 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     ];
 
     for (let i = 0; i < powers.length; i++) {
-        // Numbered orange circle label
+        // Numbered orange square — centre-aligned with the first text baseline
         const num = `${i + 1}`;
-        p1.drawRectangle({ x: ML, y: y - 12, width: 14, height: 14, color: ORANGE });
-        p1.drawText(num, { x: ML + (14 - bold.widthOfTextAtSize(num, 8)) / 2, y: y - 10, size: 8, font: bold, color: WHITE });
+        p1.drawRectangle({ x: ML, y: y - 7, width: 14, height: 14, color: ORANGE });
+        p1.drawText(num, { x: ML + (14 - bold.widthOfTextAtSize(num, 8)) / 2, y: y - 4, size: 8, font: bold, color: WHITE });
         // Power text
         const after = drawWrapped(p1, powers[i], regular, 9, ML + 18, y, CW - 18, 12);
         y = after - 5;
@@ -271,10 +271,10 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     const p2 = addPage();
     coverPreprinted(p2);
 
-    drawCentered(p2, 'AUTHORIZATION & TRANSFER REQUEST', bold, 14, 648);
-    p2.drawRectangle({ x: ML + CW / 2 - 40, y: 632, width: 80, height: 2, color: ORANGE });
+    drawCentered(p2, 'AUTHORIZATION & TRANSFER REQUEST', bold, 14, 624);
+    p2.drawRectangle({ x: ML + CW / 2 - 40, y: 608, width: 80, height: 2, color: ORANGE });
 
-    y = 620;
+    y = 596;
 
     // Section 3
     y = drawSectionHeader(p2, '3.   AUTHORIZATION — CREDIT BUREAU ACCESS', bold, y);
