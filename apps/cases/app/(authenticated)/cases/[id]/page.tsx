@@ -3286,6 +3286,9 @@ export default function CaseDetailPage() {
                     clientName={`${caseData.client?.firstName ?? ''} ${caseData.client?.lastName ?? ''}`.trim()}
                     clientEmail={caseData.client?.email}
                     clientPhone={caseData.client?.whatsappNumber ?? caseData.client?.phone}
+                    services={caseData.services}
+                    dcName={caseData.debtCounsellorName}
+                    dcNcrdcNo={caseData.ncrdcNo}
                 />
             )}
 

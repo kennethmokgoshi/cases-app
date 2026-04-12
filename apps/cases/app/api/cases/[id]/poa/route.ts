@@ -4,7 +4,6 @@ import { writeFile, mkdir } from 'fs/promises';
 import { prisma } from '@zenowethu/database';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { generateStandardPoa, generateWesbankPoa } from '@zenowethu/shared-lib/src/poa/poa-generator';
-import { scrapeDetailedConsumerInfo, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { GhlService } from '@zenowethu/shared-lib/src/integrations/ghl-service';
 
@@ -95,48 +94,13 @@ export async function POST(
         }
 
         // ---------------------------------------------------------------
-        // DC auto-fill — if service is "Debt Review Flag Removal" and DC
-        // details are missing on the case, trigger a DHS scrape to populate them.
+        // DC details for section 4 — use whatever is already stored on the case.
+        // If service is "Debt Review Flag Removal" and DC details are missing,
+        // the UI blocks the send and directs staff to run DHS Auto-Fill first.
         // ---------------------------------------------------------------
-        let dcName    = caseRecord.debtCounsellorName ?? '';
-        let dcNcrdcNo = caseRecord.ncrdcNo ?? '';
-        let dcPhone   = caseRecord.dcMobile ?? '';
-
-        const services: string[] = (() => {
-            try { return JSON.parse(caseRecord.services ?? '[]'); } catch { return []; }
-        })();
-        const isDRR = services.some(s => s.toLowerCase().includes('flag removal'));
-
-        if (type === 'STANDARD' && isDRR && (!dcName || !dcNcrdcNo)) {
-            logger.info('[POA] DRR service detected — DC details missing, attempting DHS auto-fill');
-            try {
-                const dhs = await Promise.race([
-                    scrapeDetailedConsumerInfo(client.idNumber),
-                    new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('DHS auto-fill timed out')), 60_000)
-                    ),
-                ]);
-                if (dhs.success && dhs.data) {
-                    dcName    = dhs.data.dcFullName || dhs.data.debtCounsellorName || dcName;
-                    dcNcrdcNo = dhs.data.ncrdcNo   || dcNcrdcNo;
-                    dcPhone   = dhs.data.dcMobile  || dcPhone;
-                    // Persist back to the case so future lookups are instant
-                    await prisma.case.update({
-                        where: { id: caseId },
-                        data: {
-                            ...(dcName    ? { debtCounsellorName: dcName }    : {}),
-                            ...(dcNcrdcNo ? { ncrdcNo: dcNcrdcNo }            : {}),
-                            ...(dcPhone   ? { dcMobile: dcPhone }             : {}),
-                        },
-                    });
-                    logger.info('[POA] DHS auto-fill successful — DC details populated');
-                }
-            } catch (dhsErr) {
-                logger.warn('[POA] DHS auto-fill failed or timed out — generating POA with blank DC fields', dhsErr);
-            } finally {
-                await closeBrowser();
-            }
-        }
+        const dcName    = caseRecord.debtCounsellorName ?? '';
+        const dcNcrdcNo = caseRecord.ncrdcNo ?? '';
+        const dcPhone   = caseRecord.dcMobile ?? '';
 
         // ---------------------------------------------------------------
         // Generate PDF
