@@ -1481,6 +1481,28 @@ export default function CaseDetailPage() {
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                 Form 16
                             </a>
+
+                            {/* Send POA — top bar shortcut */}
+                            {(() => {
+                                const svcList: string[] = (() => { try { return JSON.parse(caseData?.services ?? '[]'); } catch { return []; } })();
+                                const isDRR    = svcList.some(s => s.toLowerCase().includes('flag removal'));
+                                const drrReady = !isDRR || !!(caseData?.ncrdcNo && caseData?.debtCounsellorName);
+                                return (
+                                    <button
+                                        onClick={() => drrReady && setIsPoaModalOpen(true)}
+                                        disabled={!drrReady}
+                                        title={!drrReady ? 'Run DHS Auto-Fill first — NCRDC No and Debt Counsellor required for DRR cases.' : 'Send pre-filled Power of Attorney to client'}
+                                        className={`px-3 py-1.5 rounded text-sm flex items-center gap-2 transition-colors ${
+                                            drrReady
+                                                ? 'bg-purple-500/10 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20'
+                                                : 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed opacity-50'
+                                        }`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                        Send POA
+                                    </button>
+                                );
+                            })()}
                             {isAdmin && (
                                 <button
                                     onClick={() => setShowDeleteConfirm(true)}
