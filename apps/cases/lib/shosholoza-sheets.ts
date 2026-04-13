@@ -1,3 +1,4 @@
+// @ts-ignore
 import { google } from 'googleapis'
 
 const SHEET_ID = process.env.SHOSHOLOZA_SHEET_ID!

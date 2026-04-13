@@ -110,6 +110,9 @@ type CaseDetail = {
         telegramNumber: string | null;
         address: string | null;
         type: string;
+        employer: string | null;
+        grossSalary: string | number | null;
+        netSalary: string | number | null;
     };
     projects: Array<{
         isPrimary: boolean;

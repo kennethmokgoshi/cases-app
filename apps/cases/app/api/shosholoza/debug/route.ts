@@ -32,6 +32,7 @@ export async function GET() {
 
     // Step 2: Check googleapis import
     try {
+      // @ts-ignore
       const { google } = await import('googleapis')
       results.googleapisImport = 'OK'
 

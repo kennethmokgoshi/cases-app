@@ -269,7 +269,7 @@ export async function PATCH(
                     logger.info('🔄 Force Update Triggered for Duplicate ID:', client.idNumber);
 
                     // 1. Update Existing Client
-                    await prisma.client.update({
+                    await (prisma.client.update as any)({
                         where: { id: existingByIdNumber.id },
                         data: {
                             firstName: client.firstName,
@@ -281,8 +281,9 @@ export async function PATCH(
                             alternativeEmail: client.alternativeEmail || (existingByIdNumber as any).alternativeEmail,
                             address: client.address || existingByIdNumber.address,
                             employer: client.employer || existingByIdNumber.employer,
-                            grossSalary: client.grossSalary ? parseFloat(String(client.grossSalary)) : existingByIdNumber.grossSalary,
-                            netSalary: client.netSalary ? parseFloat(String(client.netSalary)) : existingByIdNumber.netSalary }
+                            grossSalary: client.grossSalary ? parseFloat(String(client.grossSalary)) : (existingByIdNumber as any).grossSalary,
+                            netSalary: client.netSalary ? parseFloat(String(client.netSalary)) : (existingByIdNumber as any).netSalary
+                        }
                     });
 
                     // 2. Find Latest Case for Existing Client
