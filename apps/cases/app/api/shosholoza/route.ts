@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@zenowethu/shared-lib'
+import { prisma } from '@zenowethu/database'
 import { z } from 'zod'
 import {
   getShosholozaClients,
@@ -7,6 +8,7 @@ import {
   updateShosholozaRow,
   TAB_2025,
   TAB_2026,
+  type ShoshololozaClient,
 } from '@/lib/shosholoza-sheets'
 
 const ALLOWED_TABS = [TAB_2025, TAB_2026] as const
@@ -22,7 +24,16 @@ const UpdateSchema = z.object({
   paymentNotes: z.string().optional(),
 })
 
-// GET /api/shosholoza?tab=...&idNumber=...
+export interface ShosholozaClientWithMatch extends ShoshololozaClient {
+  zenowethuCase: {
+    id: string
+    fileNumber: string
+    status: string
+    clientId: string
+  } | null
+}
+
+// GET /api/shosholoza?tab=...&idNumber=...&match=true
 export async function GET(request: Request) {
   try {
     const session = await auth()
@@ -33,6 +44,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const tab = searchParams.get('tab') ?? TAB_2026
     const idNumber = searchParams.get('idNumber')
+    const withMatch = searchParams.get('match') === 'true'
 
     if (!ALLOWED_TABS.includes(tab as typeof ALLOWED_TABS[number])) {
       return NextResponse.json({ error: 'Invalid tab' }, { status: 400 })
@@ -47,7 +59,55 @@ export async function GET(request: Request) {
     }
 
     const clients = await getShosholozaClients(tab)
-    return NextResponse.json({ clients, total: clients.length })
+
+    if (!withMatch) {
+      return NextResponse.json({ clients, total: clients.length })
+    }
+
+    // Match against Zenowethu cases by ID number
+    const idNumbers = clients.map(c => c.idNumber).filter(Boolean)
+
+    const matchedCases = await prisma.case.findMany({
+      where: {
+        client: {
+          idNumber: { in: idNumbers },
+        },
+      },
+      select: {
+        id: true,
+        fileNumber: true,
+        status: true,
+        client: {
+          select: { id: true, idNumber: true },
+        },
+      },
+    })
+
+    // Build a lookup map: idNumber → case
+    const caseByIdNumber = new Map(
+      matchedCases.map(c => [c.client.idNumber ?? '', c])
+    )
+
+    const clientsWithMatch: ShosholozaClientWithMatch[] = clients.map(client => ({
+      ...client,
+      zenowethuCase: (() => {
+        const matched = caseByIdNumber.get(client.idNumber)
+        if (!matched) return null
+        return {
+          id: matched.id,
+          fileNumber: matched.fileNumber,
+          status: matched.status,
+          clientId: matched.client.id,
+        }
+      })(),
+    }))
+
+    return NextResponse.json({
+      clients: clientsWithMatch,
+      total: clientsWithMatch.length,
+      matched: clientsWithMatch.filter(c => c.zenowethuCase !== null).length,
+      unmatched: clientsWithMatch.filter(c => c.zenowethuCase === null).length,
+    })
   } catch (error) {
     console.error('[API] GET /api/shosholoza error:', error)
     return NextResponse.json({ error: 'Failed to fetch Shosholoza data' }, { status: 500 })
