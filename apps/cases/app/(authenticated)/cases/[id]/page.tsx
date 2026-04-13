@@ -1425,6 +1425,12 @@ export default function CaseDetailPage() {
     const secondaryProjects = caseData.projects.filter(p => !p.isPrimary);
     const hasAIAnalysis = caseData.documents.some(d => d.extractedData !== null);
 
+    // Debt-review-specific features: Form 16 + Debt Review Docs tab only visible for DR/DRR cases
+    const caseServiceList: string[] = (() => { try { return JSON.parse(caseData.services ?? '[]'); } catch { return []; } })();
+    const isDebtReviewCase = caseServiceList.some(s =>
+        s.toLowerCase().includes('debt review') || s.toLowerCase().includes('flag removal')
+    );
+
     return (
         <div className="max-w-7xl mx-auto">
             {/* Sticky Header */}
@@ -1471,16 +1477,18 @@ export default function CaseDetailPage() {
                     {/* Actions */}
                     {!isEditing && (
                         <div className="flex items-center gap-2">
-                            <a
-                                href={`/api/cases/${params.id}/form16`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-1.5 bg-teal-500/10 border border-teal-500/30 text-teal-400 rounded hover:bg-teal-500/20 text-sm flex items-center gap-2 transition-colors"
-                                title="Download Form 16 — Application for Debt Review"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                Form 16
-                            </a>
+                            {isDebtReviewCase && (
+                                <a
+                                    href={`/api/cases/${params.id}/form16`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 bg-teal-500/10 border border-teal-500/30 text-teal-400 rounded hover:bg-teal-500/20 text-sm flex items-center gap-2 transition-colors"
+                                    title="Download Form 16 — Application for Debt Review"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                    Form 16
+                                </a>
+                            )}
 
                             {/* Send POA — top bar shortcut */}
                             {(() => {
@@ -3221,15 +3229,17 @@ export default function CaseDetailPage() {
                             >
                                 <span>🤖</span> AI Plan
                             </button>
-                            <button
-                                onClick={() => setActiveDetailTab('DEBT_REVIEW')}
-                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'DEBT_REVIEW'
-                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
-                                    }`}
-                            >
-                                <span>📄</span> Debt Review Docs
-                            </button>
+                            {isDebtReviewCase && (
+                                <button
+                                    onClick={() => setActiveDetailTab('DEBT_REVIEW')}
+                                    className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'DEBT_REVIEW'
+                                        ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
+                                        : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                        }`}
+                                >
+                                    <span>📄</span> Debt Review Docs
+                                </button>
+                            )}
                         </nav>
 
                         <div className="p-8">
@@ -3257,7 +3267,7 @@ export default function CaseDetailPage() {
                                     <AIPlanTab caseId={caseData.id} acquisitionType={caseData.acquisitionType} />
                                 </div>
                             )}
-                            {activeDetailTab === 'DEBT_REVIEW' && (
+                            {isDebtReviewCase && activeDetailTab === 'DEBT_REVIEW' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <DebtReviewTab
                                         caseId={caseData.id}

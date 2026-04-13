@@ -433,72 +433,66 @@ export async function generateWesbankPoa(input: WesbankPoaInput): Promise<Buffer
         regular, 10, ML, y, CW, 14,
     );
 
-    // Signatures
-    y -= 10;
-    y = drawSectionHeader(p1, 'SIGNATURES', bold, y);
-
-    // Signed at line
-    const today = new Date();
-    const city  = input.signedAtCity ?? 'Pretoria';
-    const dd    = today.getDate().toString().padStart(2, '0');
-    const month = today.toLocaleString('en-ZA', { month: 'long' }).toUpperCase();
-    const yyyy  = today.getFullYear();
-    const dateStr = input.signedDate ?? `${dd}/${month.substring(0,3)}/${yyyy}`;
-
-    p1.drawText(`Signed at ${city}   on the ${dd}   day of ${month}   ${yyyy}.`, { x: ML, y, size: 10, font: regular, color: BLACK });
-    y -= 20;
-
-    // Principal (Grantor) signature
-    p1.drawText('Signature of Principal (Grantor)', { x: ML, y, size: 9, font: bold, color: NAVY });
-    y -= 6;
-    p1.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: DGRAY });
-    y -= 12;
-    p1.drawText('Full Name and Surname', { x: ML, y, size: 8, font: regular, color: DGRAY });
-    y -= 4;
-    p1.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: LGRAY });
-    p1.drawText(input.clientFullName, { x: ML + 2, y: y + 3, size: 10, font: bold, color: BLACK });
-    y -= 16;
-
-    // Agent signature
-    p1.drawText('Signature of Authorised Agent', { x: ML, y, size: 9, font: bold, color: NAVY });
-    y -= 6;
-    p1.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: DGRAY });
-    y -= 12;
-    p1.drawText('Full Name of Authorised Agent', { x: ML, y, size: 8, font: regular, color: DGRAY });
-    y -= 4;
-    p1.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: LGRAY });
-    p1.drawText(input.agentFullName, { x: ML + 2, y: y + 3, size: 10, font: bold, color: BLACK });
-
     // ════════════════════════════════════════════════════════════════════════
-    // PAGE 2 — WITNESSES
+    // PAGE 2 — SIGNATURES + WITNESSES
     // ════════════════════════════════════════════════════════════════════════
     const p2 = addPage();
     coverPreprinted(p2);
 
-    y = 640;
+    // ── SIGNATURES ───────────────────────────────────────────────────────────
+    y = 700;
+    y = drawSectionHeader(p2, 'SIGNATURES', bold, y);
+    y -= 10;
+
+    // Principal (Grantor) signature
+    p2.drawText('Signature of Principal (Grantor)', { x: ML, y, size: 9, font: bold, color: NAVY });
+    y -= 8;
+    p2.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: DGRAY });
+    y -= 20;
+    p2.drawText(input.clientFullName, { x: ML + 2, y, size: 10, font: bold, color: BLACK });
+    y -= 13;
+    p2.drawText('Full Name and Surname', { x: ML, y, size: 8, font: regular, color: DGRAY });
+    y -= 5;
+    p2.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: LGRAY });
+    y -= 24;
+
+    // Agent signature
+    p2.drawText('Signature of Authorised Agent', { x: ML, y, size: 9, font: bold, color: NAVY });
+    y -= 8;
+    p2.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: DGRAY });
+    y -= 20;
+    p2.drawText(input.agentFullName, { x: ML + 2, y, size: 10, font: bold, color: BLACK });
+    y -= 13;
+    p2.drawText('Full Name of Authorised Agent', { x: ML, y, size: 8, font: regular, color: DGRAY });
+    y -= 5;
+    p2.drawLine({ start: { x: ML, y }, end: { x: ML + 220, y }, thickness: 0.5, color: LGRAY });
+
+    // ── WITNESSES ─────────────────────────────────────────────────────────────
+    y -= 24;
     y = drawSectionHeader(p2, 'WITNESSES', bold, y);
+    y -= 12;   // space between header and paragraph
     y = drawWrapped(
         p2,
         'We, the undersigned, hereby confirm that the principal and authorised agent signed this power of attorney in our presence and in the presence of each other.',
         regular, 10, ML, y, CW, 14,
     );
 
-    for (const label of ['Witness 1 :', 'Witness 2 :']) {
-        y -= 14;
+    for (let wi = 0; wi < 2; wi++) {
+        const label = wi === 0 ? 'Witness 1 :' : 'Witness 2 :';
+        y -= wi === 0 ? 28 : 24;
         p2.drawText(label, { x: ML, y, size: 11, font: bold, color: NAVY });
-        y -= 14;
+        y -= 18;
         p2.drawText('Full Names and Surname', { x: ML, y, size: 8, font: regular, color: DGRAY });
-        y -= 4;
+        y -= 5;
         p2.drawLine({ start: { x: ML, y }, end: { x: MR, y }, thickness: 0.5, color: LGRAY });
-        y -= 14;
+        y -= 18;
         p2.drawText('Signature', { x: ML, y, size: 8, font: regular, color: DGRAY });
-        y -= 4;
+        y -= 5;
         p2.drawLine({ start: { x: ML, y }, end: { x: MR, y }, thickness: 0.5, color: LGRAY });
-        y -= 14;
+        y -= 18;
         p2.drawText('Date signed', { x: ML, y, size: 8, font: regular, color: DGRAY });
-        y -= 4;
+        y -= 5;
         p2.drawLine({ start: { x: ML, y }, end: { x: MR, y }, thickness: 0.5, color: LGRAY });
-        y -= 10;
     }
 
     return Buffer.from(await pdfDoc.save());

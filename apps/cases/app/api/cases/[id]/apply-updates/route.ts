@@ -13,7 +13,7 @@ interface UpdateRequest {
 }
 
 // Fields that belong to the Client model
-const CLIENT_FIELDS = ['idNumber', 'firstName', 'lastName', 'phone'];
+const CLIENT_FIELDS = ['idNumber', 'firstName', 'lastName', 'phone', 'employer', 'grossSalary', 'netSalary'];
 
 // Fields that belong to the Case model
 const CASE_FIELDS = [
@@ -53,7 +53,11 @@ export async function POST(
 
         for (const [field, value] of Object.entries(updates)) {
             if (CLIENT_FIELDS.includes(field)) {
-                clientUpdates[field] = value;
+                if (field === 'grossSalary' || field === 'netSalary') {
+                    clientUpdates[field] = value !== null ? parseFloat(String(value)) : null;
+                } else {
+                    clientUpdates[field] = value;
+                }
             } else if (CASE_FIELDS.includes(field)) {
                 // Handle special type conversions
                 if (field === 'totalDebtAmount' || field === 'totalMonthlyInstallment') {

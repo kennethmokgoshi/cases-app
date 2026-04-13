@@ -15,6 +15,10 @@
 - Sheet: `COT Debt Review Recovery` — 3 tabs: 2025 list, 2026 list, Zenowethu qualify list. 21 columns including File nr, ID Number, 17W, POA, PROCESS, REMOVED.
 - **Next**: Build UI panel in Cases app to display matched Shosholoza clients and trigger sheet updates from case milestones.
 
+### Case Detail — Debt-Review-Only Feature Gating (2026-04-12)
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — Computed `isDebtReviewCase` from `caseData.services` (true when any service includes "debt review" or "flag removal"). Form 16 button in the top action bar now only renders when `isDebtReviewCase`. Debt Review Docs tab (nav button + content) only renders when `isDebtReviewCase`. Cleans up the UI for non-debt-review cases (credit bureau checks, insurance, etc.).
+
+
 ### POA Generator — Branded PDF, Email & WhatsApp Delivery (2026-04-12)
 - [x] **`packages/shared-lib/src/poa/poa-generator.ts`** — Completely rebuilt from scratch. Embeds `Letterhead.pdf` as background on every page. Covers pre-printed letterhead text (DATED AT / SIGNATURE) with a white rectangle (y=60–440). Standard POA: 2 pages (Principal Details + 7 Powers on p1; Authorization + Checklist + Declaration + single signature on p2). Wesbank POA: 2 pages.
 - [x] **`apps/cases/app/api/cases/[id]/poa/route.ts`** — POST endpoint: validates type (STANDARD/WESBANK) + channel (EMAIL/WHATSAPP), checks client/staff profile completeness, generates PDF, sends via SMTP or WhatsApp/SMS via GHL. Logs activity as SYSTEM comment.

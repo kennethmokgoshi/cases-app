@@ -105,6 +105,8 @@ export async function POST(request: Request) {
                 if (doc.type === 'ID' && analysis.id) docData = analysis.id;
                 else if (doc.type === 'POA' && analysis.poa) docData = analysis.poa;
                 else if (doc.type === 'CREDIT_REPORT' && analysis.creditReport) docData = analysis.creditReport;
+                else if (doc.type === 'PAYSLIP' && analysis.payslip) docData = analysis.payslip;
+                else if (doc.type === 'BANK_STATEMENT' && analysis.bankStatement) docData = analysis.bankStatement;
 
                 if (Object.keys(docData).length > 0) {
                     await prisma.document.update({
@@ -229,7 +231,7 @@ export async function POST(request: Request) {
                 resultMessage = `Successfully re-extracted & split ${extractedDocs.length} documents`;
             }
 
-        } else if (['ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA'].includes(document.type)) {
+        } else if (['ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA', 'PAYSLIP', 'BANK_STATEMENT'].includes(document.type)) {
             logger.info(`🔍 Re-analyzing single ${document.type}...`);
             const result = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf');
             const analysis = result.data;
@@ -249,6 +251,8 @@ export async function POST(request: Request) {
             if (document.type === 'ID') fullAnalysis.id = analysis;
             if (document.type === 'POA' || document.type === 'ZENOWETHU_POA') fullAnalysis.poa = analysis;
             if (document.type === 'CREDIT_REPORT') fullAnalysis.creditReport = analysis;
+            if (document.type === 'PAYSLIP') fullAnalysis.payslip = analysis;
+            if (document.type === 'BANK_STATEMENT') fullAnalysis.bankStatement = analysis;
 
             resultMessage = `Successfully re-analyzed ${document.type}`;
         } else {
@@ -338,6 +342,19 @@ async function updateClientData(caseId: string, fullAnalysis: any, idVerificatio
         if (!updateData.address && fullAnalysis.creditReport.consumer.latestAddress) updateData.address = fullAnalysis.creditReport.consumer.latestAddress;
         if (!updateData.employer && fullAnalysis.creditReport.consumer.employer) updateData.employer = fullAnalysis.creditReport.consumer.employer;
         if (!updateData.phone && fullAnalysis.creditReport.consumer.cellNumber) updateData.phone = fullAnalysis.creditReport.consumer.cellNumber;
+    }
+    if (fullAnalysis.payslip) {
+        if (!updateData.employer && fullAnalysis.payslip.employer && fullAnalysis.payslip.employer !== 'NA') updateData.employer = fullAnalysis.payslip.employer;
+        if (fullAnalysis.payslip.grossSalary) updateData.grossSalary = fullAnalysis.payslip.grossSalary;
+        if (fullAnalysis.payslip.netSalary) updateData.netSalary = fullAnalysis.payslip.netSalary;
+    }
+    if (fullAnalysis.bankStatement?.latestSalaryDeposit) {
+        if (!updateData.employer && fullAnalysis.bankStatement.latestSalaryDeposit.description && fullAnalysis.bankStatement.latestSalaryDeposit.description !== 'NA') {
+            updateData.employer = fullAnalysis.bankStatement.latestSalaryDeposit.description;
+        }
+        if (!updateData.netSalary && fullAnalysis.bankStatement.latestSalaryDeposit.amount) {
+            updateData.netSalary = fullAnalysis.bankStatement.latestSalaryDeposit.amount;
+        }
     }
 
     if (Object.keys(updateData).length > 0) {

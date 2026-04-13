@@ -18,6 +18,7 @@ interface ComparisonField {
 
 interface ComparisonData {
     personalInfo: ComparisonField[];
+    employment: ComparisonField[];
     creditBureau: ComparisonField[];
     restructuring: ComparisonField[];
 }
@@ -55,7 +56,7 @@ export async function POST(
                             client: true,
                             documents: {
                                 where: {
-                                    type: { in: ['COMBINED', 'ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA'] }
+                                    type: { in: ['COMBINED', 'ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA', 'PAYSLIP', 'BANK_STATEMENT'] }
                                 },
                                 orderBy: { uploadedAt: 'desc' }
                             }
@@ -117,7 +118,7 @@ export async function POST(
                                 const buffer = await readFile(filePath);
                                 docsForAnalysis.push({
                                     base64: buffer.toString('base64'),
-                                    type: doc.type as 'ID' | 'POA' | 'CREDIT_REPORT',
+                                    type: doc.type as 'ID' | 'POA' | 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT',
                                     mimeType: 'application/pdf'
                                 });
                             }
@@ -147,6 +148,7 @@ export async function POST(
                     onProgress('📊 Generating comparison report...', 95);
                     const comparison: ComparisonData = {
                         personalInfo: [],
+                        employment: [],
                         creditBureau: [],
                         restructuring: []
                     };
@@ -173,6 +175,26 @@ export async function POST(
                             oldValue: pf.oldValue,
                             newValue: pf.newValue,
                             hasChanged: compareValue(pf.oldValue, pf.newValue)
+                        });
+                    }
+
+                    // Employment & Financial — sourced from payslip (primary) or bank statement (fallback)
+                    const payslip = actualAnalysis.payslip;
+                    const bankStatement = actualAnalysis.bankStatement;
+                    const employmentFields = [
+                        { field: 'employer', label: 'Employer', oldValue: caseRecord.client.employer, newValue: payslip?.employer || bankStatement?.latestSalaryDeposit?.description || null },
+                        { field: 'grossSalary', label: 'Gross Salary', oldValue: caseRecord.client.grossSalary ? Number(caseRecord.client.grossSalary) : null, newValue: payslip?.grossSalary ?? null },
+                        { field: 'netSalary', label: 'Net Salary', oldValue: caseRecord.client.netSalary ? Number(caseRecord.client.netSalary) : null, newValue: payslip?.netSalary ?? bankStatement?.latestSalaryDeposit?.amount ?? null },
+                        { field: 'salaryDate', label: 'Salary Date', oldValue: null, newValue: payslip?.payDate || bankStatement?.latestSalaryDeposit?.date || null },
+                    ];
+
+                    for (const ef of employmentFields) {
+                        comparison.employment.push({
+                            field: ef.field,
+                            label: ef.label,
+                            oldValue: ef.oldValue,
+                            newValue: ef.newValue,
+                            hasChanged: compareValue(ef.oldValue, ef.newValue)
                         });
                     }
 

@@ -21,6 +21,7 @@ interface ComparisonField {
 
 interface ComparisonData {
     personalInfo: ComparisonField[];
+    employment: ComparisonField[];
     creditBureau: ComparisonField[];
     restructuring: ComparisonField[];
 }
@@ -41,6 +42,9 @@ interface CaseData {
         firstName: string;
         lastName: string;
         phone: string | null;
+        employer: string | null;
+        grossSalary: string | number | null;
+        netSalary: string | number | null;
     };
     totalDebtAmount: string | number | null;
     totalMonthlyInstallment: string | number | null;
@@ -101,6 +105,7 @@ export function CompareAnalysisModal({
     // Store AI-extracted values separately
     const [aiValues, setAiValues] = useState<{
         personalInfo: { [key: string]: string | number | null };
+        employment: { [key: string]: string | number | null };
         creditBureau: { [key: string]: string | number | null };
         restructuring: { [key: string]: string | number | null };
     } | null>(null);
@@ -186,6 +191,37 @@ export function CompareAnalysisModal({
             },
         ];
 
+        const employment: ComparisonField[] = [
+            {
+                field: 'employer',
+                label: 'Employer',
+                currentValue: caseData.client.employer,
+                aiValue: getAiValue('employment', 'employer'),
+                hasChanged: checkChanged(caseData.client.employer, getAiValue('employment', 'employer'))
+            },
+            {
+                field: 'grossSalary',
+                label: 'Gross Salary',
+                currentValue: caseData.client.grossSalary ? Number(caseData.client.grossSalary) : null,
+                aiValue: getAiValue('employment', 'grossSalary'),
+                hasChanged: checkChanged(caseData.client.grossSalary, getAiValue('employment', 'grossSalary'))
+            },
+            {
+                field: 'netSalary',
+                label: 'Net Salary',
+                currentValue: caseData.client.netSalary ? Number(caseData.client.netSalary) : null,
+                aiValue: getAiValue('employment', 'netSalary'),
+                hasChanged: checkChanged(caseData.client.netSalary, getAiValue('employment', 'netSalary'))
+            },
+            {
+                field: 'salaryDate',
+                label: 'Salary Date',
+                currentValue: null,
+                aiValue: getAiValue('employment', 'salaryDate'),
+                hasChanged: checkChanged(null, getAiValue('employment', 'salaryDate'))
+            },
+        ];
+
         const creditBureau: ComparisonField[] = [
             {
                 field: 'totalDebtAmount',
@@ -262,7 +298,7 @@ export function CompareAnalysisModal({
             },
         ];
 
-        return { personalInfo, creditBureau, restructuring };
+        return { personalInfo, employment, creditBureau, restructuring };
     };
 
     const [progressMessage, setProgressMessage] = useState<string | null>(null);
@@ -337,12 +373,16 @@ export function CompareAnalysisModal({
             // Extract AI values from the comparison response
             const newAiValues = {
                 personalInfo: {} as { [key: string]: string | number | null },
+                employment: {} as { [key: string]: string | number | null },
                 creditBureau: {} as { [key: string]: string | number | null },
                 restructuring: {} as { [key: string]: string | number | null } };
 
             // Map the API response to our AI values structure
             data.comparison.personalInfo.forEach((f: any) => {
                 newAiValues.personalInfo[f.field] = f.newValue;
+            });
+            (data.comparison.employment || []).forEach((f: any) => {
+                newAiValues.employment[f.field] = f.newValue;
             });
             data.comparison.creditBureau.forEach((f: any) => {
                 newAiValues.creditBureau[f.field] = f.newValue;
@@ -391,7 +431,7 @@ export function CompareAnalysisModal({
             const comparison = buildComparisonDataWithAiValues(newAiValues);
             if (comparison) {
                 const changedFields = new Set<string>();
-                [...comparison.personalInfo, ...comparison.creditBureau, ...comparison.restructuring]
+                [...comparison.personalInfo, ...comparison.employment, ...comparison.creditBureau, ...comparison.restructuring]
                     .filter((f: ComparisonField) => f.hasChanged && f.aiValue !== null)
                     .forEach((f: ComparisonField) => changedFields.add(f.field));
                 setSelectedFields(changedFields);
@@ -427,6 +467,13 @@ export function CompareAnalysisModal({
             { field: 'phone', label: 'Cell Number', currentValue: caseData.client.phone, aiValue: getAiValue('personalInfo', 'phone'), hasChanged: checkChanged(caseData.client.phone, getAiValue('personalInfo', 'phone')) },
         ];
 
+        const employment: ComparisonField[] = [
+            { field: 'employer', label: 'Employer', currentValue: caseData.client.employer, aiValue: getAiValue('employment', 'employer'), hasChanged: checkChanged(caseData.client.employer, getAiValue('employment', 'employer')) },
+            { field: 'grossSalary', label: 'Gross Salary', currentValue: caseData.client.grossSalary ? Number(caseData.client.grossSalary) : null, aiValue: getAiValue('employment', 'grossSalary'), hasChanged: checkChanged(caseData.client.grossSalary, getAiValue('employment', 'grossSalary')) },
+            { field: 'netSalary', label: 'Net Salary', currentValue: caseData.client.netSalary ? Number(caseData.client.netSalary) : null, aiValue: getAiValue('employment', 'netSalary'), hasChanged: checkChanged(caseData.client.netSalary, getAiValue('employment', 'netSalary')) },
+            { field: 'salaryDate', label: 'Salary Date', currentValue: null, aiValue: getAiValue('employment', 'salaryDate'), hasChanged: checkChanged(null, getAiValue('employment', 'salaryDate')) },
+        ];
+
         const creditBureau: ComparisonField[] = [
             { field: 'totalDebtAmount', label: 'Balance Exposure', currentValue: caseData.totalDebtAmount ? Number(caseData.totalDebtAmount) : null, aiValue: getAiValue('creditBureau', 'totalDebtAmount'), hasChanged: checkChanged(caseData.totalDebtAmount, getAiValue('creditBureau', 'totalDebtAmount')) },
             { field: 'totalMonthlyInstallment', label: 'Monthly Instalment', currentValue: caseData.totalMonthlyInstallment ? Number(caseData.totalMonthlyInstallment) : null, aiValue: getAiValue('creditBureau', 'totalMonthlyInstallment'), hasChanged: checkChanged(caseData.totalMonthlyInstallment, getAiValue('creditBureau', 'totalMonthlyInstallment')) },
@@ -443,7 +490,7 @@ export function CompareAnalysisModal({
             { field: 'cb_statusDate', label: 'Status Date', currentValue: caseData.cb_statusDate ? new Date(caseData.cb_statusDate).toISOString().split('T')[0] : null, aiValue: getAiValue('restructuring', 'cb_statusDate'), hasChanged: checkChanged(caseData.cb_statusDate, getAiValue('restructuring', 'cb_statusDate')) },
         ];
 
-        return { personalInfo, creditBureau, restructuring };
+        return { personalInfo, employment, creditBureau, restructuring };
     };
 
     const comparison = buildComparisonData();
@@ -463,7 +510,7 @@ export function CompareAnalysisModal({
     const selectAllChanged = () => {
         if (!comparison) return;
         const changedFields = new Set<string>();
-        [...comparison.personalInfo, ...comparison.creditBureau, ...comparison.restructuring]
+        [...comparison.personalInfo, ...comparison.employment, ...comparison.creditBureau, ...comparison.restructuring]
             .filter(f => f.hasChanged && f.aiValue !== null)
             .forEach(f => changedFields.add(f.field));
         setSelectedFields(changedFields);
@@ -484,7 +531,7 @@ export function CompareAnalysisModal({
         try {
             // Build updates object from selected fields
             const updates: { [key: string]: any } = {};
-            const allFields = [...comparison.personalInfo, ...comparison.creditBureau, ...comparison.restructuring];
+            const allFields = [...comparison.personalInfo, ...comparison.employment, ...comparison.creditBureau, ...comparison.restructuring];
 
             for (const f of allFields) {
                 if (selectedFields.has(f.field)) {
@@ -746,6 +793,7 @@ export function CompareAnalysisModal({
                     {comparison && (
                         <>
                             {renderSection('Personal Information', comparison.personalInfo, true)}
+                            {renderSection('Employment & Financial', comparison.employment, false)}
                             {renderSection('Credit Bureau - Accounts Summary', comparison.creditBureau, false)}
                             {renderSection('Restructuring Information', comparison.restructuring, false)}
                         </>
