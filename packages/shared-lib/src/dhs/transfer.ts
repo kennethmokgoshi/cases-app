@@ -36,6 +36,12 @@ export async function requestTransfer(
         logger.info('Navigating to Request New Transfer page:', DHS_CONFIG.requestTransferUrl);
         await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
 
+        // Detect DHS server error page before proceeding
+        if (page.url().includes('dhs_Error.aspx')) {
+            logger.error('[DHS transfer] DHS portal error page detected:', page.url());
+            return { success: false, message: 'The NCR Debt Help System (DHS) portal returned a server error when loading the transfer page. This is a DHS outage — not an application error. Please try again later or check ncrdebthelp.co.za directly.' };
+        }
+
         // Wait for page to be fully loaded
         await delay(2000);
 

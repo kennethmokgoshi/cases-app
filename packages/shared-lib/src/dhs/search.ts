@@ -37,6 +37,12 @@ export async function searchConsumer(idNumber: string): Promise<{
         // Navigate to Request New Transfer page
         await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
 
+        // Detect DHS server error page
+        if (page.url().includes('dhs_Error.aspx')) {
+            logger.error('[DHS search] DHS portal error page detected:', page.url());
+            return { found: false, message: 'The NCR Debt Help System returned a server error. Please try again later.' };
+        }
+
         // Enter ID number
         await page.waitForSelector('input[name*="txtIdNumber"], input[id*="txtIdNumber"]', { timeout: 10000 });
         await page.type('input[name*="txtIdNumber"], input[id*="txtIdNumber"]', idNumber);
@@ -103,6 +109,20 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
         await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
         await delay(1000);
         await takeDebugScreenshot('2_request_page_loaded');
+
+        // ── DHS portal error page detection ──────────────────────────────────
+        // If DHS threw a server-side error it redirects to dhs_Error.aspx.
+        // Detect this BEFORE attempting any further scraping.
+        const landedUrl = page.url();
+        if (landedUrl.includes('dhs_Error.aspx')) {
+            const dhsErrText = await page.evaluate(() => document.body.innerText).catch(() => '');
+            logger.error('[DHS auto-fill] Landed on DHS error page:', landedUrl, dhsErrText.substring(0, 300));
+            await page.close();
+            return {
+                success: false,
+                message: 'The NCR Debt Help System (DHS) portal returned an error when loading the transfer page. This is a DHS server-side issue — not an application error. Please try again later or check ncrdebthelp.co.za directly.',
+            };
+        }
 
         // Enter ID
         const idInputSelectors = [
