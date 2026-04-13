@@ -2396,18 +2396,23 @@ export default function CaseDetailPage() {
                                         
                                         {/* Validation Check */}
                                         {(() => {
-                                            const hasDhsInfo = !!caseData.ncrdcNo || !!caseData.debtCounsellorName;
+                                            const hasDhsInfo    = !!caseData.ncrdcNo || !!caseData.debtCounsellorName;
                                             const hasCreditInfo = !!caseData.openAccounts || !!caseData.totalDebtAmount;
-                                            const isReady = hasDhsInfo && hasCreditInfo;
+                                            const hasIdDoc      = caseData.documents?.some((d: any) => d.type === 'ID');
+                                            const hasPoaDoc     = caseData.documents?.some((d: any) => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
+                                            const isReady       = hasDhsInfo && hasCreditInfo;
+                                            const hasActions    = !isReady || !hasIdDoc || !hasPoaDoc;
 
                                             return (
                                                 <div className="space-y-2">
-                                                    {!isReady && (
+                                                    {hasActions && (
                                                         <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 mb-2">
                                                             <p className="text-[9px] text-amber-300 font-bold uppercase mb-1">⚠️ Action Required</p>
                                                             <ul className="text-[9px] text-amber-400/80 list-disc list-inside space-y-0.5">
-                                                                {!hasDhsInfo && <li>Click "Auto-fill" to pull DHS Information</li>}
-                                                                {!hasCreditInfo && <li>Upload & Analyze a Credit Report first</li>}
+                                                                {!hasDhsInfo    && <li>Click &quot;Auto-fill&quot; to pull DHS Information</li>}
+                                                                {!hasCreditInfo && <li>Upload &amp; Analyze a Credit Report first</li>}
+                                                                {!hasIdDoc      && <li>Upload client <strong>ID Document</strong> (Documents tab)</li>}
+                                                                {!hasPoaDoc     && <li>Upload signed <strong>POA</strong> (Documents tab)</li>}
                                                             </ul>
                                                         </div>
                                                     )}
@@ -2535,16 +2540,22 @@ export default function CaseDetailPage() {
 
                                         {/* Send POA Button */}
                                         {(() => {
-                                            const poaReady = !!(caseData?.ncrdcNo && caseData?.debtCounsellorName);
+                                            // Only gate on NCRDC/DC details for Debt Review Flag Removal cases
+                                            const svcList: string[] = (() => { try { return JSON.parse(caseData?.services ?? '[]'); } catch { return []; } })();
+                                            const isDRR     = svcList.some(s => s.toLowerCase().includes('flag removal'));
+                                            const drrReady  = !isDRR || !!(caseData?.ncrdcNo && caseData?.debtCounsellorName);
+                                            const hasId     = caseData?.documents?.some((d: any) => d.type === 'ID');
+                                            const hasPoa    = caseData?.documents?.some((d: any) => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
+                                            const docsMissing = !hasId || !hasPoa;
                                             return (
                                                 <div className="pt-1 border-t border-white/5">
                                                     <p className="text-[10px] text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Power of Attorney</p>
                                                     <button
-                                                        onClick={() => poaReady && setIsPoaModalOpen(true)}
-                                                        disabled={!poaReady}
-                                                        title={!poaReady ? 'NCRDC No and Debt Counsellor must be set before sending a POA. Run DHS Auto-Fill to populate them.' : undefined}
+                                                        onClick={() => drrReady && setIsPoaModalOpen(true)}
+                                                        disabled={!drrReady}
+                                                        title={!drrReady ? 'Run DHS Auto-Fill first — NCRDC No and Debt Counsellor are required for Debt Review Flag Removal cases.' : undefined}
                                                         className={`w-full py-1.5 px-3 rounded text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
-                                                            poaReady
+                                                            drrReady
                                                                 ? 'bg-purple-600/20 border border-purple-600/40 text-purple-300 hover:bg-purple-600/30 cursor-pointer'
                                                                 : 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed opacity-60'
                                                         }`}
@@ -2553,12 +2564,22 @@ export default function CaseDetailPage() {
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                         </svg>
                                                         Send POA to Client
-                                                        {!poaReady && <span className="ml-1 text-[10px] text-gray-500">(DHS required)</span>}
+                                                        {!drrReady && <span className="ml-1 text-[10px] text-gray-500">(DHS required)</span>}
                                                     </button>
-                                                    {!poaReady && (
+                                                    {!drrReady && (
                                                         <p className="text-[10px] text-amber-500/80 mt-1 text-center">
                                                             Run DHS Auto-Fill to set NCRDC No &amp; Debt Counsellor
                                                         </p>
+                                                    )}
+                                                    {/* ID + POA document alert — applies to every case */}
+                                                    {docsMissing && (
+                                                        <div className="mt-1.5 rounded bg-amber-500/10 border border-amber-500/30 px-2.5 py-2">
+                                                            <p className="text-[9px] text-amber-300 font-bold uppercase mb-0.5">⚠ Documents Required</p>
+                                                            <p className="text-[9px] text-amber-400/80 leading-relaxed">
+                                                                {[!hasId && 'ID Document', !hasPoa && 'Signed POA'].filter(Boolean).join(' and ')} must be uploaded before the DHS transfer request can be submitted.
+                                                            </p>
+                                                            <p className="text-[9px] text-amber-400/60 mt-0.5">Upload under the <strong>Documents</strong> tab.</p>
+                                                        </div>
                                                     )}
                                                 </div>
                                             );
