@@ -1,11 +1,19 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-12 (POA Generator — 2-page branded PDF, email + WhatsApp delivery)
+> Last updated: 2026-04-13 (Shosholoza Google Sheets integration — read + write)
 
 ---
 
 ## ✅ Completed
+
+### Shosholoza Google Sheets Integration (2026-04-13)
+- [x] **`apps/cases/lib/shosholoza-sheets.ts`** — Service layer using `googleapis` + service account JWT auth. Reads all clients from any sheet tab, finds a client by SA ID number, writes back to specific columns (17W, POA, PROCESS, REMOVED, notes, etc.) via `batchUpdate`.
+- [x] **`apps/cases/app/api/shosholoza/route.ts`** — `GET /api/shosholoza` (list all or find by ID number), `PATCH /api/shosholoza` (update row fields). Auth-gated, Zod-validated.
+- [x] **`apps/cases/.env.local`** — Added `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `SHOSHOLOZA_SHEET_ID`.
+- [x] **`googleapis` package** — Added to `cases` app dependencies.
+- Sheet: `COT Debt Review Recovery` — 3 tabs: 2025 list, 2026 list, Zenowethu qualify list. 21 columns including File nr, ID Number, 17W, POA, PROCESS, REMOVED.
+- **Next**: Build UI panel in Cases app to display matched Shosholoza clients and trigger sheet updates from case milestones.
 
 ### POA Generator — Branded PDF, Email & WhatsApp Delivery (2026-04-12)
 - [x] **`packages/shared-lib/src/poa/poa-generator.ts`** — Completely rebuilt from scratch. Embeds `Letterhead.pdf` as background on every page. Covers pre-printed letterhead text (DATED AT / SIGNATURE) with a white rectangle (y=60–440). Standard POA: 2 pages (Principal Details + 7 Powers on p1; Authorization + Checklist + Declaration + single signature on p2). Wesbank POA: 2 pages.

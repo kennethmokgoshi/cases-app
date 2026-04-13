@@ -18,6 +18,7 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@sentry/nextjs": "^9.1.0",
     "@types/busboy": "^1.5.4",
     "@zenowethu/config": "workspace:*",
     "@zenowethu/database": "workspace:*",
@@ -27,6 +28,7 @@
     "bcryptjs": "^3.0.3",
     "busboy": "^1.6.0",
     "date-fns": "^4.1.0",
+    "googleapis": "^171.4.0",
     "next": "16.0.6",
     "next-auth": "^5.0.0-beta.30",
     "nodemailer": "^7.0.11",
@@ -37,11 +39,10 @@
     "react-dom": "19.2.0",
     "react-simple-wysiwyg": "^3.4.1",
     "xlsx": "^0.18.5",
-    "zod": "^4.3.6",
-    "@sentry/nextjs": "^9.1.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "pdfjs-dist": "^5.4.624",
+    "@playwright/test": "^1.50.0",
     "@prisma/client": "^5.22.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
@@ -49,10 +50,10 @@
     "@types/nodemailer": "^7.0.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@playwright/test": "^1.50.0",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9",
     "eslint-config-next": "16.0.6",
+    "pdfjs-dist": "^5.4.624",
     "prisma": "^5.22.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
