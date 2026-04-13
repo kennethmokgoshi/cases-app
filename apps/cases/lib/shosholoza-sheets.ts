@@ -8,6 +8,12 @@ const TAB_QUALIFY = 'Zenowethu list (QUALIFY OR NOT)'
 // Row 3 is the header row; data starts at row 4
 const DATA_START_ROW = 4
 
+// Tab name → Google Sheet GID (needed for CSV export URL)
+const TAB_GIDS: Record<string, string> = {
+  [TAB_2026]: '333864337',
+  [TAB_2025]: '0', // fallback — will use sheet name param instead
+}
+
 export interface ShoshololozaClient {
   rowIndex: number       // actual sheet row number (for updates)
   fileNr: string         // Column A — Shosholoza case ref
@@ -64,6 +70,33 @@ function getAuthClient() {
   })
 }
 
+function parseCSV(csv: string): string[][] {
+  const rows: string[][] = []
+  const lines = csv.split('\n')
+  for (const line of lines) {
+    if (!line.trim()) continue
+    // Handle quoted fields with commas inside
+    const fields: string[] = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') { current += '"'; i++ }
+        else inQuotes = !inQuotes
+      } else if (ch === ',' && !inQuotes) {
+        fields.push(current.trim())
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+    fields.push(current.trim())
+    rows.push(fields)
+  }
+  return rows
+}
+
 function rowToClient(row: string[], rowIndex: number): ShoshololozaClient {
   return {
     rowIndex,
@@ -87,22 +120,29 @@ function rowToClient(row: string[], rowIndex: number): ShoshololozaClient {
   }
 }
 
+// READ via CSV export URL — works with .xlsx files hosted on Google Sheets
 export async function getShosholozaClients(tab: string = TAB_2026): Promise<ShoshololozaClient[]> {
-  const auth = getAuthClient()
-  const sheets = google.sheets({ version: 'v4', auth })
+  const gid = TAB_GIDS[tab]
+  const url = gid
+    ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`
+    : `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`
 
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
-    range: `'${tab}'!A${DATA_START_ROW}:Q`,
-  })
+  const response = await fetch(url, { redirect: 'follow' })
+  if (!response.ok) throw new Error(`CSV fetch failed: ${response.status} ${response.statusText}`)
 
-  const rows = response.data.values ?? []
+  const csv = await response.text()
+  const allRows = parseCSV(csv)
 
-  return rows
-    .map((row, index) => rowToClient(row as string[], DATA_START_ROW + index))
+  // Skip header rows (rows 1-3 in sheet = rows 0-2 in array); data starts at index 3
+  const dataRows = allRows.slice(DATA_START_ROW - 1)
+
+  return dataRows
+    .map((row, index) => rowToClient(row, DATA_START_ROW + index))
     .filter(client => client.idNumber.length > 0)
 }
 
+// WRITE via Sheets API — requires the file to be native Google Sheets format
+// If the file is .xlsx, the user must first convert it: File → Save as Google Sheets
 export async function updateShosholozaRow(
   payload: ShosholozaUpdatePayload,
   tab: string = TAB_2026
