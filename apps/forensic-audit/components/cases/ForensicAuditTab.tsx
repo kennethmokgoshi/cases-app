@@ -18,8 +18,8 @@ type SavedAuditResult = {
 
 type Props = {
     caseId: string
-    clientNetSalary?: number | null
-    clientGrossSalary?: number | null
+    clientNetSalary?: string | number | null
+    clientGrossSalary?: string | number | null
 }
 
 // ─────────────────────────────────────────────
