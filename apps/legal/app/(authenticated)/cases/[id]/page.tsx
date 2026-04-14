@@ -95,6 +95,9 @@ type CaseDetail = {
         telegramNumber: string | null;
         address: string | null;
         type: string;
+        employer: string | null;
+        grossSalary: string | number | null;
+        netSalary: string | number | null;
     };
     projects: Array<{
         isPrimary: boolean;
@@ -181,6 +184,9 @@ type EditFormData = {
     cb_status: string;
     cb_statusDate: string;
     idNumber: string;
+    employer: string;
+    grossSalary: string;
+    netSalary: string;
 };
 
 export default function CaseDetailPage() {
@@ -238,7 +244,11 @@ export default function CaseDetailPage() {
         cb_applicationDate: '',
         cb_status: '',
         cb_statusDate: '',
-        idNumber: '' });
+        idNumber: '',
+        employer: '',
+        grossSalary: '',
+        netSalary: ''
+    });
 
     const [mounted, setMounted] = useState(false);
     const [requestingTransfer, setRequestingTransfer] = useState(false);
@@ -520,7 +530,11 @@ export default function CaseDetailPage() {
             cb_applicationDate: caseData.cb_applicationDate || '',
             cb_status: caseData.cb_status || '',
             cb_statusDate: caseData.cb_statusDate || '',
-            idNumber: caseData.client.idNumber || '' });
+            idNumber: caseData.client.idNumber || '',
+            employer: caseData.client.employer || '',
+            grossSalary: caseData.client.grossSalary?.toString() || '',
+            netSalary: caseData.client.netSalary?.toString() || ''
+        });
         setIsEditing(true);
     };
 

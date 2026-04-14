@@ -42,9 +42,9 @@ interface CaseData {
         firstName: string;
         lastName: string;
         phone: string | null;
-        employer: string | null;
-        grossSalary: string | number | null;
-        netSalary: string | number | null;
+        employer?: string | null;
+        grossSalary?: string | number | null;
+        netSalary?: string | number | null;
     };
     totalDebtAmount: string | number | null;
     totalMonthlyInstallment: string | number | null;
