@@ -5,6 +5,7 @@
   "sideEffects": false,
   "main": "./src/index.ts",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
     "@zenowethu/database": "workspace:*",
     "@zenowethu/shared-lib": "workspace:*",
     "openai": "^6.9.1",
@@ -12,9 +13,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.19.25",
+    "@vitest/coverage-v8": "^3.0.6",
     "typescript": "^5",
-    "vitest": "^3.0.6",
-    "@vitest/coverage-v8": "^3.0.6"
+    "vitest": "^3.0.6"
   },
   "scripts": {
     "test": "vitest run",

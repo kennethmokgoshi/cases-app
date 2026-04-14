@@ -4,7 +4,11 @@ import { auth } from '@zenowethu/shared-lib';
 import { z } from 'zod';
 import { checkConfidence, generatePlan } from '@zenowethu/plan-engine';
 
-const schema = z.object({ caseId: z.string().min(1) });
+const schema = z.object({
+  caseId: z.string().min(1),
+  force: z.boolean().optional().default(false),
+  userGuidance: z.string().max(2000).optional(),
+});
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -19,7 +23,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Invalid request', details: parsed.error.issues }, { status: 400 });
     }
 
-    const { caseId } = parsed.data;
+    const { caseId, force, userGuidance } = parsed.data;
 
     const caseRecord = await prisma.case.findUnique({
       where: { id: caseId },
@@ -38,13 +42,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Check existing plan — only regenerate DRAFT plans
+    // Check existing plan
     const existingPlan = await prisma.casePlan.findUnique({ where: { caseId } });
-    if (existingPlan && existingPlan.status !== 'DRAFT') {
-      return NextResponse.json(
-        { error: `Plan already exists with status: ${existingPlan.status}. Cannot regenerate.` },
-        { status: 409 },
-      );
+    if (existingPlan) {
+      const isRegeneratable = existingPlan.status === 'DRAFT' || force;
+      if (!isRegeneratable) {
+        return NextResponse.json(
+          { error: `Plan already exists with status: ${existingPlan.status}. Use force regenerate.` },
+          { status: 409 },
+        );
+      }
+      // Block regeneration of plans that are actively running
+      if (existingPlan.status === 'IN_PROGRESS') {
+        return NextResponse.json(
+          { error: 'Cannot regenerate a plan that is currently in progress.' },
+          { status: 409 },
+        );
+      }
     }
 
     // Check confidence (must have required docs)
@@ -61,9 +75,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Generate plan via AI
-    const generated = await generatePlan(caseId);
+    const generated = await generatePlan(caseId, userGuidance);
 
-    // Delete existing draft if re-generating
+    // Track version across regenerations
+    const nextVersion = existingPlan ? existingPlan.version + 1 : 1;
+
+    // Delete existing plan if re-generating
     if (existingPlan) {
       await prisma.casePlan.delete({ where: { id: existingPlan.id } });
     }
@@ -77,6 +94,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         missingInfo: JSON.parse(JSON.stringify(confidence.missingOptional)),
         caseType: generated.caseType,
         readyToStart: true,
+        version: nextVersion,
         steps: {
           create: generated.steps.map((step) => ({
             stepNumber: step.stepNumber,
@@ -102,7 +120,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       data: {
         caseId,
         userId: session.user.id,
-        content: `AI Plan generated: ${generated.caseType} — ${generated.summary} (${generated.steps.length} steps)`,
+        content: `AI Plan v${nextVersion} generated: ${generated.caseType} — ${generated.summary} (${generated.steps.length} steps)${userGuidance ? ` | Guidance: "${userGuidance.slice(0, 200)}"` : ''}`,
         type: 'AI_PLAN',
         isInternal: true,
         activityType: 'AI_PLAN_GENERATED',

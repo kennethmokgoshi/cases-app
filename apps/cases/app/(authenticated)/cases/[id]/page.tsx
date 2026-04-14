@@ -2341,13 +2341,12 @@ export default function CaseDetailPage() {
                         )}
                     </div>
 
-                    {/* DHS Information - Only show for Debt Review related services */}
+                    {/* DHS Information - Only show for Debt Review Flag Removal */}
                     {(() => {
                         let showDhsSection = false;
                         try {
                             const services = caseData.services ? JSON.parse(caseData.services) : [];
-                            const dhsRelatedServices = ['debt_review_flag_removal', 'debt_review_application'];
-                            showDhsSection = services.some((s: string) => dhsRelatedServices.includes(s));
+                            showDhsSection = services.includes('debt_review_flag_removal');
                         } catch (e) {
                             log.error({ err: e }, 'Error parsing services for DHS check');
                         }

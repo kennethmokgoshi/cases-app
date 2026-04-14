@@ -70,6 +70,8 @@ const PLAN_STATUS_STYLES: Record<string, string> = {
 };
 
 const CASE_TYPE_STYLES: Record<string, string> = {
+  DEBT_REVIEW_APPLICATION: 'bg-green-500/20 text-green-300',
+  DEBT_REVIEW_FLAG_REMOVAL: 'bg-indigo-500/20 text-indigo-300',
   PRESCRIPTION_DISPUTE: 'bg-purple-500/20 text-purple-300',
   DEBT_REVIEW_TRANSFER: 'bg-blue-500/20 text-blue-300',
   INSURANCE_REPLACEMENT: 'bg-orange-500/20 text-orange-300',
@@ -86,6 +88,9 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
   const [starting, setStarting] = useState(false);
   const [togglingReady, setTogglingReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showGuidanceModal, setShowGuidanceModal] = useState(false);
+  const [guidanceText, setGuidanceText] = useState('');
+  const [declining, setDeclining] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchPlanData = useCallback(async () => {
@@ -121,14 +126,14 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
     };
   }, [planData?.plan?.status, fetchPlanData]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (force = false, userGuidance?: string) => {
     setGenerating(true);
     setError(null);
     try {
       const resp = await fetch('/api/ai/plan/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ caseId }),
+        body: JSON.stringify({ caseId, force, userGuidance: userGuidance?.trim() || undefined }),
       });
       const data = await resp.json() as { error?: string; missingRequired?: unknown[] };
       if (!resp.ok) {
@@ -139,6 +144,40 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
       setError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleRegenerateClick = () => {
+    const version = planData?.plan?.version ?? 1;
+    // From the 3rd generation onwards, prompt for guidance before regenerating
+    if (version >= 3) {
+      setGuidanceText('');
+      setShowGuidanceModal(true);
+    } else {
+      void handleGenerate(true);
+    }
+  };
+
+  const handleGuidanceSubmit = () => {
+    setShowGuidanceModal(false);
+    void handleGenerate(true, guidanceText);
+  };
+
+  const handleDecline = async () => {
+    if (!planData?.plan) return;
+    setDeclining(true);
+    setError(null);
+    try {
+      const resp = await fetch(`/api/ai/plan/${planData.plan.id}/decline`, { method: 'POST' });
+      if (!resp.ok) {
+        const data = await resp.json() as { error?: string };
+        throw new Error(data.error || 'Decline failed');
+      }
+      await fetchPlanData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Decline failed');
+    } finally {
+      setDeclining(false);
     }
   };
 
@@ -191,10 +230,6 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
   };
 
   const isB2B = acquisitionType === 'B2B';
-  const canGenerate =
-    planData?.confidence.canProceed &&
-    (!isB2B || planData?.planReadyToStart) &&
-    (!planData?.plan || planData?.plan?.status === 'DRAFT');
 
   if (loading) {
     return (
@@ -214,6 +249,17 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
   }
 
   const { plan, confidence } = planData;
+
+  const canGenerate =
+    confidence.canProceed &&
+    (!isB2B || planData.planReadyToStart);
+  // A cancelled plan is treated as "no plan" — show the first-generate button
+  const isCancelled = plan?.status === 'CANCELLED';
+  const hasActivePlan = !!plan && !isCancelled;
+  const canRegenerate =
+    canGenerate &&
+    hasActivePlan &&
+    plan.status !== 'IN_PROGRESS';
 
   return (
     <div className="space-y-6">
@@ -250,9 +296,10 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
         </div>
       )}
 
-      {/* SECTION 3: Generate Plan Button */}
-      {(!plan || plan.status === 'DRAFT') && (
-        <div className="flex items-center gap-3">
+      {/* SECTION 3: Generate / Regenerate */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Generate — when no plan exists or previous plan was declined */}
+        {(!plan || isCancelled) && (
           <button
             onClick={() => void handleGenerate()}
             disabled={!canGenerate || generating}
@@ -264,23 +311,104 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
                 Generating Plan...
               </>
             ) : (
-              'Generate AI Plan'
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate AI Plan
+              </>
             )}
           </button>
-          {!canGenerate && !generating && (
-            <p className="text-xs text-gray-500">
-              {!confidence.canProceed
-                ? 'Upload required documents first'
-                : isB2B && !planData.planReadyToStart
-                  ? 'Tick the readiness checkbox above first'
+        )}
+
+        {/* Regenerate — shown when an active (non-cancelled) plan exists */}
+        {hasActivePlan && (
+          <button
+            onClick={handleRegenerateClick}
+            disabled={!canRegenerate || generating}
+            className="px-4 py-2 bg-white/5 border border-white/10 text-gray-300 text-xs font-bold tracking-wider uppercase rounded-xl hover:bg-white/10 hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+          >
+            {generating ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Regenerate Plan
+                {plan.version > 1 && (
+                  <span className="text-gray-500 font-normal">v{plan.version} → v{plan.version + 1}</span>
+                )}
+              </>
+            )}
+          </button>
+        )}
+
+        {!canGenerate && !generating && (
+          <p className="text-xs text-gray-500">
+            {!confidence.canProceed
+              ? 'Upload required documents first'
+              : isB2B && !planData.planReadyToStart
+                ? 'Tick the readiness checkbox above first'
+                : plan?.status === 'IN_PROGRESS'
+                  ? 'Cannot regenerate while plan is running'
                   : ''}
-            </p>
-          )}
+          </p>
+        )}
+      </div>
+
+      {/* Guidance Modal — shown from 3rd generation onwards */}
+      {showGuidanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#0f1923] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-white font-bold text-base">Guide the AI Plan</h3>
+              <p className="text-gray-400 text-sm">
+                This is plan generation #{(planData?.plan?.version ?? 0) + 1}. Tell the AI what the previous plans got wrong or what to focus on this time.
+              </p>
+            </div>
+
+            <textarea
+              value={guidanceText}
+              onChange={(e) => setGuidanceText(e.target.value)}
+              placeholder="e.g. Focus on the prescribed accounts at Wesbank and FNB. The consumer has already signed the POA — skip that step. Start with the prescription letters."
+              rows={5}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-zeno-cyan/50 resize-none"
+              autoFocus
+            />
+
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <button
+                onClick={() => setShowGuidanceModal(false)}
+                className="px-4 py-2 text-gray-400 hover:text-white text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowGuidanceModal(false); void handleGenerate(true); }}
+                  className="px-4 py-2 bg-white/5 border border-white/10 text-gray-300 text-xs font-bold rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  Skip — Generate Without Guidance
+                </button>
+                <button
+                  onClick={handleGuidanceSubmit}
+                  disabled={!guidanceText.trim()}
+                  className="px-4 py-2 bg-zeno-cyan text-zeno-navy text-xs font-black rounded-lg hover:bg-zeno-cyan/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Generate with Guidance
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* SECTION 4: Plan Details */}
-      {plan && plan.status !== 'DRAFT' && (
+      {plan && plan.status !== 'DRAFT' && plan.status !== 'CANCELLED' && (
         <div className="space-y-4">
           {/* Plan Header */}
           <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-3">
@@ -315,12 +443,30 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
               {/* Action Buttons */}
               <div className="flex items-center gap-2 shrink-0">
                 {plan.status === 'AWAITING_APPROVAL' && (
+                  <>
+                    <button
+                      onClick={() => void handleDecline()}
+                      disabled={declining}
+                      className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                    >
+                      {declining ? 'Declining...' : 'Decline Plan'}
+                    </button>
+                    <button
+                      onClick={() => void handleApprovePlan()}
+                      disabled={approving}
+                      className="px-4 py-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 text-xs font-bold rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 transition-colors"
+                    >
+                      {approving ? 'Approving...' : 'Approve Plan'}
+                    </button>
+                  </>
+                )}
+                {(plan.status === 'APPROVED' || plan.status === 'PAUSED') && (
                   <button
-                    onClick={() => void handleApprovePlan()}
-                    disabled={approving}
-                    className="px-4 py-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 text-xs font-bold rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 transition-colors"
+                    onClick={() => void handleDecline()}
+                    disabled={declining}
+                    className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold rounded-lg hover:bg-red-500/20 disabled:opacity-50 transition-colors"
                   >
-                    {approving ? 'Approving...' : 'Approve Plan'}
+                    {declining ? 'Declining...' : 'Cancel Plan'}
                   </button>
                 )}
                 {plan.status === 'APPROVED' && (

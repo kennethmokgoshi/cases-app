@@ -1,11 +1,37 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-13 (Shosholoza Google Sheets integration — read + write)
+> Last updated: 2026-04-14 (AI Plan — regeneration + guided generation from v3+)
 
 ---
 
 ## ✅ Completed
+
+### AI Plan — Regeneration + Guided Generation + Decline (2026-04-14)
+- [x] **`apps/cases/app/api/ai/plan/generate/route.ts`** — Added `force` and `userGuidance` params. `force: true` allows regenerating plans of any status (except IN_PROGRESS). Version incremented and persisted. Guidance logged in activity comment.
+- [x] **`apps/cases/app/api/ai/plan/[planId]/decline/route.ts`** — New endpoint. Sets plan to CANCELLED, logs activity. Blocked for IN_PROGRESS plans.
+- [x] **`packages/plan-engine/src/planner.ts`** — `generatePlan` accepts optional `userGuidance`, injected at top of AI prompt with override label.
+- [x] **`packages/ui/src/plan/AIPlanTab.tsx`** — **Regenerate Plan** button (when active plan exists, not running). **Decline Plan** button next to Approve (AWAITING_APPROVAL), **Cancel Plan** button for APPROVED/PAUSED. Guidance modal from v3+. CANCELLED plans render as no-plan — Generate button reappears, old steps hidden.
+
+### Local Development Environment Restoration (2026-04-14)
+- [x] **Restored Local Servers** — Applications were not running; synchronized dependencies with `pnpm install` and launched the development server using `pnpm dev`. Verified all 6 apps are listening on ports 3000-3005 and the Cases app is accessible.
+
+### DHS Section Gating + AI Plan Service-Type Awareness + Document/Email Checking (2026-04-14)
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — DHS Information section now only renders for `debt_review_flag_removal`.
+- [x] **`packages/plan-engine/src/planner.ts`** — Multiple fixes to prevent flawed plans:
+  - Explicit **DOCUMENT STATUS** block computed at runtime: "ALL REQUIRED DOCUMENTS PRESENT — do NOT generate document collection steps" or lists what is missing. AI can no longer ignore document presence.
+  - **ALREADY DONE** labels on activity history and email sections prevent the AI repeating completed work.
+  - TRIGGERS: "Request File from DC" only fires when documents are actually missing. When all docs present, trigger defaults to "proceed to substantive work".
+  - CRITICAL RULE added: never generate "Request File from DC" if all required documents are present.
+  - Service-type rules: new DR applications → no DC file requests or DHS steps; flag removal → DHS steps appropriate.
+  - Added `DEBT_REVIEW_APPLICATION` and `DEBT_REVIEW_FLAG_REMOVAL` to the AI caseType enum.
+
+### AI Plan — Claude + Full Case Context (2026-04-14)
+- [x] **`packages/plan-engine/package.json`** — Added `@anthropic-ai/sdk` dependency.
+- [x] **`packages/plan-engine/src/planner.ts`** — Switched from GPT-4o to `claude-sonnet-4-6`. Enriched Prisma query to include `comments` (full timeline/activity history) and full document `extractedData`. Prompt now includes: activity timeline, emails sent (type='EMAIL' comments), staff notes, and document AI-extracted content. Claude is instructed to generate NEXT steps only — skipping work already done per timeline evidence.
+- [x] **`packages/plan-engine/src/evaluator.ts`** — Switched to `claude-sonnet-4-6`. Added recent activity, email history, and document summary to evaluation context so re-assessment after new info is aware of all prior communications and analysis.
+- [x] **`apps/cases/.env.example`** — `ANTHROPIC_API_KEY` promoted to required (uncommented). Set `ANTHROPIC_API_KEY` in `.env.local` to enable.
+- **Note**: `ANTHROPIC_API_KEY` must be populated in `.env.local` (currently blank).
 
 ### Shosholoza Google Sheets Integration (2026-04-13)
 - [x] **`apps/cases/lib/shosholoza-sheets.ts`** — Service layer using `googleapis` + service account JWT auth. Reads all clients from any sheet tab, finds a client by SA ID number, writes back to specific columns (17W, POA, PROCESS, REMOVED, notes, etc.) via `batchUpdate`.
