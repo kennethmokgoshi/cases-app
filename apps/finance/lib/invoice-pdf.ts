@@ -3,12 +3,18 @@ import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib'
 // ---- Types ----
 
 export interface InvoiceLineItem {
-  description: string
+  // Legacy free-text format
+  description?: string
+  // Account+service format
+  creditor?: string
+  serviceKey?: string
+  serviceLabel?: string
   quantity: number
   unitPrice: number
 }
 
 export interface InvoiceData {
+  documentType?: 'INVOICE' | 'QUOTE'
   invoiceNumber: string
   issuedAt: Date
   dueAt: Date
@@ -23,6 +29,12 @@ export interface InvoiceData {
   total: number
   notes?: string
   reference?: string
+}
+
+function lineItemDescription(item: InvoiceLineItem): string {
+  if (item.creditor && item.serviceLabel) return `${item.creditor} — ${item.serviceLabel}`
+  if (item.creditor) return item.creditor
+  return item.description ?? ''
 }
 
 // ---- Colours ----
@@ -114,8 +126,9 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   drawText(page, 'DEBT MANAGEMENT', MARGIN, cursor + 40, regular, 10, rgb(0.7, 0.7, 0.7))
   drawText(page, 'info@zenowethu.co.za', MARGIN, cursor + 24, regular, 8, rgb(0.6, 0.6, 0.6))
 
-  // INVOICE label
-  drawRightAlignedText(page, 'INVOICE', RIGHT, cursor + 58, bold, 26, EMERALD)
+  // INVOICE / QUOTE label
+  const docLabel = data.documentType === 'QUOTE' ? 'QUOTATION' : 'INVOICE'
+  drawRightAlignedText(page, docLabel, RIGHT, cursor + 58, bold, 26, EMERALD)
   drawRightAlignedText(page, data.invoiceNumber, RIGHT, cursor + 40, regular, 10, WHITE)
   drawRightAlignedText(page, `Status: ${data.status}`, RIGHT, cursor + 24, regular, 8, rgb(0.7, 0.7, 0.7))
 
@@ -152,11 +165,13 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
 
   // Right: Dates
   const rightColX = W / 2 + 30
-  drawText(page, 'INVOICE DETAILS', rightColX, metaTop - 12, bold, 8, GRAY_TEXT)
+  const detailsLabel = data.documentType === 'QUOTE' ? 'QUOTATION DETAILS' : 'INVOICE DETAILS'
+  drawText(page, detailsLabel, rightColX, metaTop - 12, bold, 8, GRAY_TEXT)
 
+  const dueDateLabel = data.documentType === 'QUOTE' ? 'Valid Until' : 'Due Date'
   const metaRows = [
     ['Issue Date', formatDate(data.issuedAt)],
-    ['Due Date',   formatDate(data.dueAt)],
+    [dueDateLabel, formatDate(data.dueAt)],
   ]
 
   let rightY = metaTop - 28
@@ -218,7 +233,7 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     const textY = rowY + 7
     const lineAmt = item.quantity * item.unitPrice
 
-    drawText(page, truncate(item.description, 55), MARGIN + 6, textY, regular, 9, DARK_TEXT)
+    drawText(page, truncate(lineItemDescription(item), 55), MARGIN + 6, textY, regular, 9, DARK_TEXT)
     drawRightAlignedText(page, String(item.quantity), MARGIN + COL_DESC - 4, textY, regular, 9, DARK_TEXT)
     drawRightAlignedText(page, formatZAR(item.unitPrice), MARGIN + COL_DESC + COL_QTY + COL_PRICE - 4, textY, regular, 9, DARK_TEXT)
     drawRightAlignedText(page, formatZAR(lineAmt), RIGHT - 4, textY, regular, 9, DARK_TEXT)

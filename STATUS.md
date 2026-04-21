@@ -1,11 +1,23 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-14 (AI Plan — regeneration + guided generation from v3+)
+> Last updated: 2026-04-21 (Invoice/Quote with account+service line items + Credo App public link)
 
 ---
 
 ## ✅ Completed
+
+### Invoice/Quote — Account+Service Line Items + Credo App Public Link (2026-04-21)
+- [x] **Schema** — Added `DocumentType` enum (`INVOICE | QUOTE`), `type` and `publicToken` fields to `Invoice` model. Also added `BankAccount` and `ServicePrice` models for future use.
+- [x] **Migration** — `20260421_add_bank_accounts_service_prices` + `20260421_add_invoice_type_public_token` applied.
+- [x] **`apps/finance/lib/invoice-pdf.ts`** — `InvoiceLineItem` now supports `creditor + serviceLabel` format. PDF header shows "QUOTATION" or "INVOICE". "Valid Until" replaces "Due Date" label for quotes.
+- [x] **`apps/finance/app/api/finance/invoices/route.ts`** — Accepts `type: QUOTE | INVOICE`, generates `publicToken` (UUID) on creation, generates `QUO-YYYY-NNNN` or `INV-YYYY-NNNN` numbering, accepts `{ creditor, serviceKey, serviceLabel, quantity, unitPrice }` line items.
+- [x] **`apps/finance/app/api/finance/invoices/[id]/send/route.ts`** — Email includes "View & Download Online" button linking to `${CREDO_APP_URL}/quote/${publicToken}`. Subject line shows Quotation/Invoice based on type.
+- [x] **`apps/finance/app/api/public/quotes/[token]/route.ts`** — Public (no auth) endpoint returns quote JSON by token.
+- [x] **`apps/finance/app/api/public/quotes/[token]/pdf/route.ts`** — Public (no auth) PDF download by token.
+- [x] **`apps/finance/app/(authenticated)/invoices/new/page.tsx`** — Rebuilt: Quote/Invoice toggle, rows are Creditor + Service dropdown + Price. "Add account" button adds new rows.
+- [x] **`apps/credo/app/quote/[token]/page.tsx`** — Public server page (no auth). Shows full quote/invoice breakdown, download PDF button linking to finance app public PDF endpoint.
+- **Env vars needed**: `CREDO_APP_URL` (finance app) and `FINANCE_APP_URL` (credo app).
 
 ### AI Plan — Regeneration + Guided Generation + Decline (2026-04-14)
 - [x] **`apps/cases/app/api/ai/plan/generate/route.ts`** — Added `force` and `userGuidance` params. `force: true` allows regenerating plans of any status (except IN_PROGRESS). Version incremented and persisted. Guidance logged in activity comment.

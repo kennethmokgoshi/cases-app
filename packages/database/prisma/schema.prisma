@@ -516,6 +516,11 @@ model PaymentBatch {
   @@index([uploadedAt])
 }
 
+enum DocumentType {
+  INVOICE
+  QUOTE
+}
+
 enum InvoiceStatus {
   DRAFT
   SENT
@@ -528,6 +533,8 @@ model Invoice {
   id            String        @id @default(cuid())
   invoiceNumber String        @unique
   status        InvoiceStatus @default(DRAFT)
+  type          DocumentType  @default(INVOICE)
+  publicToken   String?       @unique
 
   clientId      String?
   caseId        String?
@@ -560,11 +567,43 @@ model Invoice {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  bankAccountId String?
+  bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
+
   @@index([status])
   @@index([clientId])
   @@index([caseId])
   @@index([issuedAt])
   @@index([dueAt])
+}
+
+// Company bank accounts displayed on invoices for payment instructions
+model BankAccount {
+  id            String    @id @default(cuid())
+  bankName      String
+  accountName   String
+  accountNumber String
+  branchCode    String?
+  accountType   String    @default("CHEQUE") // CHEQUE, SAVINGS, CURRENT
+  isDefault     Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  reference     String?
+  invoices      Invoice[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([isActive])
+}
+
+// Configurable pricing per service key (matches SERVICES_MAP keys)
+model ServicePrice {
+  id          String   @id @default(cuid())
+  serviceKey  String   @unique
+  label       String
+  price       Decimal  @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // ============================================================

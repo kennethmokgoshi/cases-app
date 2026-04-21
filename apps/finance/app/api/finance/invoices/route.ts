@@ -3,13 +3,23 @@ import { auth } from '@zenowethu/shared-lib'
 import { prisma, Prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { randomUUID } from 'crypto'
 
 const LineItemSchema = z.object({
-  description: z.string().min(1).max(500),
-  quantity: z.number().positive(),
-  unitPrice: z.number().nonnegative() })
+  // Account+service format
+  creditor:     z.string().max(200).optional(),
+  serviceKey:   z.string().max(100).optional(),
+  serviceLabel: z.string().max(200).optional(),
+  // Legacy free-text format
+  description:  z.string().max(500).optional(),
+  quantity:     z.number().positive(),
+  unitPrice:    z.number().nonnegative(),
+}).refine(d => d.creditor || d.description, {
+  message: 'Each line item must have either a creditor or a description',
+})
 
 const CreateInvoiceSchema = z.object({
+  type:      z.enum(['INVOICE', 'QUOTE']).default('INVOICE'),
   clientId:  z.string().cuid().optional(),
   caseId:    z.string().cuid().optional(),
   projectId: z.string().cuid().optional(),
@@ -17,7 +27,8 @@ const CreateInvoiceSchema = z.object({
   dueAt:     z.string().datetime(),
   notes:     z.string().max(2000).optional(),
   reference: z.string().max(100).optional(),
-  vatRate:   z.number().min(0).max(1).default(0.15) })
+  vatRate:   z.number().min(0).max(1).default(0.15),
+})
 
 export async function GET(request: Request) {
   const session = await auth()
@@ -25,6 +36,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const status    = searchParams.get('status')
+  const type      = searchParams.get('type')
   const clientId  = searchParams.get('clientId')
   const caseId    = searchParams.get('caseId')
   const from      = searchParams.get('from')
@@ -33,10 +45,13 @@ export async function GET(request: Request) {
   const page      = Math.max(1, parseInt(searchParams.get('page') || '1'))
   const limit     = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
 
-  const where: any = {}
+  const where: Prisma.InvoiceWhereInput = {}
 
   if (status && ['DRAFT','SENT','PAID','OVERDUE','CANCELLED'].includes(status)) {
-    where.status = status
+    where.status = status as Prisma.EnumInvoiceStatusFilter
+  }
+  if (type && ['INVOICE','QUOTE'].includes(type)) {
+    where.type = type as Prisma.EnumDocumentTypeFilter
   }
   if (clientId) where.clientId = clientId
   if (caseId)   where.caseId   = caseId
@@ -74,11 +89,7 @@ export async function GET(request: Request) {
       prisma.invoice.count({ where }),
     ])
 
-    return NextResponse.json({
-      invoices,
-      total,
-      page,
-      pages: Math.ceil(total / limit) })
+    return NextResponse.json({ invoices, total, page, pages: Math.ceil(total / limit) })
   } catch (err) {
     logger.error('[GET /api/finance/invoices]', err)
     return new NextResponse('Internal Server Error', { status: 500 })
@@ -104,36 +115,41 @@ export async function POST(request: Request) {
   const vatAmount = subtotal * input.vatRate
   const total     = subtotal + vatAmount
   const year      = new Date().getFullYear()
+  const prefix    = input.type === 'QUOTE' ? 'QUO' : 'INV'
 
   try {
     const invoice = await prisma.$transaction(async (tx) => {
       const count = await tx.invoice.count({
-        where: { invoiceNumber: { startsWith: `INV-${year}-` } } })
+        where: { invoiceNumber: { startsWith: `${prefix}-${year}-` } } })
       const seq = String(count + 1).padStart(4, '0')
-      const invoiceNumber = `INV-${year}-${seq}`
+      const invoiceNumber = `${prefix}-${year}-${seq}`
 
       return tx.invoice.create({
         data: {
           invoiceNumber,
-          clientId:   input.clientId  ?? null,
-          caseId:     input.caseId    ?? null,
-          projectId:  input.projectId ?? null,
-          lineItems:  input.lineItems as any,
+          type:        input.type,
+          publicToken: randomUUID(),
+          clientId:    input.clientId  ?? null,
+          caseId:      input.caseId    ?? null,
+          projectId:   input.projectId ?? null,
+          lineItems:   input.lineItems as Prisma.InputJsonValue,
           subtotal,
-          vatRate:    input.vatRate,
+          vatRate:     input.vatRate,
           vatAmount,
           total,
-          dueAt:      new Date(input.dueAt),
-          notes:      input.notes     ?? null,
-          reference:  input.reference ?? null,
+          dueAt:       new Date(input.dueAt),
+          notes:       input.notes     ?? null,
+          reference:   input.reference ?? null,
           createdById: session.user.id,
-          status:     'DRAFT' } })
+          status:      'DRAFT',
+        },
+      })
     })
 
     return NextResponse.json(invoice, { status: 201 })
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
-      return NextResponse.json({ error: 'Invoice number conflict — please retry' }, { status: 409 })
+      return NextResponse.json({ error: 'Number conflict — please retry' }, { status: 409 })
     }
     logger.error('[POST /api/finance/invoices]', err)
     return new NextResponse('Internal Server Error', { status: 500 })

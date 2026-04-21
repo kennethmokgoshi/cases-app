@@ -11,9 +11,17 @@ const SendInvoiceSchema = z.object({
   subject: z.string().min(1).max(200).optional(),
   message: z.string().max(2000).optional() })
 
-function buildEmailHtml(invoice: { invoiceNumber: string; total: unknown }, message?: string): string {
+function buildEmailHtml(
+  invoice: { invoiceNumber: string; total: unknown; type?: string; publicToken?: string | null },
+  message?: string,
+): string {
   const totalFormatted = new Intl.NumberFormat('en-ZA', {
     style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(Number(invoice.total))
+
+  const isQuote    = invoice.type === 'QUOTE'
+  const docLabel   = isQuote ? 'Quotation' : 'Invoice'
+  const credoUrl   = process.env.CREDO_APP_URL || 'https://credo.zenowethu.co.za'
+  const viewLink   = invoice.publicToken ? `${credoUrl}/quote/${invoice.publicToken}` : null
 
   return `
 <!DOCTYPE html>
@@ -22,16 +30,27 @@ function buildEmailHtml(invoice: { invoiceNumber: string; total: unknown }, mess
 <body style="font-family: Arial, sans-serif; color: #222; background: #f9f9f9; padding: 0; margin: 0;">
   <div style="max-width: 600px; margin: 32px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
     <div style="background: #0AB882; padding: 28px 32px;">
-      <h1 style="color: #fff; margin: 0; font-size: 22px;">Invoice ${invoice.invoiceNumber}</h1>
+      <h1 style="color: #fff; margin: 0; font-size: 22px;">${docLabel} ${invoice.invoiceNumber}</h1>
       <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px;">Zenowethu Debt Management</p>
     </div>
     <div style="padding: 32px;">
       ${message ? `<p style="margin: 0 0 24px; color: #444; line-height: 1.6;">${message.replace(/\n/g, '<br/>')}</p>` : ''}
-      <p style="margin: 0 0 8px; color: #666; font-size: 14px;">Please find your invoice attached.</p>
+      <p style="margin: 0 0 8px; color: #666; font-size: 14px;">Please find your ${docLabel.toLowerCase()} attached to this email.</p>
       <div style="background: #f4f4f4; border-radius: 6px; padding: 16px 20px; margin: 24px 0; display: inline-block;">
-        <p style="margin: 0; font-size: 13px; color: #888;">Total Due</p>
+        <p style="margin: 0; font-size: 13px; color: #888;">${isQuote ? 'Quoted Total' : 'Total Due'}</p>
         <p style="margin: 4px 0 0; font-size: 24px; font-weight: bold; color: #0AB882;">${totalFormatted}</p>
       </div>
+      ${viewLink ? `
+      <div style="margin: 24px 0; text-align: center;">
+        <a href="${viewLink}"
+           style="display: inline-block; background: #0B1D35; color: #fff; text-decoration: none;
+                  padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: bold;">
+          View &amp; Download ${docLabel} Online
+        </a>
+        <p style="margin: 10px 0 0; font-size: 12px; color: #999;">
+          Or copy this link: <a href="${viewLink}" style="color: #0AB882;">${viewLink}</a>
+        </p>
+      </div>` : ''}
       <p style="margin: 24px 0 0; font-size: 12px; color: #999;">
         This is an automated email from Zenowethu Debt Management. Please do not reply to this email.
       </p>
@@ -67,7 +86,9 @@ export async function POST(
       where: { id },
       include: {
         client: { select: { firstName: true, lastName: true, email: true } },
-        case:   { select: { fileNumber: true } } } })
+        case:   { select: { fileNumber: true } },
+      },
+    })
 
     if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -79,6 +100,7 @@ export async function POST(
     const lineItems = invoice.lineItems as unknown as InvoiceLineItem[]
 
     const invoiceData: InvoiceData = {
+      documentType:   invoice.type as 'INVOICE' | 'QUOTE',
       invoiceNumber:  invoice.invoiceNumber,
       issuedAt:       invoice.issuedAt,
       dueAt:          invoice.dueAt,
@@ -109,8 +131,11 @@ export async function POST(
     await transporter.sendMail({
       from:    process.env.EMAIL_FROM || process.env.SMTP_USER,
       to:      input.to,
-      subject: input.subject ?? `Invoice ${invoice.invoiceNumber} from Zenowethu`,
-      html:    buildEmailHtml(invoice, input.message),
+      subject: input.subject ?? `${invoice.type === 'QUOTE' ? 'Quotation' : 'Invoice'} ${invoice.invoiceNumber} from Zenowethu`,
+      html:    buildEmailHtml(
+        { invoiceNumber: invoice.invoiceNumber, total: invoice.total, type: invoice.type, publicToken: invoice.publicToken },
+        input.message,
+      ),
       attachments: [{
         filename:    `${invoice.invoiceNumber}.pdf`,
         content:     Buffer.from(pdfBytes),
