@@ -213,7 +213,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     // PAGE 1 — POWER OF ATTORNEY
     // ════════════════════════════════════════════════════════════════════════
     const p1 = addPage();
-    coverPreprinted(p1);
+    // coverPreprinted(p1); // Removed to reveal watermark as requested
 
     // Title
     drawCentered(p1, 'POWER OF ATTORNEY', bold, 16, 740);
