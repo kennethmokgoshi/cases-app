@@ -216,11 +216,11 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     coverPreprinted(p1);
 
     // Title
-    drawCentered(p1, 'POWER OF ATTORNEY', bold, 16, 690);
-    p1.drawRectangle({ x: ML + CW / 2 - 30, y: 672, width: 60, height: 2, color: ORANGE });
+    drawCentered(p1, 'POWER OF ATTORNEY', bold, 16, 740);
+    p1.drawRectangle({ x: ML + CW / 2 - 30, y: 722, width: 60, height: 2, color: ORANGE });
 
     // Opening paragraph
-    let y = 660;
+    let y = 710;
     y = drawWrapped(
         p1,
         'I, the undersigned (the "Principal"), do hereby nominate, constitute and appoint Zenowethu Debt Management (PTY) LTD and its authorised representatives, including DC Credit Protect (Pty) Ltd (FSP No. 51550), underwritten by African Unity Life (Pty) Ltd (FSP No. 8447), as my true and lawful agents to act on my behalf in all matters set out herein.',
@@ -277,10 +277,10 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     const p2 = addPage();
     coverPreprinted(p2);
 
-    drawCentered(p2, 'AUTHORIZATION & TRANSFER REQUEST', bold, 14, 690);
-    p2.drawRectangle({ x: ML + CW / 2 - 40, y: 674, width: 80, height: 2, color: ORANGE });
+    drawCentered(p2, 'AUTHORIZATION & TRANSFER REQUEST', bold, 14, 740);
+    p2.drawRectangle({ x: ML + CW / 2 - 40, y: 724, width: 80, height: 2, color: ORANGE });
 
-    y = 662;
+    y = 712;
 
     // Section 3
     y = drawSectionHeader(p2, '3.   AUTHORIZATION — CREDIT BUREAU ACCESS', bold, y);
@@ -399,10 +399,10 @@ export async function generateWesbankPoa(input: WesbankPoaInput): Promise<Buffer
     const p1 = addPage();
     coverPreprinted(p1);
 
-    drawCentered(p1, 'POWER OF ATTORNEY', bold, 16, 690);
-    p1.drawRectangle({ x: ML + CW / 2 - 30, y: 672, width: 60, height: 2, color: ORANGE });
+    drawCentered(p1, 'POWER OF ATTORNEY', bold, 16, 740);
+    p1.drawRectangle({ x: ML + CW / 2 - 30, y: 722, width: 60, height: 2, color: ORANGE });
 
-    let y = 660;
+    let y = 710;
     y = drawWrapped(
         p1,
         'This Power of Attorney (the "Agreement") is made BETWEEN: Zenowethu Debt Management (PTY) LTD, a company managed by a sole director Aaron Nzotho, ID No: 7809065687086, registered under the laws of the Republic of South Africa with registration number 2013/121120/07, having its registered head office at Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199.',
