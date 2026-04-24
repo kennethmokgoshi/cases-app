@@ -13,8 +13,10 @@ export function SidebarNav({ session, insuranceUrl = '' }: SidebarNavProps) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const currentProjectId = searchParams.get('projectId');
-
     const newCaseHref = currentProjectId ? `/cases/new?projectId=${currentProjectId}` : '/cases/new';
+
+    const isAdmin = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager;
+    const isFinance = isAdmin || session?.user?.role === 'FINANCE' || session?.user?.role === 'ACCOUNTS';
 
     return (
         <div>
@@ -76,7 +78,7 @@ export function SidebarNav({ session, insuranceUrl = '' }: SidebarNavProps) {
                         Shosholoza
                     </Link>
                 </li>
-                {(session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager) && (
+                {isAdmin && (
                     <>
                         <li className="mt-4 mb-2 px-2">
                             <div className="h-px bg-white/5"></div>
@@ -142,7 +144,7 @@ export function SidebarNav({ session, insuranceUrl = '' }: SidebarNavProps) {
                         )}
                     </>
                 )}
-                {(session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'FINANCE' || session?.user?.role === 'ACCOUNTS') && (
+                {isFinance && (
                     <>
                         <li className="mt-4 mb-2 px-2">
                             <div className="h-px bg-white/5"></div>
