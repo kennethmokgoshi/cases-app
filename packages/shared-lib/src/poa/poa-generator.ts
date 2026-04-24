@@ -275,7 +275,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     // PAGE 2 — AUTHORIZATION & TRANSFER REQUEST
     // ════════════════════════════════════════════════════════════════════════
     const p2 = addPage();
-    coverPreprinted(p2);
+    // coverPreprinted(p2); // Removed to reveal watermark as requested
 
     drawCentered(p2, 'AUTHORIZATION & TRANSFER REQUEST', bold, 14, 740);
     p2.drawRectangle({ x: ML + CW / 2 - 40, y: 724, width: 80, height: 2, color: ORANGE });
