@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { renderBrandedEmail } from "@zenowethu/shared-lib";
 
 interface SendEmailOptions {
   to: string;
@@ -111,61 +112,67 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
 }
 
 export function welcomeEmailHtml(firstName: string): string {
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:40px 20px">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
-        <!-- Header -->
-        <tr><td style="background:#0B1D35;padding:32px 40px">
-          <h1 style="margin:0;color:#FFFFFF;font-size:22px;font-weight:700;letter-spacing:-0.02em">Credo</h1>
-          <p style="margin:4px 0 0;color:#C4953A;font-size:13px;font-weight:500">Credit Repair &amp; Financial Wellness</p>
-        </td></tr>
-        <!-- Body -->
-        <tr><td style="padding:36px 40px">
-          <h2 style="margin:0 0 12px;color:#0F172A;font-size:20px;font-weight:700">Welcome, ${firstName}!</h2>
-          <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6">
+    const content = `
+        <h2 style="margin: 0 0 15px; color: #0d3870; font-size: 22px;">Welcome to the family, ${firstName}!</h2>
+        <p style="margin: 0 0 20px; color: #475569; font-size: 16px; line-height: 1.6">
             Your Credo account is ready. You can now access your Document Vault, track your credit repair cases,
             and chat with our AI Credit Coach — all in one place.
-          </p>
-          <a href="${process.env.NEXTAUTH_URL || "http://localhost:3005"}/dashboard"
-             style="display:inline-block;background:#0B1D35;color:#FFFFFF;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600">
-            Go to my dashboard →
-          </a>
-        </td></tr>
-        <!-- Steps -->
-        <tr><td style="padding:0 40px 32px">
-          <p style="margin:0 0 14px;color:#0F172A;font-size:14px;font-weight:600">Get started in 3 steps:</p>
-          <table cellpadding="0" cellspacing="0" width="100%">
-            ${[
-              ["1", "Upload your ID & payslip", "We need these to open your credit repair case."],
-              ["2", "Request a credit report pull", "We'll fetch your score from all 4 bureaus."],
-              ["3", "Let us dispute the negatives", "Our team files NCA Section 72 dispute letters on your behalf."],
-            ].map(([num, title, desc]) => `
-            <tr><td style="padding:10px 0;border-top:1px solid #F1F5F9">
-              <table cellpadding="0" cellspacing="0"><tr>
-                <td style="width:28px;height:28px;background:#E4EDF8;border-radius:50%;text-align:center;vertical-align:middle;font-size:12px;font-weight:700;color:#0B1D35">${num}</td>
-                <td style="padding-left:12px">
-                  <p style="margin:0;font-size:13px;font-weight:600;color:#0F172A">${title}</p>
-                  <p style="margin:2px 0 0;font-size:12px;color:#64748B">${desc}</p>
+        </p>
+        
+        <p style="margin: 0 0 15px; color: #0f172a; font-size: 15px; font-weight: 600">Get started in 3 simple steps:</p>
+        
+        <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 25px;">
+            <tr>
+                <td style="padding: 12px 0; border-top: 1px solid #f1f5f9">
+                    <table cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="width: 32px; height: 32px; background: #e4edf8; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 14px; font-weight: 700; color: #0d3870">1</td>
+                            <td style="padding-left: 15px">
+                                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0f172a">Upload your ID & payslip</p>
+                                <p style="margin: 2px 0 0; font-size: 13px; color: #64748b">Required to open your credit repair case.</p>
+                            </td>
+                        </tr>
+                    </table>
                 </td>
-              </tr></table>
-            </td></tr>`).join("")}
-          </table>
-        </td></tr>
-        <!-- Footer -->
-        <tr><td style="background:#F8F9FA;padding:20px 40px;border-top:1px solid #E2E8F0">
-          <p style="margin:0;font-size:12px;color:#94A3B8;line-height:1.6">
-            Zenowethu Consulting &bull; 012 035 1824 &bull; zenowethu@gmail.com<br>
-            This email was sent because you registered at Credo. You can manage your notification preferences in your account settings.
-          </p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
+            </tr>
+            <tr>
+                <td style="padding: 12px 0; border-top: 1px solid #f1f5f9">
+                    <table cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="width: 32px; height: 32px; background: #e4edf8; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 14px; font-weight: 700; color: #0d3870">2</td>
+                            <td style="padding-left: 15px">
+                                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0f172a">Request a credit report pull</p>
+                                <p style="margin: 2px 0 0; font-size: 13px; color: #64748b">We'll fetch your scores from all major bureaus.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 12px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9">
+                    <table cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="width: 32px; height: 32px; background: #e4edf8; border-radius: 50%; text-align: center; vertical-align: middle; font-size: 14px; font-weight: 700; color: #0d3870">3</td>
+                            <td style="padding-left: 15px">
+                                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0f172a">Let us dispute the negatives</p>
+                                <p style="margin: 2px 0 0; font-size: 13px; color: #64748b">Our team files formal dispute letters on your behalf.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+        
+        <p style="margin-bottom: 20px;">We are excited to help you on your journey to financial wellness!</p>
+    `;
+
+    return renderBrandedEmail(content, {
+        title: "Welcome to Credo",
+        previewText: "Your account is ready. Let's get started on your credit repair journey.",
+        button: {
+            text: "Go to my dashboard →",
+            url: `${process.env.NEXTAUTH_URL || "https://credo.zenowethu.co.za"}/dashboard`
+        },
+        companyName: "Zenowethu Consulting (Credo)"
+    });
 }

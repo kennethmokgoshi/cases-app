@@ -22,7 +22,8 @@ import {
     GhlWebhookWhatsAppProvider } from './providers';
 import {
     getTemplateByStatus,
-    renderTemplate
+    renderTemplate,
+    renderBrandedEmail
 } from './templates';
 import { getGHLCredentials } from '../integrations';
 import { logger } from '../logger';
@@ -309,10 +310,18 @@ async function sendNotificationByTemplate(
 
         if (EMAIL_ENABLED) {
             const emailProvider = await getEmailProvider();
+            
+            // Wrap in branded template
+            const brandedHtml = renderBrandedEmail(htmlBody, {
+                title: emailSubject,
+                previewText: emailBody.substring(0, 100) + '...',
+                companyName: COMPANY_NAME
+            });
+
             const emailResult = await emailProvider.send(
                 payload.clientEmail,
                 emailSubject,
-                htmlBody,
+                brandedHtml,
                 emailBody, // textBody
                 { fromName: payload.senderName, fromEmail: payload.senderEmail }
             );
@@ -375,10 +384,17 @@ async function sendNotificationByTemplate(
 
         if (EMAIL_ENABLED) {
             const emailProvider = await getEmailProvider();
+            
+            const brandedHtml = renderBrandedEmail(htmlBody, {
+                title: emailSubject,
+                previewText: emailBody.substring(0, 100) + '...',
+                companyName: COMPANY_NAME
+            });
+
             const emailResult = await emailProvider.send(
                 payload.dcEmail,
                 emailSubject,
-                htmlBody,
+                brandedHtml,
                 emailBody
             );
 
@@ -511,7 +527,13 @@ export async function sendFileRequestEmails(payload: {
 
     if (bureauSubject) {
         for (const bureauEmail of payload.creditBureauEmails) {
-            const res = await emailProvider.send(bureauEmail, bureauSubject, bureauBody.replace(/\n/g, '<br>'), bureauBody);
+            const brandedHtml = renderBrandedEmail(bureauBody.replace(/\n/g, '<br>'), {
+                title: bureauSubject,
+                previewText: bureauBody.substring(0, 100) + '...',
+                companyName: COMPANY_NAME
+            });
+
+            const res = await emailProvider.send(bureauEmail, bureauSubject, brandedHtml, bureauBody);
 
             bureauResults.push({ email: bureauEmail, success: res.success, error: res.error });
 
@@ -578,7 +600,13 @@ export async function sendFileRequestEmails(payload: {
 
         if (!subject) continue;
 
-        const res = await emailProvider.send(cp.email, subject, body.replace(/\n/g, '<br>'), body);
+        const brandedHtml = renderBrandedEmail(body.replace(/\n/g, '<br>'), {
+            title: subject,
+            previewText: body.substring(0, 100) + '...',
+            companyName: COMPANY_NAME
+        });
+
+        const res = await emailProvider.send(cp.email, subject, brandedHtml, body);
 
         providerResults.push({ name: cp.name, email: cp.email, success: res.success, error: res.error });
 

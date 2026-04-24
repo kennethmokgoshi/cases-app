@@ -1,4 +1,4 @@
-import { logger } from '@zenowethu/shared-lib';
+import { logger, renderBrandedEmail } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
@@ -23,42 +23,29 @@ function buildEmailHtml(
   const credoUrl   = process.env.CREDO_APP_URL || 'https://credo.zenowethu.co.za'
   const viewLink   = invoice.publicToken ? `${credoUrl}/quote/${invoice.publicToken}` : null
 
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8" /></head>
-<body style="font-family: Arial, sans-serif; color: #222; background: #f9f9f9; padding: 0; margin: 0;">
-  <div style="max-width: 600px; margin: 32px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-    <div style="background: #0AB882; padding: 28px 32px;">
-      <h1 style="color: #fff; margin: 0; font-size: 22px;">${docLabel} ${invoice.invoiceNumber}</h1>
-      <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px;">Zenowethu Debt Management</p>
+  const content = `
+    <h2 style="margin: 0 0 15px; color: #0d3870; font-size: 22px;">${docLabel} ${invoice.invoiceNumber}</h2>
+    ${message ? `<p style="margin: 0 0 24px; color: #444; line-height: 1.6;">${message.replace(/\n/g, '<br/>')}</p>` : ''}
+    <p style="margin: 0 0 15px; color: #666; font-size: 14px;">Please find your ${docLabel.toLowerCase()} attached to this email.</p>
+    
+    <div style="background-color: #f4f7f9; border-radius: 8px; padding: 25px; margin: 25px 0; border: 1px solid #e1e8ed; display: inline-block; min-width: 200px;">
+        <p style="margin: 0; font-size: 13px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">${isQuote ? 'Quoted Total' : 'Total Due'}</p>
+        <p style="margin: 5px 0 0; font-size: 28px; font-weight: bold; color: #0d3870;">${totalFormatted}</p>
     </div>
-    <div style="padding: 32px;">
-      ${message ? `<p style="margin: 0 0 24px; color: #444; line-height: 1.6;">${message.replace(/\n/g, '<br/>')}</p>` : ''}
-      <p style="margin: 0 0 8px; color: #666; font-size: 14px;">Please find your ${docLabel.toLowerCase()} attached to this email.</p>
-      <div style="background: #f4f4f4; border-radius: 6px; padding: 16px 20px; margin: 24px 0; display: inline-block;">
-        <p style="margin: 0; font-size: 13px; color: #888;">${isQuote ? 'Quoted Total' : 'Total Due'}</p>
-        <p style="margin: 4px 0 0; font-size: 24px; font-weight: bold; color: #0AB882;">${totalFormatted}</p>
-      </div>
-      ${viewLink ? `
-      <div style="margin: 24px 0; text-align: center;">
-        <a href="${viewLink}"
-           style="display: inline-block; background: #0B1D35; color: #fff; text-decoration: none;
-                  padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: bold;">
-          View &amp; Download ${docLabel} Online
-        </a>
-        <p style="margin: 10px 0 0; font-size: 12px; color: #999;">
-          Or copy this link: <a href="${viewLink}" style="color: #0AB882;">${viewLink}</a>
-        </p>
-      </div>` : ''}
-      <p style="margin: 24px 0 0; font-size: 12px; color: #999;">
-        This is an automated email from Zenowethu Debt Management. Please do not reply to this email.
-      </p>
-    </div>
-  </div>
-</body>
-</html>
-  `.trim()
+    
+    <p style="margin-top: 20px; font-size: 14px; color: #666;">
+        This is an automated financial notification from Zenowethu Debt Management.
+    </p>
+  `;
+
+  return renderBrandedEmail(content, {
+      title: `${docLabel} ${invoice.invoiceNumber}`,
+      previewText: `Your ${docLabel.toLowerCase()} from Zenowethu is ready for review.`,
+      button: viewLink ? {
+          text: `View & Download ${docLabel} Online`,
+          url: viewLink
+      } : undefined
+  });
 }
 
 export async function POST(

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger, renderBrandedEmail } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -145,13 +145,20 @@ export async function POST(request: Request, { params }: RouteContext) {
 
         // ── Send email to each provider ───────────────────────────────────────
         for (const [email, providerName] of providerEmailSet) {
-            const html = `
-<p>Dear ${providerName},</p>
-<p>Please find attached the following debt review documents for consumer <strong>${fullName}</strong> (File No: ${caseRecord.fileNumber}):</p>
-<ul>${documents.map(d => `<li>${DOC_LABELS[d.documentType] ?? d.documentType}</li>`).join('')}</ul>
-<p>This notification is issued in terms of the National Credit Act 34 of 2005.</p>
-<p>Kind regards,<br/>Zenowethu Debt Counselling Team</p>
+            const htmlContent = `
+                <p>Dear ${providerName},</p>
+                <p>Please find attached the following debt review documents for consumer <strong>${fullName}</strong> (File No: ${caseRecord.fileNumber}):</p>
+                <ul style="padding-left: 20px;">
+                    ${documents.map(d => `<li style="margin-bottom: 5px;">${DOC_LABELS[d.documentType] ?? d.documentType}</li>`).join('')}
+                </ul>
+                <p>This notification is issued in terms of the National Credit Act 34 of 2005.</p>
+                <p>Kind regards,<br/><strong>Zenowethu Debt Counselling Team</strong></p>
             `.trim();
+
+            const html = renderBrandedEmail(htmlContent, {
+                title: 'Debt Review Notification',
+                previewText: `Documents attached for consumer ${fullName} (File No: ${caseRecord.fileNumber})`
+            });
 
             const result = await sendEmailWithAttachments({
                 to:          email,

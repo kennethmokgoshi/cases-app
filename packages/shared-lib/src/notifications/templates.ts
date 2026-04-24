@@ -603,7 +603,7 @@ const BRAND_GRAY = '#f4f7f9';
  * Optimized for mobile and desktop email clients.
  */
 export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOptions = {}): string {
-    const companyName = options.companyName || 'Zenowethu Debt Management';
+    const companyName = options.companyName || 'Zenowethu Debt Management and Insurance';
     const title = options.title || companyName;
     const previewText = options.previewText || '';
     
@@ -633,8 +633,8 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
         img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
         table { border-collapse: collapse !important; }
         .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-        .content { padding: 40px 30px; color: #333333; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; }
-        .header { background-color: ${BRAND_NAVY}; padding: 30px; text-align: left; }
+        .content { padding: 40px 30px; color: #333333; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; position: relative; }
+        .header { background-color: ${BRAND_NAVY}; padding: 35px 30px; text-align: left; }
         .footer { background-color: #f8f9fa; padding: 30px; text-align: center; font-family: Arial, sans-serif; font-size: 12px; color: #6c757d; border-top: 1px solid #eeeeee; }
         .footer a { color: ${BRAND_ORANGE}; text-decoration: none; }
         h1, h2, h3 { color: ${BRAND_NAVY}; margin-top: 0; }
@@ -656,12 +656,21 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                         <td class="header">
                             <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                 <tr>
-                                    <td>
-                                        <div style="color: #ffffff; font-size: 24px; font-weight: bold; letter-spacing: 1px; font-family: Arial, sans-serif;">
+                                    <td width="70" valign="middle">
+                                        <div style="width: 50px; height: 50px; background-color: #ffffff; border-radius: 8px; position: relative; display: flex; align-items: center; justify-content: center;">
+                                            <div style="width: 30px; height: 30px; border: 4px solid ${BRAND_NAVY}; transform: rotate(45deg); position: absolute; top: 10px; left: 10px;"></div>
+                                            <div style="width: 12px; height: 12px; background-color: ${BRAND_ORANGE}; transform: rotate(45deg); position: absolute; top: 19px; left: 19px;"></div>
+                                        </div>
+                                    </td>
+                                    <td style="padding-left: 20px;" valign="middle">
+                                        <div style="color: #ffffff; font-size: 26px; font-weight: bold; font-family: Arial, sans-serif; line-height: 1.1; letter-spacing: 1px;">
                                             ZENOWETHU
                                         </div>
-                                        <div style="color: rgba(255,255,255,0.7); font-size: 11px; margin-top: 4px; letter-spacing: 0.5px; font-family: Arial, sans-serif;">
-                                            DEBT MANAGEMENT | NCRDC3693
+                                        <div style="color: #ffffff; font-size: 13px; font-weight: 500; margin-top: 5px; font-family: Arial, sans-serif; letter-spacing: 0.3px;">
+                                            Debt Management | Insurance | Financial Services
+                                        </div>
+                                        <div style="color: rgba(255,255,255,0.7); font-size: 10px; margin-top: 8px; font-family: Arial, sans-serif; letter-spacing: 0.5px;">
+                                            NCRDC3693 | DCASA 0863 | 012 035 1824
                                         </div>
                                     </td>
                                 </tr>
@@ -672,11 +681,22 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                     <tr>
                         <td class="accent-bar"></td>
                     </tr>
-                    <!-- Main Body -->
+                    <!-- Main Body with Watermark -->
                     <tr>
-                        <td class="content">
-                            ${formattedContent}
-                            ${ctaButton}
+                        <td class="content" style="background-image: url('https://cases.zenowethu.co.za/branding/watermark.jpg'); background-repeat: no-repeat; background-position: center; background-size: contain;">
+                            <!--[if gte mso 9]>
+                            <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:400px;">
+                                <v:fill type="frame" src="https://cases.zenowethu.co.za/branding/watermark.jpg" color="#ffffff" />
+                                <v:textbox inset="0,0,0,0">
+                            <![endif]-->
+                            <div style="position: relative; z-index: 1;">
+                                ${formattedContent}
+                                ${ctaButton}
+                            </div>
+                            <!--[if gte mso 9]>
+                                </v:textbox>
+                            </v:rect>
+                            <![endif]-->
                         </td>
                     </tr>
                     <!-- Footer -->
