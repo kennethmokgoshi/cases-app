@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { join } from 'path';
 import { writeFile, mkdir } from 'fs/promises';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger, renderBrandedEmail } from '@zenowethu/shared-lib';
 import { generateStandardPoa, generateWesbankPoa } from '@zenowethu/shared-lib/src/poa/poa-generator';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { GhlService } from '@zenowethu/shared-lib/src/integrations/ghl-service';
@@ -226,56 +226,33 @@ async function logActivity(caseId: string, userId: string, type: string, channel
 
 function buildEmailHtml(clientName: string, type: string, downloadUrl: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
-    return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><style>
-  body { font-family: Arial, sans-serif; color: #222; background: #f5f5f5; margin: 0; padding: 20px; }
-  .container { background: #fff; max-width: 600px; margin: auto; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
-  .header { background: #003d6b; color: #fff; padding: 28px 32px; }
-  .header h1 { margin: 0; font-size: 22px; }
-  .header p { margin: 4px 0 0; font-size: 13px; opacity: .8; }
-  .body { padding: 28px 32px; }
-  .body p { line-height: 1.6; font-size: 14px; }
-  .steps { background: #f0f6ff; border-left: 4px solid #003d6b; padding: 16px 20px; border-radius: 4px; margin: 16px 0; }
-  .steps ol { margin: 8px 0; padding-left: 20px; }
-  .steps li { margin-bottom: 6px; font-size: 13px; }
-  .cta-button { display: inline-block; background: #003d6b; color: #ffffff !important; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin: 16px 0; font-size: 14px; }
-  .footer { background: #f0f0f0; padding: 16px 32px; font-size: 11px; color: #888; text-align: center; }
-</style></head>
-<body>
-<div class="container">
-  <div class="header">
-    <h1>Zenowethu Debt Management</h1>
-    <p>NCRDC3693 | DCASA 0863 | 012 035 1824</p>
-  </div>
-  <div class="body">
-    <p>Dear <strong>${clientName}</strong>,</p>
-    <p>Please find attached your personalised <strong>${docLabel}</strong> from Zenowethu Debt Management.</p>
     
-    <div style="text-align: center;">
-      <a href="${downloadUrl}" class="cta-button">Download ${docLabel} (PDF)</a>
-    </div>
+    const content = `
+        <p>Dear <strong>${clientName}</strong>,</p>
+        <p>Please find attached your personalised <strong>${docLabel}</strong> from Zenowethu Debt Management.</p>
+        
+        <div style="background-color: #f0f6ff; border-left: 4px solid #0d3870; padding: 20px; border-radius: 4px; margin: 25px 0;">
+            <strong style="color: #0d3870; display: block; margin-bottom: 10px;">What you need to do:</strong>
+            <ol style="margin: 0; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">Download and open the attached PDF.</li>
+                <li style="margin-bottom: 8px;">Print it or use a PDF signing app (like Adobe Fill & Sign).</li>
+                <li style="margin-bottom: 8px;">Sign where indicated and fill in the date.</li>
+                <li style="margin-bottom: 0;">Scan or photograph the signed document and send it back to us at <a href="mailto:info@zenowethu.co.za" style="color: #d9701a; text-decoration: none; font-weight: bold;">info@zenowethu.co.za</a>.</li>
+            </ol>
+        </div>
+        
+        <p>If you have any questions, please contact us at <strong>012 035 1824</strong> or simply reply to this email.</p>
+        <p>Kind regards,<br/><strong>Zenowethu Debt Management Team</strong></p>
+    `;
 
-    <div class="steps">
-      <strong>What you need to do:</strong>
-      <ol>
-        <li>Download and open the PDF.</li>
-        <li>Print it or use a PDF signing app.</li>
-        <li>Sign where indicated and fill in the date.</li>
-        <li>Scan or photograph the signed document and send it back to us at <a href="mailto:info@zenowethu.co.za">info@zenowethu.co.za</a>.</li>
-      </ol>
-    </div>
-    <p>If you have any questions, please contact us at <strong>012 035 1824</strong> or reply to this email.</p>
-    <p>Kind regards,<br><strong>Zenowethu Debt Management Team</strong></p>
-  </div>
-  <div class="footer">
-    Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199<br>
-    012 035 1824 | www.zenowethu.co.za | info@zenowethu.co.za
-  </div>
-</div>
-</body>
-</html>`;
+    return renderBrandedEmail(content, {
+        title: `${docLabel} — Action Required`,
+        previewText: `Your personalised ${docLabel} is ready for signature.`,
+        button: {
+            text: `Download ${docLabel} (PDF)`,
+            url: downloadUrl
+        }
+    });
 }
 
 function buildWhatsAppMessage(clientName: string, downloadUrl: string, type: string): string {

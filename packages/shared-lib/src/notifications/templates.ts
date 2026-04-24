@@ -577,5 +577,138 @@ export function renderTemplate(
         result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '');
     }
     return result;
+
 }
+
+// ─── Branded Email Layout ──────────────────────────────────────────────────
+
+export interface EmailLayoutOptions {
+    title?: string;
+    previewText?: string;
+    button?: {
+        text: string;
+        url: string;
+    };
+    hideFooter?: boolean;
+    companyName?: string;
+    logoUrl?: string;
+}
+
+const BRAND_NAVY = '#0d3870';
+const BRAND_ORANGE = '#d9701a';
+const BRAND_GRAY = '#f4f7f9';
+
+/**
+ * Wraps raw content in a professional, branded Zenowethu HTML layout.
+ * Optimized for mobile and desktop email clients.
+ */
+export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOptions = {}): string {
+    const companyName = options.companyName || 'Zenowethu Debt Management';
+    const title = options.title || companyName;
+    const previewText = options.previewText || '';
+    
+    // Convert newlines to <br/> if the content is plain text
+    const formattedContent = contentHtml.includes('<p>') ? contentHtml : contentHtml.split('\n').map(l => l.trim() ? `<p>${l}</p>` : '<br/>').join('');
+
+    const ctaButton = options.button ? `
+        <div style="padding: 20px 0; text-align: center;">
+            <a href="${options.button.url}" style="background-color: ${BRAND_NAVY}; color: #ffffff; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">${options.button.text}</a>
+        </div>
+    ` : '';
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td, a { font-family: Arial, Helvetica, sans-serif !important; }
+    </style>
+    <![endif]-->
+    <style>
+        body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; background-color: ${BRAND_GRAY}; }
+        img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+        table { border-collapse: collapse !important; }
+        .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .content { padding: 40px 30px; color: #333333; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; }
+        .header { background-color: ${BRAND_NAVY}; padding: 30px; text-align: left; }
+        .footer { background-color: #f8f9fa; padding: 30px; text-align: center; font-family: Arial, sans-serif; font-size: 12px; color: #6c757d; border-top: 1px solid #eeeeee; }
+        .footer a { color: ${BRAND_ORANGE}; text-decoration: none; }
+        h1, h2, h3 { color: ${BRAND_NAVY}; margin-top: 0; }
+        p { margin-bottom: 1.5em; }
+        .accent-bar { height: 4px; background: linear-gradient(to right, ${BRAND_NAVY}, ${BRAND_ORANGE}); }
+        @media only screen and (max-width: 600px) {
+            .content { padding: 30px 20px !important; }
+        }
+    </style>
+</head>
+<body>
+    <div style="display: none; max-height: 0px; overflow: hidden;">${previewText}</div>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+            <td align="center" style="background-color: ${BRAND_GRAY}; padding: 20px 0;">
+                <table border="0" cellpadding="0" cellspacing="0" class="container" style="border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <!-- Header -->
+                    <tr>
+                        <td class="header">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td>
+                                        <div style="color: #ffffff; font-size: 24px; font-weight: bold; letter-spacing: 1px; font-family: Arial, sans-serif;">
+                                            ZENOWETHU
+                                        </div>
+                                        <div style="color: rgba(255,255,255,0.7); font-size: 11px; margin-top: 4px; letter-spacing: 0.5px; font-family: Arial, sans-serif;">
+                                            DEBT MANAGEMENT | NCRDC3693
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Accent Bar -->
+                    <tr>
+                        <td class="accent-bar"></td>
+                    </tr>
+                    <!-- Main Body -->
+                    <tr>
+                        <td class="content">
+                            ${formattedContent}
+                            ${ctaButton}
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    ${options.hideFooter ? '' : `
+                    <tr>
+                        <td class="footer">
+                            <p style="margin: 0 0 10px 0; font-weight: bold; color: ${BRAND_NAVY}; font-size: 14px;">${companyName}</p>
+                            <p style="margin: 0 0 5px 0;">Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199</p>
+                            <p style="margin: 0 0 5px 0;">Tel: 012 035 1824 | Email: <a href="mailto:info@zenowethu.co.za">info@zenowethu.co.za</a></p>
+                            <p style="margin: 0 0 20px 0;">Web: <a href="https://www.zenowethu.co.za">www.zenowethu.co.za</a></p>
+                            
+                            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eeeeee; font-size: 10px; line-height: 1.4; text-align: justify;">
+                                <p style="margin: 0;"><strong>Confidentiality & POPIA Notice:</strong> This email and any attachments are confidential and intended solely for the addressee. Zenowethu Debt Management (PTY) LTD is committed to protecting your personal information in accordance with the Protection of Personal Information Act (POPIA). If you have received this email in error, please notify the sender immediately and delete it from your system.</p>
+                                <p style="margin: 10px 0 0 0; text-align: center;">Zenowethu Debt Management (PTY) LTD | Reg No: 2013/121120/07 | NCRDC3693</p>
+                            </div>
+                        </td>
+                    </tr>
+                    `}
+                </table>
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;">
+                    <tr>
+                        <td style="padding: 20px; text-align: center; color: #999999; font-size: 11px; font-family: Arial, sans-serif;">
+                            &copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `;
+}
+
 
