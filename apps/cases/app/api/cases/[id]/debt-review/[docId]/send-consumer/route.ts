@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger, renderBrandedEmail } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -79,12 +79,17 @@ export async function POST(_req: Request, { params }: RouteContext) {
         const docLabel  = DOC_LABELS[doc.documentType] ?? doc.documentType;
         const fullName  = `${caseRecord.client.firstName} ${caseRecord.client.lastName}`;
 
-        const html = `
-<p>Dear ${fullName},</p>
-<p>Please find attached your <strong>${docLabel}</strong> (File No: ${caseRecord.fileNumber}) for your debt review application with Zenowethu.</p>
-<p>Kindly review the document carefully. If you have any questions, please contact us.</p>
-<p>Kind regards,<br/>Zenowethu Debt Counselling Team</p>
+        const htmlContent = `
+            <p>Dear ${fullName},</p>
+            <p>Please find attached your <strong>${docLabel}</strong> (File No: ${caseRecord.fileNumber}) for your debt review application with Zenowethu.</p>
+            <p>Kindly review the document carefully. If you have any questions, please do not hesitate to contact us.</p>
+            <p>Kind regards,<br/><strong>Zenowethu Debt Counselling Team</strong></p>
         `.trim();
+
+        const html = renderBrandedEmail(htmlContent, {
+            title: docLabel,
+            previewText: `Important document attached: ${docLabel} for File No. ${caseRecord.fileNumber}`
+        });
 
         const result = await sendEmailWithAttachments({
             to:      consumerEmail,
