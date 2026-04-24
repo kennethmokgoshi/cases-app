@@ -105,7 +105,7 @@ export async function POST(
         const parsed = parseBody(CaseCommentCreateSchema, await request.json());
         if (!parsed.success) return parsed.response;
         const body = parsed.data as z.infer<typeof CaseCommentCreateSchema>;
-        const { content, activityType, activityData, type, isInternal } = body;
+        const { content, activityType, activityData, type, isInternal, attachments } = body;
 
         // Get the case to verify it exists and get file number for notifications
         const caseData = await prisma.case.findUnique({
@@ -186,6 +186,7 @@ export async function POST(
                 isInternal: isInternal === undefined ? true : isInternal,
                 activityType: activityType || (type === 'JOURNAL' ? 'JOURNAL_ENTRY' : 'COMMENT'),
                 activityData: activityData ? JSON.stringify(activityData) : null,
+                attachments: attachments ? attachments : null,
                 mentions: {
                     create: mentionedUsers.map(user => ({
                         userId: user.id }))

@@ -30,6 +30,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             firstName: true,
             lastName: true,
             password: true,
+            role: true,
+            isAdmin: true,
+            tenantId: true,
           },
         });
 
@@ -44,13 +47,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: `${consumer.firstName} ${consumer.lastName}`,
           firstName: consumer.firstName,
           lastName: consumer.lastName,
-          role: "CONSUMER",
+          role: consumer.role,
           userType: "CONSUMER",
-          isAdmin: false,
-          isExecutive: false,
+          isAdmin: consumer.isAdmin,
+          isExecutive: consumer.role === "EXECUTIVE",
           isSeniorManager: false,
           isManager: false,
-          b2bPartnerId: null,
+          b2bPartnerId: consumer.tenantId,
           organization: null,
           avatarUrl: null,
         };

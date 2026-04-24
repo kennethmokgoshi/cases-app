@@ -24,6 +24,10 @@ export default function Error({
     useEffect(() => {
         // TODO (Round 3): replace with a proper error tracking service (e.g. Sentry)
         logger.error('[Error Boundary]', error);
+        if (error instanceof Error) {
+            logger.error('Error Message:', error.message);
+            logger.error('Error Stack:', error.stack);
+        }
     }, [error]);
 
     return (

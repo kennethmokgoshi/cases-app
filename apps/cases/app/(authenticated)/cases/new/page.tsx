@@ -176,6 +176,7 @@ function NewCaseWithAIComponent() {
     }>({
         optional: []
     });
+    const isAutoSelecting = useRef(false);
     const [uploadMode, setUploadMode] = useState<'separate' | 'combined'>('separate');
 
     // Step 3: Extracted Data
@@ -266,6 +267,7 @@ function NewCaseWithAIComponent() {
 
     // Available services
     const SERVICES = [
+        { id: 'credit_profile_enquiry', label: 'Credit Profile Enquiry' },
         { id: 'admin_order_removal', label: 'Administration Order Removal' },
         { id: 'admin_order_application', label: 'Administration Order Application' },
         { id: 'debt_review_flag_removal', label: 'Debt Review Flag Removal' },
@@ -378,7 +380,6 @@ function NewCaseWithAIComponent() {
                 const data = await res.json();
 
                 // Get ACQUISITION_SOURCE projects (main parent projects)
-                // Get ACQUISITION_SOURCE projects (main parent projects)
                 const mainProjects: Project[] = [];
                 if (data.hierarchy?.children) {
                     mainProjects.push(...data.hierarchy.children.filter(
@@ -396,17 +397,66 @@ function NewCaseWithAIComponent() {
                 const uniqueProjects = Array.from(new Map(mainProjects.map(p => [p.id, p])).values());
 
                 setParentProjects(uniqueProjects);
+
+                // Auto-select based on projectId param
+                const projectIdParam = searchParams.get('projectId');
+                if (projectIdParam) {
+                    isAutoSelecting.current = true;
+                    logger.info('Project ID detected in URL, resolving hierarchy...', projectIdParam);
+                    await resolveProjectHierarchy(projectIdParam, uniqueProjects);
+                    // Give it a tick to let the renders settle before re-enabling resets
+                    setTimeout(() => { isAutoSelecting.current = false; }, 100);
+                }
             } catch (error) {
                 logger.error('Failed to fetch projects', error);
             } finally {
                 setLoading(false);
             }
         }
+
+        async function resolveProjectHierarchy(id: string, allParentProjects: Project[]) {
+            try {
+                let currentId = id;
+                const path: any[] = [];
+                
+                // Fetch up the chain
+                while (currentId) {
+                    const res = await fetch(`/api/projects/${currentId}`);
+                    if (!res.ok) break;
+                    const p = await res.json();
+                    path.unshift(p); // Add to beginning to have Root -> ... -> Month
+                    currentId = p.parentId;
+                }
+
+                if (path.length === 0) return;
+
+                logger.info('Resolved path:', path.map(p => `${p.name} (${p.type})`));
+
+                // Process path levels
+                path.forEach(p => {
+                    if (p.type === 'ACQUISITION_SOURCE') {
+                        setSelectedParentId(p.id);
+                        if (p.clientType === 'B2B') setAcquisitionType('B2B');
+                        else if (p.clientType === 'B2C') setAcquisitionType('B2C');
+                    } else if (p.type === 'BRANCH' || p.type === 'FOLDER') {
+                        setSelectedSubprojectId(p.id);
+                    } else if (p.type === 'YEAR') {
+                        setSelectedYear(p.name);
+                    } else if (p.type === 'MONTH') {
+                        setSelectedMonth(p.name);
+                    }
+                });
+            } catch (e) {
+                logger.error('Error resolving project hierarchy:', e);
+            }
+        }
+
         fetchProjects();
     }, []);
 
     // Reset parent selection when acquisition type changes
     useEffect(() => {
+        if (isAutoSelecting.current) return;
         setSelectedParentId('');
         setSelectedSubprojectId('');
         // REMOVED: Reseting Year/Month
@@ -414,6 +464,7 @@ function NewCaseWithAIComponent() {
 
     // Reset dependent selections when parent changes
     useEffect(() => {
+        if (isAutoSelecting.current) return;
         setSelectedSubprojectId('');
         // REMOVED: Reseting Year/Month
     }, [selectedParentId]);

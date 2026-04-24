@@ -2,7 +2,7 @@ import { logger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
+import { sendEmail } from '@/lib/email'
 
 export async function POST(request: Request) {
   const session = await auth()
@@ -27,23 +27,17 @@ export async function POST(request: Request) {
       where: { id: { in: overdueInvoices.map(i => i.id) }, status: 'SENT' },
       data:  { status: 'OVERDUE' } })
 
-    const transporter = nodemailer.createTransport({
-      host:   process.env.SMTP_HOST   || 'localhost',
-      port:   parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      tls:    { rejectUnauthorized: false } })
-
     let emailsSent = 0
     for (const invoice of overdueInvoices) {
       const email = invoice.sentTo || invoice.client?.email
       if (!email) continue
       try {
         const totalFormatted = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(Number(invoice.total))
-        await transporter.sendMail({
-          from:    process.env.EMAIL_FROM || process.env.SMTP_USER,
-          to:      email,
-          subject: `Payment Reminder: Invoice ${invoice.invoiceNumber} is Overdue`,
+        const res = await sendEmail({
+          to:        email,
+          fromName:  session.user.name || undefined,
+          fromEmail: session.user.email || undefined,
+          subject:   `Payment Reminder: Invoice ${invoice.invoiceNumber} is Overdue`,
           html: `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
   <div style="background: #dc2626; padding: 24px 32px;">
@@ -59,9 +53,10 @@ export async function POST(request: Request) {
     </p>
   </div>
 </div>` })
-        emailsSent++
+        if (res.success) emailsSent++
+        else logger.error(`[invoice-reminders] Failed to send reminder for ${invoice.invoiceNumber}:`, res.error)
       } catch (emailErr) {
-        logger.error(`[invoice-reminders] Failed to send reminder for ${invoice.invoiceNumber}:`, emailErr)
+        logger.error(`[invoice-reminders] Unexpected error sending reminder for ${invoice.invoiceNumber}:`, emailErr)
       }
     }
 

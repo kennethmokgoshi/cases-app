@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@zenowethu/database";
+import { sendEmail, welcomeEmailHtml } from "@/lib/email";
 
 const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -44,6 +45,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Match consumer to existing Client by ID number so their cases appear immediately
+    let linkedClientId: string | null = null;
+    if (data.idNumber) {
+      const matchedClient = await prisma.client.findFirst({
+        where: { idNumber: data.idNumber },
+        select: { id: true },
+      });
+      if (matchedClient) {
+        const alreadyLinked = await prisma.consumerAccount.findFirst({
+          where: { linkedClientId: matchedClient.id },
+          select: { id: true },
+        });
+        if (!alreadyLinked) {
+          linkedClientId = matchedClient.id;
+        }
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
     const consumer = await prisma.consumerAccount.create({
@@ -56,6 +75,7 @@ export async function POST(req: NextRequest) {
         phone: data.phone || null,
         province: data.province || null,
         language: data.language,
+        linkedClientId,
       },
       select: {
         id: true,
@@ -63,10 +83,39 @@ export async function POST(req: NextRequest) {
         firstName: true,
         lastName: true,
         createdAt: true,
+        linkedClientId: true,
       },
     });
 
-    return NextResponse.json({ success: true, consumer }, { status: 201 });
+    // Notify User
+    sendEmail({
+      to: consumer.email,
+      subject: "Welcome to Credo — your credit repair journey starts here",
+      html: welcomeEmailHtml(consumer.firstName),
+    }).catch(() => undefined);
+
+    // Notify Staff (Zenowethu Support)
+    sendEmail({
+      to: "support@zenowethu.co.za",
+      subject: `🚨 ACTION REQUIRED: New Credo Registration - ${consumer.firstName} ${consumer.lastName}`,
+      html: `
+        <h2>New Credo Registration</h2>
+        <p>A new consumer has registered on the Credo portal and is awaiting credit report uploads.</p>
+        <ul>
+          <li><strong>Name:</strong> ${consumer.firstName} ${consumer.lastName}</li>
+          <li><strong>Email:</strong> ${consumer.email}</li>
+          <li><strong>ID Number:</strong> ${data.idNumber || "Not provided"}</li>
+          <li><strong>Registration Date:</strong> ${new Date().toLocaleString()}</li>
+        </ul>
+        <p><a href="https://cases.zenowethu.co.za/clients/${consumer.linkedClientId || ''}">View Client in Cases App</a></p>
+        <p>Please pull and upload the 4-bureau credit reports to the client's case to activate their dashboard.</p>
+      `,
+    }).catch((err) => console.error("Staff notification email failed:", err));
+
+    return NextResponse.json(
+      { success: true, consumer, linkedToExistingClient: linkedClientId !== null },
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -75,7 +124,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Prisma error codes
     const prismaError = error as { code?: string; message?: string };
     if (prismaError.code === "P2002") {
       const target = prismaError.message?.includes("email") ? "email address" : "ID number";
@@ -84,7 +132,7 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-    if (prismaError.code === "P2021" || prismaError.code === "P1001" || prismaError.code === "P1003") {
+    if (["P2021", "P1001", "P1003"].includes(prismaError.code ?? "")) {
       return NextResponse.json(
         { error: "Database is temporarily unavailable. Please try again in a few minutes." },
         { status: 503 }

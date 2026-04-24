@@ -283,7 +283,14 @@ export const CaseCommentCreateSchema = z.object({
     type: z.enum(['NOTE', 'COMMENT', 'SYSTEM', 'JOURNAL']).optional().default('COMMENT'),
     isInternal: z.boolean().optional().default(true),
     activityType: optionalString,
-    activityData: z.record(z.string(), z.unknown()).optional().nullable() });
+    activityData: z.record(z.string(), z.unknown()).optional().nullable(),
+    attachments: z.array(z.object({
+        name: z.string(),
+        url: z.string(),
+        type: z.string(),
+        size: z.number()
+    })).optional()
+});
 
 // ─── Case move schema ─────────────────────────────────────────────────────────
 

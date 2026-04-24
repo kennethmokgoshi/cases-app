@@ -4,7 +4,7 @@ import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf'
 import { z } from 'zod'
-import nodemailer from 'nodemailer'
+import { sendEmail } from '@/lib/email'
 
 const SendInvoiceSchema = z.object({
   to:      z.string().email(),
@@ -118,21 +118,12 @@ export async function POST(
 
     const pdfBytes = await generateInvoicePdf(invoiceData)
 
-    // Send via nodemailer directly (SmtpEmailProvider does not support attachments)
-    const transporter = nodemailer.createTransport({
-      host:   process.env.SMTP_HOST   || 'localhost',
-      port:   parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS },
-      tls: { rejectUnauthorized: false } })
-
-    await transporter.sendMail({
-      from:    process.env.EMAIL_FROM || process.env.SMTP_USER,
-      to:      input.to,
-      subject: input.subject ?? `${invoice.type === 'QUOTE' ? 'Quotation' : 'Invoice'} ${invoice.invoiceNumber} from Zenowethu`,
-      html:    buildEmailHtml(
+    const emailResult = await sendEmail({
+      to:        input.to,
+      fromName:  session.user.name || undefined,
+      fromEmail: session.user.email || undefined,
+      subject:   input.subject ?? `${invoice.type === 'QUOTE' ? 'Quotation' : 'Invoice'} ${invoice.invoiceNumber} from Zenowethu`,
+      html:      buildEmailHtml(
         { invoiceNumber: invoice.invoiceNumber, total: invoice.total, type: invoice.type, publicToken: invoice.publicToken },
         input.message,
       ),
@@ -140,6 +131,11 @@ export async function POST(
         filename:    `${invoice.invoiceNumber}.pdf`,
         content:     Buffer.from(pdfBytes),
         contentType: 'application/pdf' }] })
+
+    if (!emailResult.success) {
+      logger.error(`[invoice-send] Failed to send email for ${invoice.invoiceNumber}:`, emailResult.error)
+      return NextResponse.json({ error: 'Email delivery failed: ' + emailResult.error }, { status: 502 })
+    }
 
     // Update invoice status to SENT
     await prisma.invoice.update({

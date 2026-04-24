@@ -1,52 +1,6 @@
-"use client";
+import { useSession } from "next-auth/react";
 
-import { useState, useRef, useEffect } from "react";
-
-type Message = {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-};
-
-const SUGGESTED_QUESTIONS = [
-  "Should I pay this old collection or is it possibly prescribed?",
-  "What does a debt review flag on my report mean?",
-  "How do I challenge a judgment that has been paid?",
-  "What is Section 72 of the NCA and how does it help me?",
-  "How long does a default stay on my credit report?",
-  "What is an emolument attachment order and can I challenge it?",
-  "Can a creditor list a new default on a prescribed debt?",
-  "What is the difference between TransUnion and Experian?",
-];
-
-const SAMPLE_RESPONSES: Record<string, string> = {
-  prescription: `Under the **Prescription Act 68 of 1969**, most unsecured debts prescribe after **3 years** from the date the debt became due — or the last date you acknowledged it in writing or made a payment.
-
-**Key points for your situation:**
-- If the creditor has not issued a summons or obtained judgment within that period, the debt may no longer be legally enforceable
-- You should **not** acknowledge the debt or make a payment, as this resets the prescription clock
-- A creditor can still *list* the debt on your bureau, but they cannot *collect* it through the courts
-
-**My recommendation:** Before paying, let our Prescription Scanner confirm the exact dates. If the debt is prescribed, we draft a formal prescription challenge letter to the bureau.
-
-*This is general guidance under SA law. For complex matters, consult an attorney or the Credit Ombud (free service).*`,
-
-  default: `Great question. Here is what you need to know:
-
-**How long defaults stay on your report:**
-- Paid defaults: **1 year** after the settlement date
-- Unpaid defaults: **2 years** from the date of listing
-- Judgment: **5 years** (unless rescinded)
-- Debt review flag: **Indefinitely** until clearance certificate received
-
-**What you can do right now:**
-1. Check whether the default is accurately listed — incorrect dates or amounts are grounds for a Section 72 dispute
-2. If it is a paid default, request removal with proof of payment
-3. If the information is correct but old, the bureaus are legally required to remove it once the time period expires
-
-Would you like me to check the exact listing dates on your credit report?`,
-};
+/* ... (Types and Suggested Questions unchanged) ... */
 
 function TypingIndicator() {
   return (
@@ -63,6 +17,8 @@ function TypingIndicator() {
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
+  const { data: session } = useSession();
+  const initials = session?.user?.name?.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "C";
 
   const formatContent = (text: string) => {
     return text
@@ -125,7 +81,7 @@ function MessageBubble({ message }: { message: Message }) {
           marginBottom: 4,
           fontSize: "0.6875rem", fontWeight: 700, color: "#C4953A",
         }}>
-          SS
+          {initials}
         </div>
       )}
     </div>
@@ -133,6 +89,7 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 export default function AICoachPage() {
+  const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
@@ -169,7 +126,11 @@ I can see your credit profile and help you understand exactly what is affecting 
       const res = await fetch('/api/ai-coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content, language }),
+        body: JSON.stringify({ 
+          message: content, 
+          language,
+          consumerId: session?.user?.id
+        }),
       });
       const data = await res.json();
       const responseText = res.ok

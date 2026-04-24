@@ -32,4 +32,15 @@ export const authConfig: NextAuthConfig = {
   providers: [], // Credentials provider added in auth.ts (Node.js only)
   session: { strategy: "jwt" },
   trustHost: true,
+  cookies: {
+    sessionToken: {
+      name: `credo.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
 };

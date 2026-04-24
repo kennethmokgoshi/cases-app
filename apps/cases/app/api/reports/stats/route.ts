@@ -11,19 +11,41 @@ export async function GET(request: Request) {
         const from = searchParams.get('from');
         const to = searchParams.get('to');
         const projectId = searchParams.get('projectId');
+        const filterBy = searchParams.get('filterBy') || 'createdAt'; // 'createdAt' or 'fileToBeCompleted'
 
         const whereClause: any = {};
 
+        // Date Filter
         if (from && to) {
-            whereClause.createdAt = {
+            whereClause[filterBy] = {
                 gte: new Date(from),
                 lte: new Date(to + 'T23:59:59.999Z')
             };
         }
 
+        // Project Filter (Recursive)
         if (projectId && projectId !== 'all') {
+            // Get all descendants of the selected project
+            const allProjects = await prisma.project.findMany({
+                select: { id: true, parentId: true }
+            });
+
+            const projectIds = new Set<string>([projectId]);
+            let added = true;
+            while (added) {
+                added = false;
+                allProjects.forEach(p => {
+                    if (p.parentId && projectIds.has(p.parentId) && !projectIds.has(p.id)) {
+                        projectIds.add(p.id);
+                        added = true;
+                    }
+                });
+            }
+
             whereClause.projects = {
-                some: { projectId }
+                some: {
+                    projectId: { in: Array.from(projectIds) }
+                }
             };
         }
 
@@ -51,8 +73,42 @@ export async function GET(request: Request) {
             where: { ...whereClause, acquisitionType: 'B2C' }
         });
 
+        // Cases by staff (Staff Performance)
+        const staffCasesRaw = await prisma.case.groupBy({
+            by: ['assignedToId'],
+            _count: { id: true },
+            where: whereClause
+        });
+
+        // Fetch staff names
+        const staffIds = staffCasesRaw.map(s => s.assignedToId).filter(Boolean) as string[];
+        const staffMembers = await prisma.user.findMany({
+            where: { id: { in: staffIds } },
+            select: { id: true, firstName: true, lastName: true }
+        });
+
+        const staffStats = staffCasesRaw.map(s => {
+            const member = staffMembers.find(m => m.id === s.assignedToId);
+            return {
+                staffId: s.assignedToId || 'unassigned',
+                staffName: member ? `${member.firstName} ${member.lastName}` : 'Unassigned',
+                count: s._count.id
+            };
+        }).sort((a, b) => b.count - a.count);
+
+        // Cases by B2B Partner (B2B Performance)
+        const b2bStatsRaw = await prisma.case.groupBy({
+            by: ['partnerName'],
+            _count: { id: true },
+            where: { ...whereClause, acquisitionType: 'B2B' }
+        });
+
+        const b2bStats = b2bStatsRaw.map(b => ({
+            partnerName: b.partnerName || 'Unknown Partner',
+            count: b._count.id
+        })).sort((a, b) => b.count - a.count);
+
         // Cases by project (primary project)
-        // If filtering by a project, we still want to see the primary project distribution
         const caseProjects = await prisma.caseProject.findMany({
             where: {
                 isPrimary: true,
@@ -72,27 +128,21 @@ export async function GET(request: Request) {
             .map(([projectName, count]) => ({ projectName, count }))
             .sort((a, b) => b.count - a.count);
 
-        // Cases by month (last 6 months, respecting the filter if it overlaps)
-        // Note: The 'whereClause' might handle the date. If 'searchParams' has 'from'/'to', 
-        // it restricts this query. If we want "Trend" we might usually want loosely last 6 months 
-        // BUT restricted by the project filter.
-
-        // If users filter by "Last Month", trend chart is weird (1 point).
-        // But let's respect the user's explicit date filter if provided for consistency,
-        // OR default to 6 months if date filter is not strict. 
-        // Actually, typical analytics dashboards respect the date filter for all charts.
-
-        const casesForMonths = await prisma.case.findMany({
+        // Trend Chart data
+        const casesForTrend = await prisma.case.findMany({
             where: whereClause,
-            select: { createdAt: true }
+            select: { [filterBy]: true }
         });
 
-        const monthCounts: Record<string, number> = {};
-        casesForMonths.forEach(c => {
-            const month = c.createdAt.toISOString().slice(0, 7); // YYYY-MM
-            monthCounts[month] = (monthCounts[month] || 0) + 1;
+        const trendCounts: Record<string, number> = {};
+        casesForTrend.forEach((c: any) => {
+            const dateVal = c[filterBy];
+            if (dateVal) {
+                const month = dateVal.toISOString().slice(0, 7); // YYYY-MM
+                trendCounts[month] = (trendCounts[month] || 0) + 1;
+            }
         });
-        const casesByMonth = Object.entries(monthCounts)
+        const casesByMonth = Object.entries(trendCounts)
             .map(([month, count]) => ({ month, count }))
             .sort((a, b) => a.month.localeCompare(b.month));
 
@@ -101,6 +151,8 @@ export async function GET(request: Request) {
             casesByStatus,
             casesByProject,
             casesByMonth,
+            staffStats,
+            b2bStats,
             b2bCases,
             b2cCases
         });

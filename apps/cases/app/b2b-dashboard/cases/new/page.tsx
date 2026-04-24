@@ -382,14 +382,14 @@ function PartnerNewCaseComponent() {
                         firstName: fullNames,
                         lastName: surname,
                         idNumber: idNumber,
-                        phone: cellNumber, // API expects 'phone' not 'cellNumber'
+                        phone: cellNumber || null,
                         email: email || null },
                     projectId: finalProjectId,
                     acquisitionType: 'B2B',
                     partnerName: getPartnerNameFromProject(),
                     partnerBranch: getBranchNameFromProject(),
                     partnerSplitPercent: 50,
-                    services: selectedServices, // API expects services array
+                    services: selectedServices,
                 }) });
 
             if (!caseResponse.ok) {
@@ -410,6 +410,11 @@ function PartnerNewCaseComponent() {
                                 : 'Field';
 
                     alert(`❌ ${errorData.error}\n\n${errorData.message}\n\nPlease use a different ${fieldName}.`);
+                } else if (errorData.errors && typeof errorData.errors === 'object') {
+                    const fieldMessages = Object.entries(errorData.errors as Record<string, string[]>)
+                        .map(([field, msgs]) => `• ${field}: ${msgs.join(', ')}`)
+                        .join('\n');
+                    alert(`❌ Submission failed — please fix the following:\n\n${fieldMessages}`);
                 } else {
                     alert(`Failed to create case: ${errorData.error || errorData.message || 'Unknown error'}`);
                 }

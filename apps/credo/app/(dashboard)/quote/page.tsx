@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 const SERVICES = [
+  { id: "credit_profile_enquiry", label: "Credit Profile Enquiry & Analysis", price: 450,  description: "Detailed check of your credit profile to identify issues and errors", category: "Report"   },
   { id: "judgment",      label: "Judgment Removal",            price: 4500,  description: "Rule 49 rescission application — Magistrate's or High Court", category: "Legal"     },
   { id: "default",       label: "Default Dispute",             price: 1800,  description: "Section 72 NCA dispute filed directly with credit bureaus",    category: "Dispute"   },
   { id: "debt_review",   label: "Debt Review Flag Removal",    price: 2500,  description: "DHS clearance certificate coordination and bureau flag removal", category: "DHS"      },
@@ -68,6 +69,71 @@ export default function QuotePage() {
     { key:"review",   label:"Review"      },
   ];
   const stepIndex = STEPS.findIndex(s => s.key === step);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/consumer/service-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          services: selectedServices.map(s => s.label),
+          subtotal,
+          couponCode: coupon,
+          discountPercent: couponApplied ? (coupon.toUpperCase() === "CREDO20" ? 20 : 10) : 0,
+          notes: planType === "ai" ? "AI-generated optimal plan" : "Manual selection",
+        }),
+      });
+
+      if (res.ok) {
+        setSuccess(true);
+        // Redirect after a short delay
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 2000);
+      } else {
+        const error = await res.json();
+        alert(error.error || "Failed to submit request. Please try again.");
+      }
+    } catch (err) {
+      alert("Connection error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="animate-fade-in" style={{ 
+        maxWidth: 600, margin: "100px auto", textAlign: "center",
+        padding: 40, background: "white", borderRadius: 16, border: "1px solid #E2E8F0"
+      }}>
+        <div style={{ 
+          width: 64, height: 64, borderRadius: "50%", background: "#ECFDF5", 
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 20px"
+        }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+            <path d="M20 6L9 17L4 12" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0B1D35", margin: "0 0 10px" }}>Request Submitted!</h2>
+        <p style={{ fontSize: "1rem", color: "#64748B", margin: "0 0 24px", lineHeight: 1.6 }}>
+          Thank you! Your quote has been accepted. A consultant will review your request and link it to your profile shortly.
+        </p>
+        <div style={{ padding: "16px", background: "#F8F9FA", borderRadius: 10, textAlign: "left", marginBottom: 24 }}>
+          <p style={{ fontSize: "0.8125rem", color: "#94A3B8", margin: "0 0 4px" }}>REFERENCE</p>
+          <p style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#0F172A", margin: 0 }}>REQ-{Math.random().toString(36).substring(7).toUpperCase()}</p>
+        </div>
+        <button onClick={() => window.location.href = "/dashboard"} className="btn-primary" style={{ width: "100%", justifyContent: "center", padding: "12px 0" }}>
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in" style={{ maxWidth:900 }}>
@@ -421,8 +487,13 @@ export default function QuotePage() {
                 <button onClick={() => setStep("coupon")} className="btn-outline" style={{ padding:"11px 20px" }}>
                   ← Back
                 </button>
-                <button className="btn-accent" style={{ flex:1, padding:"12px 0", fontSize:"0.9375rem", fontWeight:700, justifyContent:"center" }}>
-                  Accept quote &amp; create case
+                <button 
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="btn-accent" 
+                  style={{ flex:1, padding:"12px 0", fontSize:"0.9375rem", fontWeight:700, justifyContent:"center" }}
+                >
+                  {submitting ? "Submitting..." : "Accept quote & create case"}
                 </button>
               </div>
               <p style={{ fontSize:"0.75rem", color:"#94A3B8", textAlign:"center", marginTop:12 }}>

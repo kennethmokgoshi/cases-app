@@ -1,20 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { DEMO_DOCS } from "@/lib/credo-demo-data";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 type DocCategory = "ALL" | "IDENTITY" | "INCOME" | "BUREAU" | "LEGAL" | "CORRESPONDENCE";
 
+interface CredoDoc {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  category: string;
+  createdAt: string;
+}
+
 const CATEGORIES: { key: DocCategory; label: string }[] = [
-  { key: "ALL",          label: "All Files"      },
-  { key: "IDENTITY",     label: "Identity"       },
-  { key: "INCOME",       label: "Income"         },
-  { key: "BUREAU",       label: "Bureau Reports" },
-  { key: "LEGAL",        label: "Legal"          },
+  { key: "ALL",            label: "All Files"      },
+  { key: "IDENTITY",       label: "Identity"       },
+  { key: "INCOME",         label: "Income"         },
+  { key: "BUREAU",         label: "Bureau Reports" },
+  { key: "LEGAL",          label: "Legal"          },
   { key: "CORRESPONDENCE", label: "Correspondence" },
 ];
-
-const DOCS = DEMO_DOCS;
 
 const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
   IDENTITY: {
@@ -39,42 +45,129 @@ const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: React.R
   },
 };
 
-function DocTypeIcon({ type }: { type: string }) {
+function fileExt(mimeType: string): string {
+  const map: Record<string, string> = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  };
+  return map[mimeType] ?? "file";
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DocTypeIcon({ mimeType }: { mimeType: string }) {
+  const ext = fileExt(mimeType);
+  const isPdf = ext === "pdf";
   return (
     <div style={{
       width: 40, height: 48,
-      background: type === "pdf" ? "#FEF2F2" : "#EFF6FF",
+      background: isPdf ? "#FEF2F2" : "#EFF6FF",
       borderRadius: 6,
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       flexShrink: 0,
-      border: `1px solid ${type === "pdf" ? "#FECACA" : "#BFDBFE"}`,
+      border: `1px solid ${isPdf ? "#FECACA" : "#BFDBFE"}`,
     }}>
       <span style={{
         fontSize: "0.6rem",
         fontWeight: 800,
-        color: type === "pdf" ? "#DC2626" : "#2563EB",
+        color: isPdf ? "#DC2626" : "#2563EB",
         letterSpacing: "0.04em",
         textTransform: "uppercase",
       }}>
-        {type}
+        {ext}
       </span>
     </div>
   );
 }
 
+const UPLOAD_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
+
 export default function DocumentsPage() {
+  const [docs, setDocs] = useState<CredoDoc[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<DocCategory>("ALL");
   const [view, setView] = useState<"grid" | "list">("list");
   const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadCategory, setUploadCategory] = useState<Exclude<DocCategory, "ALL">>("IDENTITY");
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchDocs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/consumer/documents");
+      if (res.ok) {
+        const data = await res.json() as { documents: CredoDoc[] };
+        setDocs(data.documents);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchDocs(); }, [fetchDocs]);
+
+  async function uploadFile(file: File) {
+    setError(null);
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("category", uploadCategory);
+
+      const res = await fetch("/api/consumer/upload", { method: "POST", body: form });
+      const data = await res.json() as { error?: string };
+
+      if (!res.ok) {
+        setError(data.error ?? "Upload failed");
+      } else {
+        await fetchDocs();
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteDoc(id: string) {
+    if (!confirm("Delete this document? This cannot be undone.")) return;
+    await fetch(`/api/consumer/documents?id=${id}`, { method: "DELETE" });
+    setDocs(prev => prev.filter(d => d.id !== id));
+  }
+
+  function downloadDoc(id: string, name: string) {
+    const a = document.createElement("a");
+    a.href = `/api/consumer/documents/${id}/download`;
+    a.download = name;
+    a.click();
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) uploadFile(file);
+  }
+
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadFile(file);
+    e.target.value = "";
+  }
 
   const filtered = activeCategory === "ALL"
-    ? DOCS
-    : DOCS.filter(d => d.category === activeCategory);
+    ? docs
+    : docs.filter(d => d.category === activeCategory);
 
-  const usedMB = DOCS.reduce((sum, d) => sum + parseFloat(d.size), 0);
-  const limitMB = 1024;
-  const usedPct = (usedMB / limitMB) * 100;
+  const usedBytes = docs.reduce((sum, d) => sum + d.size, 0);
+  const usedPct = (usedBytes / UPLOAD_LIMIT_BYTES) * 100;
 
   return (
     <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -86,10 +179,23 @@ export default function DocumentsPage() {
             Document Vault
           </h2>
           <p style={{ fontSize: "0.875rem", color: "#64748B", margin: 0 }}>
-            {DOCS.length} files &bull; POPIA-compliant &bull; AES-256 encrypted
+            {loading ? "Loading…" : `${docs.length} files`} &bull; POPIA-compliant &bull; AES-256 encrypted
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Category selector for upload */}
+          <select
+            value={uploadCategory}
+            onChange={e => setUploadCategory(e.target.value as Exclude<DocCategory, "ALL">)}
+            style={{
+              padding: "8px 12px", border: "1px solid #E2E8F0", borderRadius: 8,
+              fontSize: "0.8125rem", color: "#475569", background: "#FFFFFF", cursor: "pointer",
+            }}
+          >
+            {CATEGORIES.filter(c => c.key !== "ALL").map(c => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
+          </select>
           {/* View toggle */}
           <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 8, padding: 3 }}>
             {(["list", "grid"] as const).map(v => (
@@ -107,14 +213,37 @@ export default function DocumentsPage() {
               </button>
             ))}
           </div>
-          <button className="btn-primary" style={{ padding: "9px 18px", fontSize: "0.875rem" }}>
+          <button
+            className="btn-primary"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ padding: "9px 18px", fontSize: "0.875rem", opacity: uploading ? 0.7 : 1 }}
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1v12M1 7h12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            Upload file
+            {uploading ? "Uploading…" : "Upload file"}
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.docx"
+            style={{ display: "none" }}
+            onChange={handleFileInput}
+          />
         </div>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div style={{
+          background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8,
+          padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <span style={{ fontSize: "0.875rem", color: "#DC2626" }}>{error}</span>
+          <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: "1rem" }}>✕</button>
+        </div>
+      )}
 
       {/* Storage bar */}
       <div className="credo-card" style={{ padding: "16px 20px" }}>
@@ -126,7 +255,7 @@ export default function DocumentsPage() {
             <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#0F172A" }}>Storage</span>
           </div>
           <span style={{ fontSize: "0.8125rem", color: "#64748B" }}>
-            {usedMB.toFixed(1)} MB of {limitMB / 1024} GB used
+            {formatBytes(usedBytes)} of 1 GB used
           </span>
         </div>
         <div style={{ height: 6, background: "#F1F5F9", borderRadius: 9999, overflow: "hidden" }}>
@@ -166,7 +295,7 @@ export default function DocumentsPage() {
               fontSize: "0.7rem",
               fontWeight: 600,
             }}>
-              {cat.key === "ALL" ? DOCS.length : DOCS.filter(d => d.category === cat.key).length}
+              {cat.key === "ALL" ? docs.length : docs.filter(d => d.category === cat.key).length}
             </span>
           </button>
         ))}
@@ -176,7 +305,8 @@ export default function DocumentsPage() {
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={e => { e.preventDefault(); setDragging(false); }}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
         style={{
           border: `2px dashed ${dragging ? "#0B1D35" : "#E2E8F0"}`,
           borderRadius: 12,
@@ -196,22 +326,42 @@ export default function DocumentsPage() {
           </div>
           <div style={{ textAlign: "left" }}>
             <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#0F172A", margin: 0 }}>
-              Drop files here or <span style={{ color: "#C4953A", cursor: "pointer" }}>browse</span>
+              {uploading ? "Uploading…" : <>Drop files here or <span style={{ color: "#C4953A" }}>browse</span></>}
             </p>
             <p style={{ fontSize: "0.8125rem", color: "#94A3B8", margin: 0 }}>
-              PDF, PNG, JPG, DOCX &bull; Max 10 MB per file
+              PDF, PNG, JPG, DOCX &bull; Max 10 MB per file &bull; Category: {CATEGORIES.find(c => c.key === uploadCategory)?.label}
             </p>
           </div>
         </div>
       </div>
 
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="credo-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{ height: 48, background: "#F1F5F9", borderRadius: 8, animation: "pulse 1.5s infinite" }} />
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && docs.length === 0 && (
+        <div style={{ textAlign: "center", padding: "48px 20px", color: "#94A3B8" }}>
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ margin: "0 auto 16px" }}>
+            <rect x="8" y="6" width="32" height="36" rx="4" stroke="#CBD5E1" strokeWidth="2"/>
+            <path d="M16 18h16M16 24h10" stroke="#CBD5E1" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <p style={{ fontWeight: 600, color: "#475569", margin: "0 0 4px" }}>No documents yet</p>
+          <p style={{ fontSize: "0.875rem", margin: 0 }}>Upload your first document using the button above.</p>
+        </div>
+      )}
+
       {/* File list */}
-      {view === "list" ? (
+      {!loading && filtered.length > 0 && (view === "list" ? (
         <div className="credo-card" style={{ overflow: "hidden" }}>
-          {/* Table header */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "1fr 130px 90px 90px 100px",
+            gridTemplateColumns: "1fr 130px 90px 100px 120px",
             padding: "10px 20px",
             background: "#F8F9FA",
             borderBottom: "1px solid #E2E8F0",
@@ -228,62 +378,67 @@ export default function DocumentsPage() {
             return (
               <div key={doc.id} style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 130px 90px 90px 100px",
+                gridTemplateColumns: "1fr 130px 90px 100px 120px",
                 padding: "14px 20px",
                 alignItems: "center",
                 borderBottom: i < filtered.length - 1 ? "1px solid #F1F5F9" : "none",
                 transition: "background-color 150ms",
-                cursor: "pointer",
               }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#FAFAFA"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
               >
-                {/* Name */}
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <DocTypeIcon type={doc.type} />
-                  <div>
-                    <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#0F172A", margin: 0 }}>
-                      {doc.name}
-                    </p>
-                    {doc.locked && (
-                      <span style={{ fontSize: "0.75rem", color: "#94A3B8" }}>Encrypted</span>
-                    )}
-                  </div>
+                  <DocTypeIcon mimeType={doc.mimeType} />
+                  <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#0F172A", margin: 0, wordBreak: "break-word" }}>
+                    {doc.originalName}
+                  </p>
                 </div>
 
-                {/* Category */}
                 <span style={{
                   display: "inline-flex", alignItems: "center", gap: 5,
                   padding: "3px 10px",
-                  background: cfg.bg, color: cfg.color,
+                  background: cfg?.bg ?? "#F1F5F9", color: cfg?.color ?? "#475569",
                   borderRadius: 9999, fontSize: "0.75rem", fontWeight: 600,
                   width: "fit-content",
                 }}>
-                  {cfg.icon}
-                  {CATEGORIES.find(c => c.key === doc.category)?.label}
+                  {cfg?.icon}
+                  {CATEGORIES.find(c => c.key === doc.category)?.label ?? doc.category}
                 </span>
 
-                {/* Size */}
-                <span style={{ fontSize: "0.8125rem", color: "#64748B" }}>{doc.size}</span>
+                <span style={{ fontSize: "0.8125rem", color: "#64748B" }}>{formatBytes(doc.size)}</span>
 
-                {/* Date */}
-                <span style={{ fontSize: "0.8125rem", color: "#64748B" }}>{doc.date}</span>
+                <span style={{ fontSize: "0.8125rem", color: "#64748B" }}>
+                  {new Date(doc.createdAt).toLocaleDateString("en-ZA")}
+                </span>
 
-                {/* Actions */}
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button style={{
-                    padding: "5px 10px", border: "1px solid #E2E8F0",
-                    background: "#FFFFFF", borderRadius: 6,
-                    cursor: "pointer", color: "#64748B",
-                    fontSize: "0.75rem", fontWeight: 500,
-                    display: "flex", alignItems: "center", gap: 4,
-                    transition: "all 150ms",
-                  }}>
+                  <button
+                    onClick={() => downloadDoc(doc.id, doc.originalName)}
+                    style={{
+                      padding: "5px 10px", border: "1px solid #E2E8F0",
+                      background: "#FFFFFF", borderRadius: 6,
+                      cursor: "pointer", color: "#64748B",
+                      fontSize: "0.75rem", fontWeight: 500,
+                      display: "flex", alignItems: "center", gap: 4,
+                    }}
+                  >
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                       <path d="M6 8V2M3.5 5.5L6 8l2.5-2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                       <path d="M2 10h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                     </svg>
-                    Download
+                  </button>
+                  <button
+                    onClick={() => deleteDoc(doc.id)}
+                    style={{
+                      padding: "5px 8px", border: "1px solid #FECACA",
+                      background: "#FEF2F2", borderRadius: 6,
+                      cursor: "pointer", color: "#DC2626",
+                      fontSize: "0.75rem", fontWeight: 500,
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 3h8M5 3V2h2v1M4.5 10h3M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -299,31 +454,41 @@ export default function DocumentsPage() {
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
                   <div style={{
                     width: 56, height: 72,
-                    background: doc.type === "pdf" ? "#FEF2F2" : "#EFF6FF",
+                    background: doc.mimeType === "application/pdf" ? "#FEF2F2" : "#EFF6FF",
                     borderRadius: 8,
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
-                    border: `1px solid ${doc.type === "pdf" ? "#FECACA" : "#BFDBFE"}`,
+                    border: `1px solid ${doc.mimeType === "application/pdf" ? "#FECACA" : "#BFDBFE"}`,
                   }}>
-                    <span style={{ fontSize: "0.75rem", fontWeight: 800, color: doc.type === "pdf" ? "#DC2626" : "#2563EB", letterSpacing: "0.04em" }}>
-                      {doc.type.toUpperCase()}
+                    <span style={{ fontSize: "0.75rem", fontWeight: 800, color: doc.mimeType === "application/pdf" ? "#DC2626" : "#2563EB", letterSpacing: "0.04em" }}>
+                      {fileExt(doc.mimeType).toUpperCase()}
                     </span>
                   </div>
                 </div>
-                <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#0F172A", margin: "0 0 6px", lineHeight: 1.4, textAlign: "center" }}>
-                  {doc.name.length > 36 ? doc.name.slice(0, 36) + "…" : doc.name}
+                <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#0F172A", margin: "0 0 6px", lineHeight: 1.4, textAlign: "center", wordBreak: "break-word" }}>
+                  {doc.originalName.length > 36 ? doc.originalName.slice(0, 36) + "…" : doc.originalName}
                 </p>
-                <div style={{ display: "flex", justifyContent: "center" }}>
-                  <span style={{ padding: "2px 8px", background: cfg.bg, color: cfg.color, borderRadius: 9999, fontSize: "0.7rem", fontWeight: 600 }}>
-                    {CATEGORIES.find(c => c.key === doc.category)?.label}
+                <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
+                  <span style={{ padding: "2px 8px", background: cfg?.bg ?? "#F1F5F9", color: cfg?.color ?? "#475569", borderRadius: 9999, fontSize: "0.7rem", fontWeight: 600 }}>
+                    {CATEGORIES.find(c => c.key === doc.category)?.label ?? doc.category}
                   </span>
                 </div>
-                <p style={{ fontSize: "0.75rem", color: "#94A3B8", textAlign: "center", margin: "6px 0 0" }}>{doc.date}</p>
+                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 10 }}>
+                  <button onClick={() => downloadDoc(doc.id, doc.originalName)} style={{ padding: "4px 10px", border: "1px solid #E2E8F0", borderRadius: 6, background: "#FFFFFF", cursor: "pointer", fontSize: "0.75rem", color: "#64748B" }}>
+                    Download
+                  </button>
+                  <button onClick={() => deleteDoc(doc.id)} style={{ padding: "4px 8px", border: "1px solid #FECACA", borderRadius: 6, background: "#FEF2F2", cursor: "pointer", fontSize: "0.75rem", color: "#DC2626" }}>
+                    Delete
+                  </button>
+                </div>
+                <p style={{ fontSize: "0.75rem", color: "#94A3B8", textAlign: "center", margin: "6px 0 0" }}>
+                  {new Date(doc.createdAt).toLocaleDateString("en-ZA")}
+                </p>
               </div>
             );
           })}
         </div>
-      )}
+      ))}
 
       {/* POPIA notice */}
       <div style={{

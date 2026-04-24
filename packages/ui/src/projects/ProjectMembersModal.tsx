@@ -52,6 +52,7 @@ export function ProjectMembersModal({
     const [groups, setGroups] = useState<Group[]>([]);
     const [saving, setSaving] = useState(false);
     const [loadingUsers, setLoadingUsers] = useState(false);
+    const [syncDown, setSyncDown] = useState(false);
 
     // Initialize members from props
     useEffect(() => {
@@ -100,7 +101,8 @@ export function ProjectMembersModal({
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    members: modalMembers
+                    members: modalMembers,
+                    syncDown: syncDown
                 })
             });
 
@@ -204,6 +206,21 @@ export function ProjectMembersModal({
                     <div className="mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider flex justify-between items-center">
                         <span>Current Members ({modalMembers.length})</span>
                     </div>
+
+                    {canManage && project.type !== 'ACQUISITION_SOURCE' && (
+                        <div className="mb-4 flex items-center gap-2 p-3 bg-zeno-blue/10 border border-white/5 rounded-lg hover:border-white/10 transition-colors">
+                            <input
+                                type="checkbox"
+                                id="syncDownCheckbox"
+                                checked={syncDown}
+                                onChange={(e) => setSyncDown(e.target.checked)}
+                                className="w-4 h-4 rounded border-zeno-blue bg-zeno-blue/50 text-zeno-cyan focus:ring-zeno-cyan transition-all"
+                            />
+                            <label htmlFor="syncDownCheckbox" className="text-xs text-gray-300 font-medium cursor-pointer select-none">
+                                Apply member changes to all sub-projects
+                            </label>
+                        </div>
+                    )}
 
                     {modalMembers.length > 0 ? (
                         <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">

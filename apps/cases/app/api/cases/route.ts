@@ -81,30 +81,28 @@ export async function GET(request: Request) {
             const rootAllowedIds = userMemberships.map((m: { projectId: string }) => m.projectId);
 
             if (rootAllowedIds.length === 0) {
-                // If not an admin and not in any projects, they see nothing
-                return NextResponse.json([]);
-            }
-
-            // Expand to include all descendants
-            const effectiveProjectIds = new Set<string>();
-            rootAllowedIds.forEach(id => {
-                effectiveProjectIds.add(id);
-                getDescendantIds(id).forEach(childId => effectiveProjectIds.add(childId));
-            });
-
-            const allowedList = Array.from(effectiveProjectIds);
-
-            if (projectId) {
-                if (!allowedList.includes(projectId)) {
-                    return NextResponse.json({ error: 'Forbidden: You do not have access to this project' }, { status: 403 });
-                }
-                // Include the project itself + all its descendants
-                const projectAndDescendants = [projectId, ...getDescendantIds(projectId)];
-                // Only include IDs the user is allowed to see
-                const effectiveIds = projectAndDescendants.filter(id => allowedList.includes(id));
-                where.projects = { some: { projectId: { in: effectiveIds } } };
+                // No project memberships — fall back to cases created by this user
+                where.createdById = session.user.id;
             } else {
-                where.projects = { some: { projectId: { in: allowedList } } };
+                // Expand to include all descendants
+                const effectiveProjectIds = new Set<string>();
+                rootAllowedIds.forEach(id => {
+                    effectiveProjectIds.add(id);
+                    getDescendantIds(id).forEach(childId => effectiveProjectIds.add(childId));
+                });
+
+                const allowedList = Array.from(effectiveProjectIds);
+
+                if (projectId) {
+                    if (!allowedList.includes(projectId)) {
+                        return NextResponse.json({ error: 'Forbidden: You do not have access to this project' }, { status: 403 });
+                    }
+                    const projectAndDescendants = [projectId, ...getDescendantIds(projectId)];
+                    const effectiveIds = projectAndDescendants.filter(id => allowedList.includes(id));
+                    where.projects = { some: { projectId: { in: effectiveIds } } };
+                } else {
+                    where.projects = { some: { projectId: { in: allowedList } } };
+                }
             }
         } else if (projectId) {
             // Admin requesting a specific project bypasses membership but filters by ID

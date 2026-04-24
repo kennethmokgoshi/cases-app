@@ -95,40 +95,38 @@ async function removeMembersFromDescendants(tx: any, projectId: string, userIdsT
     }
 }
 
-// Helper to recursively ADD members to children projects
-async function addMembersToDescendants(tx: any, projectId: string, newMembers: { userId: string, role: string }[]) {
+// Helper to recursively SYNC members to children projects (Add/Update roles)
+async function syncMembersToDescendants(tx: any, projectId: string, members: { userId: string, role: string }[]) {
     // 1. Get children
     const children = await tx.project.findMany({
         where: { parentId: projectId },
-        select: { id: true, members: { select: { userId: true } } }
+        select: { id: true }
     });
 
     if (children.length === 0) return;
 
-    // 2. Add members to children
+    // 2. Sync members to children
     for (const child of children) {
-        // Filter members that are NOT already in the child
-        const existingMemberIds = new Set(child.members.map((m: any) => m.userId));
-        const membersToAdd = newMembers.filter(m => !existingMemberIds.has(m.userId));
-
-        if (membersToAdd.length > 0) {
-            await Promise.all(membersToAdd.map(m =>
-                tx.projectMember.create({
-                    data: {
+        // Upsert each member to ensure they exist and have the correct role
+        for (const m of members) {
+            await tx.projectMember.upsert({
+                where: {
+                    projectId_userId: {
                         projectId: child.id,
-                        userId: m.userId,
-                        role: m.role
+                        userId: m.userId
                     }
-                })
-            ));
+                },
+                update: { role: m.role },
+                create: {
+                    projectId: child.id,
+                    userId: m.userId,
+                    role: m.role
+                }
+            });
         }
 
-        // 3. Recurse (pass ALL newMembers down, even if some were already in this child, 
-        // because sub-children might be missing them)
-        // Optimization: We could pass only membersToAdd if we assume consistency, 
-        // but strict inheritance suggests passing all from parent down.
-        // However, to avoid exponential checks, passing 'newMembers' (the parent's full list of additions) is correct.
-        await addMembersToDescendants(tx, child.id, newMembers);
+        // 3. Recurse
+        await syncMembersToDescendants(tx, child.id, members);
     }
 }
 
@@ -146,7 +144,7 @@ export async function PATCH(
         const body = await request.json();
         logger.info('PATCH Project [id]:', id);
         logger.info('PATCH Body:', JSON.stringify(body, null, 2));
-        const { name, description, type, clientType, parentId, members: inputMembers } = body;
+        const { name, description, type, clientType, parentId, members: inputMembers, syncDown = false } = body;
         let members = inputMembers;
 
         // Manager validation moved below to support type-based exceptions
@@ -265,16 +263,17 @@ export async function PATCH(
                 });
             }
 
-            // 2. Not updating members? Return
+            // 3. Not updating members? Return
             if (members === undefined) return updated;
 
-            // 3. Handle Removal from Descendants
-            // EXCEPTION: Partners (ACQUISITION_SOURCE) do not propagate removals to descendants
-            if (removedUserIds.length > 0 && updated.type !== 'ACQUISITION_SOURCE') {
+            // 4. Handle Removal from Descendants
+            // Propagate removal ONLY if syncDown is explicitly true
+            // EXCEPTION: Partners (ACQUISITION_SOURCE) never propagate removals
+            if (syncDown && removedUserIds.length > 0 && updated.type !== 'ACQUISITION_SOURCE') {
                 await removeMembersFromDescendants(tx, id, removedUserIds);
             }
 
-            // 4. Replace members for THIS project
+            // 5. Replace members for THIS project
             // Delete all existing
             await tx.projectMember.deleteMany({ where: { projectId: id } });
 
@@ -295,17 +294,19 @@ export async function PATCH(
                     data: createData
                 });
 
-                // 5. Hierarchy Sync
+                // 6. Hierarchy Sync
                 // EXCEPTION: Partners (ACQUISITION_SOURCE) are isolated containers.
-                // We SKIP all hierarchy syncing (Up and Down) to prevent performance issues and recursive crashes.
                 if (finalType !== 'ACQUISITION_SOURCE') {
                     // A) Sync UP: If adding to a sub-project, ensure ancestors have them too
+                    // We keep this automatic as it's usually required for navigation context
                     if (updated.parentId) {
                         await addMembersToAncestors(tx, updated.parentId, newMembersPayload);
                     }
 
-                    // B) Sync DOWN: If adding to a parent, ensure descendants have them too
-                    await addMembersToDescendants(tx, id, newMembersPayload);
+                    // B) Sync DOWN: If syncDown is enabled, ensure descendants have them too (with role matching)
+                    if (syncDown) {
+                        await syncMembersToDescendants(tx, id, newMembersPayload);
+                    }
                 }
             }
 

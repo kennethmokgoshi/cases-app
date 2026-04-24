@@ -23,23 +23,38 @@ export async function GET() {
                 where: { userId },
                 select: { projectId: true },
             });
-            const projectIds = memberships.map((m) => m.projectId);
+            const rootProjectIds = memberships.map((m) => m.projectId);
 
-            if (projectIds.length === 0) {
-                return NextResponse.json({
-                    totalCases: 0,
-                    activeCases: 0,
-                    completedCases: 0,
-                    pendingCases: 0,
-                    newLeads: 0,
-                    newLeadsLast7Days: 0,
-                    completedLast7Days: 0,
-                    myCases: 0,
-                    recentCases: [],
+            if (rootProjectIds.length === 0) {
+                // No project memberships — show only cases this user created directly
+                projectWhere = { createdById: userId };
+            } else {
+                // Expand root memberships to include all descendant projects
+                // (cases live on MONTH projects which are children of the user's root membership)
+                const allProjects = await prisma.project.findMany({
+                    select: { id: true, parentId: true },
                 });
+                const childrenMap = new Map<string, string[]>();
+                for (const p of allProjects) {
+                    if (p.parentId) {
+                        const list = childrenMap.get(p.parentId) || [];
+                        list.push(p.id);
+                        childrenMap.set(p.parentId, list);
+                    }
+                }
+                const effectiveIds = new Set<string>(rootProjectIds);
+                const queue = [...rootProjectIds];
+                while (queue.length > 0) {
+                    const curr = queue.shift()!;
+                    for (const child of childrenMap.get(curr) || []) {
+                        if (!effectiveIds.has(child)) {
+                            effectiveIds.add(child);
+                            queue.push(child);
+                        }
+                    }
+                }
+                projectWhere = { projects: { some: { projectId: { in: Array.from(effectiveIds) } } } };
             }
-
-            projectWhere = { projects: { some: { projectId: { in: projectIds } } } };
         }
 
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);

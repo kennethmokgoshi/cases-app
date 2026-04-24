@@ -24,6 +24,12 @@ type Comment = {
         lastName: string;
         email: string;
     };
+    attachments?: Array<{
+        name: string;
+        url: string;
+        type: string;
+        size: number;
+    }>;
     mentions: Array<{
         user: {
             id: string;
@@ -59,7 +65,10 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
     const [showInternal, setShowInternal] = useState(true);
     const [isJournalMode, setIsJournalMode] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [pendingAttachments, setPendingAttachments] = useState<Array<{ name: string; url: string; type: string; size: number }>>([]);
+    const [isUploading, setIsUploading] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Track client-side hydration
     useEffect(() => {
@@ -140,6 +149,58 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
         setMentionQuery('');
         textareaRef.current?.focus();
     };
+    
+    // Handle file selection and upload
+    const handleFileUpload = async (files: FileList | File[]) => {
+        if (!files || files.length === 0) return;
+        
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('caseId', caseId);
+        
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
+        }
+        
+        try {
+            const res = await fetch('/api/comments/attachments/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                setPendingAttachments(prev => [...prev, ...data.files]);
+            } else {
+                alert('Failed to upload files');
+            }
+        } catch (error) {
+            logger.error('Upload failed', error);
+            alert('Upload failed');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent) => {
+        const items = e.clipboardData.items;
+        const files: File[] = [];
+        
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].kind === 'file') {
+                const file = items[i].getAsFile();
+                if (file) files.push(file);
+            }
+        }
+        
+        if (files.length > 0) {
+            handleFileUpload(files);
+        }
+    };
+
+    const removePendingAttachment = (index: number) => {
+        setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+    };
 
     // Submit comment
     const handleSubmit = async (e: React.FormEvent) => {
@@ -154,13 +215,15 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
                 body: JSON.stringify({
                     content: newComment,
                     type: isJournalMode ? 'JOURNAL' : 'NOTE',
-                    isInternal: isJournalMode
+                    isInternal: isJournalMode,
+                    attachments: pendingAttachments
                 }) });
 
             if (res.ok) {
                 const comment = await res.json();
                 setComments([comment, ...comments]);
                 setNewComment('');
+                setPendingAttachments([]);
             } else {
                 alert('Failed to post comment');
             }
@@ -241,11 +304,37 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
                         ref={textareaRef}
                         value={newComment}
                         onChange={handleTextChange}
+                        onPaste={handlePaste}
                         placeholder={isJournalMode ? "Type internal team note..." : "Add a public comment..."}
                         className={`w-full px-4 py-3 bg-zeno-navy border rounded-xl text-white placeholder-gray-500 transition-all focus:outline-none resize-none ${isJournalMode ? 'border-amber-500/30 ring-1 ring-amber-500/10' : 'border-white/10 focus:border-zeno-cyan'
                             }`}
                         rows={3}
                     />
+
+                    {/* Pending Attachments UI */}
+                    {pendingAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2 px-1">
+                            {pendingAttachments.map((file, idx) => (
+                                <div key={idx} className="group relative bg-white/5 border border-white/10 rounded-lg p-2 flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded bg-zeno-blue/30 flex items-center justify-center overflow-hidden">
+                                        {file.type.startsWith('image/') ? (
+                                            <img src={file.url} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-[10px]">📄</span>
+                                        )}
+                                    </div>
+                                    <span className="text-xs text-gray-400 max-w-[120px] truncate">{file.name}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => removePendingAttachment(idx)}
+                                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Mention suggestions dropdown */}
                     {showMentions && userSuggestions.length > 0 && (
@@ -265,18 +354,35 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
                     )}
                 </div>
                 <div className="flex justify-between items-center mt-3">
-                    <span className="text-[10px] text-gray-500 italic">
-                        {isJournalMode
-                            ? "📓 Internal notes are only visible to staff and managers."
-                            : "💬 Public notes may be shared in reports."}
-                    </span>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+                            multiple
+                            className="hidden"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="p-2 text-gray-500 hover:text-zeno-cyan transition-colors"
+                            title="Attach images or documents"
+                        >
+                            📎
+                        </button>
+                        <span className="text-[10px] text-gray-500 italic">
+                            {isJournalMode
+                                ? "📓 Internal notes are only visible to staff and managers."
+                                : "💬 Public notes may be shared in reports."}
+                        </span>
+                    </div>
                     <button
                         type="submit"
-                        disabled={submitting || !newComment.trim()}
+                        disabled={submitting || isUploading || !newComment.trim()}
                         className={`px-5 py-2 font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all ${isJournalMode ? 'bg-amber-500 text-zeno-navy' : 'bg-zeno-cyan text-zeno-navy'
                             }`}
                     >
-                        {submitting ? 'Saving...' : (isJournalMode ? 'Save to Journal' : 'Post Comment')}
+                        {submitting ? 'Saving...' : isUploading ? 'Uploading...' : (isJournalMode ? 'Save to Journal' : 'Post Comment')}
                     </button>
                 </div>
             </form>
@@ -326,6 +432,36 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
                                     // If it's a rich system event, we might want to allow HTML, otherwise perform formatting
                                     dangerouslySetInnerHTML={{ __html: formatComment(comment.content) }}
                                 />
+
+                                {/* Render Attachments in Comment */}
+                                {comment.attachments && comment.attachments.length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        {comment.attachments.map((file, idx) => (
+                                            <a
+                                                key={idx}
+                                                href={file.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="group relative bg-white/5 border border-white/10 rounded-xl p-2 flex items-center gap-3 hover:bg-white/10 transition-all max-w-[240px]"
+                                            >
+                                                <div className="w-10 h-10 rounded-lg bg-zeno-navy/80 flex items-center justify-center overflow-hidden border border-white/5">
+                                                    {file.type.startsWith('image/') ? (
+                                                        <img src={file.url} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <span className="text-xl">📄</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0 pr-2">
+                                                    <p className="text-[12px] text-white font-medium truncate">{file.name}</p>
+                                                    <p className="text-[10px] text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                                                </div>
+                                                <div className="opacity-0 group-hover:opacity-100 absolute right-2 bottom-2 text-[10px] bg-zeno-cyan text-zeno-navy font-bold px-1.5 py-0.5 rounded transition-opacity">
+                                                    OPEN
+                                                </div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
                                 {comment.mentions.length > 0 && (
                                     <div className="mt-3 flex flex-wrap items-center gap-2">
                                         <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Mentioned:</span>

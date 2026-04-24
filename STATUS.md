@@ -1,11 +1,27 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-21 (Invoice/Quote with account+service line items + Credo App public link)
+> Last updated: 2026-04-23 (Credo Week 1 — document vault, email, client matching)
 
 ---
 
 ## ✅ Completed
+
+### Credo — Week 1 (Document Vault + Email + Client Matching) (2026-04-23)
+- [x] **Schema** — Added `CredoDocument` model (consumerId, fileName, originalName, mimeType, size, category, storagePath). Added `documents CredoDocument[]` relation to `ConsumerAccount`. Migration `20260423_add_credo_document` created + applied via `db push`.
+- [x] **`apps/credo/lib/email.ts`** — SMTP-first email utility (mirrors cases app pattern). `sendEmail()` + `welcomeEmailHtml()` template with branded header, 3-step onboarding guide, POPIA footer.
+- [x] **`apps/credo/app/api/consumer/register/route.ts`** — Added Client ID-number matching on register: if a `Client` exists with matching `idNumber` and is not yet linked, `linkedClientId` is set automatically so the consumer sees their cases immediately. Welcome email sent fire-and-forget after creation.
+- [x] **`apps/credo/app/api/consumer/upload/route.ts`** — `POST /api/consumer/upload` — multipart upload, validates MIME type (PDF/JPG/PNG/DOCX) + 10 MB limit, stores to `UPLOAD_DIR/{consumerId}/{uuid}.{ext}`, saves `CredoDocument` record.
+- [x] **`apps/credo/app/api/consumer/documents/route.ts`** — `GET` lists documents for authenticated consumer; `DELETE ?id=` removes doc record + physical file.
+- [x] **`apps/credo/app/api/consumer/documents/[id]/download/route.ts`** — Streams the file with correct `Content-Type` + `Content-Disposition`. Only the document owner can download.
+- [x] **`apps/credo/app/(dashboard)/documents/page.tsx`** — Replaced demo data with live API. Upload button + drag-drop zone trigger real upload. Category selector sets upload category. Delete button per row. Download button streams from API. Storage bar calculated from real byte totals. Error banner for failed uploads.
+- [x] **`apps/credo/package.json`** — Added `nodemailer ^6.9.0` + `@types/nodemailer ^6.4.14`.
+- **Env vars needed**: `UPLOAD_DIR` (optional — defaults to `./uploads` in dev, set to a Docker volume path in production e.g. `/app/uploads`).
+
+### What's Next for Credo (Week 2)
+- [ ] **ServiceRequest → Case conversion** — Consumer submits quote request → staff see it in cases app → accept converts to a `Case` and links `ConsumerAccount.linkedClientId`
+- [ ] **Payment gateway** — PayFast or Peach Payments integration for Premium subscription (R299/month); gate Premium features behind active subscription check
+- [ ] **Dispute letter generation** — NCA Section 72 form + AI letter generation + PDF output (reuse existing pdf-lib + OpenAI pipeline)
 
 ### Invoice/Quote — Account+Service Line Items + Credo App Public Link (2026-04-21)
 - [x] **Schema** — Added `DocumentType` enum (`INVOICE | QUOTE`), `type` and `publicToken` fields to `Invoice` model. Also added `BankAccount` and `ServicePrice` models for future use.

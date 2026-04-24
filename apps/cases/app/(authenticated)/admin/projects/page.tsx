@@ -91,6 +91,7 @@ export default function ProjectsManagement() {
     const [formMembers, setFormMembers] = useState<{ userId: string; role: string }[]>([]);
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [syncDown, setSyncDown] = useState(false);
 
     // Structured Move State (The Cases Way)
     const [useStructuredMove, setUseStructuredMove] = useState(false);
@@ -172,6 +173,7 @@ export default function ProjectsManagement() {
         setEditingProject(null);
         setUseStructuredMove(false);
         setStructuredPathDetails(null);
+        setSyncDown(false);
     };
 
     const openCreateModal = (parentId?: string) => {
@@ -259,7 +261,8 @@ export default function ProjectsManagement() {
                     type: formType,
                     clientType: formType === 'ACQUISITION_SOURCE' ? formClientType : null,
                     parentId: finalParentId,
-                    members: formMembers
+                    members: formMembers,
+                    syncDown: syncDown
                 })
             });
 
@@ -380,7 +383,8 @@ export default function ProjectsManagement() {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    members: modalMembers
+                    members: modalMembers,
+                    syncDown: syncDown
                 })
             });
 
@@ -1012,6 +1016,21 @@ export default function ProjectsManagement() {
                                             })}
                                         </div>
                                     )}
+
+                                    {formType !== 'ACQUISITION_SOURCE' && (
+                                        <div className="flex items-center gap-2 mt-4 p-3 bg-white/5 border border-white/10 rounded-xl">
+                                            <input
+                                                type="checkbox"
+                                                id="formSyncDown"
+                                                checked={syncDown}
+                                                onChange={(e) => setSyncDown(e.target.checked)}
+                                                className="w-4 h-4 rounded border-white/20 bg-zeno-blue text-zeno-cyan focus:ring-zeno-cyan"
+                                            />
+                                            <label htmlFor="formSyncDown" className="text-sm text-gray-300 cursor-pointer select-none">
+                                                Apply member changes to all sub-projects
+                                            </label>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </form>
@@ -1140,6 +1159,21 @@ export default function ProjectsManagement() {
                                                             ))}
                                                     </optgroup>
                                                 </select>
+                                            </div>
+                                        )}
+
+                                        {canManage && viewingMembersProject.type !== 'ACQUISITION_SOURCE' && (
+                                            <div className="mb-4 flex items-center gap-2 p-3 bg-zeno-blue/10 border border-white/5 rounded-lg">
+                                                <input
+                                                    type="checkbox"
+                                                    id="modalSyncDown"
+                                                    checked={syncDown}
+                                                    onChange={(e) => setSyncDown(e.target.checked)}
+                                                    className="w-4 h-4 rounded border-zeno-blue bg-zeno-blue/50 text-zeno-cyan focus:ring-zeno-cyan"
+                                                />
+                                                <label htmlFor="modalSyncDown" className="text-xs text-gray-300 font-medium cursor-pointer select-none">
+                                                    Apply member changes to all sub-projects
+                                                </label>
                                             </div>
                                         )}
 

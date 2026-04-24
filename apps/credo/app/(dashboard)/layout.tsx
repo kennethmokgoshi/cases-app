@@ -4,77 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-/* ─── Icons ──────────────────────────────────────────────────────── */
-const DashboardIcon = ({ active }: { active: boolean }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="2" y="2" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} />
-    <rect x="9.5" y="2" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} />
-    <rect x="2" y="9.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} />
-    <rect x="9.5" y="9.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} />
-  </svg>
-);
-
-const CreditIcon = ({ active }: { active: boolean }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M3 5.5l3.5-2.5 3 2 3-1.5 2.5 2" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M3 9.5l3.5-2 3 1.5 3.5-2 2 1.5" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M2 16h14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M2 2v14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
-const CasesIcon = ({ active }: { active: boolean }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="2" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} />
-    <path d="M6 3V1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M12 3V1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M2 7.5h14" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M6 11h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M6 13.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
-const QuoteIcon = ({ active }: { active: boolean }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M9 2L2.5 5.5v4c0 3.5 2.8 6.6 6.5 7.5 3.7-.9 6.5-4 6.5-7.5v-4L9 2z" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} strokeLinejoin="round" />
-    <path d="M6 9l2 2 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const DocumentsIcon = ({ active }: { active: boolean }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M10.5 2H4a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6.5L10.5 2z" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} strokeLinejoin="round" />
-    <path d="M10.5 2v4.5H15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M6 10h6M6 12.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
-const SettingsIcon = ({ active }: { active: boolean }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} />
-    <path d="M9 2v1.5M9 14.5V16M2 9h1.5M14.5 9H16M3.93 3.93l1.06 1.06M13.01 13.01l1.06 1.06M3.93 14.07l1.06-1.06M13.01 4.99l1.06-1.06" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
-const MenuIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-    <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-);
-
-const BellIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M9 2a5 5 0 00-5 5v3l-1.5 2H15.5L14 10V7a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    <path d="M7.5 14.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-);
-
-const SearchIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
+import { 
+  DashboardIcon, 
+  CreditIcon, 
+  CasesIcon, 
+  QuoteIcon, 
+  DocumentsIcon, 
+  SettingsIcon, 
+  MenuIcon, 
+  BellIcon, 
+  SearchIcon 
+} from "../../components/icons";
 
 /* ─── Nav items ──────────────────────────────────────────────────── */
 const NAV_ITEMS = [
@@ -85,13 +25,26 @@ const NAV_ITEMS = [
   { href: "/documents",       label: "Documents",     Icon: DocumentsIcon },
 ];
 
+const ADMIN_NAV = [
+  { href: "/admin/branding",  label: "White-Label",   Icon: SettingsIcon  },
+  { href: "/admin/users",     label: "Manage Users",  Icon: CasesIcon     },
+  { href: "/admin/analytics", label: "Tenant Stats",  Icon: DashboardIcon },
+];
+
 const BOTTOM_NAV = [
   { href: "/settings", label: "Settings", Icon: SettingsIcon },
 ];
 
+import { useSession, signOut } from "next-auth/react";
+
 /* ─── Sidebar ────────────────────────────────────────────────────── */
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const userName = session?.user?.name || "Consumer";
+  const initials = userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  
+  const isAdmin = (session?.user as any)?.isAdmin || (session?.user as any)?.role === "EXECUTIVE";
 
   return (
     <aside style={{
@@ -107,7 +60,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
       position: "sticky",
       top: 0,
     }}>
-      {/* Logo */}
+      {/* ... (Logo section unchanged) ... */}
       <div style={{
         height: 64,
         display: "flex",
@@ -118,7 +71,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
         gap: 10,
       }}>
         {!collapsed && (
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none", overflow: "hidden" }}>
+          <Link href="/dashboard" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none", overflow: "hidden" }}>
             <div style={{
               width: 32, height: 32, flexShrink: 0,
               background: "#0B1D35",
@@ -137,18 +90,20 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           </Link>
         )}
         {collapsed && (
-          <div style={{
-            width: 32, height: 32,
-            background: "#0B1D35",
-            borderRadius: 8,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M9 2C5.69 2 3 4.69 3 9s2.69 7 6 7 7-3.13 7-7" stroke="#C4953A" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M13 2l2.5 2.5L13 7" stroke="#C4953A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M6 9l2 2 3.5-3.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <Link href="/dashboard" style={{ display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
+            <div style={{
+              width: 32, height: 32,
+              background: "#0B1D35",
+              borderRadius: 8,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M9 2C5.69 2 3 4.69 3 9s2.69 7 6 7 7-3.13 7-7" stroke="#C4953A" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M13 2l2.5 2.5L13 7" stroke="#C4953A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M6 9l2 2 3.5-3.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          </Link>
         )}
         {!collapsed && (
           <button onClick={onToggle} style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8", padding: 4, borderRadius: 6 }}>
@@ -176,6 +131,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
       {/* Main nav */}
       <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
+        <p style={{ fontSize: "0.625rem", fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", margin: collapsed ? "0 0 8px 0" : "4px 12px 10px", textAlign: collapsed ? "center" : "left" }}>
+          {!collapsed ? "Menu" : "•"}
+        </p>
         {NAV_ITEMS.map(({ href, label, Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
@@ -188,6 +146,26 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             </Link>
           );
         })}
+
+        {isAdmin && (
+          <>
+            <p style={{ fontSize: "0.625rem", fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", margin: collapsed ? "16px 0 8px 0" : "18px 12px 10px", textAlign: collapsed ? "center" : "left" }}>
+              {!collapsed ? "Management" : "•"}
+            </p>
+            {ADMIN_NAV.map(({ href, label, Icon }) => {
+              const active = pathname === href || pathname.startsWith(href + "/");
+              return (
+                <Link key={href} href={href} className={`nav-item ${active ? "active" : ""}`}
+                  title={collapsed ? label : undefined}
+                  style={{ justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "9px" : "9px 12px" }}
+                >
+                  <Icon active={active} />
+                  {!collapsed && <span>{label}</span>}
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       {/* Bottom nav */}
@@ -226,15 +204,15 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             color: "#C4953A",
             letterSpacing: "0.02em",
           }}>
-            SS
+            {initials}
           </div>
           {!collapsed && (
             <div style={{ overflow: "hidden" }}>
               <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#0F172A", margin: 0, whiteSpace: "nowrap" }}>
-                Sipho Sithole
+                {userName}
               </p>
               <p style={{ fontSize: "0.75rem", color: "#94A3B8", margin: 0, whiteSpace: "nowrap" }}>
-                Standard plan
+                {session?.user?.email || "Consumer Portal"}
               </p>
             </div>
           )}
@@ -247,6 +225,11 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 /* ─── Top Bar ────────────────────────────────────────────────────── */
 function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userName = session?.user?.name || "Consumer";
+  const initials = userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 
   const pageTitle: Record<string, string> = {
     "/dashboard":     "Dashboard",
@@ -302,40 +285,133 @@ function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
         </div>
 
         {/* Notifications */}
-        <button style={{
-          position: "relative",
-          background: "none", border: "none",
-          cursor: "pointer",
-          color: "#64748B",
-          padding: 8,
-          borderRadius: 8,
-          display: "flex", alignItems: "center",
-        }}>
-          <BellIcon />
+        <div style={{ position: "relative" }}>
+          <button 
+            onClick={() => setShowNotifications(!showNotifications)}
+            style={{
+              background: showNotifications ? "#F1F5F9" : "none", 
+              border: "none",
+              cursor: "pointer",
+              color: showNotifications ? "#0F172A" : "#64748B",
+              padding: 8,
+              borderRadius: 8,
+              display: "flex", alignItems: "center",
+              transition: "all 150ms",
+            }}>
+            <BellIcon />
+            <span style={{
+              position: "absolute", top: 6, right: 6,
+              width: 7, height: 7,
+              background: "#DC2626",
+              borderRadius: "50%",
+              border: "1.5px solid white",
+            }} />
+          </button>
+
+          {showNotifications && (
+            <div style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              right: 0,
+              width: 280,
+              background: "#FFFFFF",
+              border: "1px solid #E2E8F0",
+              borderRadius: 12,
+              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+              padding: "12px",
+              zIndex: 100,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#0F172A" }}>Notifications</span>
+                <button style={{ fontSize: "0.75rem", color: "#C4953A", fontWeight: 600, background: "none", border: "none", cursor: "pointer" }}>
+                  Mark all as read
+                </button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ padding: "8px", background: "#F8F9FA", borderRadius: 8, border: "1px solid #F1F5F9" }}>
+                  <p style={{ fontSize: "0.8125rem", color: "#0F172A", fontWeight: 600, margin: "0 0 2px" }}>Dashboard Activated</p>
+                  <p style={{ fontSize: "0.75rem", color: "#64748B", margin: 0 }}>Welcome to your new white-labeled portal.</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Role Badge */}
+        {(session?.user as any)?.role !== "CONSUMER" && (
           <span style={{
-            position: "absolute", top: 6, right: 6,
-            width: 7, height: 7,
-            background: "#DC2626",
-            borderRadius: "50%",
-            border: "1.5px solid white",
-          }} />
-        </button>
+            padding: "4px 10px",
+            background: (session?.user as any)?.role === "EXECUTIVE" ? "#FFFBEB" : "#F1F5F9",
+            color: (session?.user as any)?.role === "EXECUTIVE" ? "#B45309" : "#475569",
+            borderRadius: 6,
+            fontSize: "0.6875rem",
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            textTransform: "uppercase"
+          }}>
+            {(session?.user as any)?.role}
+          </span>
+        )}
 
         {/* Avatar */}
-        <button style={{
-          width: 34, height: 34,
-          background: "linear-gradient(135deg, #0B1D35, #1E4470)",
-          borderRadius: "50%",
-          border: "none",
-          cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "0.6875rem",
-          fontWeight: 700,
-          color: "#C4953A",
-          letterSpacing: "0.02em",
-        }}>
-          SS
-        </button>
+        <div style={{ position: "relative" }}>
+          <button 
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            style={{
+              width: 34, height: 34,
+              background: "linear-gradient(135deg, #0B1D35, #1E4470)",
+              borderRadius: "50%",
+              border: showUserMenu ? "2px solid #C4953A" : "none",
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "0.6875rem",
+              fontWeight: 700,
+              color: "#C4953A",
+              letterSpacing: "0.02em",
+              transition: "all 150ms",
+            }}>
+            {initials}
+          </button>
+
+          {showUserMenu && (
+            <div style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              right: 0,
+              width: 220,
+              background: "#FFFFFF",
+              border: "1px solid #E2E8F0",
+              borderRadius: 12,
+              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+              padding: "8px",
+              zIndex: 100,
+            }}>
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid #F1F5F9", marginBottom: 4 }}>
+                <p style={{ fontSize: "0.8125rem", fontWeight: 700, color: "#0F172A", margin: 0 }}>{userName}</p>
+                <p style={{ fontSize: "0.75rem", color: "#64748B", margin: 0 }}>Free Plan</p>
+              </div>
+              
+              <Link 
+                href="/settings"
+                onClick={() => setShowUserMenu(false)}
+                style={{ display: "block", textDecoration: "none", width: "100%", textAlign: "left", padding: "8px 12px", background: "none", border: "none", borderRadius: 6, fontSize: "0.8125rem", color: "#475569", cursor: "pointer" }}
+                className="hover:bg-slate-50"
+              >
+                Profile Settings
+              </Link>
+              
+              <button 
+                onClick={async () => {
+                  await signOut({ callbackUrl: "/login" });
+                }}
+                style={{ width: "100%", textAlign: "left", padding: "8px 12px", background: "none", border: "none", borderRadius: 6, fontSize: "0.8125rem", color: "#DC2626", fontWeight: 600, cursor: "pointer" }}
+                className="hover:bg-red-50"
+              >
+                Log out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

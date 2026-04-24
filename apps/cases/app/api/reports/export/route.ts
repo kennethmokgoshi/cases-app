@@ -125,21 +125,48 @@ export async function GET(request: Request) {
         const format = (searchParams.get('format') || 'csv') as 'csv' | 'excel' | 'pdf';
         const from = searchParams.get('from');
         const to = searchParams.get('to');
+        const projectId = searchParams.get('projectId');
+        const filterBy = searchParams.get('filterBy') || 'createdAt';
 
-        const dateFilter = from && to ? {
-            createdAt: {
+        const dateFilter: any = from && to ? {
+            [filterBy]: {
                 gte: new Date(from),
                 lte: new Date(to + 'T23:59:59.999Z')
             }
         } : {};
+
+        // Project Filter (Recursive)
+        if (projectId && projectId !== 'all') {
+            const allProjects = await prisma.project.findMany({
+                select: { id: true, parentId: true }
+            });
+
+            const projectIds = new Set<string>([projectId]);
+            let added = true;
+            while (added) {
+                added = false;
+                allProjects.forEach(p => {
+                    if (p.parentId && projectIds.has(p.parentId) && !projectIds.has(p.id)) {
+                        projectIds.add(p.id);
+                        added = true;
+                    }
+                });
+            }
+
+            dateFilter.projects = {
+                some: {
+                    projectId: { in: Array.from(projectIds) }
+                }
+            };
+        }
 
         let headers: string[] = [];
         let rows: string[][] = [];
         let filename = 'export';
         let pdfTitle = 'Zenowethu Report';
 
-        // ── Cases ──────────────────────────────────────────────────────────────
-        if (type === 'cases' || type === 'cases_b2b' || type === 'cases_b2c') {
+        // ── Cases (All/B2B/B2C/Completed) ───────────────────────────────────────
+        if (type === 'cases' || type === 'cases_b2b' || type === 'cases_b2c' || type === 'cases_completed') {
             const clientTypeFilter = type === 'cases_b2b' ? { acquisitionType: 'B2B' }
                 : type === 'cases_b2c' ? { acquisitionType: 'B2C' }
                     : {};
@@ -153,7 +180,7 @@ export async function GET(request: Request) {
                 orderBy: { createdAt: 'desc' }
             });
 
-            headers = ['File Number', 'Client Name', 'ID Number', 'Phone', 'Email', 'Status', 'Client Type', 'Project', 'Created Date'];
+            headers = ['File Number', 'Client Name', 'ID Number', 'Phone', 'Email', 'Status', 'Client Type', 'Project', 'Created Date', 'Target Completion'];
             rows = cases.map(c => [
                 c.fileNumber,
                 `${c.client.firstName} ${c.client.lastName}`,
@@ -163,12 +190,63 @@ export async function GET(request: Request) {
                 c.status,
                 c.acquisitionType || 'N/A',
                 c.projects[0]?.project?.name || 'N/A',
-                c.createdAt.toISOString().split('T')[0]
+                c.createdAt.toISOString().split('T')[0],
+                c.fileToBeCompleted ? c.fileToBeCompleted.toISOString().split('T')[0] : 'N/A'
             ]);
 
-            const label = type === 'cases_b2b' ? 'B2B Cases' : type === 'cases_b2c' ? 'B2C Cases' : 'All Cases';
+            const labelMap: Record<string, string> = {
+                'cases': 'All Cases',
+                'cases_b2b': 'B2B Cases',
+                'cases_b2c': 'B2C Cases',
+                'cases_completed': 'Completion Report'
+            };
+            const label = labelMap[type] || 'Cases Report';
             filename = `cases_${type}_${from}_${to}`;
             pdfTitle = `Zenowethu — ${label} (${from} to ${to})`;
+
+        // ── Staff Performance ──────────────────────────────────────────────────
+        } else if (type === 'staff') {
+            const staffCasesRaw = await prisma.case.groupBy({
+                by: ['assignedToId'],
+                _count: { id: true },
+                where: dateFilter
+            });
+
+            const staffIds = staffCasesRaw.map(s => s.assignedToId).filter(Boolean) as string[];
+            const staffMembers = await prisma.user.findMany({
+                where: { id: { in: staffIds } },
+                select: { id: true, firstName: true, lastName: true, email: true }
+            });
+
+            headers = ['Staff Member', 'Email', 'Case Count'];
+            rows = staffCasesRaw.map(s => {
+                const member = staffMembers.find(m => m.id === s.assignedToId);
+                return [
+                    member ? `${member.firstName} ${member.lastName}` : 'Unassigned',
+                    member?.email || 'N/A',
+                    String(s._count.id)
+                ];
+            }).sort((a, b) => Number(b[2]) - Number(a[2]));
+
+            filename = `staff_performance_${from}_${to}`;
+            pdfTitle = `Zenowethu — Staff Performance (${from} to ${to})`;
+
+        // ── B2B Performance ────────────────────────────────────────────────────
+        } else if (type === 'b2b') {
+            const b2bStatsRaw = await prisma.case.groupBy({
+                by: ['partnerName'],
+                _count: { id: true },
+                where: { ...dateFilter, acquisitionType: 'B2B' }
+            });
+
+            headers = ['Partner Name', 'Case Count'];
+            rows = b2bStatsRaw.map(b => [
+                b.partnerName || 'Unknown Partner',
+                String(b._count.id)
+            ]).sort((a, b) => Number(b[1]) - Number(a[1]));
+
+            filename = `b2b_performance_${from}_${to}`;
+            pdfTitle = `Zenowethu — B2B Partner Performance (${from} to ${to})`;
 
         // ── Invoices ───────────────────────────────────────────────────────────
         } else if (type === 'invoices') {

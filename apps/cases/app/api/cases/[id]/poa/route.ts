@@ -141,15 +141,27 @@ export async function POST(
         }
 
         // ---------------------------------------------------------------
+        // Save PDF for download link (Fallback for GHL / WhatsApp)
+        // ---------------------------------------------------------------
+        const uploadDir = '/tmp/poa';
+        await mkdir(uploadDir, { recursive: true });
+        await writeFile(join(uploadDir, fileName), pdfBuffer);
+
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://cases.zenowethu.co.za';
+        const downloadUrl = `${baseUrl}/api/poa/download/${fileName}`;
+
+        // ---------------------------------------------------------------
         // Send PDF
         // ---------------------------------------------------------------
         if (channel === 'EMAIL') {
             const emailResult = await sendEmailWithAttachments({
                 to: client.email!,
+                fromName:    session.user.name || undefined,
+                fromEmail:   session.user.email || undefined,
                 subject: type === 'WESBANK'
                     ? `Wesbank Power of Attorney — Please Sign and Return | ${clientFullName}`
                     : `Power of Attorney — Please Sign and Return | Zenowethu Debt Management`,
-                html: buildEmailHtml(clientFullName, type),
+                html: buildEmailHtml(clientFullName, type, downloadUrl),
                 attachments: [{
                     filename:    fileName,
                     content:     pdfBuffer,
@@ -163,16 +175,8 @@ export async function POST(
             }
 
             await logActivity(caseId, session.user.id, type, 'EMAIL', client.email!);
-            return NextResponse.json({ success: true, channel: 'EMAIL', messageId: emailResult.messageId });
+            return NextResponse.json({ success: true, channel: 'EMAIL', messageId: emailResult.messageId, downloadUrl });
         }
-
-        // WHATSAPP — save PDF to /tmp/poa/ (writable by nextjs user) and serve via API route
-        const uploadDir = '/tmp/poa';
-        await mkdir(uploadDir, { recursive: true });
-        await writeFile(join(uploadDir, fileName), pdfBuffer);
-
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.zenowethu.co.za';
-        const downloadUrl = `${baseUrl}/api/poa/download/${fileName}`;
 
         const waMessage = buildWhatsAppMessage(clientFullName, downloadUrl, type);
 
@@ -220,7 +224,7 @@ async function logActivity(caseId: string, userId: string, type: string, channel
     });
 }
 
-function buildEmailHtml(clientName: string, type: string): string {
+function buildEmailHtml(clientName: string, type: string, downloadUrl: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
     return `
 <!DOCTYPE html>
@@ -236,6 +240,7 @@ function buildEmailHtml(clientName: string, type: string): string {
   .steps { background: #f0f6ff; border-left: 4px solid #003d6b; padding: 16px 20px; border-radius: 4px; margin: 16px 0; }
   .steps ol { margin: 8px 0; padding-left: 20px; }
   .steps li { margin-bottom: 6px; font-size: 13px; }
+  .cta-button { display: inline-block; background: #003d6b; color: #ffffff !important; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin: 16px 0; font-size: 14px; }
   .footer { background: #f0f0f0; padding: 16px 32px; font-size: 11px; color: #888; text-align: center; }
 </style></head>
 <body>
@@ -247,10 +252,15 @@ function buildEmailHtml(clientName: string, type: string): string {
   <div class="body">
     <p>Dear <strong>${clientName}</strong>,</p>
     <p>Please find attached your personalised <strong>${docLabel}</strong> from Zenowethu Debt Management.</p>
+    
+    <div style="text-align: center;">
+      <a href="${downloadUrl}" class="cta-button">Download ${docLabel} (PDF)</a>
+    </div>
+
     <div class="steps">
       <strong>What you need to do:</strong>
       <ol>
-        <li>Open the attached PDF.</li>
+        <li>Download and open the PDF.</li>
         <li>Print it or use a PDF signing app.</li>
         <li>Sign where indicated and fill in the date.</li>
         <li>Scan or photograph the signed document and send it back to us at <a href="mailto:info@zenowethu.co.za">info@zenowethu.co.za</a>.</li>

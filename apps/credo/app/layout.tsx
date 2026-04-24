@@ -50,6 +50,8 @@ export const viewport: Viewport = {
   themeColor: "#0B1D35",
 };
 
+import { AuthProvider } from "../components/AuthProvider";
+
 export default function RootLayout({
   children,
 }: {
@@ -73,7 +75,9 @@ export default function RootLayout({
         `}</style>
       </head>
       <body className="antialiased" suppressHydrationWarning>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

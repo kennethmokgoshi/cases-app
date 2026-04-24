@@ -4,14 +4,19 @@
   "private": true,
   "main": "./src/index.ts",
   "dependencies": {
+    "@tiptap/extension-color": "^3.22.4",
+    "@tiptap/extension-link": "^3.22.4",
+    "@tiptap/extension-text-style": "^3.22.4",
+    "@tiptap/extension-underline": "^3.22.4",
+    "@tiptap/react": "^3.22.4",
+    "@tiptap/starter-kit": "^3.22.4",
     "@zenowethu/config": "workspace:*",
-    "@zenowethu/shared-lib": "workspace:*",
     "@zenowethu/database": "workspace:*",
     "@zenowethu/plan-engine": "workspace:*",
+    "@zenowethu/shared-lib": "workspace:*",
     "date-fns": "^4.1.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "react-simple-wysiwyg": "^3.0.2",
     "zod": "^4.3.6"
   },
   "peerDependencies": {

@@ -79,6 +79,8 @@ type ReportStats = {
     casesByStatus: { status: string; count: number }[];
     casesByProject: { projectName: string; count: number }[];
     casesByMonth: { month: string; count: number }[];
+    staffStats: { staffId: string; staffName: string; count: number }[];
+    b2bStats: { partnerName: string; count: number }[];
     b2bCases: number;
     b2cCases: number;
 };
@@ -89,6 +91,7 @@ function ReportsContent() {
     const [activeTab, setActiveTab] = useState(initialTab);
     const [stats, setStats] = useState<ReportStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [filterBy, setFilterBy] = useState<'createdAt' | 'fileToBeCompleted'>('createdAt');
     const [dateRange, setDateRange] = useState({
         from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
         to: new Date().toISOString().split('T')[0]
@@ -116,12 +119,12 @@ function ReportsContent() {
 
     useEffect(() => {
         fetchReportStats();
-    }, [dateRange, selectedProjectId]); // Re-fetch when filter changes
+    }, [dateRange, selectedProjectId, filterBy]); // Re-fetch when filter changes
 
     const fetchReportStats = async () => {
         try {
             setLoading(true);
-            const res = await fetch(`/api/reports/stats?from=${dateRange.from}&to=${dateRange.to}&projectId=${selectedProjectId}`);
+            const res = await fetch(`/api/reports/stats?from=${dateRange.from}&to=${dateRange.to}&projectId=${selectedProjectId}&filterBy=${filterBy}`);
             if (res.ok) {
                 const data = await res.json();
                 setStats(data);
@@ -134,12 +137,14 @@ function ReportsContent() {
     };
 
     const exportReport = (type: string, format: string = 'csv') => {
-        window.open(`/api/reports/export?type=${type}&format=${format}&from=${dateRange.from}&to=${dateRange.to}&projectId=${selectedProjectId}`, '_blank');
+        window.open(`/api/reports/export?type=${type}&format=${format}&from=${dateRange.from}&to=${dateRange.to}&projectId=${selectedProjectId}&filterBy=${filterBy}`, '_blank');
     };
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: '📊' },
         { id: 'cases', label: 'Cases Report', icon: '📁' },
+        { id: 'staff', label: 'Staff Performance', icon: '👥' },
+        { id: 'b2b', label: 'B2B Partners', icon: '🏢' },
         { id: 'invoices', label: 'Invoices', icon: '💰' },
         { id: 'performance', label: 'Performance', icon: '📈' },
     ];
@@ -197,6 +202,22 @@ function ReportsContent() {
                     </select>
                 </div>
 
+                {/* Filter By Mode */}
+                <div className="flex items-center gap-2 bg-zeno-navy p-1 rounded-lg border border-white/5">
+                    <button
+                        onClick={() => setFilterBy('createdAt')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${filterBy === 'createdAt' ? 'bg-zeno-cyan text-zeno-navy' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Created Date
+                    </button>
+                    <button
+                        onClick={() => setFilterBy('fileToBeCompleted')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${filterBy === 'fileToBeCompleted' ? 'bg-zeno-cyan text-zeno-navy' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Completion Date
+                    </button>
+                </div>
+
                 <button
                     onClick={fetchReportStats}
                     className="px-4 py-2 bg-zeno-cyan text-zeno-navy font-medium rounded-lg hover:bg-cyan-400 transition-colors ml-auto"
@@ -235,7 +256,17 @@ function ReportsContent() {
 
                     {/* Cases Report Tab */}
                     {activeTab === 'cases' && (
-                        <CasesReportTab stats={stats} onExport={exportReport} />
+                        <CasesReportTab stats={stats} filterBy={filterBy} onExport={exportReport} />
+                    )}
+
+                    {/* Staff Tab */}
+                    {activeTab === 'staff' && (
+                        <StaffPerformanceTab stats={stats} onExport={exportReport} />
+                    )}
+
+                    {/* B2B Tab */}
+                    {activeTab === 'b2b' && (
+                        <B2BPerformanceTab stats={stats} onExport={exportReport} />
                     )}
 
                     {/* Invoices Tab */}
@@ -317,14 +348,22 @@ function OverviewTab({ stats, onExport }: { stats: ReportStats | null; onExport:
     );
 }
 
-function CasesReportTab({ stats, onExport }: { stats: ReportStats | null; onExport: (type: string, format: string) => void }) {
+function CasesReportTab({ stats, filterBy, onExport }: { stats: ReportStats | null; filterBy: string; onExport: (type: string, format: string) => void }) {
+    const isCompletionMode = filterBy === 'fileToBeCompleted';
+
     return (
         <div className="bg-zeno-gray rounded-xl p-6 border border-white/10">
             <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-white">Cases Report</h3>
-                <ExportDropdown reportType="cases" onExport={onExport} label="Export All Cases" variant="primary" />
+                <div>
+                    <h3 className="text-lg font-semibold text-white">Detailed Cases Report</h3>
+                    <p className="text-sm text-zeno-cyan mt-1">Filtering by: {isCompletionMode ? 'Target Completion Date' : 'Registration Date'}</p>
+                </div>
+                <div className="flex gap-2">
+                    {isCompletionMode && <ExportDropdown reportType="cases_completed" onExport={onExport} label="Export Completion Report" variant="primary" />}
+                    <ExportDropdown reportType="cases" onExport={onExport} label="Export All Cases" variant={isCompletionMode ? 'inline' : 'primary'} />
+                </div>
             </div>
-            <p className="text-gray-400 mb-4">Export a detailed report of all cases within the selected date range.</p>
+            <p className="text-gray-400 mb-6">Export a detailed report of all cases within the selected date range and branch filter.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-zeno-navy rounded-lg border border-purple-500/30">
                     <div className="flex justify-between items-start mb-2">
@@ -340,6 +379,67 @@ function CasesReportTab({ stats, onExport }: { stats: ReportStats | null; onExpo
                     </div>
                     <p className="text-gray-400 text-sm">Export direct/private cases</p>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+function StaffPerformanceTab({ stats, onExport }: { stats: ReportStats | null; onExport: (type: string, format: string) => void }) {
+    if (!stats) return null;
+    return (
+        <div className="bg-zeno-gray rounded-xl p-6 border border-white/10">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold text-white">Staff Performance</h3>
+                <ExportDropdown reportType="staff" onExport={onExport} label="Export Staff Report" variant="primary" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {stats.staffStats.map((staff) => (
+                    <div key={staff.staffId} className="bg-zeno-navy p-4 rounded-xl border border-white/5 flex justify-between items-center">
+                        <div>
+                            <p className="text-white font-medium">{staff.staffName}</p>
+                            <p className="text-xs text-gray-500">{staff.staffId === 'unassigned' ? 'Action required' : 'Team Member'}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-2xl font-bold text-zeno-cyan">{staff.count}</p>
+                            <p className="text-[10px] text-gray-400 uppercase">Cases</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function B2BPerformanceTab({ stats, onExport }: { stats: ReportStats | null; onExport: (type: string, format: string) => void }) {
+    if (!stats) return null;
+    return (
+        <div className="bg-zeno-gray rounded-xl p-6 border border-white/10">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold text-white">B2B / Partner Breakdown</h3>
+                <ExportDropdown reportType="b2b" onExport={onExport} label="Export Partner Report" variant="primary" />
+            </div>
+            <div className="space-y-3">
+                {stats.b2bStats.map((partner) => (
+                    <div key={partner.partnerName} className="flex items-center justify-between p-4 bg-zeno-navy rounded-xl border border-white/5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+                                🏢
+                            </div>
+                            <span className="text-white font-medium">{partner.partnerName}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="text-right">
+                                <span className="text-xl font-bold text-white">{partner.count}</span>
+                                <span className="text-gray-500 text-xs ml-2">cases</span>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {stats.b2bStats.length === 0 && (
+                    <div className="text-center py-12 text-gray-500">
+                        No B2B cases found for the selected criteria.
+                    </div>
+                )}
             </div>
         </div>
     );

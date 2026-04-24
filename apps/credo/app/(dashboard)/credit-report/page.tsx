@@ -1,33 +1,43 @@
 "use client";
 
-import { useState } from "react";
-import { DEMO_BUREAUS, DEMO_NEGATIVE_ITEMS, DEMO_PAYMENT_PROFILE } from "@/lib/credo-demo-data";
+import { useState, useEffect } from "react";
 
 type Bureau = "transunion" | "experian" | "xds" | "lightstone";
 
-const BUREAUS: { key: Bureau; name: string; score: number; lastPulled: string }[] = DEMO_BUREAUS as any;
-const NEGATIVE_ITEMS = DEMO_NEGATIVE_ITEMS;
-const PAYMENT_PROFILE = DEMO_PAYMENT_PROFILE;
+const BUREAUS: { key: Bureau; name: string }[] = [
+  { key: "transunion", name: "TransUnion" },
+  { key: "experian",   name: "Experian"    },
+  { key: "xds",        name: "XDS"         },
+  { key: "lightstone", name: "Lightstone"  },
+];
+
+interface BureauData {
+  key: Bureau;
+  name: string;
+  score: number;
+  lastPulled: string;
+}
 
 function ScoreGauge({ score, size = 88 }: { score: number; size?: number }) {
   const max = 999;
   const r = (size - 10) / 2;
   const c = 2 * Math.PI * r;
-  const offset = c * (1 - (score / max) * 0.75);
-  const color = score >= 700 ? "#059669" : score >= 600 ? "#D97706" : "#DC2626";
+  const safeScore = score || 0;
+  const offset = c * (1 - (safeScore / max) * 0.75);
+  const color = safeScore >= 700 ? "#059669" : safeScore > 0 ? "#D97706" : "#E2E8F0";
 
   return (
     <div style={{ position: "relative", width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: "rotate(135deg)" }}>
         <circle cx={size/2} cy={size/2} r={r} stroke="#E2E8F0" strokeWidth="5" fill="none" />
         <circle cx={size/2} cy={size/2} r={r} stroke={color} strokeWidth="5" fill="none"
-          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
+          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={safeScore > 0 ? offset : c}
           style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1)" }}
         />
       </svg>
       <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <span style={{ fontSize: size*0.24, fontWeight: 800, color, lineHeight: 1 }}>{score}</span>
-        <span style={{ fontSize: size*0.1, color:"#94A3B8", fontWeight:500 }}>/ 999</span>
+        <span style={{ fontSize: size*0.24, fontWeight: 800, color: safeScore > 0 ? color : "#94A3B8", lineHeight: 1 }}>{safeScore || "—"}</span>
+        <span style={{ fontSize: size*0.1, color:"#94A3B8", fontWeight:500 }}>{safeScore > 0 ? "/ 999" : "No Data"}</span>
       </div>
     </div>
   );
@@ -65,7 +75,32 @@ function PaymentDots({ months }: { months: number }) {
 
 export default function CreditReportPage() {
   const [activeBureau, setActiveBureau] = useState<Bureau>("transunion");
-  const active = BUREAUS.find(b => b.key === activeBureau)!;
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const res = await fetch("/api/consumer/dashboard");
+        if (res.ok) setData(await res.json());
+      } catch (err) {
+        console.error("Fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  const bureausData = data?.bureaus || [];
+  const bureaus = BUREAUS.map(b => {
+    const d = bureausData.find((bd: any) => bd.name.toLowerCase().includes(b.key));
+    return { ...b, score: d?.score || 0, lastPulled: d ? "Last updated today" : "Not pulled yet" };
+  });
+
+  const active = bureaus.find(b => b.key === activeBureau) || bureaus[0];
+  const negativeItems = data?.negativeItems || [];
+  const paymentProfile = data?.paymentProfile || [];
 
   return (
     <div className="animate-fade-in" style={{ display:"flex", flexDirection:"column", gap:24 }}>
@@ -94,10 +129,10 @@ export default function CreditReportPage() {
       </div>
 
       {/* Bureau tabs */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12 }}>
-        {BUREAUS.map((b) => {
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:12 }}>
+        {bureaus.map((b) => {
           const isActive = b.key === activeBureau;
-          const color = b.score >= 700 ? "#059669" : b.score >= 600 ? "#D97706" : "#DC2626";
+          const color = b.score >= 700 ? "#059669" : b.score > 0 ? "#D97706" : "#94A3B8";
           return (
             <button key={b.key} onClick={() => setActiveBureau(b.key)} style={{
               background: isActive ? "#FFFFFF" : "#F8F9FA",
@@ -113,7 +148,7 @@ export default function CreditReportPage() {
                   <span style={{ width:8, height:8, borderRadius:"50%", background:"#059669", display:"block" }} />
                 )}
               </div>
-              <div style={{ fontSize:"1.5rem", fontWeight:800, color, lineHeight:1 }}>{b.score}</div>
+              <div style={{ fontSize:"1.5rem", fontWeight:800, color: b.score > 0 ? color : "#E2E8F0", lineHeight:1 }}>{b.score || "—"}</div>
               <div style={{ fontSize:"0.75rem", color:"#94A3B8", marginTop:3 }}>{b.lastPulled}</div>
             </button>
           );
@@ -121,7 +156,7 @@ export default function CreditReportPage() {
       </div>
 
       {/* Detail panel */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 300px", gap:20, alignItems:"start" }}>
+      <div style={{ display:"grid", gridTemplateColumns: "1fr 300px", gap:20, alignItems:"start" }}>
         {/* Negative items */}
         <div className="credo-card" style={{ padding:"24px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
@@ -130,77 +165,55 @@ export default function CreditReportPage() {
                 Negative Items
               </h3>
               <p style={{ fontSize:"0.8125rem", color:"#94A3B8", margin:0 }}>
-                {NEGATIVE_ITEMS.length} items identified &bull; 1 possible prescribed debt
+                {negativeItems.length} items identified
               </p>
             </div>
-            <button className="btn-primary" style={{ padding:"8px 16px", fontSize:"0.8125rem" }}>
-              Dispute all
-            </button>
+            {negativeItems.length > 0 && (
+              <button className="btn-primary" style={{ padding:"8px 16px", fontSize:"0.8125rem" }}>
+                Dispute all
+              </button>
+            )}
           </div>
 
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {NEGATIVE_ITEMS.map((item) => (
-              <div key={item.id} style={{
-                border:"1px solid #E2E8F0",
-                borderRadius:10,
-                padding:"16px 18px",
-                borderLeft: item.isPrescribed ? "3px solid #059669" : "1px solid #E2E8F0",
-              }}>
-                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:8 }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                      <span style={{
-                        padding:"2px 8px", borderRadius:4,
-                        background:"#F1F5F9", color:"#475569",
-                        fontSize:"0.6875rem", fontWeight:700, letterSpacing:"0.04em",
-                        textTransform:"uppercase",
-                      }}>
-                        {item.type}
-                      </span>
-                      <StatusPill status={item.status} />
-                      {item.isPrescribed && (
+            {negativeItems.length > 0 ? (
+              negativeItems.map((item) => (
+                <div key={item.id} style={{
+                  border:"1px solid #E2E8F0",
+                  borderRadius:10,
+                  padding:"16px 18px",
+                  borderLeft: item.isPrescribed ? "3px solid #059669" : "1px solid #E2E8F0",
+                }}>
+                  <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:8 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                         <span style={{
                           padding:"2px 8px", borderRadius:4,
-                          background:"#ECFDF5", color:"#059669",
-                          fontSize:"0.6875rem", fontWeight:700,
+                          background:"#F1F5F9", color:"#475569",
+                          fontSize:"0.6875rem", fontWeight:700, letterSpacing:"0.04em",
+                          textTransform:"uppercase",
                         }}>
-                          POSSIBLY PRESCRIBED
+                          {item.type}
                         </span>
-                      )}
+                        <StatusPill status={item.status} />
+                      </div>
+                      <p style={{ fontSize:"0.9375rem", fontWeight:700, color:"#0F172A", margin:"0 0 3px" }}>
+                        {item.creditor}
+                      </p>
+                      <p style={{ fontSize:"0.8125rem", color:"#64748B", margin:0 }}>{item.description}</p>
                     </div>
-                    <p style={{ fontSize:"0.9375rem", fontWeight:700, color:"#0F172A", margin:"0 0 3px" }}>
-                      {item.creditor}
-                    </p>
-                    <p style={{ fontSize:"0.8125rem", color:"#64748B", margin:0 }}>{item.description}</p>
-                  </div>
-                  <div style={{ textAlign:"right", flexShrink:0 }}>
-                    <p style={{ fontSize:"0.9375rem", fontWeight:700, color:"#0F172A", margin:"0 0 2px" }}>{item.amount}</p>
-                    <p style={{ fontSize:"0.75rem", color:"#94A3B8", margin:0 }}>{item.date}</p>
+                    <div style={{ textAlign:"right", flexShrink:0 }}>
+                      <p style={{ fontSize:"0.9375rem", fontWeight:700, color:"#0F172A", margin:"0 0 2px" }}>{item.amount}</p>
+                      <p style={{ fontSize:"0.75rem", color:"#94A3B8", margin:0 }}>{item.date}</p>
+                    </div>
                   </div>
                 </div>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingTop:10, borderTop:"1px solid #F1F5F9" }}>
-                  <span style={{ fontSize:"0.8125rem", color:"#94A3B8" }}>Bureau: {item.bureau}</span>
-                  <div style={{ display:"flex", gap:8 }}>
-                    {item.isPrescribed && (
-                      <button style={{
-                        padding:"5px 12px", fontSize:"0.8125rem", fontWeight:600,
-                        background:"#ECFDF5", color:"#059669",
-                        border:"none", borderRadius:6, cursor:"pointer",
-                      }}>
-                        Challenge prescription
-                      </button>
-                    )}
-                    <button style={{
-                      padding:"5px 12px", fontSize:"0.8125rem", fontWeight:600,
-                      background:"#E4EDF8", color:"#0B1D35",
-                      border:"none", borderRadius:6, cursor:"pointer",
-                    }}>
-                      Dispute
-                    </button>
-                  </div>
+              ))
+            ) : (
+                <div style={{ padding: "40px 20px", textAlign: "center", border: "1px dashed #E2E8F0", borderRadius: 12 }}>
+                  <p style={{ fontSize: "0.875rem", color: "#64748B", margin: 0 }}>No negative items found for this bureau.</p>
                 </div>
-              </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -215,23 +228,27 @@ export default function CreditReportPage() {
               <ScoreGauge score={active.score} size={100} />
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {[
-                { label:"Payment History",   value:72, color:"#059669" },
-                { label:"Credit Utilisation", value:55, color:"#D97706" },
-                { label:"Account Age",        value:61, color:"#D97706" },
-                { label:"Credit Mix",         value:80, color:"#059669" },
-                { label:"New Inquiries",      value:45, color:"#DC2626" },
-              ].map((f) => (
-                <div key={f.label}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
-                    <span style={{ fontSize:"0.75rem", color:"#64748B" }}>{f.label}</span>
-                    <span style={{ fontSize:"0.75rem", fontWeight:600, color:f.color }}>{f.value}%</span>
+              {active.score > 0 ? (
+                [
+                  { label:"Payment History",   value:72, color:"#059669" },
+                  { label:"Credit Utilisation", value:55, color:"#D97706" },
+                  { label:"Account Age",        value:61, color:"#D97706" },
+                  { label:"Credit Mix",         value:80, color:"#059669" },
+                  { label:"New Inquiries",      value:45, color:"#DC2626" },
+                ].map((f) => (
+                  <div key={f.label}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                      <span style={{ fontSize:"0.75rem", color:"#64748B" }}>{f.label}</span>
+                      <span style={{ fontSize:"0.75rem", fontWeight:600, color:f.color }}>{f.value}%</span>
+                    </div>
+                    <div style={{ height:4, background:"#F1F5F9", borderRadius:9999 }}>
+                      <div style={{ height:"100%", borderRadius:9999, background:f.color, width:`${f.value}%` }} />
+                    </div>
                   </div>
-                  <div style={{ height:4, background:"#F1F5F9", borderRadius:9999 }}>
-                    <div style={{ height:"100%", borderRadius:9999, background:f.color, width:`${f.value}%` }} />
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                  <p style={{ fontSize: "0.75rem", color: "#94A3B8", textAlign: "center" }}>Pull a report to see score factors.</p>
+              )}
             </div>
           </div>
 
@@ -241,25 +258,18 @@ export default function CreditReportPage() {
               Payment Profile
             </p>
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-              {PAYMENT_PROFILE.map((acc) => (
-                <div key={acc.creditor}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                    <span style={{ fontSize:"0.8125rem", fontWeight:600, color:"#0F172A" }}>{acc.creditor}</span>
-                    <span style={{
-                      fontSize:"0.7rem", fontWeight:600, padding:"1px 8px", borderRadius:9999,
-                      background: acc.status === "PAID_UP" ? "#ECFDF5" : "#EFF6FF",
-                      color: acc.status === "PAID_UP" ? "#059669" : "#2563EB",
-                    }}>
-                      {acc.status === "PAID_UP" ? "Paid Up" : "Current"}
-                    </span>
+              {paymentProfile.length > 0 ? (
+                paymentProfile.map((acc) => (
+                  <div key={acc.creditor}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                      <span style={{ fontSize:"0.8125rem", fontWeight:600, color:"#0F172A" }}>{acc.creditor}</span>
+                    </div>
+                    <PaymentDots months={acc.months} />
                   </div>
-                  <PaymentDots months={acc.months} />
-                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:3 }}>
-                    <span style={{ fontSize:"0.7rem", color:"#94A3B8" }}>Bal: {acc.balance}</span>
-                    <span style={{ fontSize:"0.7rem", color:"#94A3B8" }}>Inst: {acc.payment}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                  <p style={{ fontSize: "0.75rem", color: "#94A3B8", textAlign: "center" }}>No account data available.</p>
+              )}
             </div>
           </div>
 

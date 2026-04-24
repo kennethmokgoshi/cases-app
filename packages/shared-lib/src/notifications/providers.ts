@@ -9,9 +9,21 @@ export interface SmsProvider {
     send(to: string, message: string): Promise<SmsResult>;
 }
 
+export interface EmailAttachment {
+    filename: string;
+    content:  Buffer | string; // Use Buffer for SMTP, base64 string for Resend
+    contentType?: string;
+}
+
+export interface EmailOptions {
+    fromName?:    string;
+    fromEmail?:   string;
+    attachments?: EmailAttachment[];
+}
+
 export interface EmailProvider {
     name: string;
-    send(to: string, subject: string, htmlBody: string, textBody?: string, options?: { fromName?: string, fromEmail?: string }): Promise<EmailResult>;
+    send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult>;
 }
 
 export interface SmsResult {
@@ -47,10 +59,12 @@ export class MockSmsProvider implements SmsProvider {
 export class MockEmailProvider implements EmailProvider {
     name = 'Mock Email';
 
-    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: { fromName?: string, fromEmail?: string }): Promise<EmailResult> {
+    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         logger.info(`📧 [MOCK EMAIL] To: ${to}`);
         logger.info(`📧 [MOCK EMAIL] Subject: ${subject}`);
-        logger.info(`📧 [MOCK EMAIL] Body: ${htmlBody.substring(0, 200)}...`);
+        if (options?.attachments?.length) {
+            logger.info(`📧 [MOCK EMAIL] Attachments: ${options.attachments.map(a => a.filename).join(', ')}`);
+        }
         return {
             success: true,
             messageId: `mock-email-${Date.now()}`,
@@ -117,19 +131,29 @@ export class ResendEmailProvider implements EmailProvider {
         this.fromEmail = fromEmail;
     }
 
-    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: { fromName?: string, fromEmail?: string }): Promise<EmailResult> {
+    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         try {
+            const body: Record<string, any> = {
+                from:    options?.fromEmail || this.fromEmail,
+                to:      [to],
+                subject: subject,
+                html:    htmlBody,
+                text:    textBody || htmlBody.replace(/<[^>]*>/g, ''),
+            };
+
+            if (options?.attachments?.length) {
+                body.attachments = options.attachments.map(a => ({
+                    filename: a.filename,
+                    content:  Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
+                }));
+            }
+
             const response = await fetch('https://api.resend.com/emails', {
-                method: 'POST',
+                method:  'POST',
                 headers: {
                     'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    from: this.fromEmail,
-                    to: [to],
-                    subject: subject,
-                    html: htmlBody,
-                    text: textBody || htmlBody.replace(/<[^>]*>/g, '') }) });
+                    'Content-Type':  'application/json' },
+                body: JSON.stringify(body) });
 
             const data = await response.json();
 
@@ -179,14 +203,19 @@ export class SmtpEmailProvider implements EmailProvider {
         this.fromEmail = config.fromEmail || config.auth.user;
     }
 
-    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: { fromName?: string, fromEmail?: string }): Promise<EmailResult> {
+    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         try {
             const info = await this.transporter.sendMail({
-                from: this.fromEmail,
-                to: to,
-                subject: subject,
-                html: htmlBody,
-                text: textBody || htmlBody.replace(/<[^>]*>/g, '') });
+                from:        options?.fromEmail || this.fromEmail,
+                to:          to,
+                subject:     subject,
+                html:        htmlBody,
+                text:        textBody || htmlBody.replace(/<[^>]*>/g, ''),
+                attachments: options?.attachments?.map(a => ({
+                    filename: a.filename,
+                    content:  a.content,
+                })),
+            });
 
             return {
                 success: true,
@@ -363,7 +392,7 @@ export class GhlSmsProvider extends GhlBaseProvider implements SmsProvider {
 export class GhlEmailProvider extends GhlBaseProvider implements EmailProvider {
     name = 'GoHighLevel';
 
-    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: { fromName?: string, fromEmail?: string }): Promise<EmailResult> {
+    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         const contactId = await this.ensureContactId(to, 'email');
         if (!contactId) return { success: false, error: 'Contact could not be found or created', provider: this.name };
         const res = await this.sendMessage(contactId, htmlBody, 'Email', subject);
@@ -409,7 +438,7 @@ export class GhlWebhookEmailProvider implements EmailProvider {
     name = 'GHL Webhook';
     constructor(private webhookUrl: string) { }
 
-    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: { fromName?: string, fromEmail?: string }): Promise<EmailResult> {
+    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         try {
             await fetch(this.webhookUrl, {
                 method: 'POST',

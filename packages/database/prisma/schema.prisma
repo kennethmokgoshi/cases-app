@@ -24,8 +24,16 @@ model Project {
   children        Project[]          @relation("ProjectHierarchy")
   members         ProjectMember[]
   b2bPartnerUsers User[]             @relation("B2BPartnerUsers")
+  consumers       ConsumerAccount[]
   resources       DocumentResource[] @relation("DocumentResourceToProject")
   invoices        Invoice[]
+  
+  // White-Label Bundle Branding
+  primaryColor    String?            @default("#0B1D35")
+  accentColor     String?            @default("#C4953A")
+  logoUrl         String?
+  companySlogan   String?
+  termsUrl        String?
 }
 
 model ProjectMember {
@@ -327,6 +335,7 @@ model CaseComment {
   case         Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
   user         User             @relation(fields: [userId], references: [id])
   mentions     CommentMention[]
+  attachments  Json?            // Array of { name, url, type, size }
 
   @@index([caseId])
   @@index([userId])
@@ -638,16 +647,37 @@ model ConsumerAccount {
   province       String?
   language       String           @default("English")
   tenantId       String?
+  projectId      String?
+  role           String           @default("CONSUMER") // CONSUMER, STAFF, EXECUTIVE
+  isAdmin        Boolean          @default(false)
   isVerified     Boolean          @default(false)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   linkedClientId String?          @unique
   linkedClient   Client?          @relation(fields: [linkedClientId], references: [id])
   tenant         CredoTenant?     @relation(fields: [tenantId], references: [id])
+  project        Project?         @relation(fields: [projectId], references: [id])
   serviceRequests ServiceRequest[]
+  documents      CredoDocument[]
 
   @@index([email])
   @@index([tenantId])
+}
+
+model CredoDocument {
+  id           String          @id @default(cuid())
+  consumerId   String
+  fileName     String          // stored filename (cuid-based, no path traversal risk)
+  originalName String          // original upload filename shown in UI
+  mimeType     String
+  size         Int             // bytes
+  category     String          // IDENTITY | INCOME | BUREAU | LEGAL | CORRESPONDENCE
+  storagePath  String          // absolute path on server filesystem
+  createdAt    DateTime        @default(now())
+  consumer     ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+
+  @@index([consumerId])
+  @@index([category])
 }
 
 model CouponCode {

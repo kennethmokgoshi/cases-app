@@ -102,9 +102,9 @@ export async function GET(req: NextRequest) {
             cases: dashboardCases,
             activities,
             bureaus: [
-                { key: "transunion", name: "TransUnion", score: 620, change: 0, lastPulled: "Today" },
-                { key: "experian",   name: "Experian",   score: 615, change: 0, lastPulled: "Today" },
-                { key: "xds",        name: "XDS",        score: 640, change: 0, lastPulled: "Today" },
+                { key: "transunion", name: "TransUnion", score: 0, change: 0, lastPulled: "Never" },
+                { key: "experian",   name: "Experian",   score: 0, change: 0, lastPulled: "Never" },
+                { key: "xds",        name: "XDS",        score: 0, change: 0, lastPulled: "Never" },
             ]
         });
 

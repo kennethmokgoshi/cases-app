@@ -1,4 +1,5 @@
 export const SERVICES_MAP: Record<string, string> = {
+    'credit_profile_enquiry': 'Credit Profile Enquiry',
     'admin_order_removal': 'Administration Order Removal',
     'admin_order_application': 'Administration Order Application',
     'debt_review_flag_removal': 'Debt Review Flag Removal',
