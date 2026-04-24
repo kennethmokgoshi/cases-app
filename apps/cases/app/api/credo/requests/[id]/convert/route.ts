@@ -3,10 +3,10 @@ import { prisma } from "@zenowethu/database";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const requestId = params.id;
+    const { id: requestId } = await params;
 
     const request = await prisma.serviceRequest.findUnique({
       where: { id: requestId },

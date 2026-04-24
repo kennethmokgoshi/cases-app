@@ -22,12 +22,13 @@ function formatDate(d: Date) {
 
 type LineItem = { description: string; quantity: number; unitPrice: number }
 
-export default async function InvoiceDetailPage({ params }: { params: { id: string } }) {
+export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await auth()
   if (!session?.user) return null
 
   const invoice = await prisma.invoice.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       client:    { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true } },
       case:      { select: { fileNumber: true, acquisitionType: true } },
