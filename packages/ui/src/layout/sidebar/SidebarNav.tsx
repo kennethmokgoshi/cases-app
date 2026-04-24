@@ -142,7 +142,6 @@ export function SidebarNav({ session, insuranceUrl = '' }: SidebarNavProps) {
                         )}
                     </>
                 )}
-
                 {(session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'FINANCE' || session?.user?.role === 'ACCOUNTS') && (
                     <>
                         <li className="mt-4 mb-2 px-2">
@@ -184,7 +183,7 @@ export function SidebarNav({ session, insuranceUrl = '' }: SidebarNavProps) {
                         <li>
                             <Link href="/credit-accounts" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${pathname.startsWith('/credit-accounts') ? 'bg-emerald-500/10 text-emerald-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                                 </svg>
                                 Credit Accounts
                             </Link>
