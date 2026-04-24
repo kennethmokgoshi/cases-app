@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger } from '@zenowethu/shared-lib';
-import { analyzeCombinedDocument, batchAnalyzeDocuments } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
+import { analyzeCombinedDocument, batchAnalyzeDocuments } from '@zenowethu/shared-lib/src/openai';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+
+const logger = createLogger('compare-analysis');
 
 interface ComparisonField {
     field: string;

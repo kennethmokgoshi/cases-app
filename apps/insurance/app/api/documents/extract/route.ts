@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
-import { extractDocumentsFromCombinedPdf, analyzeDocument } from '@zenowethu/shared-lib';
+import { extractDocumentsFromCombinedPdf, analyzeDocument } from '@zenowethu/shared-lib/src/openai';
 import { runAutomatedUnderwriting } from '../../../../lib/underwriting-service';
 import { writeFile, mkdir, readFile } from 'fs/promises';
 import { join } from 'path';

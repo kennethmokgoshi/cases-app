@@ -6,7 +6,7 @@ import {
     analyzeCombinedDocument,
     analyzeMultipleDocumentsAsCombined,
     extractDocumentsFromCombinedPdf
-} from '@zenowethu/shared-lib';
+} from '@zenowethu/shared-lib/src/openai';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';

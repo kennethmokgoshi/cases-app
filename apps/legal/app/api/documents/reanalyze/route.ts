@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, ReanalyzeSchema, parseBody  } from '@zenowethu/shared-lib';
-import { extractDocumentsFromCombinedPdf, analyzeDocument, batchAnalyzeDocuments, verifyIdNumbers } from '@zenowethu/shared-lib';
+import { auth, logger, ReanalyzeSchema, parseBody } from '@zenowethu/shared-lib';
+import { extractDocumentsFromCombinedPdf, analyzeDocument, batchAnalyzeDocuments, verifyIdNumbers } from '@zenowethu/shared-lib/src/openai';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
 
             if (extractOnly) {
                 logger.info('🤖 Re-analyzing Combined PDF (Extraction Only)...');
-                const { analyzeCombinedDocument } = await import('@zenowethu/shared-lib');
+                const { analyzeCombinedDocument } = await import('@zenowethu/shared-lib/src/openai');
                 const analysis = await analyzeCombinedDocument(base64Pdf);
                 fullAnalysis = analysis;
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
-import { analyzeCombinedDocument, batchAnalyzeDocuments } from '@zenowethu/shared-lib';
+import { analyzeCombinedDocument, batchAnalyzeDocuments } from '@zenowethu/shared-lib/src/openai';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';

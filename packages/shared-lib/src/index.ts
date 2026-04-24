@@ -1,15 +1,17 @@
 /// <reference path="./types/next-auth.d.ts" />
 
 export * from './logger';
-
 export * from './auth';
 export * from './integrations';
 export * from './statuses';
-export * from './dhs';
-export * from './openai';
+// export * from './dhs'; // Removed from main index (Node-only)
 
-// pdf-image NOT exported - uses Node.js APIs (fs, path, process.cwd)
-// Import directly when needed: import { convertPdfToImages } from '@zenowethu/shared-lib/src/pdf-image'
+// Note: The following modules are NOT exported from the main index 
+// because they use Node.js-only APIs (fs, path, etc.) which break 
+// browser/edge runtimes. Import them directly when needed:
+// import { ... } from '@zenowethu/shared-lib/src/openai'
+// import { ... } from '@zenowethu/shared-lib/src/xds'
+
 export * from './notifications';
 export * from './schemas';
 
@@ -22,19 +24,7 @@ export * from './ai/savings-engine';
 // AI Provider Management
 export * from './ai/provider-client';
 
-// B2B File Created Trigger — AI Employee
-export * from './ai/b2b-trigger';
-
 export * from './metrics';
-
-// XDS Credit Bureau Integration
-export * from './xds';
-
-// Dispute letter generation (CreditFix AI)
-export * from './disputes';
-
-// Power of Attorney generation
-export * from './poa';
 
 // Demo Data
 export * from './demo-data';

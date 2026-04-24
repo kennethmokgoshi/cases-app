@@ -1,5 +1,5 @@
 
-import { getOpenAI } from '../openai';
+import { getOpenAI } from '../openai/client';
 import { logger } from '../logger';
 
 export interface CaseStrategyRequest {

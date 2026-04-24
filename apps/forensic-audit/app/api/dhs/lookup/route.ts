@@ -7,7 +7,14 @@
  */
 
 import { NextResponse } from 'next/server';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo , logger } from '@zenowethu/shared-lib';
+import { logger } from '@zenowethu/shared-lib';
+import { 
+    checkTransferStatus, 
+    searchConsumer, 
+    closeBrowser, 
+    requestTransfer, 
+    scrapeDetailedConsumerInfo 
+} from '@zenowethu/shared-lib/src/dhs';
 import { prisma } from '@zenowethu/database';
 import { addWorkingDays } from '@zenowethu/shared-lib';
 import path, { join } from 'path';
