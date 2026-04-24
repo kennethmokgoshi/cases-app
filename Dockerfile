@@ -17,6 +17,11 @@ RUN apt-get update && apt-get install -y openssl libssl1.1 libssl-dev ca-certifi
 # Install pnpm — pin to exact version matching packageManager in package.json
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
+# Environment variables to optimize pnpm install
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 WORKDIR /app
 
 # Copy workspace manifests — ALL apps needed so pnpm-lock.yaml validates correctly
@@ -48,8 +53,10 @@ FROM node:20-bullseye AS builder
 ARG CACHE_BUST=20260220000000
 ARG APP=cases
 
-RUN apt-get update && apt-get install -y openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 WORKDIR /app
 
@@ -104,7 +111,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Install Chromium and all necessary dependencies for Puppeteer on Bullseye
-RUN apt-get update && apt-get install -y --fix-missing \
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     chromium \
     fonts-liberation \
     libasound2 \
