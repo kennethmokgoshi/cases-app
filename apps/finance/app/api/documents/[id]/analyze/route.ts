@@ -3,7 +3,7 @@ import { prisma } from '@zenowethu/database';
 
 export const maxDuration = 300; // Allow 5 minutes for heavy analysis
 import { auth, logger } from '@zenowethu/shared-lib';
-import { analyzeDocument, analyzeCombinedDocument } from '@zenowethu/shared-lib';
+import { analyzeDocument, analyzeCombinedDocument } from '@zenowethu/shared-lib/src/openai';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
