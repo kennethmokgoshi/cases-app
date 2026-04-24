@@ -27,6 +27,7 @@ export interface StandardPoaInput {
     dcName?:    string;
     dcNcrdcNo?: string;
     dcPhone?:   string;
+    signatureImage?: string; // Base64 string of the signature PNG
 }
 
 export interface WesbankPoaInput {
@@ -369,6 +370,27 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     p2.drawLine({ start: { x: ML + 10, y: y - sigBoxH + 36 }, end: { x: ML + 240, y: y - sigBoxH + 36 }, thickness: 0.5, color: DGRAY });
     p2.drawText('Signature of Principal', { x: ML + 10, y: y - sigBoxH + 26, size: 8, font: regular, color: DGRAY });
     p2.drawText(`ID No: ${input.idNumber}`, { x: ML + 260, y: y - sigBoxH + 26, size: 8, font: regular, color: DGRAY });
+
+    // ── Embed Digital Signature if provided ──────────────────────────────────
+    if (input.signatureImage) {
+        try {
+            const sigBase64 = input.signatureImage.includes(',') 
+                ? input.signatureImage.split(',')[1] 
+                : input.signatureImage;
+            const sigImage = await pdfDoc.embedPng(Buffer.from(sigBase64, 'base64'));
+            
+            // Adjust size to fit in the box
+            const sigDims = sigImage.scale(0.35); 
+            p2.drawImage(sigImage, {
+                x: ML + 20,
+                y: y - sigBoxH + 38,
+                width: sigDims.width,
+                height: sigDims.height,
+            });
+        } catch (e) {
+            console.error('Failed to embed digital signature image:', e);
+        }
+    }
 
     return Buffer.from(await pdfDoc.save());
 }
