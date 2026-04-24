@@ -94,6 +94,45 @@ export async function GET(request: Request) {
             where.projects = { some: { projectId: projectId } };
         }
 
+        // NEW: Timeline/Source Filtering (Year, Month, Source)
+        const urlYear = searchParams.get('year');
+        const urlMonth = searchParams.get('month');
+        const urlSource = searchParams.get('source');
+
+        if (urlYear || urlMonth || urlSource) {
+            let targetIds: string[] = [];
+            
+            if (urlYear && urlMonth) {
+                targetIds = allProjects
+                    .filter(p => {
+                        const isMonth = p.name.toLowerCase() === urlMonth.toLowerCase();
+                        if (!isMonth) return false;
+                        const parent = p.parentId ? projectMap.get(p.parentId) : null;
+                        return parent && parent.name === urlYear;
+                    })
+                    .map(p => p.id);
+            } else if (urlYear) {
+                targetIds = allProjects
+                    .filter(p => p.name === urlYear && (p.type === 'YEAR' || !isNaN(Number(p.name))))
+                    .map(p => p.id);
+            } else if (urlSource) {
+                targetIds = allProjects
+                    .filter(p => p.name === urlSource && (p.parentId === null || (projectMap.get(p.parentId!) as any)?.type === 'ROOT'))
+                    .map(p => p.id);
+            }
+
+            if (targetIds.length > 0) {
+                const allDescendants = new Set<string>();
+                targetIds.forEach(id => {
+                    allDescendants.add(id);
+                    getDescendantIds(id).forEach(dId => allDescendants.add(dId));
+                });
+                
+                const finalIds = Array.from(allDescendants);
+                where.projects = { some: { projectId: { in: finalIds } } };
+            }
+        }
+
         // Apply filters
         if (status) {
             where.status = status;

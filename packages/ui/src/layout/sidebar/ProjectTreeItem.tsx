@@ -133,7 +133,7 @@ export const ProjectTreeItem = ({ project, depth = 0, autoExpandDate, yearContex
                         <ProjectTreeItem
                             key={child.id}
                             project={child}
-                            depth={0}
+                            depth={depth + 1}
                             autoExpandDate={autoExpandDate}
                             yearContext={project.type === 'V_YEAR' ? project.name : yearContext}
                         />

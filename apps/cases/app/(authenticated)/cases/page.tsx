@@ -116,6 +116,9 @@ function CasesContent() {
                 if (urlFilter) params.set('filter', urlFilter);
                 if (urlSearch) params.set('search', urlSearch);
                 if (urlProjectId) params.set('projectId', urlProjectId);
+                if (urlYear) params.set('year', urlYear);
+                if (urlMonth) params.set('month', urlMonth);
+                if (urlSource) params.set('source', urlSource);
                 if (statusFilter !== 'ALL') params.set('status', statusFilter);
                 if (selectedStatuses.size > 0) params.set('status', Array.from(selectedStatuses).join(','));
                 if (categoryFilter !== 'ALL') params.set('category', categoryFilter);
@@ -138,7 +141,7 @@ function CasesContent() {
             }
         }
         fetchData();
-    }, [urlFilter, urlSearch, urlProjectId, selectedStatuses, categoryFilter, serviceFilter]);
+    }, [urlFilter, urlSearch, urlProjectId, urlYear, urlMonth, urlSource, selectedStatuses, categoryFilter, serviceFilter]);
 
     // Fetch project name when filtering by projectId
     useEffect(() => {
@@ -227,7 +230,18 @@ function CasesContent() {
         <div className="space-y-6">
             <div className="flex justify-between items-center text-white">
                 <div>
-                    <h1 className="text-3xl font-bold">{urlProjectId ? (projectName || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.fullPath || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.name || 'Project Cases') : 'All Cases'}</h1>
+                    <h1 className="text-3xl font-bold">
+                        {urlYear ? (
+                            <>
+                                {urlMonth ? `${urlMonth} ` : ''}{urlYear} Cases
+                                {urlSource && <span className="text-zeno-cyan/60 text-xl ml-3">({urlSource})</span>}
+                            </>
+                        ) : urlSource ? (
+                            `${urlSource} Cases`
+                        ) : urlProjectId ? (
+                            projectName || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.fullPath || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.name || 'Project Cases'
+                        ) : 'All Cases'}
+                    </h1>
                     <p className="text-gray-400 text-sm">Showing {paginated.length} of {filteredCases.length}</p>
                 </div>
                 <Link href="/cases/new" className="px-6 py-3 bg-zeno-cyan text-zeno-navy font-bold rounded-lg hover:bg-cyan-400 transition-all">+ New Case</Link>
