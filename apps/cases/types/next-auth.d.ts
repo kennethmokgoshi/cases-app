@@ -1,5 +1,40 @@
-import { DefaultSession, DefaultUser } from "next-auth"
+import { DefaultSession } from "next-auth"
 import { AdapterUser as DefaultAdapterUser } from "@auth/core/adapters"
+
+declare module "@auth/core/types" {
+  interface User {
+      role: string;
+      isAdmin: boolean;
+      isExecutive: boolean;
+      isSeniorManager: boolean;
+      isManager: boolean;
+      userType: string;
+      b2bPartnerId: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      organization: string | null;
+      avatarUrl: string | null;
+  }
+  interface Session {
+    user: {
+      id: string;
+      role: string;
+      isAdmin: boolean;
+      isExecutive: boolean;
+      isSeniorManager: boolean;
+      isManager: boolean;
+      userType: string;
+      b2bPartnerId: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      organization: string | null;
+      avatarUrl: string | null;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+    }
+  }
+}
 
 declare module "next-auth" {
   interface Session {
@@ -17,20 +52,6 @@ declare module "next-auth" {
       organization: string | null;
       avatarUrl: string | null;
     } & DefaultSession["user"]
-  }
-
-  interface User extends DefaultUser {
-      role: string;
-      isAdmin: boolean;
-      isExecutive: boolean;
-      isSeniorManager: boolean;
-      isManager: boolean;
-      userType: string;
-      b2bPartnerId: string | null;
-      firstName: string | null;
-      lastName: string | null;
-      organization: string | null;
-      avatarUrl: string | null;
   }
 }
 
