@@ -13,6 +13,7 @@
     "@zenowethu/config": "workspace:*",
     "@zenowethu/database": "workspace:*",
     "@zenowethu/shared-lib": "workspace:*",
+    "@zenowethu/ui": "workspace:*",
     "bcryptjs": "^2.4.3",
     "nodemailer": "^6.9.0",
     "date-fns": "^4.1.0",
