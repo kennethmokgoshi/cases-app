@@ -1,11 +1,15 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-25 (Deployment fix — NextAuth TypeScript build error)
+> Last updated: 2026-04-25 (Deployment fix — Credo Module not found: @zenowethu/ui)
 
 ---
 
 ## ✅ Completed
+
+### Deployment Fix — Credo Module not found: @zenowethu/ui (2026-04-25)
+- [x] **Root cause** — `apps/credo/app/(dashboard)/documents/sign/[id]/page.tsx` imports `SignaturePad` from `@zenowethu/ui`, but `@zenowethu/ui` was never declared as a dependency in `apps/credo/package.json`. `pnpm install --frozen-lockfile` in Docker never linked the workspace package, so webpack failed with "Module not found".
+- [x] **Fix** — Added `"@zenowethu/ui": "workspace:*"` to `apps/credo/package.json`, ran `pnpm install` to update `pnpm-lock.yaml`, committed and pushed as `517e83e`. Credo build should now resolve the import.
 
 ### Deployment Fix — NextAuth TypeScript Build Error (2026-04-25)
 - [x] **Root cause identified** — 68 TypeScript errors: `Property 'isAdmin' does not exist on type 'User'`. NextAuth v5 defines `User` in `@auth/core/types` and re-exports it; module augmentation in `declare module "next-auth"` does not propagate to the re-export chain, so `session.user.isAdmin` etc. fail type-checking.
