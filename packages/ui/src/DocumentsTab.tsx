@@ -57,7 +57,7 @@ const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: strin
 
 export function DocumentsTab({ caseId }: { caseId: string }) {
     const { data: session } = useSession();
-    const isAdmin = session?.user?.isAdmin === true;
+    const isAdmin = (session?.user as any)?.isAdmin === true;
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);

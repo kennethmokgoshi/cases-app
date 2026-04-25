@@ -66,7 +66,7 @@ export default function AiProvidersPage() {
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     useEffect(() => {
-        if (status === 'authenticated' && !session?.user?.isAdmin) router.push('/');
+        if (status === 'authenticated' && !(session?.user as any)?.isAdmin) router.push('/');
     }, [session, status, router]);
 
     useEffect(() => { fetchProviders(); }, []);

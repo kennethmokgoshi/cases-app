@@ -127,7 +127,7 @@ function DashboardSwitcherInner() {
                         ))}
                     </div>
                     <div className="p-3 bg-black/20 border-t border-white/5 text-[10px] text-gray-500 text-center font-medium">
-                        Logged in as <span className="text-gray-300 font-bold">{session?.user?.role}</span>
+                        Logged in as <span className="text-gray-300 font-bold">{(session?.user as any)?.role}</span>
                     </div>
                 </div>
             )}
