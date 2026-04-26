@@ -29,14 +29,14 @@ export function invalidateAiProviderCache(): void {
 
 // ─── Default model assignments ────────────────────────────────────────────────
 const DEFAULT_MODELS: Record<AiTask, string> = {
-    document_analysis:    'gpt-4o',
-    document_reanalysis:  'google/gemini-pro-1.5', // For side-by-side audits
-    legal_drafting:       'anthropic/claude-3.5-sonnet', // High-quality legal tone
-    case_strategy:        'gpt-4o',
-    plan_generation:      'gpt-4o',
-    contract_analysis:    'google/gemini-pro-1.5', // Gemini is better for long contracts
-    dhs_parsing:          'gpt-4o',
-    ai_coach:             'gpt-4o',
+    document_analysis:    'gpt-4.1',          // gpt-4.1 has better vision & instruction-following for scanned docs
+    document_reanalysis:  'google/gemini-pro-1.5',
+    legal_drafting:       'anthropic/claude-3.5-sonnet',
+    case_strategy:        'gpt-4.1',
+    plan_generation:      'gpt-4.1',
+    contract_analysis:    'google/gemini-pro-1.5',
+    dhs_parsing:          'gpt-4.1',
+    ai_coach:             'gpt-4.1',
 };
 
 // ─── Direct build of OpenAI client from environment variables ─────────────────
