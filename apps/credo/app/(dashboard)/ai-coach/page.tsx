@@ -1,6 +1,23 @@
+'use client';
+
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 
-/* ... (Types and Suggested Questions unchanged) ... */
+interface Message {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+const SUGGESTED_QUESTIONS = [
+  "How do I dispute incorrect information on my credit report?",
+  "What is the prescription period for debt in South Africa?",
+  "How does debt review affect my credit score?",
+  "What are my rights under the National Credit Act?",
+  "How can I remove a default listing from my credit report?",
+  "What is an emolument attachment order and can I challenge it?",
+];
 
 function TypingIndicator() {
   return (

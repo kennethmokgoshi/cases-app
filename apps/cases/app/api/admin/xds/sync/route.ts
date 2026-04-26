@@ -2,116 +2,108 @@
  * XDS Sync API Route
  *
  * POST /api/admin/xds/sync
- *
- * Triggers a full XDS daily sync:
- *  - Logs in to XDS portal
- *  - Scrapes today's search history
- *  - For each credit report: uploads to existing case OR creates a new file + notifies admins
+ *  - Logs in to the XDS portal
+ *  - Reads the last-synced date from DB
+ *  - Processes every date from (lastSyncedDate + 1) up to yesterday
+ *  - First run: processes all dates available in XDS history
  *
  * Authorization:
- *  - Admin or Executive session (manual trigger from the UI), OR
- *  - Secret cron key via X-Cron-Secret header (automated daily trigger from cron/Dokploy)
+ *  - Admin or Executive session (manual trigger), OR
+ *  - X-Cron-Secret header matching XDS_CRON_SECRET env var (daily cron)
  *
- * Set XDS_CRON_SECRET in .env to enable cron access.
- * Example cron (runs daily at 6 AM): POST /api/admin/xds/sync with header X-Cron-Secret: <secret>
+ * GET /api/admin/xds/sync
+ *  - Returns current sync status: credentials configured, last synced date, etc.
  */
 
 import { NextResponse } from 'next/server';
 import { createLogger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { runXdsSync } from '@zenowethu/shared-lib/src/xds/sync';
-import { z } from 'zod';
+import { prisma } from '@zenowethu/database';
 
 const logger = createLogger('api/admin/xds/sync');
 export const runtime = 'nodejs';
+export const maxDuration = 600; // 10 minutes
 
-// Max duration: 10 minutes (XDS portal + PDF downloads can be slow)
-export const maxDuration = 600;
+async function isAuthorised(request: Request): Promise<boolean> {
+    const cronSecret = request.headers.get('x-cron-secret');
+    const configuredSecret = process.env.XDS_CRON_SECRET;
+    if (configuredSecret && cronSecret === configuredSecret) return true;
 
-const SyncOptionsSchema = z.object({
-    /** Override sync date — ISO string (YYYY-MM-DD). Defaults to today. */
-    targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-});
+    const session = await auth();
+    return !!(session?.user?.isAdmin || session?.user?.isExecutive);
+}
 
 export async function POST(request: Request) {
     try {
-        // ─── Authorization ─────────────────────────────────────────────────
-        const cronSecret = request.headers.get('x-cron-secret');
-        const configuredSecret = process.env.XDS_CRON_SECRET;
-
-        const isCronRequest = configuredSecret && cronSecret === configuredSecret;
-
-        if (!isCronRequest) {
-            // Fall back to requiring an Admin or Executive session
-            const session = await auth();
-            const isAllowed = session?.user?.isAdmin || session?.user?.isExecutive;
-            if (!isAllowed) {
-                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-            }
+        if (!(await isAuthorised(request))) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // ─── Parse options ─────────────────────────────────────────────────
-        let targetDate: Date | undefined;
-        try {
-            const body = await request.json().catch(() => ({}));
-            const parsed = SyncOptionsSchema.safeParse(body);
-            if (parsed.success && parsed.data.targetDate) {
-                targetDate = new Date(parsed.data.targetDate);
-            }
-        } catch {
-            // No body or invalid JSON — use defaults
-        }
+        logger.info('[XDS] Sync triggered');
 
-        logger.info(`[XDS] Sync triggered (cron=${isCronRequest}) for date: ${targetDate?.toISOString() ?? 'today'}`);
+        const result = await runXdsSync();
 
-        // ─── Run sync ──────────────────────────────────────────────────────
-        const result = await runXdsSync({ targetDate });
+        // Only treat as a hard failure if there were errors AND nothing succeeded at all.
+        // Zero reports with no errors = normal "nothing to process" — still 200.
+        const hardFailure = result.errors.length > 0 && result.datesProcessed.length === 0;
 
-        const statusCode = result.errors.length > 0 && result.processed === 0 ? 500 : 200;
+        // Build a human-readable message for the zero-reports case
+        const message = result.processed === 0 && result.errors.length === 0
+            ? result.datesProcessed.length === 0
+                ? 'Already up to date — no new dates to process.'
+                : 'Dates checked but no reports found in XDS history for those dates.'
+            : undefined;
 
         return NextResponse.json(
             {
-                success: result.errors.length === 0,
+                success: !hardFailure,
+                message,
                 summary: {
                     processed: result.processed,
                     newFilesCreated: result.newFilesCreated,
                     existingFilesUpdated: result.existingFilesUpdated,
                     errorCount: result.errors.length,
+                    datesProcessed: result.datesProcessed,
+                    lastSyncedDate: result.lastSyncedDate,
                 },
                 details: result.details,
                 errors: result.errors,
             },
-            { status: statusCode }
+            { status: hardFailure ? 500 : 200 }
         );
     } catch (error) {
         logger.error('[XDS] Sync route error:', error);
         return NextResponse.json(
-            {
-                error: 'XDS sync failed',
-                details: error instanceof Error ? error.message : 'Unknown error',
-            },
+            { error: 'XDS sync failed', details: error instanceof Error ? error.message : 'Unknown error' },
             { status: 500 }
         );
     }
 }
 
-// GET — Return current XDS sync configuration (for admin UI status display)
 export async function GET(request: Request) {
     try {
         const session = await auth();
-        const isAllowed = session?.user?.isAdmin || session?.user?.isExecutive;
-        if (!isAllowed) {
+        if (!session?.user?.isAdmin && !session?.user?.isExecutive) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const lastSyncedSetting = await prisma.systemSettings.findUnique({
+            where: { key: 'xds_last_synced_date' },
+            select: { value: true, updatedAt: true },
+        });
+
+        const credentialsExist = await prisma.systemSettings.findUnique({
+            where: { key: 'xds_username' },
+            select: { value: true },
+        });
+
         return NextResponse.json({
+            credentialsConfigured: !!(credentialsExist?.value || process.env.XDS_USERNAME),
             cronEnabled: !!process.env.XDS_CRON_SECRET,
-            credentialsConfigured: !!(
-                process.env.XDS_USERNAME ||
-                // also check DB — done by getXdsCredentials internally
-                true
-            ),
-            scheduleHint: 'Configure a daily cron to POST /api/admin/xds/sync with header X-Cron-Secret: <XDS_CRON_SECRET>',
+            lastSyncedDate: lastSyncedSetting?.value || null,
+            lastSyncedAt: lastSyncedSetting?.updatedAt || null,
+            scheduleHint: 'Set up a daily cron: POST /api/admin/xds/sync with header X-Cron-Secret: <XDS_CRON_SECRET>',
         });
     } catch (error) {
         logger.error('[XDS] Status route error:', error);

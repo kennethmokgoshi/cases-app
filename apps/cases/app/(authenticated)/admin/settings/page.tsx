@@ -47,6 +47,8 @@ interface XdsSyncSummary {
     newFilesCreated: number;
     existingFilesUpdated: number;
     errorCount: number;
+    datesProcessed: string[];
+    lastSyncedDate: string | null;
 }
 
 export default function SettingsPage() {
@@ -87,9 +89,10 @@ export default function SettingsPage() {
     const [bureauIsDefault, setBureauIsDefault] = useState(true);
 
     // XDS state
-    const [xdsSettings, setXdsSettings] = useState<XdsSettings>({ xds_username: '', xds_password: '', xds_portal_url: 'https://portal.xds.co.za' });
+    const [xdsSettings, setXdsSettings] = useState<XdsSettings>({ xds_username: '', xds_password: '', xds_portal_url: 'https://www.online.xds.co.za' });
     const [hasXdsPassword, setHasXdsPassword] = useState(false);
     const [xdsLastUpdated, setXdsLastUpdated] = useState<Date | null>(null);
+    const [xdsLastSyncedDate, setXdsLastSyncedDate] = useState<string | null>(null);
     const [xdsSaving, setXdsSaving] = useState(false);
     const [showXdsPassword, setShowXdsPassword] = useState(false);
     const [xdsSyncing, setXdsSyncing] = useState(false);
@@ -223,16 +226,23 @@ export default function SettingsPage() {
 
     const fetchXdsSettings = async () => {
         try {
-            const res = await fetch('/api/admin/settings/xds');
-            if (res.ok) {
-                const data = await res.json();
+            const [settingsRes, syncStatusRes] = await Promise.all([
+                fetch('/api/admin/settings/xds'),
+                fetch('/api/admin/xds/sync'),
+            ]);
+            if (settingsRes.ok) {
+                const data = await settingsRes.json();
                 setHasXdsPassword(!!(data.settings.xds_password && data.settings.xds_password.includes('•')));
                 setXdsSettings({
                     xds_username: data.settings.xds_username || '',
                     xds_password: '',
-                    xds_portal_url: data.settings.xds_portal_url || 'https://portal.xds.co.za',
+                    xds_portal_url: data.settings.xds_portal_url || 'https://www.online.xds.co.za',
                 });
                 if (data.lastUpdated) setXdsLastUpdated(new Date(data.lastUpdated));
+            }
+            if (syncStatusRes.ok) {
+                const syncData = await syncStatusRes.json();
+                setXdsLastSyncedDate(syncData.lastSyncedDate || null);
             }
         } catch (error) {
             logger.error('Error fetching XDS settings:', error);
@@ -274,7 +284,7 @@ export default function SettingsPage() {
             const res = await fetch('/api/admin/settings/xds', { method: 'DELETE' });
             if (res.ok) {
                 setMessage({ type: 'success', text: 'XDS credentials cleared' });
-                setXdsSettings({ xds_username: '', xds_password: '', xds_portal_url: 'https://portal.xds.co.za' });
+                setXdsSettings({ xds_username: '', xds_password: '', xds_portal_url: 'https://www.online.xds.co.za' });
                 setHasXdsPassword(false);
                 setXdsLastUpdated(null);
             } else {
@@ -289,7 +299,10 @@ export default function SettingsPage() {
     };
 
     const handleRunXdsSync = async () => {
-        if (!confirm('Run XDS sync now? This will log in to the XDS portal and process today\'s credit reports.')) return;
+        const lastMsg = xdsLastSyncedDate
+            ? `Last synced: ${xdsLastSyncedDate}. The sync will resume from the next day.`
+            : 'No previous sync found. All available history will be processed.';
+        if (!confirm(`Run XDS sync now?\n\n${lastMsg}\n\nThis will log in to the XDS portal and may take several minutes.`)) return;
         setXdsSyncing(true);
         setXdsSyncResult(null);
         setXdsSyncError(null);
@@ -298,8 +311,24 @@ export default function SettingsPage() {
             const data = await res.json();
             if (res.ok) {
                 setXdsSyncResult(data.summary);
+                if (data.summary?.lastSyncedDate) setXdsLastSyncedDate(data.summary.lastSyncedDate);
+                // Surface any partial errors even on a 200 response
+                if (data.errors?.length) {
+                    setXdsSyncError(data.errors.join('\n'));
+                } else if (data.message) {
+                    // Informational: e.g. "Already up to date" or "0 reports found"
+                    setXdsSyncError(data.message); // reuse error state as info — styled below
+                }
             } else {
-                setXdsSyncError(data.error || data.details || 'Sync failed');
+                // Pick the most descriptive error available
+                const errMsg =
+                    data.error ||
+                    data.details ||
+                    (Array.isArray(data.errors) && data.errors.length > 0
+                        ? data.errors.join('\n')
+                        : null) ||
+                    `Sync request failed (HTTP ${res.status})`;
+                setXdsSyncError(errMsg);
             }
         } catch {
             setXdsSyncError('Network error — could not reach the sync endpoint');
@@ -1256,7 +1285,7 @@ export default function SettingsPage() {
                                     value={xdsSettings.xds_portal_url}
                                     onChange={(e) => setXdsSettings({ ...xdsSettings, xds_portal_url: e.target.value })}
                                     className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
-                                    placeholder="https://portal.xds.co.za"
+                                    placeholder="https://www.online.xds.co.za"
                                 />
                             </div>
 
@@ -1302,11 +1331,26 @@ export default function SettingsPage() {
                                 </div>
                             </div>
 
-                            {mounted && xdsLastUpdated && (
-                                <div className="pt-1 text-sm text-gray-500">
-                                    Last updated: {xdsLastUpdated.toLocaleString()}
-                                </div>
-                            )}
+                            {mounted && xdsLastUpdated && (() => {
+                                const daysSince = Math.floor((Date.now() - xdsLastUpdated.getTime()) / 86_400_000);
+                                const isExpired = daysSince >= 30;
+                                const isWarning = daysSince >= 25 && !isExpired;
+                                return (
+                                    <div className={`pt-2 flex items-start gap-2 text-sm rounded-lg px-3 py-2 ${
+                                        isExpired  ? 'bg-red-500/10 border border-red-500/40 text-red-400' :
+                                        isWarning  ? 'bg-amber-500/10 border border-amber-500/40 text-amber-400' :
+                                                     'text-gray-500'
+                                    }`}>
+                                        <span>{isExpired ? '🔴' : isWarning ? '🟡' : '🟢'}</span>
+                                        <span>
+                                            Password last updated <strong>{daysSince}</strong> day{daysSince !== 1 ? 's' : ''} ago
+                                            {isExpired && ' — XDS may have locked this account. Update your password immediately.'}
+                                            {isWarning && ' — XDS passwords expire after 30 days. Update soon.'}
+                                            {!isExpired && !isWarning && ` (${xdsLastUpdated.toLocaleDateString()})`}
+                                        </span>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Save / Reset */}
@@ -1331,9 +1375,23 @@ export default function SettingsPage() {
                         <div className="mt-6 pt-6 border-t border-zeno-blue/30">
                             <div className="flex items-center justify-between mb-3">
                                 <div>
-                                    <p className="text-sm font-medium text-white">Manual Sync</p>
+                                    <p className="text-sm font-medium text-white">Daily Sync</p>
                                     <p className="text-xs text-gray-500 mt-0.5">
-                                        Pulls today&apos;s credit reports from XDS Search History and matches them to case files.
+                                        Resumes from where it last stopped and processes all missing dates up to yesterday.
+                                        {mounted && xdsLastSyncedDate && (
+                                            <span className="ml-1 text-emerald-400">
+                                                Last synced: <strong>{xdsLastSyncedDate}</strong> — next run starts from <strong>{
+                                                    (() => {
+                                                        const d = new Date(xdsLastSyncedDate);
+                                                        d.setDate(d.getDate() + 1);
+                                                        return d.toISOString().split('T')[0];
+                                                    })()
+                                                }</strong>.
+                                            </span>
+                                        )}
+                                        {mounted && !xdsLastSyncedDate && (
+                                            <span className="ml-1 text-amber-400"> No sync yet — first run will process all available history.</span>
+                                        )}
                                     </p>
                                 </div>
                                 <button
@@ -1354,8 +1412,15 @@ export default function SettingsPage() {
 
                             {/* Sync result */}
                             {xdsSyncResult && (
-                                <div className="mt-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                                    <p className="text-sm font-semibold text-emerald-400 mb-2">Sync completed</p>
+                                <div className="mt-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm font-semibold text-emerald-400">Sync completed</p>
+                                        {xdsSyncResult.lastSyncedDate && (
+                                            <p className="text-xs text-gray-400">
+                                                Up to date: <span className="text-white font-medium">{xdsSyncResult.lastSyncedDate}</span>
+                                            </p>
+                                        )}
+                                    </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         {[
                                             { label: 'Processed', value: xdsSyncResult.processed },
@@ -1369,15 +1434,48 @@ export default function SettingsPage() {
                                             </div>
                                         ))}
                                     </div>
+                                    {xdsSyncResult.datesProcessed?.length > 0 && (
+                                        <div className="pt-2 border-t border-emerald-500/20">
+                                            <p className="text-xs text-gray-400 mb-1">Dates processed:</p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {xdsSyncResult.datesProcessed.map(d => (
+                                                    <span key={d} className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-full">
+                                                        {d}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {xdsSyncResult.datesProcessed?.length === 0 && (
+                                        <p className="text-xs text-gray-500 pt-1 border-t border-emerald-500/20">
+                                            Already up to date — no new dates to process.
+                                        </p>
+                                    )}
                                 </div>
                             )}
 
-                            {xdsSyncError && (
-                                <div className="mt-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                                    <p className="text-sm font-semibold text-red-400 mb-1">Sync failed</p>
-                                    <p className="text-xs text-gray-400">{xdsSyncError}</p>
-                                </div>
-                            )}
+                            {xdsSyncError && (() => {
+                                const isInfo = !xdsSyncError.toLowerCase().startsWith('fatal') &&
+                                               !xdsSyncError.toLowerCase().includes('failed') &&
+                                               !xdsSyncError.toLowerCase().includes('error') &&
+                                               !xdsSyncError.toLowerCase().includes('http 5');
+                                return (
+                                    <div className={`mt-3 p-4 rounded-lg border ${
+                                        isInfo
+                                            ? 'bg-blue-500/10 border-blue-500/30'
+                                            : 'bg-red-500/10 border-red-500/30'
+                                    }`}>
+                                        <p className={`text-sm font-semibold mb-2 ${isInfo ? 'text-blue-400' : 'text-red-400'}`}>
+                                            {isInfo ? 'Sync info' : 'Sync error'}
+                                        </p>
+                                        <div className="space-y-1">
+                                            {xdsSyncError.split('\n').map((line, i) => (
+                                                <p key={i} className="text-xs text-gray-300 font-mono leading-relaxed">{line}</p>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </section>
                 )}

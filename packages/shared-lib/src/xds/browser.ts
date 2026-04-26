@@ -48,7 +48,7 @@ export async function loginToXds(
     credentials: XdsCredentials
 ): Promise<boolean> {
     try {
-        const loginUrl = `${credentials.portalUrl.replace(/\/$/, '')}/login`;
+        const loginUrl = `${credentials.portalUrl.replace(/\/$/, '')}/XDSPortal/Account/Login`;
         logger.info(`[XDS] Navigating to login: ${loginUrl}`);
 
         await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: 60_000 });

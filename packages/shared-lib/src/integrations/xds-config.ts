@@ -32,7 +32,7 @@ export async function getXDSCredentials(): Promise<XDSCredentials> {
         credentialsCache = {
             username: settingsMap['xds_username'] || process.env.XDS_USERNAME || '',
             password: settingsMap['xds_password'] || process.env.XDS_PASSWORD || '',
-            portalUrl: settingsMap['xds_portal_url'] || process.env.XDS_PORTAL_URL || 'https://portal.xds.co.za'
+            portalUrl: settingsMap['xds_portal_url'] || process.env.XDS_PORTAL_URL || 'https://www.online.xds.co.za'
         };
 
         lastFetchTime = now;
@@ -49,7 +49,7 @@ export async function getXDSCredentials(): Promise<XDSCredentials> {
         return {
             username: process.env.XDS_USERNAME || '',
             password: process.env.XDS_PASSWORD || '',
-            portalUrl: process.env.XDS_PORTAL_URL || 'https://portal.xds.co.za'
+            portalUrl: process.env.XDS_PORTAL_URL || 'https://www.online.xds.co.za'
         };
     }
 }
