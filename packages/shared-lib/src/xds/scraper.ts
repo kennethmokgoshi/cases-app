@@ -1,241 +1,253 @@
 /**
  * XDS (TransUnion XDS) Credit Bureau — Search History Scraper
- * Navigates to Search History, lists today's credit reports, and downloads each PDF.
+ *
+ * Portal:        https://www.online.xds.co.za
+ * History page:  /XDSPortal/History/HistoryMatch
+ *
+ * Table columns: Enquiry Type | XDS Ref# | Search Output | Executed By | Enquiry Date | View
+ * Search Output: "ID_NUMBER | SURNAME | FIRSTNAME"
  */
 
 import { Page } from 'puppeteer';
-import { XdsCredentials, XdsCreditReportEntry } from './types';
+import { XdsCredentials, XdsCreditReportEntry, XdsHistoryEntry } from './types';
 import { logger } from '../logger';
 import { delay } from './browser';
 
+// ─── Date Helpers ─────────────────────────────────────────────────────────────
+
 /**
- * Navigate to the XDS Search History page and scrape all entries from today.
- * Returns a list of report metadata (without PDFs downloaded yet).
+ * Normalise any XDS date string to YYYY-MM-DD.
+ * XDS Online format: "2026/04/24 15:12:29"
  */
-async function getSearchHistoryEntries(
+export function normaliseXdsDate(dateStr: string): string {
+    // ISO or slash-separated YYYY/MM/DD
+    const ymatch = dateStr.match(/(\d{4})[\/\-](\d{2})[\/\-](\d{2})/);
+    if (ymatch) return `${ymatch[1]}-${ymatch[2]}-${ymatch[3]}`;
+    // DD/MM/YYYY or DD-MM-YYYY
+    const dmatch = dateStr.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+    if (dmatch) return `${dmatch[3]}-${dmatch[2]}-${dmatch[1]}`;
+    return new Date().toISOString().split('T')[0];
+}
+
+// ─── Raw History Scraping ─────────────────────────────────────────────────────
+
+/**
+ * Scrape ALL rows from the XDS Search History page (no date filter applied here).
+ * Returns raw metadata only — PDFs are downloaded separately.
+ */
+async function scrapeAllHistoryEntries(
     page: Page,
     portalUrl: string
-): Promise<Array<{ consumerName: string; searchDate: string; referenceNumber: string | null; downloadLink: string | null }>> {
-    const searchHistoryUrl = `${portalUrl.replace(/\/$/, '')}/search-history`;
-    logger.info(`[XDS] Navigating to search history: ${searchHistoryUrl}`);
+): Promise<XdsHistoryEntry[]> {
+    const historyUrl = `${portalUrl.replace(/\/$/, '')}/XDSPortal/History/HistoryMatch`;
+    logger.info(`[XDS] Navigating to history: ${historyUrl}`);
 
-    await page.goto(searchHistoryUrl, { waitUntil: 'networkidle2', timeout: 60_000 });
+    await page.goto(historyUrl, { waitUntil: 'networkidle2', timeout: 60_000 });
     await delay(2000);
 
-    // Try to detect table or list of search history
-    // XDS portals typically render a table with columns: Date | Consumer Name | ID Number | Reference | Actions
-    const entries = await page.evaluate(() => {
+    const raw = await page.evaluate(() => {
         const results: Array<{
             consumerName: string;
             searchDate: string;
             referenceNumber: string | null;
             idNumber: string | null;
-            downloadLink: string | null;
+            viewLink: string | null;
         }> = [];
 
-        // Strategy 1: Standard <table> rows
-        const rows = Array.from(document.querySelectorAll('table tbody tr, .search-history-table tr, .history-table tr'));
+        // XDS Online portal table:
+        // [0] Enquiry Type | [1] XDS Ref# | [2] Search Output | [3] Executed By | [4] Enquiry Date | [5] View
+        const rows = Array.from(document.querySelectorAll('table tbody tr'));
 
         for (const row of rows) {
             const cells = Array.from(row.querySelectorAll('td'));
-            if (cells.length < 2) continue;
+            if (cells.length < 5) continue;
 
-            // Try to find date, name, and a download link
-            const cellTexts = cells.map(c => c.innerText?.trim() || '');
+            const xdsRef = cells[1]?.innerText?.trim() || null;
+            const searchOutput = cells[2]?.innerText?.trim() || '';
+            const enquiryDate = cells[4]?.innerText?.trim() || '';
 
-            // Look for a cell that looks like a date (contains / or -)
-            const dateCell = cellTexts.find(t => /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/.test(t) || /\d{4}-\d{2}-\d{2}/.test(t));
+            // "8908115668085 | MASIMONG | THAPELO"
+            const parts = searchOutput.split('|').map((s: string) => s.trim());
+            const idNumber = parts[0]?.match(/^\d{13}$/) ? parts[0] : null;
+            const surname = parts[1] || '';
+            const firstName = parts[2] || '';
+            const consumerName = [firstName, surname].filter(Boolean).join(' ') || searchOutput;
 
-            // Name is often the longest non-date, non-numeric cell
-            const nameCell = cellTexts.find(t =>
-                t.length > 2 &&
-                !(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(t)) &&
-                !(/^\d+$/.test(t))
-            );
+            // View link — anchor href, onclick, or fallback from ref#
+            const viewCell = cells[5];
+            let viewLink: string | null = null;
 
-            // Reference number — purely numeric or alphanumeric short string
-            const refCell = cellTexts.find(t => /^[A-Z0-9\-]{4,20}$/i.test(t) && t !== nameCell && t !== dateCell);
+            const anchor = viewCell?.querySelector('a');
+            if (anchor) viewLink = anchor.getAttribute('href') || anchor.href || null;
 
-            // ID Number — 13 digit numeric
-            const idCell = cellTexts.find(t => /^\d{13}$/.test(t));
-
-            // Download link
-            const downloadAnchor = row.querySelector('a[href*=".pdf"], a[href*="download"], a[href*="report"], button[data-action="download"]');
-            const downloadLink = downloadAnchor
-                ? (downloadAnchor as HTMLAnchorElement).href || (downloadAnchor as HTMLElement).dataset['href'] || null
-                : null;
-
-            if (nameCell && dateCell) {
-                results.push({
-                    consumerName: nameCell,
-                    searchDate: dateCell,
-                    referenceNumber: refCell || null,
-                    idNumber: idCell || null,
-                    downloadLink,
-                });
+            if (!viewLink) {
+                const clickable = viewCell?.querySelector('[onclick]');
+                const onclick = clickable?.getAttribute('onclick') || '';
+                const m = onclick.match(/location\.href\s*=\s*['"]([^'"]+)['"]/);
+                if (m) viewLink = m[1];
             }
-        }
+            if (!viewLink && xdsRef) {
+                viewLink = `/XDSPortal/History/ViewEnquiry?ref=${encodeURIComponent(xdsRef)}`;
+            }
 
-        // Strategy 2: List items / cards (some portals use card layouts)
-        if (results.length === 0) {
-            const cards = Array.from(document.querySelectorAll('.history-item, .report-card, [data-testid*="history"], .search-result-item'));
-            for (const card of cards) {
-                const nameEl = card.querySelector('.consumer-name, .name, h3, h4, [data-field="name"]');
-                const dateEl = card.querySelector('.date, .search-date, [data-field="date"], time');
-                const refEl = card.querySelector('.reference, .ref, [data-field="reference"]');
-                const idEl = card.querySelector('.id-number, [data-field="id"]');
-                const downloadAnchor = card.querySelector('a[href*=".pdf"], a[href*="download"], button[data-action="download"]');
-
-                if (nameEl) {
-                    results.push({
-                        consumerName: nameEl.textContent?.trim() || '',
-                        searchDate: dateEl?.textContent?.trim() || new Date().toISOString().split('T')[0],
-                        referenceNumber: refEl?.textContent?.trim() || null,
-                        idNumber: idEl?.textContent?.trim().replace(/\s/g, '') || null,
-                        downloadLink: downloadAnchor
-                            ? (downloadAnchor as HTMLAnchorElement).href || null
-                            : null,
-                    });
-                }
+            if (consumerName && enquiryDate) {
+                results.push({ consumerName, searchDate: enquiryDate, referenceNumber: xdsRef, idNumber, viewLink });
             }
         }
 
         return results;
     });
 
-    logger.info(`[XDS] Found ${entries.length} entries in search history`);
+    const entries: XdsHistoryEntry[] = raw.map(r => ({
+        ...r,
+        dateKey: normaliseXdsDate(r.searchDate),
+    }));
+
+    logger.info(`[XDS] Scraped ${entries.length} total history entries`);
     return entries;
 }
 
+// ─── Group by Date ────────────────────────────────────────────────────────────
+
 /**
- * Filter entries to only those from today (or a specific date).
+ * Scrape the full XDS history page and return entries grouped by YYYY-MM-DD date.
+ * Keys are sorted oldest-first so the sync can process them in chronological order.
  */
-function filterToday(
-    entries: Array<{ consumerName: string; searchDate: string; referenceNumber: string | null; idNumber: string | null; downloadLink: string | null }>,
-    targetDate?: Date
-): typeof entries {
-    const target = targetDate || new Date();
-    const todayStr = target.toISOString().split('T')[0]; // YYYY-MM-DD
+export async function getXdsHistoryGroupedByDate(
+    page: Page,
+    credentials: XdsCredentials
+): Promise<Map<string, XdsHistoryEntry[]>> {
+    const allEntries = await scrapeAllHistoryEntries(page, credentials.portalUrl);
 
-    return entries.filter(entry => {
-        const dateStr = entry.searchDate;
-        // Match against YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, MM/DD/YYYY
-        if (dateStr.includes(todayStr)) return true;
+    const grouped = new Map<string, XdsHistoryEntry[]>();
+    for (const entry of allEntries) {
+        if (!grouped.has(entry.dateKey)) grouped.set(entry.dateKey, []);
+        grouped.get(entry.dateKey)!.push(entry);
+    }
 
-        const [d, m, y] = dateStr.split(/[\/\-]/).map(Number);
-        if (!d || !m || !y) return true; // can't parse — include it
+    // Sort oldest → newest
+    const sorted = new Map(
+        [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b))
+    );
 
-        const fullYear = y < 100 ? 2000 + y : y;
-        const parsed = new Date(fullYear, m - 1, d);
-        const parsedStr = parsed.toISOString().split('T')[0];
-        return parsedStr === todayStr;
-    });
+    logger.info(`[XDS] History spans ${sorted.size} date(s): ${[...sorted.keys()].join(', ')}`);
+    return sorted;
 }
 
+// ─── PDF Download ─────────────────────────────────────────────────────────────
+
 /**
- * Download a credit report PDF by navigating to its download link.
- * Returns the PDF as a Buffer.
+ * Navigate to the report view page and capture it as a PDF buffer.
  */
 async function downloadReportPdf(
     page: Page,
-    downloadLink: string,
+    viewLink: string,
     portalUrl: string
 ): Promise<Buffer | null> {
     try {
-        // Resolve relative URLs
-        const fullUrl = downloadLink.startsWith('http')
-            ? downloadLink
-            : `${portalUrl.replace(/\/$/, '')}${downloadLink.startsWith('/') ? '' : '/'}${downloadLink}`;
+        const fullUrl = viewLink.startsWith('http')
+            ? viewLink
+            : `${portalUrl.replace(/\/$/, '')}${viewLink.startsWith('/') ? '' : '/'}${viewLink}`;
 
-        logger.info(`[XDS] Downloading report: ${fullUrl}`);
+        logger.info(`[XDS] Navigating to report: ${fullUrl}`);
+        await page.goto(fullUrl, { waitUntil: 'networkidle2', timeout: 60_000 });
+        await delay(2000);
 
-        // Use CDP to intercept the download as binary
-        const client = await page.createCDPSession();
-        await client.send('Page.setDownloadBehavior', {
-            behavior: 'deny', // We capture via fetch instead
+        // Try a direct PDF download link on the report page first
+        const directPdfUrl = await page.evaluate(() => {
+            const a = document.querySelector(
+                'a[href*=".pdf"], a[href*="download"], a[href*="Download"], a[href*="Export"]'
+            );
+            return a ? (a as HTMLAnchorElement).href : null;
         });
 
-        // Fetch the PDF using page.evaluate with fetch API (preserves auth cookies)
-        const base64Pdf = await page.evaluate(async (url: string) => {
-            const res = await fetch(url, { credentials: 'include' });
-            if (!res.ok) return null;
-            const blob = await res.blob();
-            return new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve((reader.result as string).split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        }, fullUrl);
+        if (directPdfUrl) {
+            logger.info(`[XDS] Found direct PDF link: ${directPdfUrl}`);
+            const base64 = await page.evaluate(async (url: string) => {
+                const res = await fetch(url, { credentials: 'include' });
+                if (!res.ok) return null;
+                const blob = await res.blob();
+                return new Promise<string | null>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve((reader.result as string).split(',')[1] ?? null);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            }, directPdfUrl);
 
-        if (!base64Pdf) {
-            logger.warn(`[XDS] Empty response for ${fullUrl}`);
-            return null;
+            if (base64) return Buffer.from(base64, 'base64');
         }
 
-        return Buffer.from(base64Pdf, 'base64');
+        // Fallback: render the page as PDF
+        logger.info('[XDS] Rendering report page to PDF');
+        const bytes = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
+        });
+        return Buffer.from(bytes);
     } catch (error) {
-        logger.error(`[XDS] Download failed for ${downloadLink}:`, error);
+        logger.error(`[XDS] PDF download failed for ${viewLink}:`, error);
         return null;
     }
 }
 
 /**
- * Attempt to extract the South African ID number from a PDF buffer using text search.
- * Returns null if not found (caller can use AI analysis as fallback).
+ * Download PDFs for a list of history entries and return them as XdsCreditReportEntry[].
+ * Used by the sync engine after it has determined which entries to process.
  */
-export function extractIdNumberFromFilename(filename: string): string | null {
-    // Many XDS filenames include the ID number: e.g. "CreditReport_8001015800085.pdf"
-    const match = filename.match(/\b(\d{13})\b/);
-    return match ? match[1] : null;
-}
-
-/**
- * Main scraping function.
- * Logs in, visits search history, downloads today's reports, returns them as buffers.
- */
-export async function scrapeXdsSearchHistory(
+export async function downloadPdfsForEntries(
     page: Page,
-    credentials: XdsCredentials,
-    targetDate?: Date
+    entries: XdsHistoryEntry[],
+    portalUrl: string
 ): Promise<XdsCreditReportEntry[]> {
-    const entries = await getSearchHistoryEntries(page, credentials.portalUrl);
-    const todayEntries = filterToday(entries as any, targetDate);
-
-    logger.info(`[XDS] ${todayEntries.length} reports match target date`);
-
     const results: XdsCreditReportEntry[] = [];
 
-    for (const entry of todayEntries) {
-        logger.info(`[XDS] Processing: ${entry.consumerName}`);
-
-        let pdfBuffer: Buffer | null = null;
-
-        if (entry.downloadLink) {
-            pdfBuffer = await downloadReportPdf(page, entry.downloadLink, credentials.portalUrl);
-        }
-
-        if (!pdfBuffer) {
-            logger.warn(`[XDS] No PDF downloaded for ${entry.consumerName} — skipping`);
+    for (const entry of entries) {
+        if (!entry.viewLink) {
+            logger.warn(`[XDS] No view link for ${entry.consumerName} — skipping`);
             continue;
         }
 
-        // Try to extract ID from filename first, then from the entry, then leave null for AI
-        const idFromFilename = extractIdNumberFromFilename(entry.downloadLink || '');
-        const idNumber = (entry as any).idNumber || idFromFilename || null;
+        const pdfBuffer = await downloadReportPdf(page, entry.viewLink, portalUrl);
+        if (!pdfBuffer) {
+            logger.warn(`[XDS] No PDF captured for ${entry.consumerName} — skipping`);
+            continue;
+        }
 
-        const fileName = `xds-credit-report-${entry.consumerName.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.pdf`;
-
+        const safeName = entry.consumerName.replace(/\s+/g, '-').toLowerCase();
         results.push({
             consumerName: entry.consumerName,
-            idNumber,
+            idNumber: entry.idNumber,
             searchDate: entry.searchDate,
-            fileName,
+            fileName: `xds-credit-report-${safeName}-${Date.now()}.pdf`,
             pdfBuffer,
             referenceNumber: entry.referenceNumber,
         });
     }
 
-    logger.info(`[XDS] Scraping complete — ${results.length} reports with PDFs`);
     return results;
+}
+
+// ─── Legacy single-date function (kept for backward compat) ───────────────────
+
+export function extractIdNumberFromFilename(filename: string): string | null {
+    const match = filename.match(/\b(\d{13})\b/);
+    return match ? match[1] : null;
+}
+
+/** @deprecated Use getXdsHistoryGroupedByDate + downloadPdfsForEntries instead */
+export async function scrapeXdsSearchHistory(
+    page: Page,
+    credentials: XdsCredentials,
+    targetDate?: Date
+): Promise<XdsCreditReportEntry[]> {
+    const grouped = await getXdsHistoryGroupedByDate(page, credentials);
+    const targetKey = targetDate
+        ? targetDate.toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+
+    const entries = grouped.get(targetKey) || [];
+    logger.info(`[XDS] Legacy scrape for ${targetKey}: ${entries.length} entries`);
+    return downloadPdfsForEntries(page, entries, credentials.portalUrl);
 }

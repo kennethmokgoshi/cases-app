@@ -14,7 +14,7 @@ const XdsSettingsSchema = z.object({
     portalUrl: z
         .string()
         .url('Must be a valid URL')
-        .default('https://portal.xds.co.za'),
+        .default('https://www.online.xds.co.za'),
 });
 
 // GET /api/admin/settings/xds — Retrieve current XDS credentials
@@ -48,7 +48,7 @@ export async function GET() {
         if (Object.keys(settings).length === 0) {
             settings.xds_username = process.env.XDS_USERNAME || '';
             settings.xds_password = process.env.XDS_PASSWORD ? '••••••••' : '';
-            settings.xds_portal_url = process.env.XDS_PORTAL_URL || 'https://portal.xds.co.za';
+            settings.xds_portal_url = process.env.XDS_PORTAL_URL || 'https://www.online.xds.co.za';
         }
 
         return NextResponse.json({ settings, lastUpdated });

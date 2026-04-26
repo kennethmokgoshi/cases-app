@@ -1,11 +1,45 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-25 (Deployment fix — Credo Module not found: @zenowethu/ui)
+> Last updated: 2026-04-26 (XDS smart date-range sync — catch-up logic, acquisitionType labelling)
+
+---
+
+### XDS Smart Date-Range Sync (2026-04-26)
+- [x] **`packages/shared-lib/src/xds/types.ts`** — Added `XdsHistoryEntry` type; extended `XdsSyncResult` with `datesProcessed[]` and `lastSyncedDate`; added `date` field to `XdsSyncDetail`
+- [x] **`packages/shared-lib/src/xds/scraper.ts`** — Refactored into: `getXdsHistoryGroupedByDate()` (all entries grouped by YYYY-MM-DD, sorted oldest-first) and `downloadPdfsForEntries()` (separated PDF download from scraping)
+- [x] **`packages/shared-lib/src/xds/sync.ts`** — Full rewrite with date-range catch-up logic:
+  - Stores `xds_last_synced_date` in `systemSettings` (YYYY-MM-DD)
+  - First run: processes ALL dates in XDS history
+  - Subsequent runs: resumes from `lastSyncedDate + 1` through yesterday
+  - Gap handling: if it ran 24th, then runs on 30th → processes 25th, 26th, 27th, 28th, 29th in order
+  - Saves progress after each date so a crash mid-run doesn't lose work
+  - Cases auto-created with `acquisitionType = "Credit Bureaus XDS April 2026"` (dynamic month/year)
+- [x] **`apps/cases/app/api/admin/xds/sync/route.ts`** — GET returns `lastSyncedDate`; POST returns `datesProcessed[]` and `lastSyncedDate` in summary
+- [x] **`apps/cases/app/(authenticated)/admin/settings/page.tsx`** — XDS section now shows: last synced date + next start date, confirm dialog tells user what will run, result box shows date badges for each processed date
+
+### XDS Integration URL Fix (2026-04-26)
+- [x] **`packages/shared-lib/src/integrations/xds-config.ts`** — Default portal URL updated from `https://portal.xds.co.za` → `https://www.online.xds.co.za`
+- [x] **`packages/shared-lib/src/xds/browser.ts`** — Login URL fixed from `/login` → `/XDSPortal/Account/Login` (matches actual portal URL visible in browser)
+- [x] **`packages/shared-lib/src/xds/scraper.ts`** — Full rewrite targeting the actual XDS Online table structure:
+  - History page path: `/XDSPortal/History/HistoryMatch`
+  - Parses "Search Output" column format: `ID_NUMBER | SURNAME | FIRSTNAME`
+  - Date filter handles XDS format `2026/04/24 15:12:29`
+  - PDF capture: clicks View link → navigates to report page → uses `page.pdf()` to render as PDF (falls back to direct PDF link if available)
+- ⚠️ **View link URL pattern** — The exact href of the magnifying glass "View" icon in the table is unknown without inspecting the live HTML. If the link doesn't resolve, check `ViewEnquiry?ref=` or adjust the `viewLink` extraction in `scraper.ts:getSearchHistoryEntries`
+- ⚠️ **XDS passwords expire every 30 days** — Portal enforces mandatory password rotation; update credentials in Admin → Settings → XDS before each expiry
 
 ---
 
 ## ✅ Completed
+
+### GHL Integration Test Suite (2026-04-26)
+- [x] **49 new Vitest unit tests** covering all GHL integration code in `@zenowethu/shared-lib`
+- [x] **`packages/shared-lib/src/integrations/ghl-service.test.ts`** (26 tests) — `handleWebhook` (inbound message routing, case lookup, contactId persistence, plan engine notification), `sendMessage` (SMS/EMAIL/WHATSAPP, SA number formatting, failed send logging, NotificationLog writes), `applyTags` (tag application, contact lookup, GHL API error handling)
+- [x] **`packages/shared-lib/src/integrations/ghl-config.test.ts`** (7 tests) — credential loading from DB, env var fallback, error fallback, priority ordering, TTL cache behaviour, `invalidateGHLCredentialsCache()` forcing a fresh fetch
+- [x] **`packages/shared-lib/src/notifications/providers.ghl.test.ts`** (16 tests) — `GhlSmsProvider`, `GhlEmailProvider`, `GhlWhatsAppProvider`: contact lookup/create, successful sends, API failure handling, correct GHL API version headers and payload shape
+- [x] **`packages/shared-lib/src/integrations/ghl-config.ts`** — Refactored dynamic `require('@zenowethu/database')` to a static top-level `import { prisma }` (cleaner, testable, no functional change at runtime)
+- All 49 new tests pass; pre-existing suite (155 tests) unaffected
 
 ### Deployment Fix — Credo Module not found: @zenowethu/ui (2026-04-25)
 - [x] **Root cause** — `apps/credo/app/(dashboard)/documents/sign/[id]/page.tsx` imports `SignaturePad` from `@zenowethu/ui`, but `@zenowethu/ui` was never declared as a dependency in `apps/credo/package.json`. `pnpm install --frozen-lockfile` in Docker never linked the workspace package, so webpack failed with "Module not found".

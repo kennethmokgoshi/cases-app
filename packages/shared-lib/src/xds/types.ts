@@ -5,22 +5,26 @@
 export interface XdsCredentials {
     username: string;
     password: string;
-    portalUrl: string; // e.g. https://portal.xds.co.za
+    portalUrl: string;
 }
 
 export interface XdsCreditReportEntry {
-    /** Consumer full name as shown on XDS search history */
     consumerName: string;
-    /** South African ID number (13 digits) extracted from the report */
     idNumber: string | null;
-    /** Date the credit check was performed */
     searchDate: string;
-    /** Filename of the downloaded report PDF */
     fileName: string;
-    /** Raw PDF buffer */
     pdfBuffer: Buffer;
-    /** Reference / enquiry number from XDS */
     referenceNumber: string | null;
+}
+
+/** Raw metadata scraped from the XDS history table (no PDF yet) */
+export interface XdsHistoryEntry {
+    consumerName: string;
+    searchDate: string;
+    dateKey: string; // YYYY-MM-DD normalised
+    referenceNumber: string | null;
+    idNumber: string | null;
+    viewLink: string | null;
 }
 
 export interface XdsSyncResult {
@@ -29,6 +33,10 @@ export interface XdsSyncResult {
     existingFilesUpdated: number;
     errors: string[];
     details: XdsSyncDetail[];
+    /** YYYY-MM-DD dates that were fully processed in this run */
+    datesProcessed: string[];
+    /** The most recent YYYY-MM-DD date now stored as last synced */
+    lastSyncedDate: string | null;
 }
 
 export interface XdsSyncDetail {
@@ -38,4 +46,5 @@ export interface XdsSyncDetail {
     caseId: string | null;
     fileNumber: string | null;
     message: string;
+    date: string; // YYYY-MM-DD the report belongs to
 }
