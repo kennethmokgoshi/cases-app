@@ -5,6 +5,18 @@
 
 ---
 
+### AI Document Analysis Overhaul (2026-04-26)
+- [x] **Model upgraded** `gpt-4o` → `gpt-4.1` in `packages/shared-lib/src/ai/provider-client.ts` (all tasks) and `packages/shared-lib/src/openai/pdf-process.ts` (identification step)
+- [x] **ID prompt** — Added rotation/orientation handling for Smart Cards (upright, 90°, 180°, 270°). Also added `documentType` field (SMART_CARD vs GREEN_ID_BOOK)
+- [x] **PROOF_OF_RESIDENCE** — Added to `IDENTIFICATION_PROMPT` as a recognized document type (previously fell through as OTHER). Added to `identifyDocumentPages` return type in `pdf-process.ts`. Added detailed extraction prompt in `prompts.ts`
+- [x] **Zenowethu POA detection** — Enhanced IDENTIFICATION_PROMPT with exhaustive text + visual clues: "NCRDC3693", "012 035 1824", "Aftercare Fee", "Transfer Authorisation", "cases.zenowethu.co.za", Zenowethu logo description
+- [x] **Image detail** — Changed `detail: 'low'` → `detail: 'high'` in identification step so logos (Zenowethu, municipality, bank) are visible to AI
+- [x] **max_tokens** — Increased from 3500 → 8000 for credit reports/DHS, 4000 for standard docs
+- [x] **PAYSLIP prompt** — Added `employeeName`, `payPeriod` fields; extended label coverage for government/mining payslips (DPSA, Persal No, SANDF, etc.)
+- [x] **Credit report type identification** — Improved XDS/Experian/TransUnion/CPB vs ClearScore/Kudough detection with specific text clues per bureau
+
+---
+
 ### DHS-First Transfer Flow (2026-04-28)
 - [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — `validate_and_request` now calls `requestTransfer()` first; email is attempted only after DHS succeeds. Returns `dhsRequested` + `emailSent` flags on every response.
 - [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — `handleRequestTransfer` uses `result.emailSent` to set `'warning'` message type when DHS succeeded but email failed. Message display now shows amber for warnings.

@@ -13,7 +13,7 @@ export async function identifyDocumentPages(
     onProgress?: (msg: string, progress?: number) => void
 ): Promise<{
     documents: Array<{
-        type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'ZENOWETHU_POA' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER';
+        type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'ZENOWETHU_POA' | 'PAYSLIP' | 'BANK_STATEMENT' | 'PROOF_OF_RESIDENCE' | 'OTHER';
         startPage: number;
         endPage: number;
         confidence: number;
@@ -74,7 +74,7 @@ export async function identifyDocumentPages(
                         type: 'image_url',
                         image_url: {
                             url: `data:image/jpeg;base64,${imgBase64}`,
-                            detail: 'low'
+                            detail: 'high'
                         }
                     });
                 });
@@ -88,7 +88,7 @@ export async function identifyDocumentPages(
 
         const openai = getOpenAI();
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-4.1',
             messages: messages,
             max_tokens: 1000,
             response_format: { type: "json_object" }

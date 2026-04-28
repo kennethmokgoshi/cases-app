@@ -63,10 +63,11 @@ export async function analyzeDocument(
             }
 
             const { client, model } = await getAiClientForTask('document_analysis');
+            const isComplexDoc = ['CREDIT_REPORT', 'CREDIT_REPORT_OTHER', 'DHS_SUMMARY_REPORT'].includes(documentType);
             response = await client.chat.completions.create({
                 model: customModelId || model,
                 messages: [{ role: 'user', content: contentParts }],
-                max_tokens: 3500,
+                max_tokens: isComplexDoc ? 8000 : 4000,
                 temperature: 0.1,
                 response_format: { type: "json_object" }
             });
