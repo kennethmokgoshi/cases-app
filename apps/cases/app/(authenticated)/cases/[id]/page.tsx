@@ -243,7 +243,7 @@ export default function CaseDetailPage() {
     // DHS automation states
     const [dhsLoading, setDhsLoading] = useState(false);
     const [nctLoading, setNctLoading] = useState(false);
-    const [dhsMessage, setDhsMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+    const [dhsMessage, setDhsMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
     const [nctMessage, setNctMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
     const [isEditingDhs, setIsEditingDhs] = useState(false);
     const [isEditingNct, setIsEditingNct] = useState(false);
@@ -887,7 +887,8 @@ export default function CaseDetailPage() {
             const result = await res.json();
 
             if (result.success) {
-                setDhsMessage({ type: 'success', text: result.message || 'Transfer Requested successfully!' });
+                const msgType = result.emailSent === false ? 'warning' : 'success';
+                setDhsMessage({ type: msgType, text: result.message || 'Transfer Requested successfully!' });
 
                 // Refresh case data
                 const caseRes = await fetch(`/api/cases/${params.id}`);
@@ -2875,7 +2876,11 @@ export default function CaseDetailPage() {
                                 )}
 
                                 {dhsMessage && (
-                                    <div className={`mt-3 p-2 rounded text-sm ${dhsMessage.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                                    <div className={`mt-3 p-2 rounded text-sm ${
+                                        dhsMessage.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                                        dhsMessage.type === 'warning' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                                        'bg-red-500/20 text-red-400 border border-red-500/30'
+                                    }`}>
                                         {dhsMessage.text}
                                     </div>
                                 )}

@@ -1,9 +1,17 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-26 (XDS smart date-range sync — catch-up logic, acquisitionType labelling)
+> Last updated: 2026-04-28 (DHS-first transfer flow — request via DHS then email, composite result messages)
 
 ---
+
+### DHS-First Transfer Flow (2026-04-28)
+- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — `validate_and_request` now calls `requestTransfer()` first; email is attempted only after DHS succeeds. Returns `dhsRequested` + `emailSent` flags on every response.
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — `handleRequestTransfer` uses `result.emailSent` to set `'warning'` message type when DHS succeeded but email failed. Message display now shows amber for warnings.
+- **New message behaviour:**
+  - DHS failed → red: "Not requested via DHS: [reason]"
+  - DHS ok, email ok → green: "Requested via DHS successfully. Email also sent to [email]."
+  - DHS ok, no email → amber: "Requested via DHS but email not sent: [reason]"
 
 ### XDS Smart Date-Range Sync (2026-04-26)
 - [x] **`packages/shared-lib/src/xds/types.ts`** — Added `XdsHistoryEntry` type; extended `XdsSyncResult` with `datesProcessed[]` and `lastSyncedDate`; added `date` field to `XdsSyncDetail`
