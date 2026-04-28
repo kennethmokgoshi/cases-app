@@ -1,7 +1,30 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-26 (AI document analysis overhaul — model upgrade, rotation, PoR, prompts)
+> Last updated: 2026-04-28 (Feature: Referrer Registry — full CRUD + sub-project automation)
+
+---
+
+### Referrer Registry (2026-04-28)
+- [x] **`packages/database/prisma/schema.prisma`** — Added `Referrer` model (personal, employment, banking fields) + `referrerId` FK on `Case` + `referrer` relation on `Project`
+- [x] **`migrations/20260428_add_referrer/migration.sql`** — Creates `Referrer` table, unique indexes on `idNumber` + `projectId`, adds `referrerId` to `Case`
+- [x] **`GET/POST /api/admin/referrers`** — Paginated list with search + status filter. POST auto-creates a "Referrals" root project (if absent) + a named sub-project per referrer
+- [x] **`GET/PATCH/DELETE /api/admin/referrers/[id]`** — GET includes linked cases; PATCH renames sub-project when name changes; DELETE blocked if referrer has linked cases
+- [x] **`/admin/referrers` page** — Stats bar, search/status filter, paginated table, Add/Edit modal (personal + employment + banking + notes), delete confirmation, slide-out detail drawer
+- [x] **Admin hub tile + sidebar link** — "Referrers" tile (violet) added to `/admin`; link added to Admin section in `SidebarNav`
+- [x] **20 Vitest tests** — All passing (401/403/422/409/201/list/search/rename/delete-blocked/delete-with-cleanup)
+- **Access**: Admin / Executive / Senior Manager / Manager can view + create + edit. Only Admin or Executive can delete.
+- **Sub-project**: Each referrer auto-gets a `Project` (type `REFERRER`) under the `Referrals` ACQUISITION_SOURCE root. Name = referrer full name; renaming the referrer renames the project.
+- **Next step**: Add "Referred by" dropdown to New Case form so cases are auto-linked to a referrer's sub-project at creation
+
+---
+
+### Fix: Production Emails Not Sending on Case Creation (2026-04-28)
+- [x] **Root cause** — `GHL_EMAIL_WEBHOOK_URL` is set in production Dokploy env, and `getEmailProvider()` previously gave it Priority 1 — above SMTP. So all case-creation notification emails were routed through the GHL webhook (fire-and-forget), not SMTP. The GHL workflow is not configured to send actual emails, so they silently disappeared.
+- [x] **Why POA worked** — POA route uses `sendEmailWithAttachments` (in `apps/cases/lib/email-with-attachments.ts`) which checks `SMTP_HOST` first, before any GHL hooks. SMTP is set in production → POA emails deliver.
+- [x] **Fix 1** — Reordered `getEmailProvider()` priority in `packages/shared-lib/src/notifications/service.ts`: SMTP → Resend → GHL Webhook → GHL API. SMTP now wins when configured.
+- [x] **Fix 2** — Changed `EMAIL_ENABLED/SMS_ENABLED/WHATSAPP_ENABLED` to opt-out (`!== 'false'`) so they don't silently block notifications if vars are missing from a new deployment.
+- [x] **POA does NOT update case status** — It only creates a `CaseComment` log entry. No status side-effects.
 
 ---
 

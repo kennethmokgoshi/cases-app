@@ -34,6 +34,7 @@ model Project {
   logoUrl         String?
   companySlogan   String?
   termsUrl        String?
+  referrer        Referrer?
 }
 
 model ProjectMember {
@@ -48,6 +49,50 @@ model ProjectMember {
   @@unique([projectId, userId])
   @@index([projectId])
   @@index([userId])
+}
+
+// ============================================================
+// REFERRER — External persons who refer clients to Zenowethu
+// ============================================================
+
+model Referrer {
+  id                String    @id @default(cuid())
+  firstName         String
+  lastName          String
+  idNumber          String    @unique
+  email             String?
+  cellNumber        String?
+
+  // Employment details
+  employerName      String?
+  employmentType    String?   // EMPLOYED | SELF_EMPLOYED | CONTRACT | UNEMPLOYED | RETIRED
+  employerAddress   String?
+  employerPhone     String?
+  occupation        String?
+  monthlyIncome     Decimal?
+
+  // Banking details
+  bankName          String?
+  accountNumber     String?
+  accountType       String?   // CHEQUE | SAVINGS | CURRENT
+  branchCode        String?
+  accountHolderName String?
+
+  // Auto-created sub-project (name = firstName + " " + lastName)
+  projectId         String?   @unique
+  project           Project?  @relation(fields: [projectId], references: [id])
+
+  cases             Case[]
+  isActive          Boolean   @default(true)
+  notes             String?
+  createdById       String?
+  createdBy         User?     @relation("ReferrerCreator", fields: [createdById], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([lastName])
+  @@index([idNumber])
+  @@index([isActive])
 }
 
 model Client {
@@ -84,6 +129,7 @@ model Case {
   id                      String                @id @default(cuid())
   fileNumber              String                @unique
   clientId                String
+  referrerId              String?
   acquisitionType         String                @default("B2C")
   partnerName             String?
   partnerBranch           String?
@@ -163,6 +209,7 @@ model Case {
   assignedTo              User?                 @relation("CaseAssignee", fields: [assignedToId], references: [id])
   client                  Client                @relation(fields: [clientId], references: [id])
   createdBy               User?                 @relation("CaseCreator", fields: [createdById], references: [id])
+  referrer                Referrer?             @relation(fields: [referrerId], references: [id])
   comments                CaseComment[]
   projects                CaseProject[]
   creditAccounts          CreditAccount[]
@@ -183,6 +230,7 @@ model Case {
   @@index([isOverdue])
   @@index([updatedAt])
   @@index([createdAt])
+  @@index([referrerId])
 }
 
 model Document {
@@ -292,6 +340,7 @@ model User {
   documentAccessGrants      DocumentAccessGrant[] @relation("DocumentAccessGrantee")
   grantedDocumentAccess     DocumentAccessGrant[] @relation("DocumentAccessGranter")
   dccpCredential            DCCPCredential?
+  createdReferrers          Referrer[]          @relation("ReferrerCreator")
 }
 
 model CaseAssignment {

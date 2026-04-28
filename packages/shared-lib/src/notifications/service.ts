@@ -30,11 +30,11 @@ import { logger } from '../logger';
 import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
 
-// Configuration
-const SMS_ENABLED = process.env.SMS_ENABLED === 'true';
-const EMAIL_ENABLED = process.env.EMAIL_ENABLED === 'true';
-const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED === 'true';
-const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true';
+// Configuration — default all channels to ENABLED; set to 'false' to explicitly disable
+const SMS_ENABLED = process.env.SMS_ENABLED !== 'false';
+const EMAIL_ENABLED = process.env.EMAIL_ENABLED !== 'false';
+const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED !== 'false';
+const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true'; // Telegram off by default (no provider configured)
 
 const COMPANY_NAME = process.env.COMPANY_NAME || 'Zenowethu Debt Management';
 const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 035 1824';
@@ -57,12 +57,7 @@ async function getSmsProvider(): Promise<SmsProvider> {
 }
 
 async function getEmailProvider(): Promise<EmailProvider> {
-    // Priority 1: GHL webhook (explicit email override)
-    if (process.env.GHL_EMAIL_WEBHOOK_URL) {
-        return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL);
-    }
-
-    // Priority 2: SMTP (preferred direct email provider)
+    // Priority 1: SMTP — direct, reliable, proven. Always prefer over webhooks.
     if (process.env.SMTP_HOST) {
         return new SmtpEmailProvider({
             host: process.env.SMTP_HOST,
@@ -76,12 +71,17 @@ async function getEmailProvider(): Promise<EmailProvider> {
         });
     }
 
-    // Priority 3: Resend
+    // Priority 2: Resend
     if (process.env.RESEND_API_KEY) {
         return new ResendEmailProvider(
             process.env.RESEND_API_KEY,
             process.env.EMAIL_FROM || process.env.SMTP_FROM || 'notifications@zenowethu.co.za'
         );
+    }
+
+    // Priority 3: GHL webhook (fire-and-forget; depends on GHL workflow being configured for email)
+    if (process.env.GHL_EMAIL_WEBHOOK_URL) {
+        return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL);
     }
 
     // Priority 4: GHL API (fallback — shares creds with SMS/WhatsApp)
