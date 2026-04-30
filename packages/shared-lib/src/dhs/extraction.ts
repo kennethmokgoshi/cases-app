@@ -6,33 +6,85 @@
 import fs from 'fs';
 import { Page } from 'puppeteer';
 import { delay } from './browser';
-import type { DHSConsumerInfo } from './types';
+import type { DHSConsumerInfo, DHSDebtCounsellorInfo } from './types';
 import { logger } from '../logger';
 
 /**
  * Extract consumer information from the search results table
  */
-export async function extractConsumerInfo(page: Page): Promise<DHSConsumerInfo | undefined> {
+export async function extractConsumerInfo(page: any): Promise<DHSConsumerInfo | undefined> {
     try {
-        const row = await page.$('table tbody tr:first-child');
-        if (!row) return undefined;
+        const frame = page.mainFrame ? page.mainFrame() : page;
+        
+        // Find the results table (usually has class table_settings or contains identityNo header)
+        const row = await frame.evaluate(() => {
+            const tables = Array.from(document.querySelectorAll('table'));
+            const resultsTable = tables.find(t => t.innerText.includes('IDENTITY No') && t.innerText.includes('SURNAME'));
+            if (!resultsTable) return null;
+            
+            // Get the first data row (skip header)
+            const rows = Array.from(resultsTable.querySelectorAll('tr'));
+            for (const r of rows) {
+                const cells = Array.from(r.querySelectorAll('td'));
+                // Data rows usually have the ID in the second cell (index 1) and it must be exactly 13 digits
+                if (cells.length >= 7) {
+                    const cellText = cells[1]?.innerText.trim() || '';
+                    if (cellText.match(/^\d{13}$/)) {
+                        return r.innerHTML;
+                    }
+                }
+            }
+            return null;
+        });
 
-        const cells = await row.$$eval('td', tds => tds.map(td => td.textContent?.trim() || ''));
+        if (!row) {
+            // Fallback to simple selector if evaluate failed or returned null
+            const simpleRow = await frame.$('.table_settings tbody tr:not(:has(th))');
+            if (!simpleRow) return undefined;
+            
+            const cells = await simpleRow.$$eval('td', tds => tds.map(td => td.textContent?.trim() || ''));
+            return mapCellsToConsumer(cells);
+        }
 
-        // CORRECTED: ACTION column is split into 3 ([0],[1],[2]), shifting everything by +2
-        return {
-            identityNo: cells[3] || '',        // Was cells[0], now cells[3]
-            surname: cells[4] || '',            // Was cells[1], now cells[4]
-            firstNames: cells[4] || '',         // Using surname column (full name in one column)
-            gender: cells[5] || '',             // Was cells[3], now cells[5]
-            status: cells[6] || '',             // Was cells[4], now cells[6]
-            transferIndicator: cells[7] || '',  // Was cells[5], now cells[7]
-            debtCounsellor: cells[7] || '',     // DC is at column 7
-            province: cells[9] || ''            // Was cells[7], now cells[9]
-        };
-    } catch {
+        // Parse cells from the found row
+        const cells = await frame.evaluate((html: string) => {
+            const div = document.createElement('div');
+            div.innerHTML = html;
+            return Array.from(div.querySelectorAll('td')).map(td => td.textContent?.trim() || '');
+        }, row);
+
+        return mapCellsToConsumer(cells);
+    } catch (e) {
+        logger.error('[DHS extraction] Error:', e);
         return undefined;
     }
+}
+
+function mapCellsToConsumer(cells: string[]): DHSConsumerInfo | undefined {
+    // Find the ID number column (13 digits)
+    const idIndex = cells.findIndex(c => c.trim().match(/^\d{13}$/));
+    
+    if (idIndex === -1) return undefined;
+    
+    // Safety: if the cell at idIndex + 1 is "SURNAME", then idIndex was actually the header index!
+    if (cells[idIndex + 1]?.toUpperCase().includes('SURNAME')) {
+        // Look for the next occurrence starting after this index
+        const nextIdIndex = cells.slice(idIndex + 1).findIndex(c => c.trim().match(/^\d{13}$/));
+        if (nextIdIndex === -1) return undefined;
+        // Recursive call with the remaining cells
+        return mapCellsToConsumer(cells.slice(idIndex + 1 + nextIdIndex));
+    }
+    
+    return {
+        identityNo: cells[idIndex] || '',
+        surname: cells[idIndex + 1] || '',
+        firstNames: cells[idIndex + 2] || '',
+        gender: cells[idIndex + 3] || '',
+        status: cells[idIndex + 4] || '',
+        transferIndicator: cells[idIndex + 5] || '',
+        debtCounsellor: cells[idIndex + 6] || '',
+        province: cells[idIndex + 7] || ''
+    };
 }
 
 /**

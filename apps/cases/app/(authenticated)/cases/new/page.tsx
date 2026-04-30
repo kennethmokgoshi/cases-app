@@ -22,14 +22,6 @@ type Project = {
     children?: Project[];
 };
 
-type ReferrerOption = {
-    id: string;             // referrer UUID or "project:{projectId}" for placeholders
-    name: string;
-    email: string | null;   // stored on case for referrer notifications
-    cellNumber: string | null;
-    isActive: boolean;
-    hasFullProfile: boolean;
-};
 
 type ExtractedData = {
     validation?: {
@@ -156,10 +148,6 @@ function NewCaseWithAIComponent() {
     const [selectedYear, setSelectedYear] = useState(String(currentYearVal));
     const [selectedMonth, setSelectedMonth] = useState(currentMonthVal);
     const [finalProjectId, setFinalProjectId] = useState('');
-
-    // Referrer selection
-    const [referrerOptions, setReferrerOptions] = useState<ReferrerOption[]>([]);
-    const [selectedReferrerId, setSelectedReferrerId] = useState('');
 
     // B2B vs B2C Classification
     const [acquisitionType, setAcquisitionType] = useState<'B2B' | 'B2C'>('B2B');
@@ -468,13 +456,6 @@ function NewCaseWithAIComponent() {
         fetchProjects();
     }, []);
 
-    // Fetch referrers for dropdown once on mount
-    useEffect(() => {
-        fetch('/api/admin/referrers/dropdown')
-            .then(r => r.json())
-            .then(d => { if (Array.isArray(d.referrers)) setReferrerOptions(d.referrers); })
-            .catch(() => {}); // non-blocking — referrer dropdown is optional
-    }, []);
 
     // Reset parent selection when acquisition type changes
     useEffect(() => {
@@ -641,8 +622,7 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
-                    referrerId: selectedReferrerId || null
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0
                 })
             });
             if (!tempCase.ok) throw new Error('Failed to initialize case');
@@ -751,8 +731,7 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
-                    referrerId: selectedReferrerId || null }) });
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0 }) });
 
             if (!tempCase.ok) throw new Error('Failed to create temporary case');
             const tempCaseData = await tempCase.json();
@@ -1024,8 +1003,7 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
-                    referrerId: selectedReferrerId || null }) });
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0 }) });
 
             if (!tempCase.ok) throw new Error('Failed to initialize case');
             const tempCaseData = await tempCase.json();
@@ -1513,29 +1491,6 @@ function NewCaseWithAIComponent() {
                         </div>
                     )}
 
-                    {/* Referred By (optional) */}
-                    <div className="mb-6">
-                        <label className="block text-sm font-medium text-gray-400 mb-2">
-                            7. Referred By <span className="text-gray-600">(Optional)</span>
-                        </label>
-                        <select
-                            value={selectedReferrerId}
-                            onChange={(e) => setSelectedReferrerId(e.target.value)}
-                            className="w-full px-4 py-3 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
-                        >
-                            <option value="">No referrer</option>
-                            {referrerOptions.map(r => (
-                                <option key={r.id} value={r.id} disabled={!r.isActive}>
-                                    {r.name}{!r.hasFullProfile ? ' (profile pending)' : ''}{!r.isActive ? ' (inactive)' : ''}
-                                </option>
-                            ))}
-                        </select>
-                        {selectedReferrerId && !referrerOptions.find(r => r.id === selectedReferrerId)?.hasFullProfile && (
-                            <p className="text-xs text-amber-400 mt-1">
-                                This referrer has no profile yet — add their details in the Referrer Registry later.
-                            </p>
-                        )}
-                    </div>
 
                     {/* Summary */}
                     {selectedMonth && selectedServices.length > 0 && (
@@ -1550,13 +1505,6 @@ function NewCaseWithAIComponent() {
                             <p className="text-sm text-gray-400 mt-2">
                                 Services: <span className="text-zeno-cyan">{selectedServices.length} selected</span>
                             </p>
-                            {selectedReferrerId && (
-                                <p className="text-sm text-gray-400 mt-1">
-                                    Referred by: <span className="text-violet-400">
-                                        {referrerOptions.find(r => r.id === selectedReferrerId)?.name ?? ''}
-                                    </span>
-                                </p>
-                            )}
                         </div>
                     )}
 

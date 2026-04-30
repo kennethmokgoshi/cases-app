@@ -353,6 +353,34 @@ export async function POST(request: Request) {
         } else if (action === 'search') {
             // Search for consumer (for new transfer)
             result = await searchConsumer(idNumber);
+
+            // Auto-update case data if found
+            if (result.found && result.consumer && caseId) {
+                const consumer = result.consumer;
+                const dc = result.debtCounsellor;
+                
+                await prisma.case.update({
+                    where: { id: caseId },
+                    data: {
+                        ncrdcNo: dc?.registrationNo || null,
+                        debtCounsellorName: dc?.fullName || consumer.debtCounsellor,
+                        dcTradingName: dc?.tradingName || null,
+                        dcMobile: dc?.mobile || null,
+                        dcTel: dc?.tel || null,
+                        dcEmail: dc?.email || null,
+                        dcProvince: consumer.province,
+                        dcOperatingStatus: dc?.operatingStatus || null,
+                        consumerDhsStatus: consumer.status,
+                        // Synchronize last known contact info
+                        lastUsedMobile: dc?.mobile || null,
+                        lastUsedTel: dc?.tel || null,
+                        lastKnownEmail: dc?.email || null,
+                        // Request status is separate from consumer status
+                        dhsStatus: 'PENDING' // Default to pending when linked info is found
+                    }
+                });
+                logger.info(`[DHS API] Updated case ${caseId} with DHS info`);
+            }
         } else if (action === 'validate_and_request') {
             logger.info('Starting Validate & Request Transfer flow...');
 

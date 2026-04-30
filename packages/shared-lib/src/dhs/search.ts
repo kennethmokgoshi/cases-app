@@ -1,6 +1,6 @@
 /**
  * DHS (NCR Debt Help System) — Consumer Search & Detailed Scraping
- * Lightweight consumer lookup and full table scrape for auto-fill.
+ * [Build fix: Corrected loop braces]
  */
 
 import fs from 'fs';
@@ -23,6 +23,7 @@ export async function searchConsumer(idNumber: string): Promise<{
 }> {
     const browserInstance = await getBrowser();
     const page = await browserInstance.newPage();
+    let target: any = page;
 
     try {
         // Get credentials from database/config
@@ -35,35 +36,162 @@ export async function searchConsumer(idNumber: string): Promise<{
         }
 
         // Navigate to Request New Transfer page
+        logger.info(`[DHS search] Navigating to ${DHS_CONFIG.requestTransferUrl}`);
         await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
-
-        // Detect DHS server error page
-        if (page.url().includes('dhs_Error.aspx')) {
-            logger.error('[DHS search] DHS portal error page detected:', page.url());
-            return { found: false, message: 'The NCR Debt Help System returned a server error. Please try again later.' };
+        
+        // Debug Screenshot Helper
+        const screenshotDir = path.join(process.cwd(), 'public', 'uploads', 'dhs_debug', idNumber);
+        if (!fs.existsSync(screenshotDir)) {
+            fs.mkdirSync(screenshotDir, { recursive: true });
         }
 
-        // Enter ID number
-        await page.waitForSelector('input[name*="txtIdNumber"], input[id*="txtIdNumber"]', { timeout: 10000 });
-        await page.type('input[name*="txtIdNumber"], input[id*="txtIdNumber"]', idNumber);
+        let stepCounter = 1;
+        const takeScreenshot = async (description?: string) => {
+            const fileName = `DHSCHECKSTEP${stepCounter}.png`;
+            const p = path.join(screenshotDir, fileName);
+            await page.screenshot({ path: p, fullPage: true });
+            logger.info(`[DHS debug] Screenshot saved: ${fileName} ${description ? '(' + description + ')' : ''}`);
+            stepCounter++;
+        };
 
-        // Click Apply Filter
-        await page.click('input[value="Apply Filter"], button:has-text("Apply Filter")');
-        await delay(2000);
+        await delay(2000); // Give it a moment to settle
+        await takeScreenshot('Page Loaded');
+        logger.info(`[DHS search] Current URL after navigation: ${page.url()}`);
 
-        // Check if consumer found
-        const noRecordsFound = await page.$('text/No records found');
-        if (noRecordsFound) {
+        const frames = page.frames();
+        logger.info(`[DHS search] Detected ${frames.length} frames`);
+        
+        const contentFrame = frames.find(f => f.name() === 'framecontent' || f.url().includes('RequestNewTransfer'));
+        if (contentFrame) {
+            logger.info('[DHS search] Switching to content frame:', contentFrame.name() || contentFrame.url());
+            target = contentFrame;
+        } else {
+            logger.info('[DHS search] No specific content frame found, staying on main page');
+        }
+
+        // Enter ID number - robust selectors
+        const idInputSelectors = [
+            '#cp_pagedata_f_RSAIDPass',
+            '#ContentPlaceHolder1_txtIdNumber',
+            '#ContentPlaceHolder1_txtRSAID',
+            'input[id*="RSAID"]',
+            'input[name*="RSAID"]',
+            'input[id*="txtId"]',
+            'input[name*="txtId"]'
+        ];
+        
+        let idSelector = null;
+        for (const sel of idInputSelectors) {
+            if (await target.$(sel)) {
+                idSelector = sel;
+                break;
+            }
+        }
+        
+        if (!idSelector) {
+            logger.error('[DHS search] Could not find ID input field in target');
+            // Try one more time with a broader search in all frames
+            for (const frame of frames) {
+                for (const sel of idInputSelectors) {
+                    if (await frame.$(sel)) {
+                        logger.info(`[DHS search] Found ID input in frame: ${frame.name() || frame.url()}`);
+                        target = frame;
+                        idSelector = sel;
+                        break;
+                    }
+                }
+                if (idSelector) break;
+            }
+        }
+
+        if (!idSelector) {
+            logger.error('[DHS search] FINAL FAIL: Could not find ID input field');
+            await takeScreenshot('Error - No ID Field');
+            return { found: false, message: 'Could not find ID input field' };
+        }
+
+        logger.info(`[DHS search] Entering ID ${idNumber} into ${idSelector}`);
+        await target.click(idSelector, { clickCount: 3 });
+        await target.type(idSelector, idNumber);
+        await takeScreenshot('ID Entered');
+
+        // Click Apply Filter - robust selectors
+        const filterSelectors = [
+            '#cp_pagedata_lb_ApplyDataFilter',
+            'a:has-text("Apply Filter")',
+            'a[id*="ApplyDataFilter"]',
+            '#ContentPlaceHolder1_btnFilter',
+            'input[value="Apply Filter"]',
+            '.btn-primary',
+            'input[type="submit"]'
+        ];
+
+        let filterClicked = false;
+        for (const sel of filterSelectors) {
+            try {
+                if (await target.$(sel)) {
+                    logger.info(`[DHS search] Clicking filter button: ${sel}`);
+                    await target.evaluate((s) => (document.querySelector(s) as HTMLElement).click(), sel);
+                    filterClicked = true;
+                    break;
+                }
+            } catch (e) { }
+        }
+
+        if (!filterClicked) {
+            logger.info('[DHS search] Filter button not found in target, pressing Enter');
+            await page.keyboard.press('Enter');
+        }
+
+        // Wait for results
+        logger.info('[DHS search] Waiting 4s for results...');
+        await delay(4000);
+        await takeScreenshot('After Filter Clicked');
+
+        // Robust results check
+        const resultsInfo = await target.evaluate((targetId) => {
+            const bodyText = document.body.innerText;
+            const noRecords = bodyText.includes('No records found');
+            
+            // Check for record indicator
+            const displayingMatch = bodyText.match(/Displaying\s+(?:records?\s+)?(\d+)(?:\s*-\s*(\d+))?/i);
+            const hasRecordInText = bodyText.includes(targetId);
+            
+            return {
+                noRecords,
+                hasDisplayingRecords: !!(displayingMatch && parseInt(displayingMatch[1]) > 0),
+                hasIdInText: hasRecordInText,
+                bodySnippet: bodyText.substring(0, 1000).replace(/\n/g, ' ')
+            };
+        }, idNumber);
+
+        logger.info('[DHS search] Results Info:', JSON.stringify(resultsInfo));
+
+        if (resultsInfo.noRecords || (!resultsInfo.hasDisplayingRecords && !resultsInfo.hasIdInText)) {
+            logger.info('[DHS search] Record not found in search results');
             return { found: false, message: 'Consumer not found in DHS' };
         }
 
+        logger.info('[DHS search] Record found! Extracting...');
         // Extract consumer info
-        const consumer = await extractConsumerInfo(page);
+        const consumer = await extractConsumerInfo(target);
+        
+        if (!consumer || !consumer.identityNo) {
+            logger.error('[DHS search] Extraction failed');
+            return { found: false, message: 'Consumer found but could not extract data' };
+        }
+
+        logger.info('[DHS search] Consumer extracted:', JSON.stringify(consumer));
 
         // Get debt counsellor info
-        const debtCounsellor = await getDebtCounsellorInfo(page);
+        logger.info('[DHS search] Fetching DC info...');
+        await takeScreenshot('Clicking DC Info'); // STEP 4
+        const debtCounsellor = await getDebtCounsellorInfo(target);
+        await takeScreenshot('After DC Info Popup'); // STEP 5
 
-        return { found: true, consumer, debtCounsellor };
+        const result = { found: true, consumer, debtCounsellor };
+        logger.info('[DHS search] Final result:', JSON.stringify(result));
+        return result;
     } catch (error) {
         logger.error('Error searching consumer:', error);
         return { found: false, message: `Error: ${error} ` };
@@ -126,10 +254,13 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
 
         // Enter ID
         const idInputSelectors = [
+            '#cp_pagedata_f_RSAIDPass',
             '#ContentPlaceHolder1_txtIdNumber',
             '#ContentPlaceHolder1_txtRSAID',
+            'input[id*="RSAID"]',
+            'input[name*="RSAID"]',
             'input[id*="txtId"]',
-            'input[type="text"]'
+            'input[name*="txtId"]'
         ];
 
         let idSelector = null;
@@ -137,6 +268,20 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
             if (await page.$(sel)) {
                 idSelector = sel;
                 break;
+            }
+        }
+
+        if (!idSelector) {
+            // Try in frames
+            const frames = page.frames();
+            for (const frame of frames) {
+                for (const sel of idInputSelectors) {
+                    if (await frame.$(sel)) {
+                        idSelector = sel;
+                        break;
+                    }
+                }
+                if (idSelector) break;
             }
         }
 
@@ -154,7 +299,8 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
             '#cp_pagedata_lb_ApplyDataFilter',
             'a:has-text("Apply Filter")',
             'a[id*="ApplyDataFilter"]',
-            '#ContentPlaceHolder1_btnFilter'
+            '#ContentPlaceHolder1_btnFilter',
+            'input[value="Apply Filter"]'
         ];
 
         let filterClicked = false;
@@ -166,6 +312,21 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
                     break;
                 }
             } catch (e) { }
+        }
+
+        if (!filterClicked) {
+            // Try in frames
+            const frames = page.frames();
+            for (const frame of frames) {
+                for (const sel of filterSelectors) {
+                    if (await frame.$(sel)) {
+                        await frame.evaluate((s) => (document.querySelector(s) as HTMLElement).click(), sel);
+                        filterClicked = true;
+                        break;
+                    }
+                }
+                if (filterClicked) break;
+            }
         }
 
         if (!filterClicked) {
@@ -204,11 +365,7 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
             }
 
             if (!dataRow) {
-                const tableSummaries = tables.map(t => t.innerText.substring(0, 50).replace(/\n/g, ' '));
-                return {
-                    allCells: [`DEBUG: ID ${targetId} not found. Tables: ${JSON.stringify(tableSummaries)}`],
-                    identityNo: '', surname: '', gender: '', status: '', debtCounsellorName: '', transferIndicator: '', province: ''
-                };
+                return null;
             }
 
             const cells = Array.from(dataRow.querySelectorAll('td')).map(td => (td as HTMLElement).textContent?.trim() || '');
