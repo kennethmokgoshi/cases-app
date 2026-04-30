@@ -81,6 +81,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
         const data = parsed.data;
 
+        // Contact-field preservation: email and cellNumber are used for referrer notifications
+        // throughout the case lifecycle. Log prominently if they are being explicitly cleared.
+        if (data.email === null && existing.email) {
+            logger.warn(`Referrer ${params.id} email being cleared (was: ${existing.email}) by user ${session.user.id}`);
+        }
+        if (data.cellNumber === null && existing.cellNumber) {
+            logger.warn(`Referrer ${params.id} cellNumber being cleared (was: ${existing.cellNumber}) by user ${session.user.id}`);
+        }
+
         // If name changed, rename the linked sub-project too
         const newFirstName = data.firstName ?? existing.firstName;
         const newLastName = data.lastName ?? existing.lastName;

@@ -16,35 +16,55 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const query = searchParams.get('q')?.trim();
 
-        if (!query || query.length < 2) {
+        if (query && query.length < 2) {
             return NextResponse.json([]);
         }
 
-        const cases = await prisma.case.findMany({
-            where: {
-                OR: [
-                    { fileNumber: { contains: query, mode: 'insensitive' } },
-                    { client: { firstName: { contains: query, mode: 'insensitive' } } },
-                    { client: { lastName: { contains: query, mode: 'insensitive' } } },
-                    { client: { idNumber: { contains: query, mode: 'insensitive' } } },
-                    { client: { phone: { contains: query, mode: 'insensitive' } } },
-                    { client: { email: { contains: query, mode: 'insensitive' } } },
-                ]
-            },
-            take: 10,
-            include: {
-                client: true,
-                projects: {
-                    where: { isPrimary: true },
-                    include: {
-                        project: true
+        let cases;
+
+        if (!query) {
+            cases = await prisma.case.findMany({
+                take: 5,
+                include: {
+                    client: true,
+                    projects: {
+                        where: { isPrimary: true },
+                        include: {
+                            project: true
+                        }
                     }
+                },
+                orderBy: {
+                    updatedAt: 'desc'
                 }
-            },
-            orderBy: {
-                updatedAt: 'desc'
-            }
-        });
+            });
+        } else {
+            cases = await prisma.case.findMany({
+                where: {
+                    OR: [
+                        { fileNumber: { contains: query, mode: 'insensitive' } },
+                        { client: { firstName: { contains: query, mode: 'insensitive' } } },
+                        { client: { lastName: { contains: query, mode: 'insensitive' } } },
+                        { client: { idNumber: { contains: query, mode: 'insensitive' } } },
+                        { client: { phone: { contains: query, mode: 'insensitive' } } },
+                        { client: { email: { contains: query, mode: 'insensitive' } } },
+                    ]
+                },
+                take: 10,
+                include: {
+                    client: true,
+                    projects: {
+                        where: { isPrimary: true },
+                        include: {
+                            project: true
+                        }
+                    }
+                },
+                orderBy: {
+                    updatedAt: 'desc'
+                }
+            });
+        }
 
         const formattedCases = cases.map(c => ({
             id: c.id,

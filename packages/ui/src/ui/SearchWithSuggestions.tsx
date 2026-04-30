@@ -100,7 +100,7 @@ export function SearchWithSuggestions({
     }, []);
 
     const fetchSuggestions = async (searchTerm: string) => {
-        if (searchTerm.length < 2) {
+        if (searchTerm.length > 0 && searchTerm.length < 2) {
             setSuggestions([]);
             return;
         }
@@ -194,6 +194,16 @@ export function SearchWithSuggestions({
                     value={query}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
+                    onClick={() => {
+                        if (!showSuggestions) {
+                            fetchSuggestions(query);
+                        }
+                    }}
+                    onFocus={() => {
+                        if (!showSuggestions) {
+                            fetchSuggestions(query);
+                        }
+                    }}
                     className="w-full bg-zeno-blue/30 text-white text-sm rounded-lg pl-3 pr-8 py-2 border border-white/5 focus:border-zeno-cyan focus:outline-none placeholder-gray-500 transition-colors"
                 />
 
@@ -222,25 +232,27 @@ export function SearchWithSuggestions({
             </div>
 
             {/* Suggestions Dropdown */}
-            {showSuggestions && query.length >= 2 && (
+            {showSuggestions && (query.length >= 2 || query.length === 0) && (
                 <div className="absolute z-50 w-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden text-left top-full left-0 max-h-96 overflow-y-auto">
                     {/* Header Options similar to screenshot */}
                     <div className="text-xs text-gray-500 bg-gray-50 px-3 py-2 border-b border-gray-100 flex justify-between">
-                        <span>Search results for <strong>{query}</strong></span>
+                        <span>{query ? <>Search results for <strong>{query}</strong></> : 'Recent Cases'}</span>
                     </div>
 
-                    <button
-                        onClick={handleFullSearch}
-                        className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm text-gray-700 border-b border-gray-100 transition-colors flex justify-between items-center group"
-                    >
-                        <span>View all results for <strong>{query}</strong></span>
-                        <span className="text-gray-400 group-hover:text-gray-600 text-xs text-right">In all projects ↵</span>
-                    </button>
+                    {query && (
+                        <button
+                            onClick={handleFullSearch}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm text-gray-700 border-b border-gray-100 transition-colors flex justify-between items-center group"
+                        >
+                            <span>View all results for <strong>{query}</strong></span>
+                            <span className="text-gray-400 group-hover:text-gray-600 text-xs text-right">In all projects ↵</span>
+                        </button>
+                    )}
 
                     {loading ? (
                         <div className="px-4 py-3 text-sm text-gray-500 text-center">Loading...</div>
                     ) : suggestions.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500 text-center">No cases found matching "{query}"</div>
+                        <div className="px-4 py-3 text-sm text-gray-500 text-center">{query ? `No cases found matching "${query}"` : 'No recent cases'}</div>
                     ) : (
                         suggestions.map((item) => {
                             const statusInfo = getStatusByCode(item.status);

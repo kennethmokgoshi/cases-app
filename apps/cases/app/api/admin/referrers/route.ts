@@ -13,7 +13,7 @@ export const ACCOUNT_TYPES = ['CHEQUE', 'SAVINGS', 'CURRENT'] as const;
 const CreateSchema = z.object({
     firstName: z.string().min(1).max(100),
     lastName: z.string().min(1).max(100),
-    idNumber: z.string().min(13).max(13),
+    idNumber: z.string().min(13).max(13).nullable().optional(),
     email: z.string().email().nullable().optional(),
     cellNumber: z.string().max(20).nullable().optional(),
     // Employment
@@ -113,10 +113,12 @@ export async function POST(request: Request) {
 
         const data = parsed.data;
 
-        // Check for duplicate ID number
-        const existing = await prisma.referrer.findUnique({ where: { idNumber: data.idNumber } });
-        if (existing) {
-            return NextResponse.json({ error: 'A referrer with this ID number already exists' }, { status: 409 });
+        // Check for duplicate ID number (only when provided)
+        if (data.idNumber) {
+            const existing = await prisma.referrer.findUnique({ where: { idNumber: data.idNumber } });
+            if (existing) {
+                return NextResponse.json({ error: 'A referrer with this ID number already exists' }, { status: 409 });
+            }
         }
 
         // Find or create the root "Referrals" acquisition source project

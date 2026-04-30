@@ -113,49 +113,13 @@ export async function POST(request: Request) {
                     ? 'Requested Again via DHS'
                     : 'Requested via DHS';
 
-                // Rule 1: No Records Found -> Not Requested -> Request File
+                // Rule 1: No Records Found -> Not Requested
                 if (!result.found) {
-                    // Only request if not already requested or if explicitly checking
-                    // and documents are available
-                    const poa = caseData.documents.find(d => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
-                    const idDoc = caseData.documents.find(d => d.type === 'ID');
-
-                    if (poa && idDoc) {
-                        // Construct absolute paths
-                        // Handle relative URLs (e.g., /uploads/...)
-                        const poaPath = getFilePath(poa.fileUrl);
-                        const idPath = getFilePath(idDoc.fileUrl);
-
-                        const attemptLabel = wasPreviouslyRequestedViaDHS
-                            ? 'No records found (previously requested). Attempting to request again via DHS...'
-                            : 'No records found. Attempting to auto-request transfer...';
-                        comments.push(`DHS Check: ${attemptLabel}`);
-
-                        // Attempt to request transfer
-                        const requestResult = await requestTransfer(idNumber, poaPath, idPath);
-
-                        if (requestResult.success) {
-                            updateData.status = 'REQUESTED_VIA_DHS';
-                            updateData.dhsStatus = dhsRequestLabel;
-                            updateData.nextUpdate = addWorkingDays(new Date(), 5);
-                            const successLabel = wasPreviouslyRequestedViaDHS
-                                ? `Success: Transfer requested again via DHS. Next update set to +5 working days.`
-                                : `Success: Transfer requested via DHS. Next update set to +5 working days.`;
-                            comments.push(successLabel);
-                        } else {
-                            const failLabel = wasPreviouslyRequestedViaDHS
-                                ? `Failed to re-request transfer: ${requestResult.message}`
-                                : `Failed to request transfer: ${requestResult.message}`;
-                            comments.push(failLabel);
-                            updateData.dhsStatus = 'Not Requested';
-                        }
-                    } else {
-                        updateData.dhsStatus = 'Not Requested';
-                        const missingLabel = wasPreviouslyRequestedViaDHS
-                            ? 'DHS Check: File was previously requested but no records found. Cannot re-request: Missing POA or ID document.'
-                            : 'DHS Check: Not requested. Cannot auto-request: Missing POA or ID document.';
-                        comments.push(missingLabel);
-                    }
+                    updateData.dhsStatus = 'Not Requested';
+                    const missingLabel = wasPreviouslyRequestedViaDHS
+                        ? 'DHS Check: File was previously requested but no records found.'
+                        : 'DHS Check: Not requested.';
+                    comments.push(missingLabel);
                 }
                 // Rules 2-10: Records Found
                 else {

@@ -110,12 +110,14 @@ export async function POST(
 
         let pdfBuffer: Buffer;
         let fileName: string;
+        
+        const cleanIdNumber = client.idNumber ? client.idNumber.replace(/\D/g, '') : '';
 
         if (type === 'STANDARD') {
             pdfBuffer = await generateStandardPoa({
                 fullName:    clientFullName,
-                idNumber:    client.idNumber ?? '',
-                dateOfBirth: client.idNumber ? idToDateOfBirth(client.idNumber) : '',
+                idNumber:    cleanIdNumber,
+                dateOfBirth: cleanIdNumber ? idToDateOfBirth(cleanIdNumber) : '',
                 address:     client.address ?? '',
                 phone:       client.phone ?? '',
                 email:       client.email ?? '',
@@ -125,11 +127,11 @@ export async function POST(
                 dcNcrdcNo,
                 dcPhone,
             });
-            fileName = `ZDM_POA_${client.idNumber}_${Date.now()}.pdf`;
+            fileName = `ZDM_POA_${cleanIdNumber}_${Date.now()}.pdf`;
         } else {
             pdfBuffer = await generateWesbankPoa({
                 clientFullName: clientFullName,
-                clientIdNumber: client.idNumber ?? '',
+                clientIdNumber: cleanIdNumber,
                 clientAddress:  client.address ?? '',
                 agentFullName:  `${staffUser!.firstName} ${staffUser!.lastName}`,
                 agentIdNumber:  staffUser!.idNumber!,
@@ -137,7 +139,7 @@ export async function POST(
                 signedAtCity:   'Pretoria',
                 signedDate:     today,
             });
-            fileName = `ZDM_Wesbank_POA_${client.idNumber}_${Date.now()}.pdf`;
+            fileName = `ZDM_Wesbank_POA_${cleanIdNumber}_${Date.now()}.pdf`;
         }
 
         // ---------------------------------------------------------------

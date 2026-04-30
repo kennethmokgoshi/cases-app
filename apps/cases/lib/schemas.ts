@@ -71,7 +71,8 @@ export const CaseCreateSchema = z.object({
     partnerName: optionalString,
     partnerBranch: optionalString,
     partnerSplitPercent: z.number().min(0).max(100).optional().default(0),
-    services: z.array(z.string()).optional().nullable() });
+    services: z.array(z.string()).optional().nullable(),
+    referrerId: z.string().optional().nullable() });
 
 export const CasePatchSchema = z.object({
     client: ClientUpdateSchema.optional(),
@@ -119,7 +120,8 @@ export const CasePatchSchema = z.object({
     workflowStatus: optionalString,
     insuranceNotes: optionalString,
     adminFee: z.number().optional().nullable(),
-    distributeWaitList: z.boolean().optional() }).passthrough(); // allow remaining fields via otherCaseData spread in the route
+    distributeWaitList: z.boolean().optional(),
+    isAdminOnly: z.boolean().optional() }).passthrough(); // allow remaining fields via otherCaseData spread in the route
 
 export const CaseStatusSchema = z.object({
     newStatus: z.string().min(1, 'New status is required'),
@@ -351,7 +353,13 @@ export function parseBody<T>(
     if (result.success) {
         return { success: true, data: result.data, response: null as any };
     }
-    const errors = result.error.flatten().fieldErrors;
+    // Build errors with full dotted paths (e.g. client.firstName) so callers can show specific messages
+    const errors: Record<string, string[]> = {};
+    result.error.issues.forEach(issue => {
+        const path = issue.path.join('.') || '_root';
+        if (!errors[path]) errors[path] = [];
+        errors[path].push(issue.message);
+    });
     return {
         success: false,
         data: null as any,

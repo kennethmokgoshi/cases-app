@@ -35,9 +35,13 @@ export async function POST(req: NextRequest) {
 
     // 2. Prepare Data for POA
     // Use linked client data if available, otherwise fallback to consumer account data
+    const rawIdNumber = consumer.idNumber || consumer.linkedClient?.idNumber || "";
+    const cleanIdNumber = rawIdNumber.replace(/\D/g, '');
+
     const poaData = {
       fullName: `${consumer.firstName} ${consumer.lastName}`,
-      idNumber: consumer.idNumber || consumer.linkedClient?.idNumber || "",
+      idNumber: cleanIdNumber,
+      dateOfBirth: cleanIdNumber ? idToDateOfBirth(cleanIdNumber) : '',
       address: consumer.linkedClient?.address || "",
       phone: consumer.phone || consumer.linkedClient?.phone || "",
       email: consumer.email,
@@ -91,4 +95,14 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/** Extract DD/MM/YYYY date of birth from a 13-digit SA ID number */
+function idToDateOfBirth(idNumber: string): string {
+    if (idNumber.length < 6) return '';
+    const yy = idNumber.substring(0, 2);
+    const mm = idNumber.substring(2, 4);
+    const dd = idNumber.substring(4, 6);
+    const year = parseInt(yy) > 30 ? `19${yy}` : `20${yy}`;
+    return `${dd}/${mm}/${year}`;
 }

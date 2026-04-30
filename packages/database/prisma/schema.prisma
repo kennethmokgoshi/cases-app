@@ -59,7 +59,7 @@ model Referrer {
   id                String    @id @default(cuid())
   firstName         String
   lastName          String
-  idNumber          String    @unique
+  idNumber          String?   @unique
   email             String?
   cellNumber        String?
 
@@ -201,6 +201,7 @@ model Case {
   declineReasonAttended   Boolean               @default(false)
   aiAutonomyLevel         String                @default("CO_PILOT") // CO_PILOT, AUTOPILOT, MANUAL
   planReadyToStart        Boolean               @default(false)
+  isAdminOnly             Boolean               @default(false)
   description             String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -231,6 +232,7 @@ model Case {
   @@index([updatedAt])
   @@index([createdAt])
   @@index([referrerId])
+  @@index([isAdminOnly])
 }
 
 model Document {

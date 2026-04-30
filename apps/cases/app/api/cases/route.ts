@@ -69,6 +69,11 @@ export async function GET(request: Request) {
         const isAdmin = userRole === 'ADMIN' || session.user.isAdmin === true;
         const isStaff = session.user.userType === 'STAFF';
 
+        // Non-admins never see admin-only cases
+        if (!isAdmin) {
+            where.isAdminOnly = false;
+        }
+
         // Staff members (internal) should see all cases, Partners (external) are restricted to their projects
         const isRestricted = !isAdmin && !isStaff;
 
@@ -371,6 +376,8 @@ export async function POST(request: Request) {
         // Track creator explicitly
         const session = await auth();
         const currentUserId = session?.user?.id;
+        const creatorRole = session?.user?.role?.toUpperCase();
+        const isAdminCreator = creatorRole === 'ADMIN' || session?.user?.isAdmin === true;
         logger.info(`[CASE_CREATE] Session User ID: ${currentUserId}`);
 
         const parsed = parseBody(CaseCreateSchema, await request.json());
@@ -385,39 +392,87 @@ export async function POST(request: Request) {
             partnerName,
             partnerBranch,
             partnerSplitPercent,
-            services } = body;
+            services,
+            referrerId } = body;
 
-        // Check for duplicate ID Number
+        // Resolve referrerId: if prefixed with "project:" it's an orphan sub-project — auto-create a minimal Referrer
+        let resolvedReferrerId: string | null = referrerId ?? null;
+        if (resolvedReferrerId?.startsWith('project:')) {
+            const subProjectId = resolvedReferrerId.replace('project:', '');
+            const subProject = await prisma.project.findUnique({ where: { id: subProjectId }, select: { id: true, name: true } });
+            if (subProject) {
+                const nameParts = subProject.name.trim().split(/\s+/);
+                const firstName = nameParts[0] || subProject.name;
+                const lastName = nameParts.slice(1).join(' ') || '-';
+                const newReferrer = await prisma.referrer.create({
+                    data: { firstName, lastName, projectId: subProject.id, isActive: true },
+                    select: { id: true },
+                });
+                resolvedReferrerId = newReferrer.id;
+            } else {
+                resolvedReferrerId = null;
+            }
+        }
+
+        // Check for duplicate ID Number — smart reuse logic:
+        // 1. Client has no cases (orphaned — previous case was deleted) → reuse client record
+        // 2. Client has cases but ALL are admin-only AND caller is non-admin → reuse client record
+        // 3. Client has visible cases → block with duplicate error
+        let existingClientId: string | null = null;
+
         const existingClientWithId = await prisma.client.findUnique({
             where: { idNumber: client.idNumber },
-            select: { id: true, firstName: true, lastName: true }
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                cases: {
+                    select: { id: true, fileNumber: true, isAdminOnly: true }
+                }
+            }
         });
 
         if (existingClientWithId) {
-            // Generate suggested prefixed ID (e.g., DRL8207225452088 for "Debt Review Letsatsi")
-            const suggestedPrefix = 'DRL'; // Default suggested prefix
-            const suggestedIdNumber = `${suggestedPrefix}${client.idNumber}`;
+            const allCases = existingClientWithId.cases;
 
-            return NextResponse.json(
-                {
-                    error: 'Duplicate ID Number',
-                    message: `A client with ID number ${client.idNumber} already exists: ${existingClientWithId.firstName} ${existingClientWithId.lastName}`,
-                    code: 'DUPLICATE_ID_NUMBER',
-                    field: 'idNumber',
-                    existingClient: {
-                        id: existingClientWithId.id,
-                        name: `${existingClientWithId.firstName} ${existingClientWithId.lastName}`
-                    },
-                    allowPrefixedId: true,
-                    suggestedIdNumber: suggestedIdNumber,
-                    originalIdNumber: client.idNumber
-                },
-                { status: 409 }
-            );
+            if (allCases.length === 0) {
+                // Orphaned client — the case was deleted but the client record wasn't.
+                // Allow creation by connecting to the existing client rather than creating a duplicate.
+                existingClientId = existingClientWithId.id;
+                logger.info(`[CASE_CREATE] Reusing orphaned client ${existingClientId} (no linked cases)`);
+            } else {
+                const nonAdminOnlyCases = allCases.filter(c => !c.isAdminOnly);
+
+                if (nonAdminOnlyCases.length === 0 && !isAdminCreator) {
+                    // All existing cases are admin-only and caller is not an admin.
+                    // Non-admin users cannot see those cases, so allow them to create their own.
+                    existingClientId = existingClientWithId.id;
+                    logger.info(`[CASE_CREATE] Reusing client ${existingClientId} (only admin-only shadow cases exist)`);
+                } else {
+                    // Visible cases exist — block with a clear duplicate error.
+                    const suggestedIdNumber = `DRL${client.idNumber}`;
+                    return NextResponse.json(
+                        {
+                            error: 'Duplicate ID Number',
+                            message: `A client with ID number ${client.idNumber} already exists: ${existingClientWithId.firstName} ${existingClientWithId.lastName}`,
+                            code: 'DUPLICATE_ID_NUMBER',
+                            field: 'idNumber',
+                            existingClient: {
+                                id: existingClientWithId.id,
+                                name: `${existingClientWithId.firstName} ${existingClientWithId.lastName}`
+                            },
+                            allowPrefixedId: true,
+                            suggestedIdNumber,
+                            originalIdNumber: client.idNumber
+                        },
+                        { status: 409 }
+                    );
+                }
+            }
         }
 
-        // Duplication checks for Phone/Email
-        if (client.phone) {
+        // Phone duplication check — skip if reusing an existing client (same person)
+        if (!existingClientId && client.phone) {
             const existingClientWithPhone = await prisma.client.findFirst({
                 where: { phone: client.phone },
                 select: { id: true, firstName: true, lastName: true, phone: true }
@@ -468,19 +523,23 @@ export async function POST(request: Request) {
                         serviceFeeCollectedBy,
                         services: services ? JSON.stringify(services) : null,
                         partnerSplitPercent: acquisitionType === 'B2B' ? (partnerSplitPercent || 50) : 0,
+                        referrer: resolvedReferrerId ? { connect: { id: resolvedReferrerId } } : undefined,
                         createdBy: currentUserId ? { connect: { id: currentUserId } } : undefined, // Use relation connect
-                        client: {
-                            create: {
-                                firstName: client.firstName,
-                                lastName: client.lastName,
-                                idNumber: client.idNumber,
-                                email: client.email || null,
-                                alternativeEmail: (client as any).alternativeEmail || null,
-                                phone: client.phone || null,
-                                alternativePhone: (client as any).alternativePhone || null,
-                                address: client.address || null,
-                                type: client.type || 'Standard' }
-                        },
+                        client: existingClientId
+                            ? { connect: { id: existingClientId } }
+                            : {
+                                create: {
+                                    firstName: client.firstName,
+                                    lastName: client.lastName,
+                                    idNumber: client.idNumber,
+                                    email: client.email || null,
+                                    alternativeEmail: (client as any).alternativeEmail || null,
+                                    phone: client.phone || null,
+                                    alternativePhone: (client as any).alternativePhone || null,
+                                    address: client.address || null,
+                                    type: client.type || 'Standard'
+                                }
+                            },
                         projects: {
                             create: [
                                 // Primary project
