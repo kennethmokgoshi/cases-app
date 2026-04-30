@@ -22,6 +22,15 @@ type Project = {
     children?: Project[];
 };
 
+type ReferrerOption = {
+    id: string;             // referrer UUID or "project:{projectId}" for placeholders
+    name: string;
+    email: string | null;   // stored on case for referrer notifications
+    cellNumber: string | null;
+    isActive: boolean;
+    hasFullProfile: boolean;
+};
+
 type ExtractedData = {
     validation?: {
         missingID?: boolean;
@@ -148,6 +157,10 @@ function NewCaseWithAIComponent() {
     const [selectedMonth, setSelectedMonth] = useState(currentMonthVal);
     const [finalProjectId, setFinalProjectId] = useState('');
 
+    // Referrer selection
+    const [referrerOptions, setReferrerOptions] = useState<ReferrerOption[]>([]);
+    const [selectedReferrerId, setSelectedReferrerId] = useState('');
+
     // B2B vs B2C Classification
     const [acquisitionType, setAcquisitionType] = useState<'B2B' | 'B2C'>('B2B');
 
@@ -162,7 +175,7 @@ function NewCaseWithAIComponent() {
     const [uploadedFiles, setUploadedFiles] = useState<{
         id?: File;
         poa?: File;
-        creditReport?: File;
+        creditReports: File[];
         bankStatement?: File;
         payslip?: File;
         por?: File;
@@ -174,6 +187,7 @@ function NewCaseWithAIComponent() {
         allCombined?: File;
         optional: File[];
     }>({
+        creditReports: [],
         optional: []
     });
     const isAutoSelecting = useRef(false);
@@ -454,6 +468,14 @@ function NewCaseWithAIComponent() {
         fetchProjects();
     }, []);
 
+    // Fetch referrers for dropdown once on mount
+    useEffect(() => {
+        fetch('/api/admin/referrers/dropdown')
+            .then(r => r.json())
+            .then(d => { if (Array.isArray(d.referrers)) setReferrerOptions(d.referrers); })
+            .catch(() => {}); // non-blocking — referrer dropdown is optional
+    }, []);
+
     // Reset parent selection when acquisition type changes
     useEffect(() => {
         if (isAutoSelecting.current) return;
@@ -469,7 +491,7 @@ function NewCaseWithAIComponent() {
         // REMOVED: Reseting Year/Month
     }, [selectedParentId]);
 
-    const handleFileChange = (type: 'id' | 'poa' | 'creditReport' | 'bankStatement' | 'payslip' | 'por' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
+    const handleFileChange = (type: 'id' | 'poa' | 'bankStatement' | 'payslip' | 'por' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
         if (type === 'optional' && file) {
             setUploadedFiles(prev => ({
                 ...prev,
@@ -480,10 +502,27 @@ function NewCaseWithAIComponent() {
         }
     };
 
+    const handleCreditReportAdd = (files: FileList | null) => {
+        if (!files) return;
+        const incoming = Array.from(files);
+        setUploadedFiles(prev => {
+            const existing = prev.creditReports.map(f => f.name);
+            const unique = incoming.filter(f => !existing.includes(f.name));
+            return { ...prev, creditReports: [...prev.creditReports, ...unique] };
+        });
+    };
+
+    const handleCreditReportRemove = (index: number) => {
+        setUploadedFiles(prev => ({
+            ...prev,
+            creditReports: prev.creditReports.filter((_, i) => i !== index)
+        }));
+    };
+
     // Check if required documents are uploaded based on mode
     const hasRequiredDocs = uploadMode === 'combined'
         ? !!uploadedFiles.allCombined
-        : (!!uploadedFiles.id || !!uploadedFiles.poa || !!uploadedFiles.creditReport || uploadedFiles.optional.length > 0);
+        : (!!uploadedFiles.id || !!uploadedFiles.poa || uploadedFiles.creditReports.length > 0 || uploadedFiles.optional.length > 0);
 
     // Create or find the final project based on selections
     const handleContinueToUpload = async () => {
@@ -602,7 +641,8 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
+                    referrerId: selectedReferrerId || null
                 })
             });
             if (!tempCase.ok) throw new Error('Failed to initialize case');
@@ -610,7 +650,7 @@ function NewCaseWithAIComponent() {
             const caseId = tempCaseData.id;
 
             // Upload any attached files (no AI analysis)
-            const hasFiles = uploadedFiles.id || uploadedFiles.poa || uploadedFiles.creditReport ||
+            const hasFiles = uploadedFiles.id || uploadedFiles.poa || uploadedFiles.creditReports.length > 0 ||
                 uploadedFiles.payslip || uploadedFiles.bankStatement || uploadedFiles.por ||
                 uploadedFiles.form16 || uploadedFiles.form171 || uploadedFiles.form172 ||
                 uploadedFiles.form177 || uploadedFiles.clearance || uploadedFiles.optional.length > 0;
@@ -620,7 +660,7 @@ function NewCaseWithAIComponent() {
                 fd.append('skipAnalysis', 'true');
                 if (uploadedFiles.id) fd.append('file_ID', uploadedFiles.id);
                 if (uploadedFiles.poa) fd.append('file_POA', uploadedFiles.poa);
-                if (uploadedFiles.creditReport) fd.append('file_CREDIT_REPORT', uploadedFiles.creditReport);
+                uploadedFiles.creditReports.forEach(f => fd.append('file_CREDIT_REPORT', f));
                 if (uploadedFiles.payslip) fd.append('files', uploadedFiles.payslip);
                 if (uploadedFiles.bankStatement) fd.append('files', uploadedFiles.bankStatement);
                 if (uploadedFiles.por) fd.append('files', uploadedFiles.por);
@@ -687,7 +727,7 @@ function NewCaseWithAIComponent() {
             }
         } else {
             // Separate mode - require at least one file
-            if (!uploadedFiles.id && !uploadedFiles.poa && !uploadedFiles.creditReport && uploadedFiles.optional.length === 0) {
+            if (!uploadedFiles.id && !uploadedFiles.poa && uploadedFiles.creditReports.length === 0 && uploadedFiles.optional.length === 0) {
                 alert('Please upload at least one document to proceed.');
                 return;
             }
@@ -711,7 +751,8 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0 }) });
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
+                    referrerId: selectedReferrerId || null }) });
 
             if (!tempCase.ok) throw new Error('Failed to create temporary case');
             const tempCaseData = await tempCase.json();
@@ -735,7 +776,7 @@ function NewCaseWithAIComponent() {
                 // Use specific field names so backend can identify types regardless of filename
                 if (uploadedFiles.id) formDataUpload.append('file_ID', uploadedFiles.id);
                 if (uploadedFiles.poa) formDataUpload.append('file_POA', uploadedFiles.poa);
-                if (uploadedFiles.creditReport) formDataUpload.append('file_CREDIT_REPORT', uploadedFiles.creditReport);
+                uploadedFiles.creditReports.forEach(f => formDataUpload.append('file_CREDIT_REPORT', f));
                 if (uploadedFiles.bankStatement) formDataUpload.append('file_BANK_STATEMENT', uploadedFiles.bankStatement);
                 if (uploadedFiles.payslip) formDataUpload.append('file_PAYSLIP', uploadedFiles.payslip);
                 if (uploadedFiles.form16) formDataUpload.append('file_FORM_16', uploadedFiles.form16);
@@ -773,7 +814,7 @@ function NewCaseWithAIComponent() {
                     if (!isCombinedUpload) {
                         if (uploadedFiles.id) docTypes.push('ID');
                         if (uploadedFiles.poa) docTypes.push('POA');
-                        if (uploadedFiles.creditReport) docTypes.push('Credit Report');
+                        if (uploadedFiles.creditReports.length > 0) docTypes.push('Credit Report');
                         if (uploadedFiles.bankStatement) docTypes.push('Bank Statement');
                         if (uploadedFiles.payslip) docTypes.push('Payslip');
                     }
@@ -983,7 +1024,8 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0 }) });
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
+                    referrerId: selectedReferrerId || null }) });
 
             if (!tempCase.ok) throw new Error('Failed to initialize case');
             const tempCaseData = await tempCase.json();
@@ -1203,6 +1245,26 @@ function NewCaseWithAIComponent() {
                 let errorMessage = errorData.error || 'Failed to create case';
                 let errorTitle = '❌ Error';
 
+                const fieldNameMap: Record<string, string> = {
+                    'client.firstName': 'Full Names',
+                    'client.lastName': 'Surname',
+                    'client.idNumber': 'ID Number',
+                    'client.email': 'Email Address',
+                    'client.phone': 'Cell Number',
+                    'client.alternativePhone': 'Alternative Cell Number',
+                    'client.address': 'Address',
+                    'projectId': 'Period & Source',
+                    'acquisitionType': 'Acquisition Type',
+                    'partnerName': 'Partner Name',
+                    'partnerBranch': 'Partner Branch',
+                    'services': 'Services',
+                    '_root': 'Form',
+                };
+                const humanizeField = (path: string) =>
+                    fieldNameMap[path] ||
+                    path.split('.').pop()?.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()) ||
+                    path;
+
                 if (errorData.code === 'DUPLICATE_EMAIL') {
                     errorTitle = '❌ Email Already Exists';
                     errorMessage = errorData.error;
@@ -1212,18 +1274,24 @@ function NewCaseWithAIComponent() {
                 } else if (errorData.code === 'CASE_NOT_FOUND') {
                     errorTitle = '❌ Case Not Found';
                     errorMessage = 'The case you\'re trying to update no longer exists.';
-                } else if (errorData.code === 'VALIDATION_ERROR') {
-                    errorTitle = '❌ Data Validation Error';
-                    errorMessage = `${errorData.error}\n\n${errorData.details || ''}`;
                 } else if (errorData.code === 'INTERNAL_ERROR') {
                     errorTitle = '❌ Server Error';
                     errorMessage = `${errorData.error}\n\nDetails: ${errorData.details || 'Unknown error'}`;
+                } else if (res.status === 400 && errorData.errors && typeof errorData.errors === 'object') {
+                    errorTitle = '❌ Validation Failed';
+                    const fieldLines = Object.entries(errorData.errors as Record<string, string[]>)
+                        .map(([field, msgs]) => `• ${humanizeField(field)}: ${msgs.join(', ')}`)
+                        .join('\n');
+                    errorMessage = fieldLines || 'Please check the form fields and try again.';
+                } else if (errorData.code === 'VALIDATION_ERROR') {
+                    errorTitle = '❌ Validation Failed';
+                    errorMessage = `${errorData.error}\n\n${errorData.details || ''}`;
                 }
 
-                // Append Zod field-level errors when present (e.g. from parseBody returning { error, errors })
-                if (errorData.errors && typeof errorData.errors === 'object') {
+                // Append Zod field-level errors for non-400 paths that still include errors
+                if (res.status !== 400 && errorData.errors && typeof errorData.errors === 'object') {
                     const fieldLines = Object.entries(errorData.errors as Record<string, string[]>)
-                        .map(([field, msgs]) => `• ${field}: ${msgs.join(', ')}`)
+                        .map(([field, msgs]) => `• ${humanizeField(field)}: ${msgs.join(', ')}`)
                         .join('\n');
                     if (fieldLines) errorMessage = `${errorMessage}\n\n${fieldLines}`;
                 }
@@ -1445,6 +1513,30 @@ function NewCaseWithAIComponent() {
                         </div>
                     )}
 
+                    {/* Referred By (optional) */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-gray-400 mb-2">
+                            7. Referred By <span className="text-gray-600">(Optional)</span>
+                        </label>
+                        <select
+                            value={selectedReferrerId}
+                            onChange={(e) => setSelectedReferrerId(e.target.value)}
+                            className="w-full px-4 py-3 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                        >
+                            <option value="">No referrer</option>
+                            {referrerOptions.map(r => (
+                                <option key={r.id} value={r.id} disabled={!r.isActive}>
+                                    {r.name}{!r.hasFullProfile ? ' (profile pending)' : ''}{!r.isActive ? ' (inactive)' : ''}
+                                </option>
+                            ))}
+                        </select>
+                        {selectedReferrerId && !referrerOptions.find(r => r.id === selectedReferrerId)?.hasFullProfile && (
+                            <p className="text-xs text-amber-400 mt-1">
+                                This referrer has no profile yet — add their details in the Referrer Registry later.
+                            </p>
+                        )}
+                    </div>
+
                     {/* Summary */}
                     {selectedMonth && selectedServices.length > 0 && (
                         <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
@@ -1458,6 +1550,13 @@ function NewCaseWithAIComponent() {
                             <p className="text-sm text-gray-400 mt-2">
                                 Services: <span className="text-zeno-cyan">{selectedServices.length} selected</span>
                             </p>
+                            {selectedReferrerId && (
+                                <p className="text-sm text-gray-400 mt-1">
+                                    Referred by: <span className="text-violet-400">
+                                        {referrerOptions.find(r => r.id === selectedReferrerId)?.name ?? ''}
+                                    </span>
+                                </p>
+                            )}
                         </div>
                     )}
 
@@ -1599,7 +1698,6 @@ function NewCaseWithAIComponent() {
                                 {([
                                     { key: 'id',           label: 'ID Copy',                              icon: '🆔', hint: 'Click to upload ID',           accept: '.pdf,image/*', span: false },
                                     { key: 'poa',          label: 'Zenowethu POA',                        icon: '📋', hint: 'Click to upload POA',          accept: '.pdf,image/*', span: false },
-                                    { key: 'creditReport', label: 'Credit Report (Experian, XDS, ClearScore, TransUnion, etc.)', icon: '📊', hint: 'Click to upload Credit Report', subhint: 'AI will automatically identify the bureau and category', accept: '.pdf', span: true },
                                     { key: 'payslip',      label: 'Payslip',                              icon: '💸', hint: 'Click to upload Payslip',       accept: '.pdf,image/*', span: false },
                                     { key: 'bankStatement',label: 'Bank Statement',                        icon: '🏦', hint: 'Click to upload Statement',    accept: '.pdf,image/*', span: false },
                                     { key: 'por',          label: 'Proof of Residence',                   icon: '🏠', hint: 'Click to upload PoR',           accept: '.pdf,image/*', span: false },
@@ -1653,6 +1751,47 @@ function NewCaseWithAIComponent() {
                                         </div>
                                     );
                                 })}
+
+                                {/* Credit Reports — multi-upload */}
+                                <div className="space-y-1 md:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-400">Credit Reports (Experian, XDS, ClearScore, TransUnion, etc.)</label>
+                                    <div className="border-2 border-dashed rounded-lg p-5 border-white/10 hover:border-white/30 transition-colors">
+                                        <input
+                                            type="file"
+                                            id="m-creditReports-upload"
+                                            className="hidden"
+                                            accept=".pdf"
+                                            multiple
+                                            onChange={(e) => {
+                                                handleCreditReportAdd(e.target.files);
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                        <label htmlFor="m-creditReports-upload" className="cursor-pointer block text-center">
+                                            <span className="text-2xl block mb-1">📊</span>
+                                            <span className="text-xs text-gray-400">Add credit report(s)</span>
+                                            <span className="block text-[10px] text-gray-600 mt-1">Upload one per bureau — AI identifies each automatically</span>
+                                        </label>
+                                        {uploadedFiles.creditReports.length > 0 && (
+                                            <div className="mt-3 space-y-1">
+                                                {uploadedFiles.creditReports.map((f, i) => (
+                                                    <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-1.5">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <span className="text-zeno-cyan text-xs">✓</span>
+                                                            <span className="text-xs text-gray-300 truncate">{f.name}</span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCreditReportRemove(i)}
+                                                            className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 hover:text-red-300 transition-colors text-xs font-bold"
+                                                            title="Remove"
+                                                        >×</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
                                 {/* Other Files — multi-upload with individual delete */}
                                 <div className="space-y-1 md:col-span-2">
@@ -1824,28 +1963,42 @@ function NewCaseWithAIComponent() {
                             </div>
 
                              <div className="space-y-2 col-span-2">
-                                <label className="block text-sm font-medium text-gray-300">Credit Report (Experian, XDS, ClearScore, TransUnion, etc.)</label>
-                                <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${uploadedFiles.creditReport ? 'border-zeno-cyan/50 bg-zeno-cyan/10' : 'border-white/10 hover:border-white/30'}`}>
+                                <label className="block text-sm font-medium text-gray-300">Credit Reports (Experian, XDS, ClearScore, TransUnion, etc.)</label>
+                                <div className="border-2 border-dashed rounded-lg p-6 border-white/10 hover:border-white/30 transition-colors">
                                     <input
                                         type="file"
                                         id="credit-upload"
                                         className="hidden"
-                                        onChange={(e) => handleFileChange('creditReport', e.target.files?.[0] || null)}
+                                        multiple
                                         accept=".pdf"
+                                        onChange={(e) => {
+                                            handleCreditReportAdd(e.target.files);
+                                            e.target.value = '';
+                                        }}
                                     />
-                                    <label htmlFor="credit-upload" className="cursor-pointer">
-                                        {uploadedFiles.creditReport ? (
-                                            <div className="text-zeno-cyan font-medium flex items-center justify-center gap-2">
-                                                <span>✓</span> {uploadedFiles.creditReport.name}
-                                            </div>
-                                        ) : (
-                                            <div className="text-gray-400">
-                                                <span className="text-2xl block mb-2">📊</span>
-                                                Click to upload Credit Report
-                                                <span className="block text-xs mt-1 text-gray-500">AI will automatically identify the bureau and category</span>
-                                            </div>
-                                        )}
+                                    <label htmlFor="credit-upload" className="cursor-pointer block text-center">
+                                        <span className="text-2xl block mb-2">📊</span>
+                                        <span className="text-gray-400 text-sm">Add credit report(s)</span>
+                                        <span className="block text-xs mt-1 text-gray-500">Upload one per bureau — AI identifies each automatically</span>
                                     </label>
+                                    {uploadedFiles.creditReports.length > 0 && (
+                                        <div className="mt-3 space-y-1">
+                                            {uploadedFiles.creditReports.map((f, i) => (
+                                                <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-1.5">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <span className="text-zeno-cyan text-sm">✓</span>
+                                                        <span className="text-xs text-gray-300 truncate">{f.name}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCreditReportRemove(i)}
+                                                        className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 hover:text-red-300 transition-colors text-xs font-bold"
+                                                        title="Remove"
+                                                    >×</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

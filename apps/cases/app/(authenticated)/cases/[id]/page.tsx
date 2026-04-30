@@ -242,6 +242,7 @@ export default function CaseDetailPage() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     // DHS automation states
     const [dhsLoading, setDhsLoading] = useState(false);
+    const [checkRequestLoading, setCheckRequestLoading] = useState(false);
     const [nctLoading, setNctLoading] = useState(false);
     const [dhsMessage, setDhsMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
     const [nctMessage, setNctMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -1304,12 +1305,51 @@ export default function CaseDetailPage() {
         }
     };
 
+    // DHS Linkage Check (Link 2)
     const handleDHSLookup = async () => {
         if (!caseData?.client.idNumber) {
             setDhsMessage({ type: 'error', text: 'Client ID number is required' });
             return;
         }
         setDhsLoading(true);
+        setDhsMessage(null);
+        try {
+            const res = await fetch('/api/dhs/lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    idNumber: caseData.client.idNumber,
+                    caseId: caseData.id,
+                    action: 'search'
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                let text = result.found 
+                    ? `Linked to DHS. DC: ${result.debtCounsellor?.fullName || 'Unknown'}`
+                    : 'Not linked to DHS.';
+                
+                setDhsMessage({
+                    type: result.found ? 'success' : 'info',
+                    text: text
+                });
+            } else {
+                setDhsMessage({ type: 'error', text: result.error || 'DHS search failed' });
+            }
+        } catch (error) {
+            setDhsMessage({ type: 'error', text: 'Failed to connect to DHS' });
+        } finally {
+            setDhsLoading(false);
+        }
+    };
+
+    // DHS Request Status Check (Link 1)
+    const handleCheckRequestStatus = async () => {
+        if (!caseData?.client.idNumber) {
+            setDhsMessage({ type: 'error', text: 'Client ID number is required' });
+            return;
+        }
+        setCheckRequestLoading(true);
         setDhsMessage(null);
         try {
             const res = await fetch('/api/dhs/lookup', {
@@ -1347,12 +1387,12 @@ export default function CaseDetailPage() {
                     text: statusText
                 });
             } else {
-                setDhsMessage({ type: 'error', text: result.error || 'DHS lookup failed' });
+                setDhsMessage({ type: 'error', text: result.error || 'DHS status check failed' });
             }
         } catch (error) {
             setDhsMessage({ type: 'error', text: 'Failed to connect to DHS' });
         } finally {
-            setDhsLoading(false);
+            setCheckRequestLoading(false);
         }
     };
 
@@ -2775,6 +2815,13 @@ export default function CaseDetailPage() {
                                                         className="px-3 py-1.5 bg-zeno-navy border border-white/10 text-white rounded hover:bg-white/5 transition-colors text-sm flex items-center gap-2"
                                                     >
                                                         {dhsLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Check DHS'}
+                                                    </button>
+                                                    <button
+                                                        onClick={handleCheckRequestStatus}
+                                                        disabled={checkRequestLoading}
+                                                        className="px-3 py-1.5 bg-zeno-navy border border-white/10 text-white rounded hover:bg-white/5 transition-colors text-sm flex items-center gap-2"
+                                                    >
+                                                        {checkRequestLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Check Request Status'}
                                                     </button>
                                                     {(() => {
                                                         const status = caseData.dhsStatus?.toUpperCase();

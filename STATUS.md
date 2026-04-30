@@ -1,7 +1,27 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-28 (Referrer Registry, Production Emails Fix, DHS-first transfer flow)
+> Last updated: 2026-04-30 (Specific validation error messages on New Case form)
+
+---
+
+### Fix: Specific Validation Error Messages on New Case Form (2026-04-30)
+- [x] **`apps/cases/lib/schemas.ts`** — `parseBody` now uses `result.error.issues` instead of `flatten().fieldErrors`, producing fully-qualified dotted paths (e.g. `client.firstName`) instead of collapsing nested errors to the parent key (`client`)
+- [x] **`apps/cases/app/(authenticated)/cases/new/page.tsx`** — Error handling detects 400 validation responses explicitly; title changed from generic "❌ Error" to "❌ Validation Failed"; field paths mapped to human-readable labels (Surname, Full Names, Cell Number, etc.)
+- **Before**: "Error / Validation failed" — no indication of which field was wrong
+- **After**: "Validation Failed / • Surname: Last name is required" (specific per-field messages)
+
+---
+
+### Referrer Dropdown on New Case Form (2026-04-29)
+- [x] **`packages/database/prisma/schema.prisma`** — `Referrer.idNumber` made nullable (`String? @unique`), allowing referrers to be added with just a name and details filled in later
+- [x] **`migrations/20260429_referrer_optional_idnumber/migration.sql`** — `ALTER TABLE "Referrer" ALTER COLUMN "idNumber" DROP NOT NULL` — applied to production DB
+- [x] **`apps/cases/app/api/admin/referrers/route.ts`** — Relaxed `idNumber` validation to `.nullable().optional()`; duplicate-ID check skipped when `idNumber` is null
+- [x] **`apps/cases/app/api/admin/referrers/dropdown/route.ts`** — New `GET` endpoint: returns all `Referrer` records + any `REFERRER`-type sub-projects without a linked Referrer record; sorted A–Z. Used by the New Case form dropdown
+- [x] **`apps/cases/lib/schemas.ts`** — Added `referrerId: z.string().optional().nullable()` to `CaseCreateSchema`
+- [x] **`apps/cases/app/api/cases/route.ts`** — Extracts `referrerId` from POST body; if prefixed `project:{id}` (orphan sub-project) auto-creates a minimal Referrer record before linking; passes `referrer: { connect }` to Prisma case create
+- [x] **`apps/cases/app/(authenticated)/cases/new/page.tsx`** — Added `ReferrerOption` type, `referrerOptions` + `selectedReferrerId` state, fetch on mount from `/api/admin/referrers/dropdown`. Step 1 now shows **"7. Referred By (Optional)"** dropdown — always A–Z, shows "(profile pending)" for placeholder entries, amber note when selected; referrer shown in case summary. All 3 case-creation paths pass `referrerId`
+- **Behaviour**: Referrers with no ID number show as "(profile pending)" — staff can complete their details in Admin → Referrer Registry at any time. Sub-projects under "Referrals" that have no Referrer record auto-create a minimal one when a case is first linked
 
 ---
 
@@ -15,7 +35,7 @@
 - [x] **20 Vitest tests** — All passing (401/403/422/409/201/list/search/rename/delete-blocked/delete-with-cleanup)
 - **Access**: Admin / Executive / Senior Manager / Manager can view + create + edit. Only Admin or Executive can delete.
 - **Sub-project**: Each referrer auto-gets a `Project` (type `REFERRER`) under the `Referrals` ACQUISITION_SOURCE root. Name = referrer full name; renaming the referrer renames the project.
-- **Next step**: Add "Referred by" dropdown to New Case form so cases are auto-linked to a referrer's sub-project at creation
+- **Next step**: ✅ Done — "Referred by" dropdown added to New Case form (2026-04-29)
 
 ---
 
