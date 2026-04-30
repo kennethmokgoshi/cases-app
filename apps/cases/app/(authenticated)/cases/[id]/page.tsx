@@ -2800,6 +2800,10 @@ export default function CaseDetailPage() {
                                                 <div className="text-sm text-white font-medium">{caseData.dcMobile || 'Not set'}</div>
                                             </div>
                                             <div>
+                                                <div className="text-xs text-gray-400 mb-1">DC TEL</div>
+                                                <div className="text-sm text-white font-medium">{caseData.dcTel || 'Not set'}</div>
+                                            </div>
+                                            <div>
                                                 <div className="text-xs text-gray-400 mb-1">DC EMAIL</div>
                                                 <div className="text-sm text-white font-medium">{caseData.dcEmail || 'Not set'}</div>
                                             </div>
