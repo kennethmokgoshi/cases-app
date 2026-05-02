@@ -461,7 +461,7 @@ function NewCaseWithAIComponent() {
     // Check if required documents are uploaded based on mode
     const hasRequiredDocs = uploadMode === 'combined'
         ? !!uploadedFiles.allCombined
-        : (!!uploadedFiles.id || !!uploadedFiles.poa || !!uploadedFiles.creditReport || uploadedFiles.optional.length > 0);
+        : (!!uploadedFiles.id || !!uploadedFiles.poa || !!uploadedFiles.creditReport || (uploadedFiles.optional?.length || 0) > 0);
 
     // Create or find the final project based on selections
     const handleContinueToUpload = async () => {
@@ -567,7 +567,7 @@ function NewCaseWithAIComponent() {
                 if (uploadedFiles.creditReport) formDataUpload.append('file_CREDIT_REPORT', uploadedFiles.creditReport);
             }
             // Optional files still use generic 'files'
-            uploadedFiles.optional.forEach(file => formDataUpload.append('files', file));
+            (uploadedFiles.optional || []).forEach(file => formDataUpload.append('files', file));
 
             // Upload documents with progress tracking
             const result = await new Promise<any>((resolve, reject) => {
@@ -1101,7 +1101,7 @@ function NewCaseWithAIComponent() {
                                     ))}
                                 </div>
                             </div>
-                            {selectedServices.length > 0 && (
+                            {(selectedServices?.length || 0) > 0 && (
                                 <p className="text-xs text-gray-500 mt-2">
                                     {selectedServices.length} service{selectedServices.length !== 1 ? 's' : ''} selected
                                 </p>
@@ -1110,7 +1110,7 @@ function NewCaseWithAIComponent() {
                     )}
 
                     {/* Summary */}
-                    {selectedMonth && selectedServices.length > 0 && (
+                    {selectedMonth && (selectedServices?.length || 0) > 0 && (
                         <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
                             <p className="text-sm text-gray-400 mb-1">Case will be created under:</p>
                             <p className="text-white font-medium">
@@ -1258,7 +1258,7 @@ function NewCaseWithAIComponent() {
                                             Add optional files
                                         </div>
                                     </label>
-                                    {uploadedFiles.optional.length > 0 && (
+                                    {(uploadedFiles.optional?.length || 0) > 0 && (
                                         <div className="mt-2 text-xs text-left">
                                             {uploadedFiles.optional.map((f, i) => (
                                                 <div key={i} className="text-gray-300 truncate">• {f.name}</div>

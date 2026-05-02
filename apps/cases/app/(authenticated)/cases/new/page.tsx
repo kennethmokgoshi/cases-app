@@ -503,7 +503,7 @@ function NewCaseWithAIComponent() {
     // Check if required documents are uploaded based on mode
     const hasRequiredDocs = uploadMode === 'combined'
         ? !!uploadedFiles.allCombined
-        : (!!uploadedFiles.id || !!uploadedFiles.poa || uploadedFiles.creditReports.length > 0 || uploadedFiles.optional.length > 0);
+        : (!!uploadedFiles.id || !!uploadedFiles.poa || (uploadedFiles.creditReports?.length || 0) > 0 || (uploadedFiles.optional?.length || 0) > 0);
 
     // Create or find the final project based on selections
     const handleContinueToUpload = async () => {
@@ -593,7 +593,12 @@ function NewCaseWithAIComponent() {
                 cb_ncrdcNo: '', cb_debtCounsellor: '', cb_contactNo: '',
                 cb_applicationDate: '', cb_status: '', cb_statusDate: ''
             });
-            setUploadedFiles({ optional: [] });
+            // Preserve all document arrays while resetting for manual mode
+            setUploadedFiles(prev => ({ 
+                ...prev, 
+                optional: [],
+                creditReports: prev.creditReports || []
+            }));
             setStep(2);
             window.scrollTo({ top: 0, behavior: 'instant' });
         } catch (error) {
@@ -630,10 +635,10 @@ function NewCaseWithAIComponent() {
             const caseId = tempCaseData.id;
 
             // Upload any attached files (no AI analysis)
-            const hasFiles = uploadedFiles.id || uploadedFiles.poa || uploadedFiles.creditReports.length > 0 ||
+            const hasFiles = uploadedFiles.id || uploadedFiles.poa || (uploadedFiles.creditReports?.length || 0) > 0 ||
                 uploadedFiles.payslip || uploadedFiles.bankStatement || uploadedFiles.por ||
                 uploadedFiles.form16 || uploadedFiles.form171 || uploadedFiles.form172 ||
-                uploadedFiles.form177 || uploadedFiles.clearance || uploadedFiles.optional.length > 0;
+                uploadedFiles.form177 || uploadedFiles.clearance || (uploadedFiles.optional?.length || 0) > 0;
             if (hasFiles) {
                 const fd = new FormData();
                 fd.append('caseId', caseId);
@@ -707,7 +712,7 @@ function NewCaseWithAIComponent() {
             }
         } else {
             // Separate mode - require at least one file
-            if (!uploadedFiles.id && !uploadedFiles.poa && uploadedFiles.creditReports.length === 0 && uploadedFiles.optional.length === 0) {
+            if (!uploadedFiles.id && !uploadedFiles.poa && (uploadedFiles.creditReports?.length || 0) === 0 && (uploadedFiles.optional?.length || 0) === 0) {
                 alert('Please upload at least one document to proceed.');
                 return;
             }
@@ -793,7 +798,7 @@ function NewCaseWithAIComponent() {
                     if (!isCombinedUpload) {
                         if (uploadedFiles.id) docTypes.push('ID');
                         if (uploadedFiles.poa) docTypes.push('POA');
-                        if (uploadedFiles.creditReports.length > 0) docTypes.push('Credit Report');
+                        if ((uploadedFiles.creditReports?.length || 0) > 0) docTypes.push('Credit Report');
                         if (uploadedFiles.bankStatement) docTypes.push('Bank Statement');
                         if (uploadedFiles.payslip) docTypes.push('Payslip');
                     }
@@ -1720,7 +1725,7 @@ function NewCaseWithAIComponent() {
                                             <span className="text-xs text-gray-400">Add credit report(s)</span>
                                             <span className="block text-[10px] text-gray-600 mt-1">Upload one per bureau — AI identifies each automatically</span>
                                         </label>
-                                        {uploadedFiles.creditReports.length > 0 && (
+                                        {(uploadedFiles.creditReports?.length || 0) > 0 && (
                                             <div className="mt-3 space-y-1">
                                                 {uploadedFiles.creditReports.map((f, i) => (
                                                     <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-1.5">
@@ -1767,7 +1772,7 @@ function NewCaseWithAIComponent() {
                                             <span className="text-xs text-gray-400">Add optional files</span>
                                             <span className="block text-[10px] text-gray-600 mt-1">Select multiple if needed</span>
                                         </label>
-                                        {uploadedFiles.optional.length > 0 && (
+                                        {(uploadedFiles.optional?.length || 0) > 0 && (
                                             <div className="mt-3 space-y-1">
                                                 {uploadedFiles.optional.map((f, i) => (
                                                     <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-1.5">
@@ -1929,7 +1934,7 @@ function NewCaseWithAIComponent() {
                                         <span className="text-gray-400 text-sm">Add credit report(s)</span>
                                         <span className="block text-xs mt-1 text-gray-500">Upload one per bureau — AI identifies each automatically</span>
                                     </label>
-                                    {uploadedFiles.creditReports.length > 0 && (
+                                    {(uploadedFiles.creditReports?.length || 0) > 0 && (
                                         <div className="mt-3 space-y-1">
                                             {uploadedFiles.creditReports.map((f, i) => (
                                                 <div key={i} className="flex items-center justify-between bg-white/5 rounded px-3 py-1.5">
@@ -2096,7 +2101,7 @@ function NewCaseWithAIComponent() {
                                             Add optional files
                                         </div>
                                     </label>
-                                    {uploadedFiles.optional.length > 0 && (
+                                    {(uploadedFiles.optional?.length || 0) > 0 && (
                                         <div className="mt-2 text-xs text-left">
                                             {uploadedFiles.optional.map((f, i) => (
                                                 <div key={i} className="text-gray-300 truncate">• {f.name}</div>
@@ -2501,9 +2506,9 @@ function NewCaseWithAIComponent() {
                                     if (salaryVerif.consistent) {
                                         return (
                                             <p className="mt-1 text-xs text-green-400">
-                                                ✓ {salaryVerif.allValues.length >= 2
+                                                ✓ {(salaryVerif.allValues?.length || 0) >= 2
                                                     ? 'Found in Payslip and Bank Statement — dates are consistent'
-                                                    : `Found in ${salaryVerif.allValues[0]?.source}`}
+                                                    : `Found in ${salaryVerif.allValues?.[0]?.source}`}
                                             </p>
                                         );
                                     }
