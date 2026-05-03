@@ -1,0 +1,18 @@
+name: Daily Letsatsi Retention Sync
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every day
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Retention API
+        run: |
+          curl -X POST https://cases.zenowethu.co.za/api/admin/retention/letsatsi-sync \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"

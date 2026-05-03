@@ -9,7 +9,7 @@ const REQUIRED_DOCS = [
     isRequired: true,
     weight: 40,
     impactIfMissing: 'Cannot determine prescribed accounts, insurance premiums, or debt amounts. Plan cannot start.',
-    docTypes: ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT'],
+    docTypes: ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT', 'CREDIT_REPORT_OTHER', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'EXPERIAN', 'TRANSUNION', 'XDS', 'CLEAR_SCORE', 'KUDOUGH'],
   },
   {
     type: 'ID_DOCUMENT' as const,
@@ -17,7 +17,7 @@ const REQUIRED_DOCS = [
     isRequired: true,
     weight: 30,
     impactIfMissing: 'Cannot send legal letters or initiate DHS transfer without verified identity.',
-    docTypes: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT'],
+    docTypes: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'],
   },
   {
     type: 'POA' as const,
@@ -25,7 +25,7 @@ const REQUIRED_DOCS = [
     isRequired: true,
     weight: 20,
     impactIfMissing: 'Cannot legally represent client without signed POA.',
-    docTypes: ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY'],
+    docTypes: ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY', 'AUTHORIZATION'],
   },
 ];
 
@@ -34,9 +34,17 @@ const OPTIONAL_DOCS = [
     type: 'PAYSLIP' as const,
     description: 'Latest payslip for affordability assessment',
     isRequired: false,
-    weight: 10,
+    weight: 5,
     impactIfMissing: 'Affordability assessment will be less accurate.',
     docTypes: ['PAYSLIP', 'SALARY_SLIP'],
+  },
+  {
+    type: 'BANK_STATEMENT' as const,
+    description: 'Latest bank statement for financial verification (Added Advantage)',
+    isRequired: false,
+    weight: 5,
+    impactIfMissing: 'Financial verification will be less robust.',
+    docTypes: ['BANK_STATEMENT', 'BANK_CONFIRMATION', 'STATEMENT'],
   },
 ];
 

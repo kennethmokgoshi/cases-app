@@ -26,6 +26,14 @@ export class GhlService {
             return this.handleInboundMessage(payload);
         }
 
+        if (type === 'ContactCreate') {
+            return this.handleContactCreate(payload);
+        }
+
+        if (type === 'OpportunityUpdate' || type === 'OpportunityCreate') {
+            return this.handleOpportunityUpdate(payload);
+        }
+
         return { success: true };
     }
 
@@ -102,6 +110,121 @@ export class GhlService {
         }
 
         return { success: true, caseId: caseRecord.id };
+    }
+
+    private static async handleContactCreate(payload: Record<string, unknown>) {
+        const firstName = (payload.firstName as string) || 'Unknown';
+        const lastName = (payload.lastName as string) || 'Unknown';
+        const email = payload.email as string | undefined;
+        const phone = payload.phone as string | undefined;
+        const contactId = payload.id as string;
+
+        if (!contactId || (!email && !phone)) {
+            return { success: false, error: 'Missing contact info' };
+        }
+
+        // Check if client exists
+        let client = await prisma.client.findFirst({
+            where: {
+                OR: [
+                    { ghlContactId: contactId },
+                    ...(email ? [{ email }] : []),
+                    ...(phone ? [{ phone }] : []),
+                ],
+            },
+        });
+
+        if (client) {
+            // Update client with ghlContactId if missing
+            if (!client.ghlContactId) {
+                await prisma.client.update({
+                    where: { id: client.id },
+                    data: { ghlContactId: contactId },
+                });
+            }
+            return { success: true, clientId: client.id };
+        }
+
+        // Create new client
+        client = await prisma.client.create({
+            data: {
+                firstName,
+                lastName,
+                email,
+                phone,
+                ghlContactId: contactId,
+                idNumber: `GHL-${contactId.substring(0, 8)}`, // Placeholder ID if none provided
+            },
+        });
+
+        logger.info(`[GHL Webhook] Created new client ${client.id} from GHL contact ${contactId}`);
+        return { success: true, clientId: client.id };
+    }
+
+    private static async handleOpportunityUpdate(payload: Record<string, unknown>) {
+        const contactId = payload.contactId as string;
+        const status = payload.status as string; // 'open', 'won', 'lost', 'abandoned'
+        const pipelineId = payload.pipelineId as string;
+        const stageId = payload.pipelineStageId as string;
+
+        // We trigger case creation on 'won' status or specific stages
+        // In a real scenario, these IDs would be configurable
+        const isWon = status === 'won';
+        const isTargetStage = stageId === 'signed' || stageId === 'interested'; // Example stage IDs
+
+        if (!isWon && !isTargetStage) {
+            return { success: true, message: 'Opportunity not at target stage' };
+        }
+
+        const client = await prisma.client.findUnique({
+            where: { ghlContactId: contactId },
+        });
+
+        if (!client) {
+            return { success: false, error: 'Client not found for opportunity' };
+        }
+
+        // Check if case already exists
+        const existingCase = await prisma.case.findFirst({
+            where: { clientId: client.id },
+        });
+
+        if (existingCase) {
+            return { success: true, caseId: existingCase.id, message: 'Case already exists' };
+        }
+
+        // Create new case
+        const fileNumber = await this.generateFileNumber();
+        const newCase = await prisma.case.create({
+            data: {
+                fileNumber,
+                clientId: client.id,
+                status: 'NEW_LEAD',
+                acquisitionType: 'GHL',
+                leadSource: (payload.source as string) || 'GHL_OPPORTUNITY',
+                ghlOpportunityId: payload.id as string,
+                marketingData: JSON.stringify(payload),
+            },
+        });
+
+        logger.info(`[GHL Webhook] Created new case ${newCase.fileNumber} for client ${client.id}`);
+        return { success: true, caseId: newCase.id };
+    }
+
+    private static async generateFileNumber(): Promise<string> {
+        const year = new Date().getFullYear();
+        const lastCase = await prisma.case.findFirst({
+            where: { fileNumber: { startsWith: `ZDM-${year}-` } },
+            orderBy: { fileNumber: 'desc' },
+            select: { fileNumber: true },
+        });
+        let nextNumber = 1;
+        if (lastCase) {
+            const parts = lastCase.fileNumber.split('-');
+            const lastNum = parseInt(parts[2] || '0', 10);
+            nextNumber = (isNaN(lastNum) ? 0 : lastNum) + 1;
+        }
+        return `ZDM-${year}-${String(nextNumber).padStart(3, '0')}`;
     }
 
     /**

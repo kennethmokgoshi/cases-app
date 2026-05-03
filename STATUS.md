@@ -292,6 +292,7 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 - [x] **Role badges** — All 9 roles have distinct colour badges in Sidebar and Admin Users table. Added Senior Manager (violet) + Executive (yellow) buttons to Edit User modal.
 - [x] **Reports export** — CSV, Excel, and PDF export added to Reports page. API route (`/api/reports/export`) rewritten to support `format=csv|excel|pdf`. PDF uses `pdf-lib` (A4 landscape, dark theme, cyan headers, auto-pagination). Excel uses `xlsx` package.
 - [x] **OPSGENTY rebrand** — All visible "GoHighLevel"/"GHL" UI text in Admin Settings changed to "OPSGENTY". Internal variable names and API routes unchanged.
+- [x] **Opsgenty Marketing & Retention Integration** — Added auto-case creation, AI chat sync, and Letsatsi 9-month follow-up engine. GitHub Action added for daily sync.
 - [x] **Admin Documents back button** — "← Back to Admin" link added to `/admin/documents` page header.
 - [x] **NCRDC Compliance page** — Full registration tracking UI built at `/compliance`. Fields: NCRDC number, registered name, registration date, expiry date, notes. Status logic: ACTIVE / EXPIRING_SOON (≤30 days) / EXPIRED / NOT_SET with colour-coded banners.
 - [x] **NCRDC API** — `GET/POST /api/admin/compliance/ncrdc` using `SystemSettings` with prefixed keys (`ncrdc_ncrdc_number`, etc.) to match the schema's `key String @unique` constraint. Fixed upsert bug that used non-existent compound `category_key` constraint.

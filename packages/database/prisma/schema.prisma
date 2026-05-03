@@ -131,6 +131,9 @@ model Case {
   clientId                String
   referrerId              String?
   acquisitionType         String                @default("B2C")
+  leadSource              String?
+  ghlOpportunityId        String?
+  marketingData           Json?
   partnerName             String?
   partnerBranch           String?
   r350Status              String                @default("NOT_APPLICABLE")

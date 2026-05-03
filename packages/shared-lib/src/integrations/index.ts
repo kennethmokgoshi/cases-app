@@ -1,5 +1,6 @@
 export { getGHLCredentials, invalidateGHLCredentialsCache } from './ghl-config'
 export { GhlService } from './ghl-service'
+export { RetentionService } from './retention-service'
 export { getDHSCredentials, invalidateDHSCredentialsCache } from './dhs-config'
 export { getNCTCredentials, invalidateNCTCredentialsCache } from './nct-config'
 export { getXDSCredentials, invalidateXDSCredentialsCache } from './xds-config'

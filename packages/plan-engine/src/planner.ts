@@ -128,12 +128,13 @@ export async function generatePlan(caseId: string, userGuidance?: string): Promi
 
   // ── Document status — explicit present/missing summary ───────────────────
   const REQUIRED_DOC_TYPES = [
-    { label: 'Credit Report', types: ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT'] },
-    { label: 'Identity Document', types: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT'] },
-    { label: 'Power of Attorney', types: ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY'] },
+    { label: 'Credit Report', types: ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT', 'CREDIT_REPORT_OTHER', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'EXPERIAN', 'TRANSUNION', 'XDS', 'CLEAR_SCORE', 'KUDOUGH'] },
+    { label: 'Identity Document', types: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'] },
+    { label: 'Power of Attorney', types: ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY', 'AUTHORIZATION'] },
   ];
   const OPTIONAL_DOC_TYPES = [
     { label: 'Payslip', types: ['PAYSLIP', 'SALARY_SLIP'] },
+    { label: 'Bank Statement', types: ['BANK_STATEMENT', 'BANK_CONFIRMATION', 'STATEMENT'] },
   ];
 
   const uploadedDocTypes = caseRecord.documents.map((d) => d.type.toUpperCase());
