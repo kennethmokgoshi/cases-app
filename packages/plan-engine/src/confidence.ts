@@ -25,7 +25,7 @@ const REQUIRED_DOCS = [
     isRequired: true,
     weight: 20,
     impactIfMissing: 'Cannot legally represent client without signed POA.',
-    docTypes: ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY', 'AUTHORIZATION'],
+    docTypes: ['POA', 'ZENOWETHU_POA', 'ZDM_POA', 'ZDM', 'POWER_OF_ATTORNEY', 'AUTHORIZATION', 'APPLICATION_FORM'],
   },
 ];
 

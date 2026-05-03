@@ -178,7 +178,7 @@ export async function POST(request: Request) {
             // 3. Fallback to filename sniffing
             else if (nameLower.includes('id') || nameLower.includes('identity')) {
                 docType = 'ID';
-            } else if (nameLower.includes('poa') || nameLower.includes('power')) {
+            } else if (nameLower.includes('poa') || nameLower.includes('power') || nameLower.includes('zdm')) {
                 docType = 'POA';
             } else if (nameLower.includes('credit') || nameLower.includes('report') || nameLower.includes('xds') || nameLower.includes('experian') || nameLower.includes('transunion') || nameLower.includes('clearscore') || nameLower.includes('kudough') || nameLower.includes('kughdo')) {
                 docType = 'CREDIT_REPORT';

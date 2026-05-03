@@ -130,7 +130,7 @@ export async function generatePlan(caseId: string, userGuidance?: string): Promi
   const REQUIRED_DOC_TYPES = [
     { label: 'Credit Report', types: ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT', 'CREDIT_REPORT_OTHER', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'EXPERIAN', 'TRANSUNION', 'XDS', 'CLEAR_SCORE', 'KUDOUGH'] },
     { label: 'Identity Document', types: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'] },
-    { label: 'Power of Attorney', types: ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY', 'AUTHORIZATION'] },
+    { label: 'Power of Attorney', types: ['POA', 'ZENOWETHU_POA', 'ZDM_POA', 'ZDM', 'POWER_OF_ATTORNEY', 'AUTHORIZATION', 'APPLICATION_FORM'] },
   ];
   const OPTIONAL_DOC_TYPES = [
     { label: 'Payslip', types: ['PAYSLIP', 'SALARY_SLIP'] },
