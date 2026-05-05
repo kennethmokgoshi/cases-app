@@ -328,19 +328,24 @@ export default function SettingsPage() {
                 // Surface any partial errors even on a 200 response
                 if (data.errors?.length) {
                     setXdsSyncError(data.errors.join('\n'));
-                } else if (data.message) {
+                } else if (data.message && typeof data.message === 'string' && data.message.trim().length > 0) {
                     // Informational: e.g. "Already up to date" or "0 reports found"
-                    setXdsSyncError(data.message); // reuse error state as info — styled below
+                    setXdsSyncError(data.message); 
                 }
             } else {
                 // Pick the most descriptive error available
-                const errMsg =
+                let errMsg =
                     data.error ||
                     data.details ||
                     (Array.isArray(data.errors) && data.errors.length > 0
                         ? data.errors.join('\n')
                         : null) ||
                     `Sync request failed (HTTP ${res.status})`;
+                
+                // Ensure it's a string
+                if (typeof errMsg !== 'string') {
+                    errMsg = JSON.stringify(errMsg);
+                }
                 setXdsSyncError(errMsg);
             }
         } catch {
@@ -1448,7 +1453,12 @@ export default function SettingsPage() {
                             {xdsSyncResult && (
                                 <div className="mt-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg space-y-3">
                                     <div className="flex items-center justify-between">
-                                        <p className="text-sm font-semibold text-emerald-400">Sync completed</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-semibold text-emerald-400">Sync completed</p>
+                                            {xdsSyncResult.processed === 0 && (
+                                                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider rounded">No Records</span>
+                                            )}
+                                        </div>
                                         {xdsSyncResult.lastSyncedDate && (
                                             <p className="text-xs text-gray-400">
                                                 Up to date: <span className="text-white font-medium">{xdsSyncResult.lastSyncedDate}</span>
@@ -1489,10 +1499,11 @@ export default function SettingsPage() {
                             )}
 
                             {xdsSyncError && (() => {
-                                const isInfo = !xdsSyncError.toLowerCase().startsWith('fatal') &&
-                                               !xdsSyncError.toLowerCase().includes('failed') &&
-                                               !xdsSyncError.toLowerCase().includes('error') &&
-                                               !xdsSyncError.toLowerCase().includes('http 5');
+                                const errorStr = String(xdsSyncError).toLowerCase();
+                                const isInfo = !errorStr.startsWith('fatal') &&
+                                               !errorStr.includes('failed') &&
+                                               !errorStr.includes('error') &&
+                                               !errorStr.includes('http 5');
                                 return (
                                     <div className={`mt-3 p-4 rounded-lg border ${
                                         isInfo
@@ -1503,7 +1514,7 @@ export default function SettingsPage() {
                                             {isInfo ? 'Sync info' : 'Sync error'}
                                         </p>
                                         <div className="space-y-1">
-                                            {xdsSyncError.split('\n').map((line, i) => (
+                                            {String(xdsSyncError).split('\n').map((line, i) => (
                                                 <p key={i} className="text-xs text-gray-300 font-mono leading-relaxed">{line}</p>
                                             ))}
                                         </div>

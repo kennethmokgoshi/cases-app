@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         const message = result.processed === 0 && result.errors.length === 0
             ? result.datesProcessed.length === 0
                 ? 'Already up to date — no new dates to process.'
-                : 'Dates checked but no reports found in XDS history for those dates.'
+                : 'No records or zero records have been found. Zero reports were uploaded and zero XDS_LEADS were created.'
             : undefined;
 
         return NextResponse.json(
