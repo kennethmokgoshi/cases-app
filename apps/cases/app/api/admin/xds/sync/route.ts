@@ -42,7 +42,12 @@ export async function POST(request: Request) {
 
         logger.info('[XDS] Sync triggered');
 
-        const result = await runXdsSync();
+        const body = await request.json().catch(() => ({}));
+        const mode = body.mode || 'daily';
+        
+        logger.info(`[XDS] Sync mode: ${mode}`);
+
+        const result = await runXdsSync(mode);
 
         // Only treat as a hard failure if there were errors AND nothing succeeded at all.
         // Zero reports with no errors = normal "nothing to process" — still 200.

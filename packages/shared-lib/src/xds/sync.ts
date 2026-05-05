@@ -247,7 +247,7 @@ async function createNewCaseFile(
                     data: {
                         fileNumber,
                         clientId: client.id,
-                        status: 'NEW_LEAD',
+                        status: 'XDS_LEAD',
                         acquisitionType, // "Credit Bureaus XDS April 2026"
                     },
                 });
@@ -360,7 +360,7 @@ async function processDateEntries(
  *  - After each date completes → immediately saves it as the new last synced date.
  *  - If a date has no entries in XDS history → still marks it as processed (no gaps).
  */
-export async function runXdsSync(): Promise<XdsSyncResult> {
+export async function runXdsSync(mode: 'daily' | 'today' | 'full' = 'daily'): Promise<XdsSyncResult> {
     const result: XdsSyncResult = {
         processed: 0,
         newFilesCreated: 0,
@@ -412,23 +412,35 @@ export async function runXdsSync(): Promise<XdsSyncResult> {
         // ── 3. Build the ordered list of dates to process ────────────────────
         // All dates from XDS history, oldest first
         const availableDates = [...historyByDate.keys()].sort();
+        const todayKey = new Date().toISOString().split('T')[0];
 
         let datesToProcess: string[];
 
-        if (!lastSyncedDate) {
-            // First run — process everything available in history
+        if (mode === 'today') {
+            // Process ONLY today
+            datesToProcess = [todayKey].filter(d => availableDates.includes(d));
+            logger.info(`[XDS] Mode: TODAY — processing ${datesToProcess.length} date(s)`);
+        } else if (mode === 'full') {
+            // Process everything available in history
             datesToProcess = availableDates;
-            logger.info(`[XDS] First run — processing all ${datesToProcess.length} available date(s)`);
+            logger.info(`[XDS] Mode: FULL — processing all ${datesToProcess.length} available date(s)`);
         } else {
-            // Resume from day after last synced, up to and including yesterday
-            datesToProcess = availableDates.filter(d => d > lastSyncedDate && d <= yesterdayKey);
-            logger.info(
-                `[XDS] Resuming from ${lastSyncedDate} — ${datesToProcess.length} date(s) to process (up to ${yesterdayKey})`
-            );
+            // Default: Daily (resume from last synced)
+            if (!lastSyncedDate) {
+                // First run — process everything available in history
+                datesToProcess = availableDates;
+                logger.info(`[XDS] Mode: DAILY (First Run) — processing all ${datesToProcess.length} available date(s)`);
+            } else {
+                // Resume from day after last synced, up to and including yesterday
+                datesToProcess = availableDates.filter(d => d > lastSyncedDate && d <= yesterdayKey);
+                logger.info(
+                    `[XDS] Mode: DAILY — resuming from ${lastSyncedDate} up to ${yesterdayKey} (${datesToProcess.length} date(s))`
+                );
+            }
         }
 
         if (datesToProcess.length === 0) {
-            logger.info('[XDS] Already up to date — nothing to process');
+            logger.info(`[XDS] No dates to process for mode: ${mode}`);
             result.lastSyncedDate = lastSyncedDate;
             return result;
         }

@@ -37,6 +37,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         slaDays: 2,
         isOverdueState: false },
     {
+        code: 'XDS_LEAD',
+        name: 'XDS Leads',
+        category: 'INTAKE',
+        description: 'Lead automatically created from XDS credit bureau history',
+        slaEnabled: true,
+        slaDays: 2,
+        isOverdueState: false },
+    {
         code: 'TOLD_R350',
         name: 'Told about R350',
         category: 'INTAKE',

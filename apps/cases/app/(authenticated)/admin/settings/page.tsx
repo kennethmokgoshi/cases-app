@@ -298,16 +298,29 @@ export default function SettingsPage() {
         }
     };
 
-    const handleRunXdsSync = async () => {
-        const lastMsg = xdsLastSyncedDate
-            ? `Last synced: ${xdsLastSyncedDate}. The sync will resume from the next day.`
-            : 'No previous sync found. All available history will be processed.';
-        if (!confirm(`Run XDS sync now?\n\n${lastMsg}\n\nThis will log in to the XDS portal and may take several minutes.`)) return;
+    const handleRunXdsSync = async (mode: 'daily' | 'today' | 'full' = 'daily') => {
+        let msg = '';
+        if (mode === 'today') {
+            msg = "Run Today's Sync? This will only check the XDS portal for reports from today's date.";
+        } else if (mode === 'full') {
+            msg = "Sync Entire History? This will re-scan every date available in your XDS Search History. This may take a long time.";
+        } else {
+            msg = xdsLastSyncedDate
+                ? `Last synced: ${xdsLastSyncedDate}. The sync will resume from the next day.`
+                : 'No previous sync found. All available history will be processed.';
+        }
+
+        if (!confirm(`${msg}\n\nThis will log in to the XDS portal and may take several minutes.`)) return;
+        
         setXdsSyncing(true);
         setXdsSyncResult(null);
         setXdsSyncError(null);
         try {
-            const res = await fetch('/api/admin/xds/sync', { method: 'POST' });
+            const res = await fetch('/api/admin/xds/sync', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode })
+            });
             const data = await res.json();
             if (res.ok) {
                 setXdsSyncResult(data.summary);
@@ -1394,20 +1407,36 @@ export default function SettingsPage() {
                                         )}
                                     </p>
                                 </div>
-                                <button
-                                    onClick={handleRunXdsSync}
-                                    disabled={xdsSyncing}
-                                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600/20 border border-emerald-500/50 text-emerald-400 font-semibold text-sm rounded-lg hover:bg-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                                >
-                                    {xdsSyncing ? (
-                                        <>
-                                            <span className="w-4 h-4 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
-                                            Running…
-                                        </>
-                                    ) : (
-                                        <>▶ Run Sync Now</>
-                                    )}
-                                </button>
+                                <div className="flex flex-wrap gap-3">
+                                    <button
+                                        onClick={() => handleRunXdsSync('today')}
+                                        disabled={xdsSyncing}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600/20 border border-emerald-500/50 text-emerald-400 font-semibold text-sm rounded-lg hover:bg-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                    >
+                                        {xdsSyncing ? (
+                                            <>
+                                                <span className="w-4 h-4 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
+                                                Running…
+                                            </>
+                                        ) : (
+                                            <>📅 Run Today's Sync</>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => handleRunXdsSync('full')}
+                                        disabled={xdsSyncing}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-zeno-dark/50 border border-emerald-500/30 text-emerald-400/80 font-semibold text-sm rounded-lg hover:bg-emerald-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                    >
+                                        {xdsSyncing ? (
+                                            <>
+                                                <span className="w-4 h-4 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
+                                                Running…
+                                            </>
+                                        ) : (
+                                            <>📜 Sync Entire History</>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Sync result */}
