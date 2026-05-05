@@ -1472,7 +1472,7 @@ export default function SettingsPage() {
                                         <div className="pt-2 border-t border-emerald-500/20">
                                             <p className="text-xs text-gray-400 mb-1">Dates processed:</p>
                                             <div className="flex flex-wrap gap-1.5">
-                                                {xdsSyncResult.datesProcessed.map(d => (
+                                                {xdsSyncResult.datesProcessed?.map(d => (
                                                     <span key={d} className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-full">
                                                         {d}
                                                     </span>
@@ -1513,7 +1513,6 @@ export default function SettingsPage() {
                         </div>
                     </section>
                 )}
-            </div>
 
             {/* Info Box */}
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 mt-8">
