@@ -1395,9 +1395,14 @@ export default function SettingsPage() {
                                             <span className="ml-1 text-emerald-400">
                                                 Last synced: <strong>{xdsLastSyncedDate}</strong> — next run starts from <strong>{
                                                     (() => {
-                                                        const d = new Date(xdsLastSyncedDate);
-                                                        d.setDate(d.getDate() + 1);
-                                                        return d.toISOString().split('T')[0];
+                                                        try {
+                                                            const d = new Date(xdsLastSyncedDate);
+                                                            if (isNaN(d.getTime())) return 'next day';
+                                                            d.setDate(d.getDate() + 1);
+                                                            return d.toISOString().split('T')[0];
+                                                        } catch (e) {
+                                                            return 'next day';
+                                                        }
                                                     })()
                                                 }</strong>.
                                             </span>
@@ -1452,9 +1457,9 @@ export default function SettingsPage() {
                                     </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         {[
-                                            { label: 'Processed', value: xdsSyncResult.processed },
-                                            { label: 'New files', value: xdsSyncResult.newFilesCreated },
-                                            { label: 'Updated', value: xdsSyncResult.existingFilesUpdated },
+                                            { label: 'Reports Pulled', value: xdsSyncResult.processed },
+                                            { label: 'New Leads Created', value: xdsSyncResult.newFilesCreated },
+                                            { label: 'Existing Cases Patched', value: xdsSyncResult.existingFilesUpdated },
                                             { label: 'Errors', value: xdsSyncResult.errorCount },
                                         ].map(({ label, value }) => (
                                             <div key={label} className="text-center">
