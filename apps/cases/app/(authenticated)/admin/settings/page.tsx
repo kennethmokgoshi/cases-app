@@ -1297,6 +1297,9 @@ export default function SettingsPage() {
                             <div>
                                 <label className="block text-sm font-medium text-gray-300 mb-2">
                                     Portal URL
+                                    {xdsSettings.xds_portal_url && !xdsSettings.xds_portal_url.includes('online.xds.co.za') && (
+                                        <span className="ml-2 text-xs text-amber-400">⚠️ Warning: Standard XDS portal is usually https://www.online.xds.co.za</span>
+                                    )}
                                 </label>
                                 <input
                                     type="text"
