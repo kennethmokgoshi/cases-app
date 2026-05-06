@@ -6,6 +6,7 @@ import Link from 'next/link'
 type Invoice = {
   id: string
   invoiceNumber: string
+  type: 'INVOICE' | 'QUOTE'
   status: 'DRAFT' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED'
   issuedAt: string
   dueAt: string
@@ -54,6 +55,7 @@ export default function InvoicesPage() {
 
   const [search, setSearch]   = useState('')
   const [status, setStatus]   = useState('')
+  const [docType, setDocType] = useState('')
   const [from, setFrom]       = useState('')
   const [to, setTo]           = useState('')
 
@@ -61,10 +63,11 @@ export default function InvoicesPage() {
     setLoading(true)
     try {
       const params = new URLSearchParams({ page: String(p), limit: '50' })
-      if (search) params.set('search', search)
-      if (status) params.set('status', status)
-      if (from)   params.set('from', from)
-      if (to)     params.set('to', to)
+      if (search)  params.set('search', search)
+      if (status)  params.set('status', status)
+      if (docType) params.set('type', docType)
+      if (from)    params.set('from', from)
+      if (to)      params.set('to', to)
 
       const res = await fetch(`/api/finance/invoices?${params}`)
       if (!res.ok) throw new Error('Failed to fetch')
@@ -118,11 +121,11 @@ export default function InvoicesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-            Invoices
+            Invoices &amp; Quotes
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">{total} invoice{total !== 1 ? 's' : ''} total</p>
+          <p className="text-sm text-gray-500 mt-0.5">{total} document{total !== 1 ? 's' : ''} total</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={sendReminders}
             disabled={sendingReminders}
@@ -140,7 +143,7 @@ export default function InvoicesPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            New Invoice
+            New Invoice / Quote
           </Link>
         </div>
       </div>
@@ -181,6 +184,18 @@ export default function InvoicesPage() {
             />
           </div>
           <div>
+            <label className="text-xs text-gray-500 mb-1 block">Type</label>
+            <select
+              value={docType}
+              onChange={e => setDocType(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+            >
+              <option value="">All Types</option>
+              <option value="INVOICE">Invoice</option>
+              <option value="QUOTE">Quotation</option>
+            </select>
+          </div>
+          <div>
             <label className="text-xs text-gray-500 mb-1 block">Status</label>
             <select
               value={status}
@@ -218,7 +233,7 @@ export default function InvoicesPage() {
             Filter
           </button>
           <button
-            onClick={() => { setSearch(''); setStatus(''); setFrom(''); setTo('') }}
+            onClick={() => { setSearch(''); setStatus(''); setDocType(''); setFrom(''); setTo('') }}
             className="px-3 py-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
           >
             Clear
@@ -242,7 +257,8 @@ export default function InvoicesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-white/5 text-gray-500 text-xs uppercase tracking-wider">
-                  <th className="px-4 py-3 text-left">Invoice #</th>
+                  <th className="px-4 py-3 text-left">Number</th>
+                  <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-left">Client</th>
                   <th className="px-4 py-3 text-left">Issued</th>
                   <th className="px-4 py-3 text-left">Due</th>
@@ -255,6 +271,15 @@ export default function InvoicesPage() {
                 {invoices.map(inv => (
                   <tr key={inv.id} className="hover:bg-white/3 transition-colors group">
                     <td className="px-4 py-3 font-mono text-gray-300 text-xs">{inv.invoiceNumber}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        inv.type === 'QUOTE'
+                          ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      }`}>
+                        {inv.type === 'QUOTE' ? 'Quote' : 'Invoice'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       {inv.client ? (
                         <span className="text-white">{inv.client.firstName} {inv.client.lastName}</span>

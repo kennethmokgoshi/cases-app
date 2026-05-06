@@ -1,7 +1,26 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-06 (Not Requested via DHS status + B2B auto DHS check)
+> Last updated: 2026-05-06 (Invoice & Quote creation ported to Cases app)
+
+---
+
+### Invoice & Quote Creation — Cases App (2026-05-06)
+- [x] **`apps/cases/lib/invoice-pdf.ts`** — PDF generator (pdf-lib); supports both INVOICE and QUOTE types, injects linked bank account details into Payment Instructions block (bank name, account number, branch code, account name); falls back to env vars
+- [x] **`apps/cases/app/api/finance/invoices/route.ts`** — Upgraded POST handler: added `type` (INVOICE/QUOTE), `bankAccountId`, `publicToken` (UUID), correct prefix (INV-/QUO-), Zod schema with creditor+service line items
+- [x] **`apps/cases/app/api/finance/invoices/[id]/route.ts`** — GET (incl. bankAccount relation) / PATCH (incl. bankAccount connect/disconnect) / DELETE (DRAFT only)
+- [x] **`apps/cases/app/api/finance/invoices/[id]/send/route.ts`** — Sends invoice/quote via email with PDF attachment. Non-admins blocked from sending invoices without banking details; admins bypass. Uses `sendEmailWithAttachments` + `renderBrandedEmail`
+- [x] **`apps/cases/app/api/finance/invoices/[id]/pdf/route.ts`** — On-demand PDF generation with disk cache; passes bank account details to PDF generator
+- [x] **`apps/cases/app/api/finance/bank-accounts/route.ts`** — GET all active bank accounts; POST (admin only)
+- [x] **`apps/cases/app/api/finance/bank-accounts/[id]/route.ts`** — GET / PATCH / DELETE (soft-delete, admin only)
+- [x] **`apps/cases/app/(authenticated)/invoices/new/page.tsx`** — Create Invoice/Quote form: document type toggle, client search, services table (creditor + service + amount), bank account radio selector, dates/reference/notes, VAT selector. Shows warning if no bank selected
+- [x] **`apps/cases/app/(authenticated)/invoices/[id]/page.tsx`** — Invoice/Quote detail: shows banking details block, type badge, admin-aware Send button
+- [x] **`apps/cases/app/(authenticated)/invoices/[id]/SendInvoiceModal.tsx`** — Send modal; disabled for non-admins when invoice has no banking details; shows warning when admin sends without banking details
+- [x] **`apps/cases/app/(authenticated)/invoices/[id]/MarkPaidButton.tsx`** — Mark as PAID button
+- [x] **`apps/cases/app/(authenticated)/invoices/page.tsx`** — Added Type column (Invoice/Quote badge), Type filter dropdown, "New Invoice / Quote" button label
+- **Business rule**: Non-admins can only send invoices that have a bank account attached. Quotes can always be sent. Admins bypass the restriction.
+
+⚠️ **Reminder**: Create a trigger for AI to auto-request all "debt review removal" files (Form 17.W, Court Orders, etc.) for relevant cases.
 
 ---
 
