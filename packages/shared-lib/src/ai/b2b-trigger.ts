@@ -4,12 +4,17 @@
  * Fires after a B2B case is created OR after documents are uploaded to a B2B case.
  * The trigger inspects the service type and available documents, then acts:
  *
- *   - Debt Review Flag Removal + POA + ID present
+ *   - Credit Profile Enquiry / Debt Review / Debt Review Flag Removal
+ *       → Auto-run DHS check (scrapeDetailedConsumerInfo)
+ *       → If consumer found on DHS → status = NOT_REQUESTED_VIA_DHS, DC info saved
+ *       → If not found → log comment only
+ *
+ *   - Debt Review Flag Removal (additionally, if POA + ID present)
  *       → Email the DC on record requesting the file
  *       → Update status to REQUESTED_VIA_DHS (or "Requested Again via DHS" if previously requested)
  *       → Notify managers
  *
- *   - Documents missing
+ *   - Documents missing (DRR only)
  *       → Log comment; will re-run automatically when documents are uploaded
  *
  *   - Other services
@@ -20,11 +25,19 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { sendStatusChangeNotification } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
+import { scrapeDetailedConsumerInfo } from '../dhs/search';
 
 const logger = createLogger('ai/b2b-trigger');
 
 /** Service IDs as stored in Case.services (JSON array) */
 const DEBT_REVIEW_REMOVAL_ID = 'debt_review_flag_removal';
+
+/** Services that require an automatic DHS check on B2B case creation */
+const DHS_AUTO_CHECK_SERVICES = [
+    'credit_profile_enquiry',
+    'debt_review_flag_removal',
+    'debt_review_application',
+];
 
 export type B2BTriggerAction =
     | 'DHS_REQUESTED'       // First-time DHS request sent
@@ -94,18 +107,82 @@ export async function runB2BFileTrigger(
     const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
     const adminId = admin?.id ?? '';
 
-    // ── 5. Handle non-DRR services ────────────────────────────────────────────
-    if (!isDebtReviewRemoval) {
+    const requiresDhsCheck = services.some(s => DHS_AUTO_CHECK_SERVICES.includes(s));
+
+    // ── 5a. Handle non-DHS services ───────────────────────────────────────────
+    if (!requiresDhsCheck) {
         await saveAIComment(caseId, adminId, {
             service: serviceLabels,
             triggeredBy,
-            assessment: `Service "${serviceLabels}" does not require an automatic DHS request.`,
+            assessment: `Service "${serviceLabels}" does not require an automatic DHS check.`,
             action: 'No automatic action taken — please process manually.'
         });
 
         return {
             action: 'NOT_APPLICABLE',
             message: `Service "${serviceLabels}" does not require automatic DHS action`
+        };
+    }
+
+    // ── 5b. Auto DHS check for Credit Profile Enquiry / Debt Review / DRR ────
+    const idNumber = caseData.client.idNumber;
+    if (idNumber) {
+        logger.info(`[B2B_TRIGGER] Running auto DHS check for ${caseData.fileNumber} (ID: ${idNumber})`);
+        try {
+            const dhsScrape = await scrapeDetailedConsumerInfo(idNumber);
+
+            if (dhsScrape.success && dhsScrape.data) {
+                const d = dhsScrape.data;
+                const dcName = d.dcFullName || d.debtCounsellorName || d.ncrdcNo || 'Unknown DC';
+
+                await prisma.case.update({
+                    where: { id: caseId },
+                    data: {
+                        status:             'NOT_REQUESTED_VIA_DHS',
+                        dhsStatus:          'Not Requested via DHS',
+                        ncrdcNo:            d.ncrdcNo,
+                        debtCounsellorName: d.dcFullName || d.debtCounsellorName,
+                        dcTradingName:      d.dcTradingName,
+                        dcOperatingStatus:  d.dcOperatingStatus,
+                        dcMobile:           d.dcMobile,
+                        dcEmail:            d.dcEmail,
+                        consumerDhsStatus:  d.status,
+                    },
+                });
+
+                await saveAIComment(caseId, adminId, {
+                    service: serviceLabels,
+                    triggeredBy,
+                    assessment: `DHS auto-check: consumer ID ${idNumber} is linked on DHS under ${dcName}.`,
+                    action: `Status set to "Not Requested via DHS". DC info saved (NCRDC: ${d.ncrdcNo || 'N/A'}). A transfer request has not been submitted yet — please proceed via the DHS portal.`
+                });
+
+                logger.info(`[B2B_TRIGGER] ✅ ${caseData.fileNumber}: linked on DHS under ${dcName}`);
+            } else {
+                await saveAIComment(caseId, adminId, {
+                    service: serviceLabels,
+                    triggeredBy,
+                    assessment: `DHS auto-check: consumer ID ${idNumber} was not found in the DHS system.`,
+                    action: 'No status change. Please verify the ID number or check DHS manually.'
+                });
+                logger.info(`[B2B_TRIGGER] ℹ️  ${caseData.fileNumber}: not found in DHS`);
+            }
+        } catch (dhsErr) {
+            logger.error(`[B2B_TRIGGER] DHS auto-check failed for ${caseData.fileNumber}:`, dhsErr);
+            await saveAIComment(caseId, adminId, {
+                service: serviceLabels,
+                triggeredBy,
+                assessment: `DHS auto-check: could not connect to DHS portal.`,
+                action: 'Please run the DHS check manually from the case page.'
+            });
+        }
+    }
+
+    // ── 5c. If not Debt Review Removal, we are done after the DHS check ───────
+    if (!isDebtReviewRemoval) {
+        return {
+            action: 'NOT_APPLICABLE',
+            message: `DHS auto-check completed for "${serviceLabels}" — no transfer request required`
         };
     }
 
@@ -337,8 +414,9 @@ async function notifyManagers(
 const SERVICE_LABELS: Record<string, string> = {
     admin_order_removal: 'Administration Order Removal',
     admin_order_application: 'Administration Order Application',
+    credit_profile_enquiry: 'Credit Profile Enquiry',
     debt_review_flag_removal: 'Debt Review Flag Removal',
-    debt_review_application: 'Debt Review Application',
+    debt_review_application: 'Debt Review',
     payment_profile_update: 'Payment Profile Update',
     paid_accounts_update: 'Paid Accounts Update',
     prescription_dispute: 'Prescription Dispute',

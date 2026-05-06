@@ -5,7 +5,9 @@ import { getStatusByCode } from '@zenowethu/shared-lib';
 import {
     sendStatusChangeNotification,
     sendInternalNotification,
-    findManagersForCase
+    findManagersForCase,
+    getCommissionStageForCaseStatus,
+    isCommissionEligible,
 } from '@zenowethu/shared-lib';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { CaseStatusSchema, parseBody } from '@/lib/schemas';
@@ -82,6 +84,27 @@ export async function PATCH(
                 }
             }
         });
+
+        // --- REFERRER COMMISSION STAGE SYNC ---
+        if (currentCase.referrerId) {
+            const commissionStage = getCommissionStageForCaseStatus(newStatus);
+            if (commissionStage) {
+                const eligible = isCommissionEligible(commissionStage);
+                await prisma.referrerCommission.upsert({
+                    where: { caseId: id },
+                    create: {
+                        referrerId: currentCase.referrerId,
+                        caseId: id,
+                        stage: commissionStage,
+                        isEligible: eligible,
+                    },
+                    update: {
+                        stage: commissionStage,
+                        isEligible: eligible,
+                    },
+                });
+            }
+        }
 
         // Send notification (async, don't block response)
         if (!skipNotification) {

@@ -113,6 +113,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
 
     // DHS PROCESS
     {
+        code: 'NOT_REQUESTED_VIA_DHS',
+        name: 'Not Requested via DHS',
+        category: 'DHS_PROCESS',
+        description: 'ID linked on DHS — consumer found under a debt counsellor, but no transfer request submitted yet',
+        slaEnabled: true,
+        slaDays: 3,
+        isOverdueState: false },
+    {
         code: 'REQUESTED_VIA_DHS',
         name: 'Requested via DHS',
         category: 'DHS_PROCESS',

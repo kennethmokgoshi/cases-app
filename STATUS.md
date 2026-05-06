@@ -1,7 +1,32 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-04-30 (Specific validation error messages on New Case form)
+> Last updated: 2026-05-06 (Not Requested via DHS status + B2B auto DHS check)
+
+---
+
+### Not Requested via DHS Status + B2B Auto DHS Check (2026-05-06)
+- [x] **`packages/shared-lib/src/statuses/statuses.ts`** — Added `NOT_REQUESTED_VIA_DHS` ("Not Requested via DHS") workflow status in `DHS_PROCESS` category; SLA 3 days. Placed before `REQUESTED_VIA_DHS`. Meaning: consumer's ID was checked on DHS and found linked to a debt counsellor, but no transfer request has been submitted yet.
+- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — `auto_fill` action: when consumer IS found on DHS (`anyDataFound = true`), now also sets `status: 'NOT_REQUESTED_VIA_DHS'` and `dhsStatus: 'Not Requested via DHS'` on the case (previously only saved DC fields, no status update)
+- [x] **`packages/shared-lib/src/ai/b2b-trigger.ts`** — Expanded B2B trigger: now auto-runs `scrapeDetailedConsumerInfo` (DHS check) for B2B cases where required services include **Credit Profile Enquiry**, **Debt Review Flag Removal**, or **Debt Review**. If consumer found → sets `NOT_REQUESTED_VIA_DHS` + saves DC info + logs AI comment. If not found → logs comment only. DRR-specific email-DC logic still runs after the DHS check if applicable.
+- **Rule**: `NOT_REQUESTED_VIA_DHS` = DHS was checked, ID is linked (consumer under a DC), but Zenowethu has not yet submitted a transfer request. Staff should proceed with the DHS transfer request.
+- **Trigger services**: `credit_profile_enquiry`, `debt_review_flag_removal`, `debt_review_application`
+
+---
+
+### Referrer Commission Tracking System (2026-05-06)
+- [x] **`packages/database/prisma/schema.prisma`** — Added `ReferrerCommissionStage` enum (13 stages) + `ReferrerCommission` model (one record per referred case); added `commissions` relation on `Referrer`, `referrerCommission` relation on `Case`, `commissionsPaid` relation on `User`
+- [x] **Schema applied** via `prisma db push` (shadow DB had pre-existing ConsumerAccount issue blocking `migrate dev`)
+- [x] **`packages/shared-lib/src/referrer-commission.ts`** — `getCommissionStageForCaseStatus()`, `isCommissionEligible()`, `COMMISSION_STAGE_LABELS`, `COMMISSION_STAGE_ORDER` — maps any case status code to a commission stage and flags payable stages (DEPOSIT_PAID, PAYING_INSTALMENTS, UP_TO_DATE, SETTLED)
+- [x] **`apps/cases/app/api/cases/[id]/status/route.ts`** — Auto-upserts `ReferrerCommission` record on every status change for cases with a referrerId; sets `isEligible` flag automatically
+- [x] **`apps/cases/app/api/admin/referrers/[id]/commission/route.ts`** — `GET` returns all commissions for one referrer with summary (total, eligible, paid, amounts owed/paid)
+- [x] **`apps/cases/app/api/admin/referrers/[id]/commission/[commissionId]/route.ts`** — `PATCH` to update stage, amount, payment ref, notes, isPaid; records who marked it paid
+- [x] **`apps/cases/app/api/admin/commissions/route.ts`** — Global commission list with filters (isPaid, isEligible, referrerId, search); ordered by eligibility then unpaid first
+- [x] **`apps/cases/app/(authenticated)/admin/referrers/[id]/page.tsx`** — Referrer detail page: banking info, 6-stat summary, per-client commission table, quick "Mark Paid" button, full edit drawer (stage, amount, payment ref, notes, paid toggle)
+- [x] **`apps/cases/app/(authenticated)/admin/commissions/page.tsx`** — Global commissions overview: filter by eligibility/payment status/search, quick Mark Paid, links to referrer detail pages
+- [x] **`apps/cases/app/(authenticated)/admin/referrers/page.tsx`** — Added "Commission" link button per row → navigates to referrer detail page
+- **Commission Rule**: Eligible when stage is Deposit Paid, Paying Instalments (debit order through), Up to Date, or Settled. Records auto-created/updated on every case status change.
+- **Stage order**: New Lead → Admin Fee Paid → Quote Submitted → Quote Accepted → Deposit Paid → Paying Instalments → Up to Date → Arrears 1–4+ months → Handed Over → Settled
 
 ---
 

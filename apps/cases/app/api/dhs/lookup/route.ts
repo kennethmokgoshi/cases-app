@@ -321,7 +321,7 @@ export async function POST(request: Request) {
                         }
                     }
 
-                    // Persist to case
+                    // Persist to case — consumer IS linked on DHS → Not Requested via DHS
                     if (caseId) {
                         await prisma.case.update({
                             where: { id: caseId },
@@ -335,6 +335,8 @@ export async function POST(request: Request) {
                                 dcMobile:          data.dcMobile,
                                 dcEmail:           data.dcEmail,
                                 lastKnownEmail:    lastUsedEmail,
+                                status:            'NOT_REQUESTED_VIA_DHS',
+                                dhsStatus:         'Not Requested via DHS',
                             },
                         });
                     }

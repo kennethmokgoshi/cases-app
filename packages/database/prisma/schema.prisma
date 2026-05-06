@@ -55,6 +55,22 @@ model ProjectMember {
 // REFERRER — External persons who refer clients to Zenowethu
 // ============================================================
 
+enum ReferrerCommissionStage {
+  NEW_LEAD
+  ADMIN_FEE_PAID
+  QUOTE_SUBMITTED
+  QUOTE_ACCEPTED
+  DEPOSIT_PAID
+  PAYING_INSTALMENTS
+  UP_TO_DATE
+  ARREARS_1M
+  ARREARS_2M
+  ARREARS_3M
+  ARREARS_4M_PLUS
+  HANDED_OVER
+  SETTLED
+}
+
 model Referrer {
   id                String    @id @default(cuid())
   firstName         String
@@ -83,6 +99,7 @@ model Referrer {
   project           Project?  @relation(fields: [projectId], references: [id])
 
   cases             Case[]
+  commissions       ReferrerCommission[]
   isActive          Boolean   @default(true)
   notes             String?
   createdById       String?
@@ -93,6 +110,35 @@ model Referrer {
   @@index([lastName])
   @@index([idNumber])
   @@index([isActive])
+}
+
+// One commission record per case linked to a referrer.
+// Stage auto-advances when case status changes.
+// Commission becomes eligible at DEPOSIT_PAID, PAYING_INSTALMENTS, UP_TO_DATE, or SETTLED.
+model ReferrerCommission {
+  id               String                  @id @default(cuid())
+  referrerId       String
+  referrer         Referrer                @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+  caseId           String                  @unique
+  case             Case                    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  stage            ReferrerCommissionStage @default(NEW_LEAD)
+  isEligible       Boolean                 @default(false)  // true when stage is payable
+  commissionAmount Decimal?                                 // manually set by staff
+  isPaid           Boolean                 @default(false)
+  paidAt           DateTime?
+  paidById         String?
+  paidBy           User?                   @relation("CommissionPaidBy", fields: [paidById], references: [id])
+  paymentRef       String?                                  // EFT / payment reference
+
+  notes            String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([referrerId])
+  @@index([isPaid])
+  @@index([isEligible])
+  @@index([stage])
 }
 
 model Client {
@@ -229,6 +275,7 @@ model Case {
   debtReviewDocuments     DebtReviewDocument[]
   assignments             CaseAssignment[]
   followers               CaseFollower[]
+  referrerCommission      ReferrerCommission?
 
   @@index([status])
   @@index([isOverdue])
@@ -346,6 +393,7 @@ model User {
   grantedDocumentAccess     DocumentAccessGrant[] @relation("DocumentAccessGranter")
   dccpCredential            DCCPCredential?
   createdReferrers          Referrer[]          @relation("ReferrerCreator")
+  commissionsPaid           ReferrerCommission[] @relation("CommissionPaidBy")
 }
 
 model CaseAssignment {

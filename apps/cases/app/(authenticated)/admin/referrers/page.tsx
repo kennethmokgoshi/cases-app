@@ -317,6 +317,9 @@ export default function ReferrersPage() {
                                 </td>
                                 <td className="py-3 px-4">
                                     <div className="flex items-center gap-2 justify-end">
+                                        <Link href={`/admin/referrers/${r.id}`} className="text-zeno-cyan hover:text-zeno-cyan/80 text-xs px-2 py-1 rounded hover:bg-zeno-cyan/10 transition-colors">
+                                            Commission
+                                        </Link>
                                         <button onClick={() => openEdit(r)} className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-white/5">
                                             Edit
                                         </button>
