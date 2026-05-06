@@ -35,7 +35,7 @@ export async function identifyDocumentPages(
         } else {
             try {
                 logger.info('📄 Calling extractTextFromPdf for identification...');
-                extractedText = await extractTextFromPdf(base64Pdf, 25);
+                extractedText = await extractTextFromPdf(base64Pdf, 0); // 0 = unlimited as requested
                 logger.info(`📄 Text extraction returned ${extractedText.length} characters.`);
             } catch (e) {
                 logger.warn({ err: e }, '⚠️ Text extraction failed for identification');
@@ -48,13 +48,13 @@ export async function identifyDocumentPages(
                 content: [
                     {
                         type: 'text',
-                        text: IDENTIFICATION_PROMPT.replace('{{EXTRACTED_TEXT}}', extractedText ? extractedText.substring(0, 50000) : '(Text extraction skipped/failed - rely on images below)')
+                        text: IDENTIFICATION_PROMPT.replace('{{EXTRACTED_TEXT}}', extractedText ? extractedText.substring(0, 80000) : '(Text extraction skipped/failed - rely on images below)')
                     }
                 ]
             }
         ];
 
-        const imageLimit = isLargeFile ? 5 : 10;
+        const imageLimit = isLargeFile ? 5 : 15;
 
         if (!extractedText || isLargeFile) {
             logger.warn(`⚠️ Using image-based identification (Limit: ${imageLimit} pages).`);
@@ -90,7 +90,7 @@ export async function identifyDocumentPages(
         const response = await openai.chat.completions.create({
             model: 'gpt-4.1',
             messages: messages,
-            max_tokens: 1000,
+            max_tokens: 4000,
             response_format: { type: "json_object" }
         });
 
