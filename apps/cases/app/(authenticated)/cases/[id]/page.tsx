@@ -21,6 +21,7 @@ import { AIPlanTab } from '@zenowethu/ui';
 import { DebtReviewTab } from './DebtReviewTab';
 import { SavingsAuditCard } from './SavingsAuditCard';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
+import SendQuoteModal from './SendQuoteModal';
 
 // Client-side logger (avoid importing createLogger from shared-lib)
 const createLogger = (name: string) => ({
@@ -221,7 +222,10 @@ export default function CaseDetailPage() {
     const params = useParams();
     const router = useRouter();
     const { data: session } = useSession();
-    const isAdmin = session?.user?.isAdmin === true;
+    const isAdmin     = session?.user?.isAdmin === true;
+    const isExecutive = session?.user?.isExecutive === true;
+    const isFinance   = (session?.user as any)?.role?.toUpperCase() === 'FINANCE';
+    const canCreateInvoice = isAdmin || isExecutive || isFinance;
 
     const [caseData, setCaseData] = useState<CaseDetail | null>(null);
     const [loading, setLoading] = useState(true);
@@ -304,7 +308,8 @@ export default function CaseDetailPage() {
     const [isEditServicesOpen, setIsEditServicesOpen] = useState(false);
     const [isManageAssignmentsOpen, setIsManageAssignmentsOpen] = useState(false);
     const [showCompareModal, setShowCompareModal] = useState(false);
-    const [isPoaModalOpen, setIsPoaModalOpen] = useState(false);
+    const [isPoaModalOpen, setIsPoaModalOpen]     = useState(false);
+    const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
     const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN' | 'DEBT_REVIEW'>('ACTIVITY');
     // DC pre-send confirmation
     const [dcConfirmPending, setDcConfirmPending] = useState<'FILE_REQUEST' | 'INVOICE_REQUEST' | null>(null);
@@ -1555,6 +1560,20 @@ export default function CaseDetailPage() {
                                     </button>
                                 );
                             })()}
+                            {/* Send Quote / Invoice — finance, executive, admin only */}
+                            {canCreateInvoice && (
+                                <button
+                                    onClick={() => setIsQuoteModalOpen(true)}
+                                    className="px-3 py-1.5 rounded text-sm flex items-center gap-2 transition-colors bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                                    title="Create Invoice or Quotation for this client"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Send Quote
+                                </button>
+                            )}
+
                             {isAdmin && (
                                 <button
                                     onClick={() => setShowDeleteConfirm(true)}
@@ -3431,6 +3450,19 @@ export default function CaseDetailPage() {
                     refreshCaseData();
                 }}
             />
+
+            {/* Send Quote / Invoice Modal */}
+            {caseData && canCreateInvoice && (
+                <SendQuoteModal
+                    isOpen={isQuoteModalOpen}
+                    onClose={() => setIsQuoteModalOpen(false)}
+                    caseId={caseData.id}
+                    clientId={caseData.client.id}
+                    clientName={`${caseData.client.firstName} ${caseData.client.lastName}`.trim()}
+                    clientEmail={caseData.client.email}
+                    services={caseData.services}
+                />
+            )}
 
             {/* Send POA Modal */}
             {caseData && (

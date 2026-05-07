@@ -1,7 +1,7 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-06 (Invoice & Quote creation ported to Cases app)
+> Last updated: 2026-05-07 (Fix: referral sub-sub-projects now appear in branch/subproject dropdown)
 
 ---
 
@@ -20,7 +20,26 @@
 - [x] **`apps/cases/app/(authenticated)/invoices/page.tsx`** — Added Type column (Invoice/Quote badge), Type filter dropdown, "New Invoice / Quote" button label
 - **Business rule**: Non-admins can only send invoices that have a bank account attached. Quotes can always be sent. Admins bypass the restriction.
 
+### Send Quote / Invoice from Case Detail Page (2026-05-07)
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/SendQuoteModal.tsx`** — Self-contained modal: QUOTE/INVOICE toggle, services table (pre-filled from case services), bank account selector, dates/notes, "Create" and "Create & Send" buttons. On create: shows success + optional email step. On send: calls `/api/finance/invoices/[id]/send`
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — Added `canCreateInvoice` role check (admin OR executive OR FINANCE role), `isQuoteModalOpen` state, **"Send Quote" button** in top header bar (next to Send POA), `SendQuoteModal` mount at page bottom
+- **Access rule**: Button visible to `isAdmin`, `isExecutive`, or `role === 'FINANCE'` only. Hidden from regular members.
+- **Flow**: Click "Send Quote" → modal opens pre-filled with case client + services → set amounts → choose bank → "Create" (saves as draft) or "Create & Send" (saves + emails PDF)
+
+### Fix: Referral Sub-Sub-Projects in Branch/Subproject Dropdown (2026-05-07)
+- [x] **`apps/cases/app/(authenticated)/cases/new/page.tsx`** — Added `getDescendants()` BFS helper + `allFlatProjects` state; `fetchProjects` now flattens the full hierarchy/independent list into a flat map; `subprojects` now includes ALL descendants of the selected parent (not just direct children), filtered to exclude YEAR/MONTH/ROOT/ACQUISITION_SOURCE types
+- [x] **`apps/cases/app/(authenticated)/partner/cases/new/page.tsx`** — Same changes applied
+- **Behaviour**: Referral sub-projects that themselves have children now surface in the dropdown flat list. The sidebar still shows the full hierarchy.
+
 ⚠️ **Reminder**: Create a trigger for AI to auto-request all "debt review removal" files (Form 17.W, Court Orders, etc.) for relevant cases.
+
+---
+
+### Fix: Document Extraction Broken by Unlimited Puppeteer Page Scan (2026-05-07)
+- [x] **Root cause**: Commit `c734602` changed `extractTextFromPdf(base64Pdf, 25)` → `extractTextFromPdf(base64Pdf, 0)` (unlimited pages). When `maxPages = 0`, the PDF optimization step is skipped and Puppeteer tries to process every page of the combined PDF. A 30–80 page combined document causes Puppeteer to hang/crash, killing extraction before the AI is ever called.
+- [x] **`packages/shared-lib/src/openai/pdf-process.ts`** — Reverted `maxPages` to **30** (slightly more than the previous 25, giving better coverage without Puppeteer timeout risk)
+- [x] **Secondary fix**: The identification step was using the hardcoded legacy `getOpenAI()` client regardless of the admin-configured AI provider. Changed to `getAiClientForTask('document_analysis')` so it correctly routes to whichever model is configured for document analysis.
+- **Impact**: This fixes the entire downstream pipeline — email documents, DHS requests, quote generation — all of which depend on extracted document data.
 
 ---
 

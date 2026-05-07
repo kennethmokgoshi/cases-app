@@ -435,19 +435,31 @@ export async function POST(request: Request) {
         if (existingClientWithId) {
             const allCases = existingClientWithId.cases;
 
+            // Check if special role (Employee, Referrer, or B2B Partner)
+            let isSpecialRole = false;
+            if (client.idNumber) {
+                const [employee, referrer, b2bUser] = await Promise.all([
+                    prisma.user.findFirst({ where: { idNumber: client.idNumber, userType: 'STAFF' }, select: { id: true } }),
+                    prisma.referrer.findFirst({ where: { idNumber: client.idNumber }, select: { id: true } }),
+                    prisma.user.findFirst({ where: { idNumber: client.idNumber, userType: 'B2B_PARTNER' }, select: { id: true } })
+                ]);
+                isSpecialRole = !!(employee || referrer || b2bUser);
+            }
+
             if (allCases.length === 0) {
                 // Orphaned client — the case was deleted but the client record wasn't.
-                // Allow creation by connecting to the existing client rather than creating a duplicate.
                 existingClientId = existingClientWithId.id;
                 logger.info(`[CASE_CREATE] Reusing orphaned client ${existingClientId} (no linked cases)`);
             } else {
                 const nonAdminOnlyCases = allCases.filter(c => !c.isAdminOnly);
 
-                if (nonAdminOnlyCases.length === 0 && !isAdminCreator) {
-                    // All existing cases are admin-only and caller is not an admin.
-                    // Non-admin users cannot see those cases, so allow them to create their own.
+                // Allow reuse if:
+                // 1. Caller is an ADMIN (admins should always be able to link to existing clients)
+                // 2. Individual is an Employee/Referrer/B2B Partner
+                // 3. No visible cases exist for a non-admin caller
+                if (isAdminCreator || isSpecialRole || (nonAdminOnlyCases.length === 0 && !isAdminCreator)) {
                     existingClientId = existingClientWithId.id;
-                    logger.info(`[CASE_CREATE] Reusing client ${existingClientId} (only admin-only shadow cases exist)`);
+                    logger.info(`[CASE_CREATE] Reusing client ${existingClientId} (Role: ${isSpecialRole ? 'Special' : isAdminCreator ? 'Admin' : 'None'}, Cases: ${allCases.length})`);
                 } else {
                     // Visible cases exist — block with a clear duplicate error.
                     const suggestedIdNumber = `DRL${client.idNumber}`;

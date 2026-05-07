@@ -187,6 +187,12 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const session = await auth();
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const isAdmin = session.user.isAdmin === true;
+
         const { id } = await params;
         const parsed = parseBody(CasePatchSchema, await request.json());
         if (!parsed.success) return parsed.response;
@@ -265,8 +271,26 @@ export async function PATCH(
             });
 
             if (existingByIdNumber) {
-                if (forceUpdate) {
-                    logger.info('🔄 Force Update Triggered for Duplicate ID:', client.idNumber);
+                // Determine if we should allow merging automatically
+                let isSpecialRole = false;
+                if (client.idNumber) {
+                    const [employee, referrer, b2bUser] = await Promise.all([
+                        prisma.user.findFirst({ where: { idNumber: client.idNumber, userType: 'STAFF' }, select: { id: true } }),
+                        prisma.referrer.findFirst({ where: { idNumber: client.idNumber }, select: { id: true } }),
+                        prisma.user.findFirst({ where: { idNumber: client.idNumber, userType: 'B2B_PARTNER' }, select: { id: true } })
+                    ]);
+                    isSpecialRole = !!(employee || referrer || b2bUser);
+                }
+
+                // Check if existing client has active cases
+                const existingCases = await prisma.case.findMany({
+                    where: { clientId: existingByIdNumber.id },
+                    select: { status: true }
+                });
+                const hasActiveCases = existingCases.some(c => !['COMPLETED', 'CLOSED', 'CANCELLED', 'REJECTED', 'QUOTE_REJECTED', 'NOT_POTENTIAL', 'FEES_TOO_HIGH', 'LEGAL_FEES_WITHDREW', 'AFTERCARE_FEES_WITHDREW', 'PARKED'].includes(c.status));
+
+                if (forceUpdate || isAdmin || isSpecialRole || !hasActiveCases) {
+                    logger.info(`🔄 Auto-Merge/Force Update Triggered for Duplicate ID: ${client.idNumber} (Reason: ${forceUpdate ? 'Manual' : isAdmin ? 'Admin' : isSpecialRole ? 'Special Role' : 'No Active Cases'})`);
 
                     // 1. Update Existing Client
                     await (prisma.client.update as any)({

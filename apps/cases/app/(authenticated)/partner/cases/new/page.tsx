@@ -17,9 +17,28 @@ type Project = {
     name: string;
     type: string;
     clientType?: string | null;  // B2B or B2C
+    parentId?: string | null;
     parent_id?: string | null;
     children?: Project[];
 };
+
+function getDescendants(parentId: string, allProjects: Project[]): Project[] {
+    const result: Project[] = [];
+    const queue = [parentId];
+    const visited = new Set<string>();
+    while (queue.length > 0) {
+        const pid = queue.shift()!;
+        if (visited.has(pid)) continue;
+        visited.add(pid);
+        for (const p of allProjects) {
+            if (p.parentId === pid && !visited.has(p.id)) {
+                result.push(p);
+                queue.push(p.id);
+            }
+        }
+    }
+    return result;
+}
 
 type ExtractedData = {
     validation?: {
@@ -137,6 +156,7 @@ function NewCaseWithAIComponent() {
 
     const [selectedParentId, setSelectedParentId] = useState('');
     const [selectedSubprojectId, setSelectedSubprojectId] = useState('');
+    const [allFlatProjects, setAllFlatProjects] = useState<Project[]>([]);
     const [selectedYear, setSelectedYear] = useState(String(currentYearVal));
     const [selectedMonth, setSelectedMonth] = useState(currentMonthVal);
     const [finalProjectId, setFinalProjectId] = useState('');
@@ -358,9 +378,12 @@ function NewCaseWithAIComponent() {
 
     // Get selected parent project and its children
     const selectedParent = parentProjects.find(p => p.id === selectedParentId);
-    const subprojects = selectedParent?.children?.filter(c =>
-        c.type === 'BRANCH' || c.type === 'FOLDER'
-    ) || [];
+    const subprojects = selectedParentId
+        ? getDescendants(selectedParentId, allFlatProjects).filter(c =>
+            c.type !== 'YEAR' && c.type !== 'MONTH' &&
+            c.type !== 'ROOT' && c.type !== 'ACQUISITION_SOURCE'
+        )
+        : [];
 
     // Helper functions to get partner and branch names from selected projects
     const getPartnerNameFromProject = (): string | null => {
@@ -405,6 +428,22 @@ function NewCaseWithAIComponent() {
                 const uniqueProjects = Array.from(new Map(mainProjects.map(p => [p.id, p])).values());
 
                 setParentProjects(uniqueProjects);
+
+                // Build a flat project list for recursive descendant lookups
+                function flattenTree(node: any, result: any[]) {
+                    result.push(node);
+                    if (node.children) node.children.forEach((c: any) => flattenTree(c, result));
+                }
+                const flat: Project[] = [];
+                if (data.hierarchy) {
+                    flattenTree(data.hierarchy, flat);
+                }
+                if (data.independent) {
+                    data.independent.forEach((p: any) => {
+                        if (!flat.some(f => f.id === p.id)) flat.push(p);
+                    });
+                }
+                setAllFlatProjects(flat);
 
                 // Auto-select first B2B partner if no partnerIdParam and acquisitionType is B2B
                 if (!partnerIdParam && uniqueProjects.length > 0) {

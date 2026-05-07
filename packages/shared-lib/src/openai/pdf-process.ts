@@ -2,7 +2,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { convertPdfToImages, extractTextFromPdf } from '../pdf-image';
 import { logger } from '../logger';
-import { getOpenAI } from './client';
+import { getAiClientForTask } from '../ai/provider-client';
 import { IDENTIFICATION_PROMPT } from './prompts';
 
 /**
@@ -35,7 +35,7 @@ export async function identifyDocumentPages(
         } else {
             try {
                 logger.info('📄 Calling extractTextFromPdf for identification...');
-                extractedText = await extractTextFromPdf(base64Pdf, 0); // 0 = unlimited as requested
+                extractedText = await extractTextFromPdf(base64Pdf, 30); // 30-page cap prevents Puppeteer timeout on large combined PDFs
                 logger.info(`📄 Text extraction returned ${extractedText.length} characters.`);
             } catch (e) {
                 logger.warn({ err: e }, '⚠️ Text extraction failed for identification');
@@ -86,9 +86,9 @@ export async function identifyDocumentPages(
 
         onProgress?.('🤖 Grouping and preparing documents for AI...', 20);
 
-        const openai = getOpenAI();
+        const { client: openai, model: identModel } = await getAiClientForTask('document_analysis');
         const response = await openai.chat.completions.create({
-            model: 'gpt-4.1',
+            model: identModel,
             messages: messages,
             max_tokens: 4000,
             response_format: { type: "json_object" }
