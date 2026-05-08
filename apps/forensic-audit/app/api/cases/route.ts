@@ -251,7 +251,7 @@ export async function POST(request: Request) {
         }
 
         // Check for duplicate ID Number
-        const existingClientWithId = await prisma.client.findUnique({
+        const existingClientWithId = await prisma.client.findFirst({
             where: { idNumber: client.idNumber },
             select: { id: true, firstName: true, lastName: true }
         });
@@ -597,6 +597,15 @@ Please review and process this referral.`;
                     logger.error(`❌ Failed to notify managers for ${newCase.id}:`, notifyError);
                 }
             })();
+        }
+
+        // Fire B2B AI trigger (async, non-blocking — does not affect response time)
+        if (newCase.acquisitionType === 'B2B') {
+            import('@zenowethu/shared-lib/src/ai/b2b-trigger').then(({ runB2BFileTrigger }) => {
+                runB2BFileTrigger(newCase.id, 'CASE_CREATED').catch(err => {
+                    logger.error(`❌ B2B trigger failed for ${newCase.id}:`, err);
+                });
+            });
         }
 
         return NextResponse.json(newCase, { status: 201 });

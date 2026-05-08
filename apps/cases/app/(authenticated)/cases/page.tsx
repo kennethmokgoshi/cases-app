@@ -320,7 +320,15 @@ function CasesContent() {
                                         <td className="px-4 py-4 text-gray-500 font-mono text-xs">{(currentPage-1)*ITEMS_PER_PAGE + i + 1}</td>
                                         <td className="px-4 py-4 text-zeno-cyan font-bold"><Link href={`/cases/${c.id}`}>{c.fileNumber}</Link></td>
                                         <td className="px-4 py-4">{c.client.firstName} {c.client.lastName}</td>
-                                        <td className="px-4 py-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.status === 'COMPLETED' ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'}`}>{sInfo.name}</span></td>
+                                        <td className="px-4 py-4">
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                c.status === 'COMPLETED' ? 'bg-green-500/20 text-green-300' : 
+                                                c.status === 'NOT_LINKED' ? 'bg-red-500/20 text-red-300 border border-red-500/30 shadow-[0_0_8px_rgba(239,68,68,0.3)]' :
+                                                'bg-blue-500/20 text-blue-300'
+                                            }`}>
+                                                {sInfo.name}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-4">
                                             {(() => {
                                                 try {

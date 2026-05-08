@@ -113,12 +113,11 @@ export async function POST(request: Request) {
                     ? 'Requested Again via DHS'
                     : 'Requested via DHS';
 
-                // Rule 1: No Records Found -> Not Requested
+                // Rule 1: No Records Found -> NOT_LINKED
                 if (!result.found) {
-                    updateData.dhsStatus = 'Not Requested';
-                    const missingLabel = wasPreviouslyRequestedViaDHS
-                        ? 'DHS Check: File was previously requested but no records found.'
-                        : 'DHS Check: Not requested.';
+                    updateData.dhsStatus = 'NOT_LINKED';
+                    updateData.status = 'NOT_LINKED'; // Update main workflow status
+                    const missingLabel = 'DHS Check: This ID number was not found on the NCR Debt Help System. Please verify the ID number is correct.';
                     comments.push(missingLabel);
                 }
                 // Rules 2-10: Records Found
@@ -271,8 +270,20 @@ export async function POST(request: Request) {
             if (!scrapeResult.success || !scrapeResult.data) {
                 result = {
                     success: false,
-                    message: scrapeResult.message || 'DHS portal did not return data. The consumer may not be registered in the NCR Debt Help System, or the portal may be temporarily unavailable.',
+                    status: 'NOT_LINKED',
+                    message: scrapeResult.message || 'This ID number was not found on the NCR Debt Help System. Please verify the ID number is correct.',
                 };
+
+                // Also update case status to NOT_LINKED in DB if caseId exists
+                if (caseId) {
+                    await prisma.case.update({
+                        where: { id: caseId },
+                        data: { 
+                            status: 'NOT_LINKED',
+                            dhsStatus: 'NOT_LINKED'
+                        }
+                    });
+                }
             } else {
                 const data = scrapeResult.data;
 
@@ -382,6 +393,28 @@ export async function POST(request: Request) {
                     }
                 });
                 logger.info(`[DHS API] Updated case ${caseId} with DHS info`);
+            } else if (!result.found && caseId) {
+                // Automation: If search returns no records, set status to NOT_LINKED
+                await prisma.case.update({
+                    where: { id: caseId },
+                    data: {
+                        status: 'NOT_LINKED',
+                        dhsStatus: 'NOT_LINKED'
+                    }
+                });
+
+                // Log system comment
+                const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
+                if (admin) {
+                    await prisma.caseComment.create({
+                        data: {
+                            caseId,
+                            userId: admin.id,
+                            content: `[SYSTEM] DHS Search: This ID number was not found on the NCR Debt Help System. Main status set to NOT_LINKED.`
+                        }
+                    });
+                }
+                logger.info(`[DHS API] Set case ${caseId} to NOT_LINKED (no search results)`);
             }
         } else if (action === 'validate_and_request') {
             logger.info('Starting Validate & Request Transfer flow...');

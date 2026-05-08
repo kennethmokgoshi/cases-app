@@ -566,13 +566,13 @@ export async function requestTransfer(
         logger.info('===== STEP 4: Checking checkbox =====');
         const checkboxClicked = await targetFrame.evaluate(() => {
             const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-            logger.info('Found', checkboxes.length, 'checkboxes');
+            console.log('Found', checkboxes.length, 'checkboxes');
 
             for (const checkbox of checkboxes) {
                 const cb = checkbox as HTMLInputElement;
                 if (!cb.checked) {
                     cb.click();
-                    logger.info('Clicked checkbox:', cb.id || cb.name);
+                    console.log('Clicked checkbox:', cb.id || cb.name);
                 }
             }
             return checkboxes.length > 0;

@@ -62,6 +62,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [extracting, setExtracting] = useState(false);
+    const [extractingDhs, setExtractingDhs] = useState(false);
     const [reanalyzing, setReanalyzing] = useState<string | null>(null); // Track specific doc ID being re-analyzed
     const [uploadType, setUploadType] = useState('OTHER');
     const [dhsAnalyzing, setDhsAnalyzing] = useState(false);
@@ -218,6 +219,71 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
             e.target.value = '';
         }
     };
+    
+    const handleDhsExtract = async (fileOrDocId: File | string) => {
+        const isExisting = typeof fileOrDocId === 'string';
+        setExtractingDhs(true);
+        setExtractionProgress(5);
+        setExtractionMessage(isExisting ? 'Initializing DHS extraction...' : 'Uploading file for DHS extraction...');
+        setError('');
+        setSuccess('');
+
+        try {
+            const formData = new FormData();
+            if (isExisting) {
+                formData.append('documentId', fileOrDocId);
+            } else {
+                formData.append('file', fileOrDocId as File);
+            }
+            formData.append('caseId', caseId);
+
+            const response = await fetch('/api/documents/extract-dhs', {
+                method: 'POST',
+                body: formData });
+
+            if (!response.ok) throw new Error('Failed to start DHS extraction');
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) throw new Error('No reader available');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    let update;
+                    try {
+                        update = JSON.parse(line);
+                    } catch (e) {
+                        logger.error('Error parsing line:', e);
+                        continue;
+                    }
+
+                    if (update.type === 'progress') {
+                        setExtractionMessage(update.message);
+                        if (update.progress) setExtractionProgress(update.progress);
+                    } else if (update.type === 'error') {
+                        throw new Error(update.message);
+                    } else if (update.type === 'result') {
+                        setSuccess(update.data.message || 'DHS Extraction complete');
+                        fetchDocuments();
+                    }
+                }
+            }
+        } catch (e: any) {
+            setError(e.message || 'Failed to extract DHS documents');
+        } finally {
+            setExtractingDhs(false);
+            setExtractionProgress(0);
+            setExtractionMessage('');
+        }
+    };
+
     const handleSplitExisting = async (docId: string) => {
         setExtracting(true);
         setExtractionProgress(5);
@@ -499,6 +565,52 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                         <input type="file" accept=".pdf" onChange={handleExtract} disabled={extracting} className="sr-only" />
                     </label>
 
+                    {/* DHS Extraction Button */}
+                    <div className="relative group">
+                        <button
+                            disabled={extractingDhs || extracting}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 cursor-pointer transition-colors flex items-center gap-2"
+                        >
+                            {extractingDhs ? '⏳ DHS Processing...' : '🏠 DHS Extraction'}
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+
+                        <div className="absolute right-0 top-full mt-1 w-64 bg-zeno-navy border border-white/10 rounded-lg shadow-xl overflow-hidden hidden group-hover:block z-50">
+                            <div className="bg-white/5 px-4 py-2 text-[10px] uppercase font-bold text-gray-500 flex justify-between items-center">
+                                <span>Select Doc to Extract</span>
+                                <label className="text-rose-400 hover:text-rose-300 cursor-pointer">
+                                    Upload New
+                                    <input type="file" accept=".pdf" className="sr-only" onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) handleDhsExtract(file);
+                                    }} />
+                                </label>
+                            </div>
+
+                            <div className="max-h-60 overflow-y-auto">
+                                {documents.filter(d => d.type === 'COMBINED' || d.type === 'OTHER' || d.type === 'DHS_SUMMARY_REPORT').map((doc) => (
+                                    <button
+                                        key={doc.id}
+                                        onClick={() => handleDhsExtract(doc.id)}
+                                        className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors border-t border-white/5"
+                                    >
+                                        <div className="font-medium truncate">{doc.fileName}</div>
+                                        <div className="text-xs text-gray-500">
+                                            {getDocTypeInfo(doc.type).label} • {formatFileSize(doc.fileSize)}
+                                        </div>
+                                    </button>
+                                ))}
+
+                                {documents.filter(d => d.type === 'COMBINED' || d.type === 'OTHER' || d.type === 'DHS_SUMMARY_REPORT').length === 0 && (
+                                    <div className="px-4 py-4 text-center text-xs text-gray-500 italic">
+                                        No suitable documents found
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+
                     {/* Split Existing Button */}
                     <div className="relative group">
                         <button
@@ -539,7 +651,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                 </div>
 
                 {/* Extraction Progress Bar */}
-                {extracting && (
+                {(extracting || extractingDhs) && (
                     <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
                         <div className="bg-zeno-navy/50 rounded-lg border border-zeno-cyan/20 p-4">
                             <div className="flex justify-between items-center mb-2">

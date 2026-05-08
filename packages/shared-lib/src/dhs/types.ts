@@ -5,6 +5,7 @@
 
 export type DHSTransferStatus =
     | 'NOT_REQUESTED'
+    | 'NOT_LINKED'
     | 'PENDING'
     | 'ACCEPTED'
     | 'AUTO_TRANSFERRED'

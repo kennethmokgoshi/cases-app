@@ -89,6 +89,15 @@ export async function getDebtCounsellorInfo(page: any): Promise<DHSDebtCounsello
                         });
                     }
 
+                    // Fix misaligned email addresses caused by missing column values shifting left
+                    Object.keys(results).forEach(key => {
+                        const val = results[key];
+                        if (val && /\S+@\S+\.\S+/.test(val) && key.toLowerCase() !== 'email') {
+                            results['Email'] = val;
+                            results[key] = ''; // Clear the incorrectly assigned field
+                        }
+                    });
+
                     // Special check for links (Email/Mobile) which might not show up in innerText correctly
                     const allLinks = Array.from(document.querySelectorAll('a'));
                     allLinks.forEach(link => {

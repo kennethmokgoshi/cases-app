@@ -648,3 +648,58 @@ Return JSON format:
 }
 
 ONLY return the JSON object, no other text.`;
+
+export const DHS_IDENTIFICATION_PROMPT = `You are analyzing a combined PDF to identify ONLY two specific document types for a DHS case intake. Extract ONLY these and NOTHING else.
+
+[EXTRACTED TEXT CONTENT]
+{{EXTRACTED_TEXT}}
+
+=== DOCUMENT 1: ID ===
+South African ID — green ID book or smart card.
+VISUAL: SA coat of arms, small photo, credit-card, green booklet.
+TEXT: 13-digit number, "IDENTITY DOCUMENT", "REPUBLIC OF SOUTH AFRICA", "SURNAME", "NAMES".
+RULE: In joint cases (two clients), put BOTH ID pages into ONE "ID" entry using the pages array.
+
+=== DOCUMENT 2: ZENOWETHU_POA ===
+ONLY these THREE specific Zenowethu documents qualify (ALL must have the Zenowethu Diamond-Z logo):
+
+A. Transfer Authorization / Transfer Authorisation
+   - Page heading: "Transfer Authorization" or "Transfer Authorisation"
+   - Body: "I consent that the Debt Counsellor may request my debt review file from my current debt counsellor"
+   - Has: "Debt Counsellor Name:" and "Counsellor Number: NCRDC"
+
+B. Power of Attorney
+   - Page heading: "POWER OF ATTORNEY"
+   - Body: "This Power of Attorney (the 'Agreement') is made BETWEEN: Zenowethu Debt Management"
+   - Body: "nominate, constitute and appoint Zenowethu Debt Management"
+   - Has Witness Signature lines and footer "+27 12 035 1824"
+
+C. Authorisation to Obtain Confidential Information
+   - Page heading: "Authorisation to Obtain Confidential Information with All Credit Bureaus"
+   - Body: "I consent to the Debt Counsellor obtaining and updating my credit records details from any/all registered credit bureaus"
+   - Has footer "+27 12 035 1824"
+
+=== STRICT EXCLUSIONS — NEVER EXTRACT THESE ===
+❌ Any page headed "SCHEDULE 6" or "Schedule 6: Power of Attorney in favour of Zenowethu" — SKIP even if Zenowethu logo is present
+❌ Any page headed "Aftercare fees and legal fees consent" or listing aftercare fee tables — SKIP even if Zenowethu logo is present
+❌ Any page headed "CREDIT REPAIR SERVICES AGREEMENT (ZENOWETHU)" or "CREDIT REPAIR SERVICES AGREEMENT(ZENOWETHU)" — this is a Letsatsi Finance document, SKIP even though it says Zenowethu in the title
+❌ Letsatsi Finance contracts or any document with the Letsatsi Finance and Loan logo — SKIP
+❌ Credit reports, bank statements, payslips, bills — SKIP
+
+=== OUTPUT RULES ===
+- pages: array of 1-based page numbers.
+- ALL valid Zenowethu pages (A+B+C from any/all clients) → ONE "ZENOWETHU_POA" entry.
+- ALL ID pages → ONE "ID" entry.
+
+Return JSON only:
+{
+    "documents": [
+        { "type": "ID", "pages": [1], "confidence": 0.98, "description": "SA Smart ID Card" },
+        { "type": "ZENOWETHU_POA", "pages": [3, 4, 5], "confidence": 0.97, "description": "Transfer Auth + POA + Authorisation" }
+    ],
+    "totalPages": 50
+}
+
+If nothing found: { "documents": [], "totalPages": X }
+ONLY return the JSON object, no other text.`;
+

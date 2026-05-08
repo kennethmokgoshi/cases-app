@@ -420,7 +420,7 @@ export async function POST(request: Request) {
         // 3. Client has visible cases → block with duplicate error
         let existingClientId: string | null = null;
 
-        const existingClientWithId = await prisma.client.findUnique({
+        const existingClientWithId = await prisma.client.findFirst({
             where: { idNumber: client.idNumber },
             select: {
                 id: true,

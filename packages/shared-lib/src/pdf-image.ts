@@ -175,19 +175,31 @@ async function renderPdf(max) {
         const totalPages = pdf.numPages;
         const pagesToRender = max > 0 ? Math.min(totalPages, max) : totalPages;
 
-        for (let i = 1; i <= pagesToRender; i++) {
-            if (window.reportConversionProgress) {
-                await window.reportConversionProgress(i, pagesToRender);
+        // Render pages in parallel chunks of 10 to prevent timeout and memory overflow
+        const chunkSize = 10;
+        for (let i = 1; i <= pagesToRender; i += chunkSize) {
+            const chunkEnd = Math.min(i + chunkSize - 1, pagesToRender);
+            const chunkPromises = [];
+
+            for (let j = i; j <= chunkEnd; j++) {
+                chunkPromises.push((async (pageNum) => {
+                    if (window.reportConversionProgress) {
+                        await window.reportConversionProgress(pageNum, pagesToRender);
+                    }
+                    const page = await pdf.getPage(pageNum);
+                    const scale = 1.0; // Reduced scale for faster identification
+                    const viewport = page.getViewport({ scale });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({ canvasContext: context, viewport }).promise;
+                    return canvas.toDataURL('image/jpeg', 0.6).split(',')[1]; // Lower quality for speed
+                })(j));
             }
-            const page = await pdf.getPage(i);
-            const scale = 1.5;
-            const viewport = page.getViewport({ scale });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context, viewport }).promise;
-            images.push(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+
+            const chunkResults = await Promise.all(chunkPromises);
+            images.push(...chunkResults);
         }
         return { success: true, images };
     } catch (err) {

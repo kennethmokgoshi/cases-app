@@ -1,43 +1,34 @@
 import { prisma } from '@zenowethu/database';
-import { logger } from '../logger';
 import { GhlService } from './ghl-service';
+import { logger } from '../logger';
+import { subMonths, startOfDay, endOfDay } from 'date-fns';
 
+/**
+ * Retention Service
+ * 
+ * Handles automated follow-ups for existing clients to generate repeat business.
+ */
 export class RetentionService {
     /**
-     * Finds Letsatsi clients who were "Debt Review Removal" clients 
-     * and settled their accounts exactly 9 months ago.
-     * 
-     * Tags them in GHL to trigger an automated re-engagement campaign.
+     * Finds Letsatsi clients who settled 9 months ago and tags them in GHL for a check-in.
      */
     static async syncLetsatsiFollowups() {
-        // Calculate the date range for 9 months ago today
-        const targetDate = new Date();
-        targetDate.setMonth(targetDate.getMonth() - 9);
-        
-        const startOfDay = new Date(targetDate);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(targetDate);
-        endOfDay.setHours(23, 59, 59, 999);
+        logger.info('[Retention Service] Starting Letsatsi 9-month follow-up sync...');
 
-        logger.info(`[Retention] Scanning for Letsatsi clients settled between ${startOfDay.toISOString()} and ${endOfDay.toISOString()}`);
+        // 1. Calculate the target date (9 months ago)
+        // We look for anything settled in that window
+        const targetDate = subMonths(new Date(), 9);
+        const start = startOfDay(targetDate);
+        const end = endOfDay(targetDate);
 
-        // We target clients from Letsatsi who had Flag Removal services and are now COMPLETED/CLOSED
+        // 2. Find cases
         const cases = await prisma.case.findMany({
             where: {
-                partnerName: {
-                    contains: 'Letsatsi',
-                    mode: 'insensitive'
-                },
-                status: {
-                    in: ['COMPLETED', 'CLOSED', 'CL_CLEARED']
-                },
+                partnerName: 'Letsatsi',
+                status: { in: ['COMPLETED', 'SETTLED', 'CLOSED'] },
                 updatedAt: {
-                    gte: startOfDay,
-                    lte: endOfDay
-                },
-                services: {
-                    contains: 'debt_review_flag_removal'
+                    gte: start,
+                    lte: end
                 }
             },
             include: {
@@ -45,36 +36,34 @@ export class RetentionService {
             }
         });
 
-        logger.info(`[Retention] Found ${cases.length} eligible Letsatsi clients for 9-month follow-up`);
+        logger.info(`[Retention Service] Found ${cases.length} cases settled 9 months ago.`);
 
-        const results = {
-            success: 0,
-            failed: 0,
-            skipped: 0
-        };
+        let successCount = 0;
+        let skipCount = 0;
 
-        for (const caseRecord of cases) {
+        // 3. Sync to GHL
+        for (const c of cases) {
             try {
-                // We apply a specific tag in GHL which triggers a Workflow in their system
-                const res = await GhlService.applyTags(caseRecord.id, ['LETSATSI_9MONTH_FOLLOWUP']);
-                
+                const res = await GhlService.applyTags(c.id, ['Letsatsi_9Month_Checkin']);
                 if (res.success) {
-                    results.success++;
-                    logger.info(`[Retention] Tagged client ${caseRecord.client.firstName} ${caseRecord.client.lastName} (File: ${caseRecord.fileNumber})`);
+                    successCount++;
                 } else {
-                    results.failed++;
-                    logger.error(`[Retention] Failed to tag case ${caseRecord.id}: ${res.error}`);
+                    logger.warn(`[Retention Service] Failed to tag case ${c.id}: ${res.error}`);
+                    skipCount++;
                 }
             } catch (err) {
-                results.failed++;
-                logger.error(`[Retention] Exception tagging case ${caseRecord.id}:`, err);
+                logger.error(`[Retention Service] Error processing case ${c.id}:`, err);
+                skipCount++;
             }
         }
 
+        logger.info(`[Retention Service] Sync complete. Success: ${successCount}, Failed/Skipped: ${skipCount}`);
+        
         return {
-            date: targetDate.toISOString().split('T')[0],
-            found: cases.length,
-            ...results
+            success: true,
+            processed: cases.length,
+            synced: successCount,
+            failed: skipCount
         };
     }
 }

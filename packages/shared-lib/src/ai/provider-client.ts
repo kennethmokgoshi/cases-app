@@ -4,6 +4,7 @@ import { logger } from '../logger';
 
 // ─── Task types ────────────────────────────────────────────────────────────────
 export type AiTask =
+    | 'document_identification'  // Fast scanning - uses gpt-4o-mini (200k TPM)
     | 'document_analysis'
     | 'document_reanalysis'
     | 'legal_drafting'
@@ -29,14 +30,15 @@ export function invalidateAiProviderCache(): void {
 
 // ─── Default model assignments ────────────────────────────────────────────────
 const DEFAULT_MODELS: Record<AiTask, string> = {
-    document_analysis:    'gpt-4.1',          // gpt-4.1 has better vision & instruction-following for scanned docs
-    document_reanalysis:  'google/gemini-pro-1.5',
-    legal_drafting:       'anthropic/claude-3.5-sonnet',
-    case_strategy:        'gpt-4.1',
-    plan_generation:      'gpt-4.1',
-    contract_analysis:    'google/gemini-pro-1.5',
-    dhs_parsing:          'gpt-4.1',
-    ai_coach:             'gpt-4.1',
+    document_identification:  'gpt-4o-mini',      // High TPM (200k) — used for scanning 100-page docs
+    document_analysis:        'gpt-4.1',           // Precise extraction of names, IDs, amounts
+    document_reanalysis:      'google/gemini-pro-1.5',
+    legal_drafting:           'anthropic/claude-3.5-sonnet',
+    case_strategy:            'gpt-4.1',
+    plan_generation:          'gpt-4.1',
+    contract_analysis:        'google/gemini-pro-1.5',
+    dhs_parsing:              'gpt-4.1',
+    ai_coach:                 'gpt-4.1',
 };
 
 // ─── Direct build of OpenAI client from environment variables ─────────────────

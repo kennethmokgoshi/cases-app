@@ -1330,12 +1330,18 @@ export default function CaseDetailPage() {
             });
             const result = await res.json();
             if (result.success) {
+                // Refresh case data to reflect new status in UI
+                const caseRes = await fetch(`/api/cases/${params.id}`);
+                const updatedCase = await caseRes.json();
+                setCaseData(updatedCase);
+                setActivityUpdate(prev => prev + 1);
+                
                 let text = result.found 
                     ? `Linked to DHS. DC: ${result.debtCounsellor?.fullName || 'Unknown'}`
                     : 'Not linked to DHS.';
                 
                 setDhsMessage({
-                    type: result.found ? 'success' : 'info',
+                    type: result.found ? 'success' : 'error',
                     text: text
                 });
             } else {
@@ -1372,6 +1378,7 @@ export default function CaseDetailPage() {
                 const caseRes = await fetch(`/api/cases/${params.id}`);
                 const updatedCase = await caseRes.json();
                 setCaseData(updatedCase);
+                setActivityUpdate(prev => prev + 1);
 
                 // Build detailed status message
                 let statusText = '';
@@ -1516,7 +1523,11 @@ export default function CaseDetailPage() {
 
                     {/* Status Badge */}
                     {caseData?.status && (
-                        <span className="ml-4 px-3 py-1 rounded-full text-xs font-bold bg-zeno-cyan/20 text-zeno-cyan border border-zeno-cyan/30 uppercase tracking-wider">
+                        <span className={`ml-4 px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${
+                            caseData.status === 'NOT_LINKED' 
+                                ? 'bg-red-500/20 text-red-400 border-red-500/30 shadow-[0_0_8px_rgba(239,68,68,0.3)]' 
+                                : 'bg-zeno-cyan/20 text-zeno-cyan border-zeno-cyan/30'
+                        }`}>
                             {caseData.status.replace(/_/g, ' ')}
                         </span>
                     )}
@@ -2720,6 +2731,7 @@ export default function CaseDetailPage() {
                                                 >
                                                     <option value="">Select status...</option>
                                                     <option value="NOT_REQUESTED">Not Requested</option>
+                                                    <option value="NOT_LINKED">Not Linked on DHS</option>
                                                     <option value="PENDING">Pending</option>
                                                     <option value="DECLINED">Declined</option>
                                                     <option value="AUTO_TRANSFERRED">Auto Transferred</option>
@@ -2796,7 +2808,9 @@ export default function CaseDetailPage() {
                                             </div>
                                             <div>
                                                 <div className="text-xs text-gray-400 mb-1">REQUEST STATUS</div>
-                                                <div className="text-sm text-white font-medium">{caseData.dhsStatus || 'Not set'}</div>
+                                                <div className={`text-sm font-medium ${caseData.dhsStatus === 'NOT_LINKED' ? 'text-amber-400' : 'text-white'}`}>
+                                                    {caseData.dhsStatus === 'NOT_LINKED' ? 'Not Linked on DHS' : (caseData.dhsStatus || 'Not set')}
+                                                </div>
                                             </div>
                                             <div>
                                                 <div className="text-xs text-gray-400 mb-1">DAYS COUNTER</div>
@@ -2860,6 +2874,19 @@ export default function CaseDetailPage() {
                                                         );
                                                     })()}
                                                 </div>
+
+                                                {caseData.dhsStatus === 'NOT_LINKED' && (
+                                                    <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-3">
+                                                        <span className="text-xl">⚠️</span>
+                                                        <div>
+                                                            <p className="text-xs text-amber-300 font-bold uppercase mb-1">Not Linked on DHS</p>
+                                                            <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                                                                DHS search returned no records for this ID number. 
+                                                                Please verify if the <strong>ID number ({caseData.client.idNumber})</strong> is correct.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {/* Document readiness check — shown when transfer has NOT been requested yet */}
                                                 {(() => {

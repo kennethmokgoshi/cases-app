@@ -129,6 +129,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         slaDays: 7,
         isOverdueState: false },
     {
+        code: 'NOT_LINKED',
+        name: 'Not Linked on DHS',
+        category: 'DHS_PROCESS',
+        description: 'CRITICAL: ID number was not found on the NCR Debt Help System. Requires verification.',
+        slaEnabled: true,
+        slaDays: 1,
+        isOverdueState: false },
+    {
         code: 'REJECTED_EMAIL_DOCS',
         name: 'Rejected - Email Documents',
         category: 'DHS_PROCESS',

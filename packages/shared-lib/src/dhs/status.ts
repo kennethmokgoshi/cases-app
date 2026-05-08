@@ -278,11 +278,11 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
         const hasResults = idFoundInTable || (displayingMatch && parseInt(displayingMatch.first) > 0);
 
         if (!hasResults && hasNoRecordsMessage) {
-            logger.info('No transfer records found for this ID');
+            logger.info('No transfer records found for this ID — returning NOT_LINKED');
             return {
                 found: false,
-                status: 'NOT_REQUESTED',
-                message: 'No transfer request found for this ID number',
+                status: 'NOT_LINKED',
+                message: 'This ID number was not found on DHS. Please verify the ID number is correct.',
                 screenshot: screenshotPath
             };
         }
@@ -313,19 +313,19 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
                     const rows = table.querySelectorAll('tr');
                     const result: string[][] = [];
 
-                    logger.info('Found table with searchId, extracting rows...');
+                    console.log('Found table with searchId, extracting rows...');
                     for (const row of rows) {
                         const cells = row.querySelectorAll('td, th');
                         if (cells.length > 5) {
                             const rowData = Array.from(cells).map(c => c.textContent?.trim() || '');
                             result.push(rowData);  // No filtering - add ALL rows
-                            logger.info('Row', result.length - 1, '- Cells:', cells.length, '- First:', rowData[0]?.substring(0, 20));
+                            console.log('Row', result.length - 1, '- Cells:', cells.length, '- First:', rowData[0]?.substring(0, 20));
                         }
                     }
-                    logger.info('Table rows:', result.length);
+                    console.log('Table rows:', result.length);
                     if (result.length > 0) {
                         allTableData.push(result);
-                        logger.info('✅ Added table', allTableData.length, 'with', result.length, 'rows');
+                        console.log('✅ Added table', allTableData.length, 'with', result.length, 'rows');
                     }
                 }
 
@@ -333,13 +333,13 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
                 // allTableData[0] = filter form (has searchId in input)
                 // allTableData[1] = data table (what we want!)
                 if (allTableData.length >= 2) {
-                    logger.info('🎯 Using SECOND table (index 1 out of', allTableData.length, 'tables)');
+                    console.log('🎯 Using SECOND table (index 1 out of', allTableData.length, 'tables)');
                     return allTableData[1];
                 } else if (allTableData.length === 1) {
-                    logger.info('⚠️ Only 1 table, using it');
+                    console.log('⚠️ Only 1 table, using it');
                     return allTableData[0];
                 }
-                logger.info('❌ No tables found');
+                console.log('❌ No tables found');
                 return [];
             }, idNumber);
 
@@ -372,12 +372,12 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
                     const lastCell = cells[cells.length - 1];
                     const status = lastCell?.textContent?.trim() || '';
 
-                    logger.info('🎯 SIMPLE TR[1] - Found', cells.length, 'cells in row');
-                    logger.info('🎯 SIMPLE TR[1] - All cell values:');
+                    console.log('🎯 SIMPLE TR[1] - Found', cells.length, 'cells in row');
+                    console.log('🎯 SIMPLE TR[1] - All cell values:');
                     Array.from(cells).forEach((cell, idx) => {
-                        logger.info(`   Cell[${idx}]: "${cell.textContent?.trim()}"`);
+                        console.log(`   Cell[${idx}]: "${cell.textContent?.trim()}"`);
                     });
-                    logger.info('🎯 SIMPLE TR[1] - REQUEST STATUS (last cell):', status);
+                    console.log('🎯 SIMPLE TR[1] - REQUEST STATUS (last cell):', status);
 
                     return status;
                 }
@@ -605,7 +605,7 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
                             tel: extract(/Tel\s*[:\.]?\s*([0-9\s\-\+\(\)]+)/i),
                             mobile: extract(/Mobile\s*[:\.]?\s*([0-9\s\-\+\(\)]+)/i),
                             fax: extract(/Fax\s*[:\.]?\s*([0-9\s\-\+\(\)]*)/i),
-                            email: extract(/Email\s*[:\.]?\s*([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2 })/i),
+                            email: extract(/Email\s*[:\.]?\s*([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})/i),
                             province: extract(/Province\s*[:\.]?\s*([A-Za-z\s]+)/i),
                             operatingStatus: extract(/Operating\s*Status\s*[:\.]?\s*(Operating|Not Operating|Suspended)/i)
                         };

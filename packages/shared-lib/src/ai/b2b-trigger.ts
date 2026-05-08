@@ -26,6 +26,12 @@ import { createLogger } from '../logger';
 import { sendStatusChangeNotification } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
 import { scrapeDetailedConsumerInfo } from '../dhs/search';
+import { delay } from '../dhs/browser';
+import { extractDhsDocuments } from '../openai/extraction';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { existsSync } from 'fs';
+import { GhlService } from '../integrations/ghl-service';
 
 const logger = createLogger('ai/b2b-trigger');
 
@@ -63,6 +69,8 @@ export async function runB2BFileTrigger(
     caseId: string,
     triggeredBy: B2BTriggerSource = 'CASE_CREATED'
 ): Promise<B2BTriggerResult> {
+    logger.info(`[B2B_TRIGGER] Waiting 5 seconds before processing case ${caseId}...`);
+    await delay(5000); // User requested delay to ensure all initial updates are done
     logger.info(`[B2B_TRIGGER] Running for case ${caseId} (triggered by: ${triggeredBy})`);
 
     // ── 1. Load case ──────────────────────────────────────────────────────────
@@ -158,14 +166,34 @@ export async function runB2BFileTrigger(
                 });
 
                 logger.info(`[B2B_TRIGGER] ✅ ${caseData.fileNumber}: linked on DHS under ${dcName}`);
+                
+                // GHL Sync
+                GhlService.applyTags(caseId, ['dhs_linked', 'dhs_not_requested']).catch(err => {
+                    logger.warn(`[B2B_TRIGGER] GHL tag sync failed for ${caseId}:`, err);
+                });
             } else {
+                // Automation: If search returns no records, set status to NOT_LINKED
+                await prisma.case.update({
+                    where: { id: caseId },
+                    data: {
+                        status: 'NOT_LINKED',
+                        dhsStatus: 'NOT_LINKED'
+                    }
+                });
+
                 await saveAIComment(caseId, adminId, {
                     service: serviceLabels,
                     triggeredBy,
                     assessment: `DHS auto-check: consumer ID ${idNumber} was not found in the DHS system.`,
-                    action: 'No status change. Please verify the ID number or check DHS manually.'
+                    action: 'Status set to "Not Linked on DHS". Please verify the ID number or check DHS manually.'
                 });
-                logger.info(`[B2B_TRIGGER] ℹ️  ${caseData.fileNumber}: not found in DHS`);
+                
+                // GHL Sync
+                GhlService.applyTags(caseId, ['dhs_not_linked']).catch(err => {
+                    logger.warn(`[B2B_TRIGGER] GHL tag sync failed for ${caseId}:`, err);
+                });
+
+                logger.info(`[B2B_TRIGGER] ℹ️  ${caseData.fileNumber}: not found in DHS (Status updated to NOT_LINKED)`);
             }
         } catch (dhsErr) {
             logger.error(`[B2B_TRIGGER] DHS auto-check failed for ${caseData.fileNumber}:`, dhsErr);
@@ -178,61 +206,166 @@ export async function runB2BFileTrigger(
         }
     }
 
-    // ── 5c. If not Debt Review Removal, we are done after the DHS check ───────
-    if (!isDebtReviewRemoval) {
-        return {
-            action: 'NOT_APPLICABLE',
-            message: `DHS auto-check completed for "${serviceLabels}" — no transfer request required`
-        };
+    // Reload case data to get the latest status (it might have changed to NOT_LINKED or NOT_REQUESTED_VIA_DHS)
+    const currentCase = await prisma.case.findUnique({
+        where: { id: caseId },
+        include: { documents: true, client: true, workflowLogs: true }
+    });
+
+    if (!currentCase) return { action: 'SKIPPED', message: 'Case not found after reload' };
+
+    //  Step 2: If status is NOT_LINKED -> STOP
+    if (currentCase.status === 'NOT_LINKED') {
+        return { action: 'SKIPPED', message: 'Consumer not linked on DHS - stopping automation.' };
     }
 
-    // ── 6. Check required documents ───────────────────────────────────────────
-    const poaDoc = caseData.documents.find(
-        d => d.type === 'POA' || d.type === 'ZENOWETHU_POA'
-    );
-    const idDoc = caseData.documents.find(d => d.type === 'ID');
+    //  Step 2: If status is NOT_REQUESTED_VIA_DHS -> Check documents
+    if (currentCase.status !== 'NOT_REQUESTED_VIA_DHS' && currentCase.status !== 'NEW_LEAD') {
+        // If it's already beyond these statuses, don't re-run the automation
+        return { action: 'SKIPPED', message: `Case status is ${currentCase.status} - skipping auto-request.` };
+    }
 
+    //  Step 3: Check for Zenowethu POA and ID
+    let poaDoc = currentCase.documents.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
+    let idDoc = currentCase.documents.find(d => d.type === 'ID');
+
+    //  Step 3b: If documents missing, try to run extraction
     if (!poaDoc || !idDoc) {
-        const missing: string[] = [];
-        if (!idDoc) missing.push('ID Document');
-        if (!poaDoc) missing.push('Power of Attorney (POA)');
+        const combinedFile = currentCase.documents.find(d => d.type === 'COMBINED' || d.type === 'OTHER');
+        if (combinedFile) {
+            logger.info(`[B2B_TRIGGER] Missing docs for ${currentCase.fileNumber} but found combined file ${combinedFile.id}. Running auto-extraction...`);
+            
+            try {
+                await performAutoDhsExtraction(currentCase, combinedFile, adminId, serviceLabels, triggeredBy);
+                
+                // Wait 5 seconds as requested by user before proceeding to the next step
+                logger.info(`[B2B_TRIGGER] Extraction complete for ${currentCase.fileNumber}. Waiting 5s before checking for transfer...`);
+                await delay(5000);
 
-        await saveAIComment(caseId, adminId, {
-            service: serviceLabels,
-            triggeredBy,
-            assessment: 'Debt Review Flag Removal service detected. Document check failed.',
-            action:
-                `Missing required documents: ${missing.join(', ')}. ` +
-                'The AI will automatically re-run this check once all required documents are uploaded.'
-        });
-
-        logger.info(`[B2B_TRIGGER] Missing documents for ${caseData.fileNumber}: ${missing.join(', ')}`);
-        return { action: 'MISSING_DOCS', message: `Missing: ${missing.join(', ')}` };
+                // Re-check for docs after extraction
+                const refreshedDocs = await prisma.document.findMany({ where: { caseId: currentCase.id } });
+                poaDoc = refreshedDocs.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
+                idDoc = refreshedDocs.find(d => d.type === 'ID');
+            } catch (extractErr) {
+                logger.error(`[B2B_TRIGGER] Auto-extraction failed for ${currentCase.id}:`, extractErr);
+            }
+        }
     }
 
-    // ── 7. Detect if previously requested ────────────────────────────────────
-    const wasPreviouslyRequested =
-        caseData.dhsStatus === 'Requested via DHS' ||
-        caseData.dhsStatus === 'Requested Again via DHS' ||
-        caseData.status === 'REQUESTED_VIA_DHS' ||
-        (caseData.workflowLogs?.length ?? 0) > 0;
+    //  Step 3c: If we now have both docs, run the transfer request
+    if (poaDoc && idDoc) {
+        logger.info(`[B2B_TRIGGER] Found all docs for ${currentCase.fileNumber}. Running auto-transfer request...`);
+        return await performAutoDhsTransferRequest(currentCase, adminId, serviceLabels, triggeredBy);
+    }
 
-    const dhsStatusLabel = wasPreviouslyRequested
-        ? 'Requested Again via DHS'
-        : 'Requested via DHS';
+    // If we still don't have docs, log a comment and stop
+    const missing: string[] = [];
+    if (!idDoc) missing.push('ID Document');
+    if (!poaDoc) missing.push('Power of Attorney (POA)');
 
-    const actionVerb = wasPreviouslyRequested ? 'Re-requesting' : 'Requesting';
+    await saveAIComment(caseId, adminId, {
+        service: serviceLabels,
+        triggeredBy,
+        assessment: 'Automatic document check failed.',
+        action: `Missing: ${missing.join(', ')}. Please upload these documents or a combined file to trigger the transfer request.`
+    });
 
-    logger.info(
-        `[B2B_TRIGGER] ${caseData.fileNumber}: Debt Review Removal, POA ✓, ID ✓, ` +
-        `previously requested: ${wasPreviouslyRequested}`
-    );
+    return { action: 'MISSING_DOCS', message: `Missing: ${missing.join(', ')}` };
+}
 
-    // ── 8. Resolve DC email ───────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Action Implementation Helpers
+// ---------------------------------------------------------------------------
+
+async function performAutoDhsExtraction(
+    caseData: any,
+    combinedDoc: any,
+    adminId: string,
+    serviceLabels: string,
+    triggeredBy: string
+) {
+    const caseId = caseData.id;
+    const uploadsDir = join(process.cwd(), 'storage', 'uploads', caseId);
+    if (!existsSync(uploadsDir)) await mkdir(uploadsDir, { recursive: true });
+
+    // Resolve file path
+    let filePath = '';
+    if (combinedDoc.fileUrl.startsWith('/uploads/')) {
+        filePath = join(process.cwd(), 'storage', 'uploads', combinedDoc.fileUrl.replace('/uploads/', ''));
+    } else {
+        const relativePath = combinedDoc.fileUrl.startsWith('/') ? combinedDoc.fileUrl.slice(1) : combinedDoc.fileUrl;
+        filePath = join(process.cwd(), 'public', relativePath);
+    }
+
+    if (!existsSync(filePath)) throw new Error('Physical file not found');
+
+    const buffer = await readFile(filePath);
+    const base64Pdf = buffer.toString('base64');
+    const timestamp = Date.now();
+
+    const extraction = await extractDhsDocuments(base64Pdf);
+
+    for (const extractedDoc of extraction.extractedDocuments) {
+        const docFileName = `${timestamp}-auto-dhs-${extractedDoc.type.toLowerCase()}.pdf`;
+        const docFilePath = join(uploadsDir, docFileName);
+        const docFileUrl = `/uploads/${caseId}/${docFileName}`;
+
+        const docBuffer = Buffer.from(extractedDoc.base64Pdf, 'base64');
+        await writeFile(docFilePath, docBuffer);
+
+        let extractedData: any = {
+            confidence: extractedDoc.confidence,
+            description: extractedDoc.description,
+            pageCount: extractedDoc.pageCount,
+            extractedFrom: combinedDoc.id
+        };
+
+        if (extractedDoc.type === 'ID' && extraction.analysis.id) {
+            extractedData = { ...extractedData, ...extraction.analysis.id };
+        } else if (extractedDoc.type === 'ZENOWETHU_POA' && extraction.analysis.poa) {
+            extractedData = { ...extractedData, ...extraction.analysis.poa };
+        }
+
+        await prisma.document.create({
+            data: {
+                caseId,
+                type: extractedDoc.type,
+                fileName: docFileName,
+                fileUrl: docFileUrl,
+                fileSize: docBuffer.length,
+                mimeType: 'application/pdf',
+                extractedData: JSON.stringify(extractedData),
+                analyzedAt: new Date()
+            }
+        });
+    }
+
+    await saveAIComment(caseId, adminId, {
+        service: serviceLabels,
+        triggeredBy,
+        assessment: `Auto-extraction complete. Found ${extraction.extractedDocuments.length} documents.`,
+        action: 'Documents have been split and identified. Proceeding to transfer request check...'
+    });
+}
+
+async function performAutoDhsTransferRequest(
+    caseData: any,
+    adminId: string,
+    serviceLabels: string,
+    triggeredBy: string
+): Promise<B2BTriggerResult> {
+    const caseId = caseData.id;
     const dcEmail = caseData.lastKnownEmail || caseData.dcEmail;
     const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`;
 
-    // ── 9a. Email DC if we have an address ────────────────────────────────────
+    const wasPreviouslyRequested =
+        caseData.dhsStatus === 'Requested via DHS' ||
+        caseData.dhsStatus === 'Requested Again via DHS' ||
+        caseData.status === 'REQUESTED_VIA_DHS';
+
+    const dhsStatusLabel = wasPreviouslyRequested ? 'Requested Again via DHS' : 'Requested via DHS';
+    const actionVerb = wasPreviouslyRequested ? 'Re-requesting' : 'Requesting';
+
     if (dcEmail) {
         let emailSuccess = false;
         try {
@@ -248,10 +381,9 @@ export async function runB2BFileTrigger(
             });
             emailSuccess = emailResult.emailSuccess;
         } catch (err) {
-            logger.error(`[B2B_TRIGGER] Email to DC failed for ${caseData.fileNumber}:`, err);
+            logger.error(`[B2B_TRIGGER] Auto-email to DC failed:`, err);
         }
 
-        // Update case regardless of email success — mark as requested
         await prisma.case.update({
             where: { id: caseId },
             data: {
@@ -261,14 +393,13 @@ export async function runB2BFileTrigger(
             }
         });
 
-        // Log workflow transition
         await prisma.workflowLog.create({
             data: {
                 caseId,
                 fromStatus: caseData.status,
                 toStatus: 'REQUESTED_VIA_DHS',
                 timestamp: new Date(),
-                notes: `[AI] B2B trigger: ${dhsStatusLabel} — triggered by ${triggeredBy}`,
+                notes: `[AI] Auto B2B trigger: ${dhsStatusLabel} — triggered by ${triggeredBy}`,
                 userId: adminId || null
             }
         });
@@ -276,34 +407,24 @@ export async function runB2BFileTrigger(
         await saveAIComment(caseId, adminId, {
             service: serviceLabels,
             triggeredBy,
-            assessment:
-                'Debt Review Flag Removal service confirmed. POA and ID documents verified.',
-            action:
-                `${actionVerb} file from debt counsellor (${dcEmail}). ` +
-                (emailSuccess
-                    ? `Email sent successfully. `
-                    : `Note: email delivery failed — please send manually to ${dcEmail}. `) +
-                `Status updated to "${dhsStatusLabel}". ` +
-                (wasPreviouslyRequested
-                    ? 'This file was requested before — checking via DHS portal is also recommended. '
-                    : '') +
-                'Next update set to +5 working days.'
+            assessment: 'Auto-transfer request initiated. Required documents are present.',
+            action: `${actionVerb} file from DC (${dcEmail}). Status updated to "${dhsStatusLabel}".`
         });
 
-        // Notify managers
         await notifyManagers(caseId, caseData.fileNumber, dhsStatusLabel, adminId);
+ 
+        // GHL Sync
+        GhlService.applyTags(caseId, ['dhs_file_requested']).catch(err => {
+            logger.warn(`[B2B_TRIGGER] GHL tag sync failed for ${caseId}:`, err);
+        });
 
-        const result: B2BTriggerResult = {
+        return {
             action: wasPreviouslyRequested ? 'DHS_REQUESTED_AGAIN' : 'DHS_REQUESTED',
-            message: `${dhsStatusLabel}: email ${emailSuccess ? 'sent' : 'failed'} to ${dcEmail}`,
-            details: { dcEmail, dhsStatusLabel, wasPreviouslyRequested, emailSuccess }
+            message: `${dhsStatusLabel}: auto-email ${emailSuccess ? 'sent' : 'failed'} to ${dcEmail}`
         };
-
-        logger.info(`[B2B_TRIGGER] ✅ ${caseData.fileNumber}: ${result.message}`);
-        return result;
     }
 
-    // ── 9b. No DC email — update status and flag for manual DHS lookup ────────
+    // No email case
     await prisma.case.update({
         where: { id: caseId },
         data: {
@@ -313,41 +434,20 @@ export async function runB2BFileTrigger(
         }
     });
 
-    await prisma.workflowLog.create({
-        data: {
-            caseId,
-            fromStatus: caseData.status,
-            toStatus: 'REQUESTED_VIA_DHS',
-            timestamp: new Date(),
-            notes: `[AI] B2B trigger: ${dhsStatusLabel} (no DC email — portal lookup required)`,
-            userId: adminId || null
-        }
-    });
-
     await saveAIComment(caseId, adminId, {
         service: serviceLabels,
         triggeredBy,
-        assessment:
-            'Debt Review Flag Removal service confirmed. POA and ID documents verified.',
-        action:
-            `${actionVerb} file via DHS portal — no DC email address on record. ` +
-            'Status updated to "' + dhsStatusLabel + '". ' +
-            (wasPreviouslyRequested
-                ? 'This file was previously requested via DHS — please use "Check via DHS" to follow up. '
-                : 'Please run the DHS Lookup to submit the transfer request and retrieve the DC email. ') +
-            'Next update set to +5 working days.'
+        assessment: 'Auto-transfer request initiated. No DC email on record.',
+        action: `${actionVerb} file via portal. Status updated to "${dhsStatusLabel}".`
     });
 
     await notifyManagers(caseId, caseData.fileNumber, dhsStatusLabel, adminId);
+    GhlService.applyTags(caseId, ['dhs_file_requested', 'dhs_portal_lookup_needed']).catch(e => logger.warn(e));
 
-    const noEmailResult: B2BTriggerResult = {
-        action: wasPreviouslyRequested ? 'DHS_REQUESTED_AGAIN' : 'NO_DC_EMAIL',
-        message: `${dhsStatusLabel}: no DC email — DHS portal lookup required`,
-        details: { dhsStatusLabel, wasPreviouslyRequested, dcEmail: null }
+    return {
+        action: 'NO_DC_EMAIL',
+        message: `${dhsStatusLabel}: portal lookup required (no DC email)`
     };
-
-    logger.info(`[B2B_TRIGGER] ⚠️  ${caseData.fileNumber}: ${noEmailResult.message}`);
-    return noEmailResult;
 }
 
 // ---------------------------------------------------------------------------

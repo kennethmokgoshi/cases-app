@@ -169,7 +169,7 @@ export async function searchConsumer(idNumber: string): Promise<{
 
         if (resultsInfo.noRecords || (!resultsInfo.hasDisplayingRecords && !resultsInfo.hasIdInText)) {
             logger.info('[DHS search] Record not found in search results');
-            return { found: false, message: 'Consumer not found in DHS' };
+            return { found: false, message: 'This ID number was not found on DHS. Please verify if the ID number is correct.' };
         }
 
         logger.info('[DHS search] Record found! Extracting...');
@@ -341,7 +341,7 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
         const noResults = await page.evaluate(() => document.body.innerText.includes('No records found'));
         if (noResults) {
             await page.close();
-            return { success: false, message: 'No DHS records found for this ID' };
+            return { success: false, message: 'This ID number was not found on DHS. Please verify if the ID number is correct.' };
         }
 
         // Extract Main Table Data (Row 1)
@@ -426,8 +426,21 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
         };
 
         // Open Debt Counsellor Pop-up
-        // [TURBO MODE] Skip popup extraction for speed.
-        logger.info('Skipping popup logic. Returning table data immediately.');
+        logger.info('[DHS auto-fill] Fetching DC info from popup...');
+        const dcInfo = await getDebtCounsellorInfo(page);
+        
+        if (dcInfo) {
+            detailedInfo.dcFullName = dcInfo.fullName;
+            detailedInfo.dcTradingName = dcInfo.tradingName;
+            detailedInfo.dcOperatingStatus = dcInfo.operatingStatus;
+            detailedInfo.dcMobile = dcInfo.mobile;
+            detailedInfo.dcEmail = dcInfo.email;
+            detailedInfo.debtCounsellorName = dcInfo.fullName; // Sync both name fields
+            logger.info('[DHS auto-fill] DC info extracted successfully');
+        } else {
+            logger.warn('[DHS auto-fill] Failed to extract DC info from popup');
+        }
+
         await page.close();
         return { success: true, data: detailedInfo };
 

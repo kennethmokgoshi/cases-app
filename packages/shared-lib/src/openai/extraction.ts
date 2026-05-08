@@ -3,7 +3,7 @@ import { convertPdfToImages, extractTextFromPdf } from '../pdf-image';
 import { getAiClientForTask } from '../ai/provider-client';
 import { PROMPTS } from './prompts';
 import { parseAIResponse, buildVerificationReport } from './utils';
-import { identifyDocumentPages, splitPdf } from './pdf-process';
+import { identifyDocumentPages, identifyDhsDocumentPages, splitPdf } from './pdf-process';
 
 export type DocType = 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'ZENOWETHU_POA' | 'PROOF_OF_RESIDENCE' | 'DHS_SUMMARY_REPORT';
 
@@ -134,6 +134,50 @@ export async function extractDocumentsFromCombinedPdf(
 
     return { extractedDocuments, analysis };
 }
+/**
+ * DHS Extraction from combined PDF (ID and Zenowethu POA only)
+ */
+export async function extractDhsDocuments(
+    base64Pdf: string,
+    onProgress?: (msg: string, progress?: number) => void,
+    customModelId?: string
+): Promise<{
+    extractedDocuments: Array<any>;
+    analysis: any;
+}> {
+    const pageInfo = await identifyDhsDocumentPages(base64Pdf, onProgress);
+    if (!pageInfo.documents || pageInfo.documents.length === 0) return { extractedDocuments: [], analysis: {} };
+
+    const splitDocs = await splitPdf(base64Pdf, pageInfo.documents);
+    let extractedDocuments: any[] = [];
+    let analysis: any = {};
+
+    await Promise.all(splitDocs.map(async (doc, index) => {
+        try {
+            const docInfo = pageInfo.documents[index];
+            const analysisType = doc.type === 'ZENOWETHU_POA' ? 'POA' : doc.type;
+
+            onProgress?.(`🔍 Analyzing ${doc.type}...`);
+            const docResult = await analyzeDocument(doc.base64Pdf, analysisType as any, 'application/pdf', undefined, customModelId);
+            const data = docResult.data;
+            const description = docInfo?.description || doc.type;
+
+            if (doc.type === 'ID') analysis.id = data;
+            else if (doc.type === 'ZENOWETHU_POA') analysis.poa = data;
+
+            extractedDocuments.push({ 
+                ...doc, 
+                description: description,
+                confidence: docInfo?.confidence || 0.8 
+            });
+        } catch (err) {
+            logger.error({ err, type: doc.type }, `❌ Failed to analyze DHS document`);
+        }
+    }));
+
+    return { extractedDocuments, analysis };
+}
+
 
 /**
  * Sequential batch analysis
