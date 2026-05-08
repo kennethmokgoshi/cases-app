@@ -2,7 +2,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { convertPdfToImages, extractTextFromPdf } from '../pdf-image';
 import { logger } from '../logger';
-import { getAiClientForTask } from '../ai/provider-client';
+import { getOpenAI } from './client';
 import { IDENTIFICATION_PROMPT } from './prompts';
 
 /**
@@ -34,8 +34,9 @@ export async function identifyDocumentPages(
             onProgress?.('⚠️ Large file detected. Using image-based identification...', 12);
         } else {
             try {
-                logger.info('📄 Calling extractTextFromPdf for identification...');
-                extractedText = await extractTextFromPdf(base64Pdf, 30); // 30-page cap prevents Puppeteer timeout on large combined PDFs
+                logger.info('📄 Calling extractTextFromPdf for identification (all pages)...');
+                // No page limit — the full document text is needed to identify documents on later pages
+                extractedText = await extractTextFromPdf(base64Pdf, 0);
                 logger.info(`📄 Text extraction returned ${extractedText.length} characters.`);
             } catch (e) {
                 logger.warn({ err: e }, '⚠️ Text extraction failed for identification');
@@ -56,39 +57,35 @@ export async function identifyDocumentPages(
 
         const imageLimit = isLargeFile ? 5 : 15;
 
-        if (!extractedText || isLargeFile) {
-            logger.warn(`⚠️ Using image-based identification (Limit: ${imageLimit} pages).`);
-            onProgress?.(`🖼️ Converting first ${imageLimit} pages to images for identification...`, 15);
-
-            try {
-                const images = await convertPdfToImages(base64Pdf, imageLimit, (msg) => {
-                    onProgress?.(msg, 15);
+        // Always add page images — text alone is unreliable for scanned/image-based PDFs.
+        // If image conversion fails but text is available, degrade gracefully to text-only.
+        logger.info(`🖼️ Adding page images for identification (limit: ${imageLimit} pages).`);
+        onProgress?.(`🖼️ Converting first ${imageLimit} pages to images for identification...`, 15);
+        try {
+            const images = await convertPdfToImages(base64Pdf, imageLimit, (msg) => {
+                onProgress?.(msg, 15);
+            });
+            images.forEach((imgBase64, index) => {
+                messages[0].content.push({ type: 'text', text: `[PAGE SCAN] Page: ${index + 1}` });
+                messages[0].content.push({
+                    type: 'image_url',
+                    image_url: { url: `data:image/jpeg;base64,${imgBase64}`, detail: 'high' }
                 });
-
-                images.forEach((imgBase64, index) => {
-                    messages[0].content.push({
-                        type: 'text',
-                        text: `[PAGE SCAN] Page: ${index + 1}`
-                    });
-                    messages[0].content.push({
-                        type: 'image_url',
-                        image_url: {
-                            url: `data:image/jpeg;base64,${imgBase64}`,
-                            detail: 'high'
-                        }
-                    });
-                });
-            } catch (err) {
-                logger.error({ err }, '❌ Failed to convert PDF for identification');
+            });
+        } catch (err) {
+            if (!extractedText) {
+                // No text AND image conversion failed — nothing the AI can work with
+                logger.error({ err }, '❌ Failed to convert PDF for identification (no text fallback available)');
                 throw new Error(`Failed to process PDF for identification: ${err instanceof Error ? err.message : String(err)}`);
             }
+            logger.warn({ err }, '⚠️ Image conversion failed — falling back to text-only identification');
         }
 
         onProgress?.('🤖 Grouping and preparing documents for AI...', 20);
 
-        const { client: openai, model: identModel } = await getAiClientForTask('document_analysis');
+        const openai = getOpenAI();
         const response = await openai.chat.completions.create({
-            model: identModel,
+            model: 'gpt-4.1',
             messages: messages,
             max_tokens: 4000,
             response_format: { type: "json_object" }

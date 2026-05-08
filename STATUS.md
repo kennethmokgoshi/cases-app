@@ -1,113 +1,15 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-07 (Fix: referral sub-sub-projects now appear in branch/subproject dropdown)
+> Last updated: 2026-05-05 (Fix: document extraction returning 0 documents)
 
 ---
 
-### Invoice & Quote Creation — Cases App (2026-05-06)
-- [x] **`apps/cases/lib/invoice-pdf.ts`** — PDF generator (pdf-lib); supports both INVOICE and QUOTE types, injects linked bank account details into Payment Instructions block (bank name, account number, branch code, account name); falls back to env vars
-- [x] **`apps/cases/app/api/finance/invoices/route.ts`** — Upgraded POST handler: added `type` (INVOICE/QUOTE), `bankAccountId`, `publicToken` (UUID), correct prefix (INV-/QUO-), Zod schema with creditor+service line items
-- [x] **`apps/cases/app/api/finance/invoices/[id]/route.ts`** — GET (incl. bankAccount relation) / PATCH (incl. bankAccount connect/disconnect) / DELETE (DRAFT only)
-- [x] **`apps/cases/app/api/finance/invoices/[id]/send/route.ts`** — Sends invoice/quote via email with PDF attachment. Non-admins blocked from sending invoices without banking details; admins bypass. Uses `sendEmailWithAttachments` + `renderBrandedEmail`
-- [x] **`apps/cases/app/api/finance/invoices/[id]/pdf/route.ts`** — On-demand PDF generation with disk cache; passes bank account details to PDF generator
-- [x] **`apps/cases/app/api/finance/bank-accounts/route.ts`** — GET all active bank accounts; POST (admin only)
-- [x] **`apps/cases/app/api/finance/bank-accounts/[id]/route.ts`** — GET / PATCH / DELETE (soft-delete, admin only)
-- [x] **`apps/cases/app/(authenticated)/invoices/new/page.tsx`** — Create Invoice/Quote form: document type toggle, client search, services table (creditor + service + amount), bank account radio selector, dates/reference/notes, VAT selector. Shows warning if no bank selected
-- [x] **`apps/cases/app/(authenticated)/invoices/[id]/page.tsx`** — Invoice/Quote detail: shows banking details block, type badge, admin-aware Send button
-- [x] **`apps/cases/app/(authenticated)/invoices/[id]/SendInvoiceModal.tsx`** — Send modal; disabled for non-admins when invoice has no banking details; shows warning when admin sends without banking details
-- [x] **`apps/cases/app/(authenticated)/invoices/[id]/MarkPaidButton.tsx`** — Mark as PAID button
-- [x] **`apps/cases/app/(authenticated)/invoices/page.tsx`** — Added Type column (Invoice/Quote badge), Type filter dropdown, "New Invoice / Quote" button label
-- **Business rule**: Non-admins can only send invoices that have a bank account attached. Quotes can always be sent. Admins bypass the restriction.
-
-### Send Quote / Invoice from Case Detail Page (2026-05-07)
-- [x] **`apps/cases/app/(authenticated)/cases/[id]/SendQuoteModal.tsx`** — Self-contained modal: QUOTE/INVOICE toggle, services table (pre-filled from case services), bank account selector, dates/notes, "Create" and "Create & Send" buttons. On create: shows success + optional email step. On send: calls `/api/finance/invoices/[id]/send`
-- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — Added `canCreateInvoice` role check (admin OR executive OR FINANCE role), `isQuoteModalOpen` state, **"Send Quote" button** in top header bar (next to Send POA), `SendQuoteModal` mount at page bottom
-- **Access rule**: Button visible to `isAdmin`, `isExecutive`, or `role === 'FINANCE'` only. Hidden from regular members.
-- **Flow**: Click "Send Quote" → modal opens pre-filled with case client + services → set amounts → choose bank → "Create" (saves as draft) or "Create & Send" (saves + emails PDF)
-
-### Fix: Referral Sub-Sub-Projects in Branch/Subproject Dropdown (2026-05-07)
-- [x] **`apps/cases/app/(authenticated)/cases/new/page.tsx`** — Added `getDescendants()` BFS helper + `allFlatProjects` state; `fetchProjects` now flattens the full hierarchy/independent list into a flat map; `subprojects` now includes ALL descendants of the selected parent (not just direct children), filtered to exclude YEAR/MONTH/ROOT/ACQUISITION_SOURCE types
-- [x] **`apps/cases/app/(authenticated)/partner/cases/new/page.tsx`** — Same changes applied
-- **Behaviour**: Referral sub-projects that themselves have children now surface in the dropdown flat list. The sidebar still shows the full hierarchy.
-
-⚠️ **Reminder**: Create a trigger for AI to auto-request all "debt review removal" files (Form 17.W, Court Orders, etc.) for relevant cases.
-
----
-
-### Fix: Document Extraction Broken by Unlimited Puppeteer Page Scan (2026-05-07)
-- [x] **Root cause**: Commit `c734602` changed `extractTextFromPdf(base64Pdf, 25)` → `extractTextFromPdf(base64Pdf, 0)` (unlimited pages). When `maxPages = 0`, the PDF optimization step is skipped and Puppeteer tries to process every page of the combined PDF. A 30–80 page combined document causes Puppeteer to hang/crash, killing extraction before the AI is ever called.
-- [x] **`packages/shared-lib/src/openai/pdf-process.ts`** — Reverted `maxPages` to **30** (slightly more than the previous 25, giving better coverage without Puppeteer timeout risk)
-- [x] **Secondary fix**: The identification step was using the hardcoded legacy `getOpenAI()` client regardless of the admin-configured AI provider. Changed to `getAiClientForTask('document_analysis')` so it correctly routes to whichever model is configured for document analysis.
-- **Impact**: This fixes the entire downstream pipeline — email documents, DHS requests, quote generation — all of which depend on extracted document data.
-
----
-
-### Not Requested via DHS Status + B2B Auto DHS Check (2026-05-06)
-- [x] **`packages/shared-lib/src/statuses/statuses.ts`** — Added `NOT_REQUESTED_VIA_DHS` ("Not Requested via DHS") workflow status in `DHS_PROCESS` category; SLA 3 days. Placed before `REQUESTED_VIA_DHS`. Meaning: consumer's ID was checked on DHS and found linked to a debt counsellor, but no transfer request has been submitted yet.
-- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — `auto_fill` action: when consumer IS found on DHS (`anyDataFound = true`), now also sets `status: 'NOT_REQUESTED_VIA_DHS'` and `dhsStatus: 'Not Requested via DHS'` on the case (previously only saved DC fields, no status update)
-- [x] **`packages/shared-lib/src/ai/b2b-trigger.ts`** — Expanded B2B trigger: now auto-runs `scrapeDetailedConsumerInfo` (DHS check) for B2B cases where required services include **Credit Profile Enquiry**, **Debt Review Flag Removal**, or **Debt Review**. If consumer found → sets `NOT_REQUESTED_VIA_DHS` + saves DC info + logs AI comment. If not found → logs comment only. DRR-specific email-DC logic still runs after the DHS check if applicable.
-- **Rule**: `NOT_REQUESTED_VIA_DHS` = DHS was checked, ID is linked (consumer under a DC), but Zenowethu has not yet submitted a transfer request. Staff should proceed with the DHS transfer request.
-- **Trigger services**: `credit_profile_enquiry`, `debt_review_flag_removal`, `debt_review_application`
-
----
-
-### Referrer Commission Tracking System (2026-05-06)
-- [x] **`packages/database/prisma/schema.prisma`** — Added `ReferrerCommissionStage` enum (13 stages) + `ReferrerCommission` model (one record per referred case); added `commissions` relation on `Referrer`, `referrerCommission` relation on `Case`, `commissionsPaid` relation on `User`
-- [x] **Schema applied** via `prisma db push` (shadow DB had pre-existing ConsumerAccount issue blocking `migrate dev`)
-- [x] **`packages/shared-lib/src/referrer-commission.ts`** — `getCommissionStageForCaseStatus()`, `isCommissionEligible()`, `COMMISSION_STAGE_LABELS`, `COMMISSION_STAGE_ORDER` — maps any case status code to a commission stage and flags payable stages (DEPOSIT_PAID, PAYING_INSTALMENTS, UP_TO_DATE, SETTLED)
-- [x] **`apps/cases/app/api/cases/[id]/status/route.ts`** — Auto-upserts `ReferrerCommission` record on every status change for cases with a referrerId; sets `isEligible` flag automatically
-- [x] **`apps/cases/app/api/admin/referrers/[id]/commission/route.ts`** — `GET` returns all commissions for one referrer with summary (total, eligible, paid, amounts owed/paid)
-- [x] **`apps/cases/app/api/admin/referrers/[id]/commission/[commissionId]/route.ts`** — `PATCH` to update stage, amount, payment ref, notes, isPaid; records who marked it paid
-- [x] **`apps/cases/app/api/admin/commissions/route.ts`** — Global commission list with filters (isPaid, isEligible, referrerId, search); ordered by eligibility then unpaid first
-- [x] **`apps/cases/app/(authenticated)/admin/referrers/[id]/page.tsx`** — Referrer detail page: banking info, 6-stat summary, per-client commission table, quick "Mark Paid" button, full edit drawer (stage, amount, payment ref, notes, paid toggle)
-- [x] **`apps/cases/app/(authenticated)/admin/commissions/page.tsx`** — Global commissions overview: filter by eligibility/payment status/search, quick Mark Paid, links to referrer detail pages
-- [x] **`apps/cases/app/(authenticated)/admin/referrers/page.tsx`** — Added "Commission" link button per row → navigates to referrer detail page
-- **Commission Rule**: Eligible when stage is Deposit Paid, Paying Instalments (debit order through), Up to Date, or Settled. Records auto-created/updated on every case status change.
-- **Stage order**: New Lead → Admin Fee Paid → Quote Submitted → Quote Accepted → Deposit Paid → Paying Instalments → Up to Date → Arrears 1–4+ months → Handed Over → Settled
-
----
-
-### Fix: Specific Validation Error Messages on New Case Form (2026-04-30)
-- [x] **`apps/cases/lib/schemas.ts`** — `parseBody` now uses `result.error.issues` instead of `flatten().fieldErrors`, producing fully-qualified dotted paths (e.g. `client.firstName`) instead of collapsing nested errors to the parent key (`client`)
-- [x] **`apps/cases/app/(authenticated)/cases/new/page.tsx`** — Error handling detects 400 validation responses explicitly; title changed from generic "❌ Error" to "❌ Validation Failed"; field paths mapped to human-readable labels (Surname, Full Names, Cell Number, etc.)
-- **Before**: "Error / Validation failed" — no indication of which field was wrong
-- **After**: "Validation Failed / • Surname: Last name is required" (specific per-field messages)
-
----
-
-### Referrer Dropdown on New Case Form (2026-04-29)
-- [x] **`packages/database/prisma/schema.prisma`** — `Referrer.idNumber` made nullable (`String? @unique`), allowing referrers to be added with just a name and details filled in later
-- [x] **`migrations/20260429_referrer_optional_idnumber/migration.sql`** — `ALTER TABLE "Referrer" ALTER COLUMN "idNumber" DROP NOT NULL` — applied to production DB
-- [x] **`apps/cases/app/api/admin/referrers/route.ts`** — Relaxed `idNumber` validation to `.nullable().optional()`; duplicate-ID check skipped when `idNumber` is null
-- [x] **`apps/cases/app/api/admin/referrers/dropdown/route.ts`** — New `GET` endpoint: returns all `Referrer` records + any `REFERRER`-type sub-projects without a linked Referrer record; sorted A–Z. Used by the New Case form dropdown
-- [x] **`apps/cases/lib/schemas.ts`** — Added `referrerId: z.string().optional().nullable()` to `CaseCreateSchema`
-- [x] **`apps/cases/app/api/cases/route.ts`** — Extracts `referrerId` from POST body; if prefixed `project:{id}` (orphan sub-project) auto-creates a minimal Referrer record before linking; passes `referrer: { connect }` to Prisma case create
-- [x] **`apps/cases/app/(authenticated)/cases/new/page.tsx`** — Added `ReferrerOption` type, `referrerOptions` + `selectedReferrerId` state, fetch on mount from `/api/admin/referrers/dropdown`. Step 1 now shows **"7. Referred By (Optional)"** dropdown — always A–Z, shows "(profile pending)" for placeholder entries, amber note when selected; referrer shown in case summary. All 3 case-creation paths pass `referrerId`
-- **Behaviour**: Referrers with no ID number show as "(profile pending)" — staff can complete their details in Admin → Referrer Registry at any time. Sub-projects under "Referrals" that have no Referrer record auto-create a minimal one when a case is first linked
-
----
-
-### Referrer Registry (2026-04-28)
-- [x] **`packages/database/prisma/schema.prisma`** — Added `Referrer` model (personal, employment, banking fields) + `referrerId` FK on `Case` + `referrer` relation on `Project`
-- [x] **`migrations/20260428_add_referrer/migration.sql`** — Creates `Referrer` table, unique indexes on `idNumber` + `projectId`, adds `referrerId` to `Case`
-- [x] **`GET/POST /api/admin/referrers`** — Paginated list with search + status filter. POST auto-creates a "Referrals" root project (if absent) + a named sub-project per referrer
-- [x] **`GET/PATCH/DELETE /api/admin/referrers/[id]`** — GET includes linked cases; PATCH renames sub-project when name changes; DELETE blocked if referrer has linked cases
-- [x] **`/admin/referrers` page** — Stats bar, search/status filter, paginated table, Add/Edit modal (personal + employment + banking + notes), delete confirmation, slide-out detail drawer
-- [x] **Admin hub tile + sidebar link** — "Referrers" tile (violet) added to `/admin`; link added to Admin section in `SidebarNav`
-- [x] **20 Vitest tests** — All passing (401/403/422/409/201/list/search/rename/delete-blocked/delete-with-cleanup)
-- **Access**: Admin / Executive / Senior Manager / Manager can view + create + edit. Only Admin or Executive can delete.
-- **Sub-project**: Each referrer auto-gets a `Project` (type `REFERRER`) under the `Referrals` ACQUISITION_SOURCE root. Name = referrer full name; renaming the referrer renames the project.
-- **Next step**: ✅ Done — "Referred by" dropdown added to New Case form (2026-04-29)
-
----
-
-### Fix: Production Emails Not Sending on Case Creation (2026-04-28)
-- [x] **Root cause** — `GHL_EMAIL_WEBHOOK_URL` is set in production Dokploy env, and `getEmailProvider()` previously gave it Priority 1 — above SMTP. So all case-creation notification emails were routed through the GHL webhook (fire-and-forget), not SMTP. The GHL workflow is not configured to send actual emails, so they silently disappeared.
-- [x] **Why POA worked** — POA route uses `sendEmailWithAttachments` (in `apps/cases/lib/email-with-attachments.ts`) which checks `SMTP_HOST` first, before any GHL hooks. SMTP is set in production → POA emails deliver.
-- [x] **Fix 1** — Reordered `getEmailProvider()` priority in `packages/shared-lib/src/notifications/service.ts`: SMTP → Resend → GHL Webhook → GHL API. SMTP now wins when configured.
-- [x] **Fix 2** — Changed `EMAIL_ENABLED/SMS_ENABLED/WHATSAPP_ENABLED` to opt-out (`!== 'false'`) so they don't silently block notifications if vars are missing from a new deployment.
-- [x] **POA does NOT update case status** — It only creates a `CaseComment` log entry. No status side-effects.
+### Fix: Document Extraction Returning 0 Documents (2026-05-05)
+- [x] **`packages/shared-lib/src/openai/pdf-process.ts`** — `identifyDocumentPages` now always adds page images to the identification request, not only as a fallback when text extraction fails. For scanned/image-based PDFs that extract partial garbage text, `!extractedText` was `false` so images were never sent — AI received insufficient text and returned an empty `documents` array. Graceful degradation: if image conversion fails but text is available, continues text-only.
+- [x] **`packages/shared-lib/src/openai/pdf-process.ts`** — Increased `max_tokens` from `1000` → `2000` for the identification step to prevent JSON truncation on large combined PDFs.
+- [x] **`packages/shared-lib/src/openai/extraction.ts`** — In `extractDocumentsFromCombinedPdf`, moved `docInfo` lookup outside the try block and added fallback push in the catch handler. Previously, if `analyzeDocument` threw for any reason (API error, timeout), the split document was silently dropped. Now it is still saved with minimal data (type + page count) so the count is never 0 when documents were correctly identified.
+- [x] **`packages/shared-lib/src/openai/pdf-process.ts`** — Fixed partial identification: `extractTextFromPdf` page limit changed from `25` → `0` (unlimited) and text injection cap raised from 50,000 → 80,000 chars. Documents starting beyond page 25 (e.g. a credit report on pages 26-45) were completely invisible to the AI. Image limit raised from 10 → 15 pages. `max_tokens` for identification raised from 2,000 → 4,000.
 
 ---
 
@@ -355,7 +257,6 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 - [x] **Role badges** — All 9 roles have distinct colour badges in Sidebar and Admin Users table. Added Senior Manager (violet) + Executive (yellow) buttons to Edit User modal.
 - [x] **Reports export** — CSV, Excel, and PDF export added to Reports page. API route (`/api/reports/export`) rewritten to support `format=csv|excel|pdf`. PDF uses `pdf-lib` (A4 landscape, dark theme, cyan headers, auto-pagination). Excel uses `xlsx` package.
 - [x] **OPSGENTY rebrand** — All visible "GoHighLevel"/"GHL" UI text in Admin Settings changed to "OPSGENTY". Internal variable names and API routes unchanged.
-- [x] **Opsgenty Marketing & Retention Integration** — Added auto-case creation, AI chat sync, and Letsatsi 9-month follow-up engine. GitHub Action added for daily sync.
 - [x] **Admin Documents back button** — "← Back to Admin" link added to `/admin/documents` page header.
 - [x] **NCRDC Compliance page** — Full registration tracking UI built at `/compliance`. Fields: NCRDC number, registered name, registration date, expiry date, notes. Status logic: ACTIVE / EXPIRING_SOON (≤30 days) / EXPIRED / NOT_SET with colour-coded banners.
 - [x] **NCRDC API** — `GET/POST /api/admin/compliance/ncrdc` using `SystemSettings` with prefixed keys (`ncrdc_ncrdc_number`, etc.) to match the schema's `key String @unique` constraint. Fixed upsert bug that used non-existent compound `category_key` constraint.
