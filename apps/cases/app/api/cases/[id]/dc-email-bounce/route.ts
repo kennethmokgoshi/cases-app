@@ -80,7 +80,13 @@ export async function POST(
             caseUpdateData.lastKnownEmail = null;
         }
         if (Object.keys(caseUpdateData).length > 0) {
-            await prisma.case.update({ where: { id }, data: caseUpdateData });
+            await prisma.case.update({ 
+                where: { id }, 
+                data: {
+                    ...caseUpdateData,
+                    updatedBy: { connect: { id: session.user.id } }
+                } 
+            });
         }
 
         // 3. Log a comment on the case alerting staff

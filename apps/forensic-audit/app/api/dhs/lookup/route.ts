@@ -16,7 +16,7 @@ import {
     scrapeDetailedConsumerInfo 
 } from '@zenowethu/shared-lib/src/dhs';
 import { prisma } from '@zenowethu/database';
-import { addWorkingDays } from '@zenowethu/shared-lib';
+import { addWorkingDays, auth } from '@zenowethu/shared-lib';
 import path, { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -31,6 +31,11 @@ const getFilePath = (fileUrl: string) => {
 // Force dependency rebuild for lib/dhs.ts
 export async function POST(request: Request) {
     try {
+        const session = await auth();
+        // Attribution: Use session user or fallback to first admin
+        const actingUserId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
+        const attribution = actingUserId ? { connect: { id: actingUserId } } : undefined;
+
         const { idNumber, caseId, action } = await request.json();
 
         if (!idNumber) {
@@ -211,12 +216,14 @@ export async function POST(request: Request) {
                 // Execute Updates
                 await prisma.case.update({
                     where: { id: caseId },
-                    data: updateData
+                    data: {
+                        ...updateData,
+                        updatedBy: attribution
+                    }
                 });
 
-                // Get a user ID for the comments (System or Admin)
-                const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
-                const userId = admin?.id;
+                // Get a user ID for the comments
+                const userId = actingUserId;
 
                 logger.info('Admin user found:', !!admin);
                 logger.info('User ID for comments:', userId);
@@ -230,7 +237,7 @@ export async function POST(request: Request) {
                         await prisma.caseComment.create({
                             data: {
                                 caseId,
-                                userId: userId,
+                                userId: actingUserId || '',
                                 content: `[SYSTEM] ${content}`
                             }
                         });
@@ -302,7 +309,8 @@ export async function POST(request: Request) {
                             dcOperatingStatus: data.dcOperatingStatus,
                             dcMobile: data.dcMobile,
                             dcEmail: data.dcEmail,
-                            lastKnownEmail: lastUsedEmail
+                            lastKnownEmail: lastUsedEmail,
+                            updatedBy: attribution
                         }
                     });
                 }
@@ -464,14 +472,15 @@ export async function POST(request: Request) {
                     data: {
                         dhsStatus: 'Requested via DHS',
                         status: 'REQUESTED_VIA_DHS',
-                        nextUpdate: addWorkingDays(new Date(), 5)
+                        nextUpdate: addWorkingDays(new Date(), 5),
+                        updatedBy: attribution
                     }
                 });
 
                 await prisma.caseComment.create({
                     data: {
                         caseId,
-                        userId: (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id || '',
+                        userId: actingUserId || '',
                         content: `[SYSTEM] Manual Transfer Request initiated. Status updated to 'Requested via DHS'.`
                     }
                 });

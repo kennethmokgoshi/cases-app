@@ -147,9 +147,15 @@ export async function PATCH(
         }
 
         // Update the case
-        const updateData: Record<string, unknown> = {};
+        const updateData: Record<string, any> = {};
         if (status) updateData.status = status;
         if (notes !== undefined) updateData.notes = notes;
+
+        // Attribution: Use API key creator or fallback to first admin
+        const fallbackUserId = apiKey.createdBy || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
+        if (fallbackUserId) {
+            updateData.updatedBy = { connect: { id: fallbackUserId } };
+        }
 
         const updatedCase = await prisma.case.update({
             where: { id: caseRecord.id },
@@ -163,6 +169,7 @@ export async function PATCH(
                     caseId: caseRecord.id,
                     fromStatus: caseRecord.status,
                     toStatus: status,
+                    userId: fallbackUserId,
                     notes: `[API: ${apiKey.name}] ${notes || 'Status updated via API'}`
                 }
             });

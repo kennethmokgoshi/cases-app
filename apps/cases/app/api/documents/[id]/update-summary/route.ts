@@ -67,7 +67,8 @@ export async function POST(
                 data: {
                     openAccounts: openAccounts,
                     closedAccounts: closedAccounts,
-                    prescribedAccounts: extractedData.prescribedAccounts || 0
+                    prescribedAccounts: extractedData.prescribedAccounts || 0,
+                    updatedBy: { connect: { id: session.user.id } }
                 }
             });
             logger.info(`✅ Case ${document.caseId} updated with manual edits`);

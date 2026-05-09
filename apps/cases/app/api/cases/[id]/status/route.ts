@@ -62,11 +62,14 @@ export async function PATCH(
                 // deadline: deadline, // Removed as requested
                 isOverdue: false, // Reset overdue state on status change
                 daysInStatus: 0, // Reset days counter
+                updatedBy: { connect: { id: session.user.id } },
                 workflowLogs: {
                     create: {
                         fromStatus: currentCase.status,
                         toStatus: newStatus,
-                        timestamp: new Date() }
+                        timestamp: new Date(),
+                        userId: session.user.id
+                    }
                 }
             },
             include: {

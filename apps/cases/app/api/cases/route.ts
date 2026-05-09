@@ -244,6 +244,12 @@ export async function GET(request: Request) {
                 where,
                 include: {
                     client: true,
+                    updatedBy: {
+                        select: {
+                            firstName: true,
+                            lastName: true
+                        }
+                    },
                     assignments: {
                         include: {
                             user: {
@@ -280,11 +286,17 @@ export async function GET(request: Request) {
             }
             if (fallbackWhere.assignments) delete fallbackWhere.assignments;
 
-            cases = await prisma.case.findMany({
-                where: fallbackWhere,
-                include: {
-                    client: true,
-                    projects: {
+                cases = await prisma.case.findMany({
+                    where: fallbackWhere,
+                    include: {
+                        client: true,
+                        updatedBy: {
+                            select: {
+                                firstName: true,
+                                lastName: true
+                            }
+                        },
+                        projects: {
                         include: {
                             project: true
                         }
@@ -536,7 +548,8 @@ export async function POST(request: Request) {
                         services: services ? JSON.stringify(services) : null,
                         partnerSplitPercent: acquisitionType === 'B2B' ? (partnerSplitPercent || 50) : 0,
                         referrer: resolvedReferrerId ? { connect: { id: resolvedReferrerId } } : undefined,
-                        createdBy: currentUserId ? { connect: { id: currentUserId } } : undefined, // Use relation connect
+                        createdBy: currentUserId ? { connect: { id: currentUserId } } : undefined,
+                        updatedBy: currentUserId ? { connect: { id: currentUserId } } : undefined,
                         client: existingClientId
                             ? { connect: { id: existingClientId } }
                             : {

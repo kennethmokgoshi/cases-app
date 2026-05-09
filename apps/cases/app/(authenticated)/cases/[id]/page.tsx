@@ -89,6 +89,10 @@ type CaseDetail = {
 
     createdAt: string;
     updatedAt: string;
+    updatedBy?: {
+        firstName: string;
+        lastName: string;
+    } | null;
     nextUpdate: string | null;
     category: string;
 
@@ -2367,8 +2371,11 @@ export default function CaseDetailPage() {
                                 </p>
                             </div>
                             <div>
-                                <label className="text-xs text-gray-500 uppercase">Last Update</label>
+                                <label className="text-xs text-gray-500 uppercase">Last Updated By</label>
                                 <p className="text-white">
+                                    {caseData.updatedBy ? `${caseData.updatedBy.firstName} ${caseData.updatedBy.lastName}` : '—'}
+                                </p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">
                                     {mounted ? `${new Date(caseData.updatedAt).toLocaleDateString()} ${new Date(caseData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
                                 </p>
                             </div>

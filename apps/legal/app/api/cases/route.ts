@@ -139,6 +139,12 @@ export async function GET(request: Request) {
             where,
             include: {
                 client: true,
+                updatedBy: {
+                    select: {
+                        firstName: true,
+                        lastName: true
+                    }
+                },
                 projects: {
                     include: {
                         project: true
@@ -330,7 +336,8 @@ export async function POST(request: Request) {
                         serviceFeeCollectedBy,
                         services: services ? JSON.stringify(services) : null,
                         partnerSplitPercent: acquisitionType === 'B2B' ? (partnerSplitPercent || 50) : 0,
-                        createdBy: currentUserId ? { connect: { id: currentUserId } } : undefined, // Use relation connect
+                        createdBy: currentUserId ? { connect: { id: currentUserId } } : undefined,
+                        updatedBy: currentUserId ? { connect: { id: currentUserId } } : undefined,
                         client: {
                             create: {
                                 firstName: client.firstName,
@@ -370,6 +377,12 @@ export async function POST(request: Request) {
                     include: {
                         client: true,
                         createdBy: true,
+                        updatedBy: {
+                            select: {
+                                firstName: true,
+                                lastName: true
+                            }
+                        },
                         projects: {
                             include: {
                                 project: true

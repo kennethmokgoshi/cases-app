@@ -19,6 +19,11 @@ type Case = {
     createdAt: string;
     updatedAt: string;
     createdById: string | null;
+    updatedById: string | null;
+    updatedBy?: {
+        firstName: string;
+        lastName: string;
+    } | null;
     assignedToId: string | null;
     client: {
         id: string;
@@ -349,6 +354,9 @@ function CasesContent() {
             case 'updated':
                 comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
                 break;
+            case 'updatedBy' as any:
+                comparison = `${a.updatedBy?.firstName || ''} ${a.updatedBy?.lastName || ''}`.localeCompare(`${b.updatedBy?.firstName || ''} ${b.updatedBy?.lastName || ''}`);
+                break;
         }
 
         return sortDirection === 'asc' ? comparison : -comparison;
@@ -590,6 +598,19 @@ function CasesContent() {
                                         )}
                                     </div>
                                 </th>
+                                <th
+                                    className="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none"
+                                    onClick={() => handleSort('updatedBy' as any)}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        Last Updated By
+                                        {sortBy === ('updatedBy' as any) && (
+                                            <span className="text-zeno-cyan">
+                                                {sortDirection === 'asc' ? '↑' : '↓'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
@@ -690,7 +711,13 @@ function CasesContent() {
                                                 )}
                                             </td>
                                             <td className="px-3 py-2 whitespace-nowrap text-gray-400 text-sm">
-                                                {mounted ? new Date(c.updatedAt).toLocaleDateString() : ''}
+                                                {mounted ? `${new Date(c.updatedAt).toLocaleDateString()} ${new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                                            </td>
+                                            <td className="px-3 py-2 whitespace-nowrap text-gray-400 text-sm">
+                                                {c.updatedBy ? `${c.updatedBy.firstName} ${c.updatedBy.lastName}` : '—'}
+                                                <div className="text-[10px] opacity-60">
+                                                    {mounted ? `${new Date(c.updatedAt).toLocaleDateString()} ${new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                                                </div>
                                             </td>
                                         </tr>
                                     );

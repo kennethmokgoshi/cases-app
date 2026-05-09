@@ -2,12 +2,17 @@ import { NextResponse } from 'next/server';
 import { NCTService } from '@zenowethu/shared-lib/src/nct';
 
 import { prisma } from '@zenowethu/database';
-import { createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
 
 const logger = createLogger('api/nct/filing');
 
 export async function POST(request: Request) {
     try {
+        const session = await auth();
+        // Attribution: Use session user or fallback to first admin
+        const actingUserId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
+        const attribution = actingUserId ? { connect: { id: actingUserId } } : undefined;
+
         const body = await request.json();
         const { caseId, data } = body;
 
@@ -26,7 +31,8 @@ export async function POST(request: Request) {
                     nctCaseNumber: result.caseNumber,
                     nctStatus: 'FILED',
                     nctFilingDate: new Date(),
-                    nctLastUpdated: new Date()
+                    nctLastUpdated: new Date(),
+                    updatedBy: attribution
                 }
             });
         }

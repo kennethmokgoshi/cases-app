@@ -30,7 +30,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     await prisma.case.update({
       where: { id: caseId },
-      data: { planReadyToStart: ready },
+      data: { 
+        planReadyToStart: ready,
+        updatedBy: { connect: { id: session.user.id } }
+      },
     });
 
     await prisma.caseComment.create({

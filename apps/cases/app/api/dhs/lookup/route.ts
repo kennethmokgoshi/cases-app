@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createLogger, sendStatusChangeNotification } from '@zenowethu/shared-lib';
+import { createLogger, sendStatusChangeNotification, auth } from '@zenowethu/shared-lib';
 import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
@@ -27,6 +27,11 @@ const getFilePath = (fileUrl: string) => {
 // Force dependency rebuild for lib/dhs.ts
 export async function POST(request: Request) {
     try {
+        const session = await auth();
+        // Attribution: Use session user or fallback to first admin
+        const actingUserId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
+        const attribution = actingUserId ? { connect: { id: actingUserId } } : undefined;
+
         const { idNumber, caseId, action, useAiExtraction = false } = await request.json();
 
         if (!idNumber) {
@@ -213,12 +218,14 @@ export async function POST(request: Request) {
                 // Execute Updates
                 await prisma.case.update({
                     where: { id: caseId },
-                    data: updateData
+                    data: {
+                        ...updateData,
+                        updatedBy: attribution
+                    }
                 });
 
-                // Get a user ID for the comments (System or Admin)
-                const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
-                const userId = admin?.id;
+                // Get a user ID for the comments
+                const userId = actingUserId;
 
                 logger.info('Admin user found:', !!admin);
                 logger.info('User ID for comments:', userId);
@@ -280,7 +287,8 @@ export async function POST(request: Request) {
                         where: { id: caseId },
                         data: { 
                             status: 'NOT_LINKED',
-                            dhsStatus: 'NOT_LINKED'
+                            dhsStatus: 'NOT_LINKED',
+                            updatedBy: attribution
                         }
                     });
                 }
@@ -348,6 +356,7 @@ export async function POST(request: Request) {
                                 lastKnownEmail:    lastUsedEmail,
                                 status:            'NOT_REQUESTED_VIA_DHS',
                                 dhsStatus:         'Not Requested via DHS',
+                                updatedBy:         attribution
                             },
                         });
                     }
@@ -389,7 +398,8 @@ export async function POST(request: Request) {
                         lastUsedTel: dc?.tel || null,
                         lastKnownEmail: dc?.email || null,
                         // Request status is separate from consumer status
-                        dhsStatus: 'PENDING' // Default to pending when linked info is found
+                        dhsStatus: 'PENDING', // Default to pending when linked info is found
+                        updatedBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined
                     }
                 });
                 logger.info(`[DHS API] Updated case ${caseId} with DHS info`);
@@ -399,17 +409,17 @@ export async function POST(request: Request) {
                     where: { id: caseId },
                     data: {
                         status: 'NOT_LINKED',
-                        dhsStatus: 'NOT_LINKED'
+                        dhsStatus: 'NOT_LINKED',
+                        updatedBy: attribution
                     }
                 });
 
                 // Log system comment
-                const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
-                if (admin) {
+                if (actingUserId) {
                     await prisma.caseComment.create({
                         data: {
                             caseId,
-                            userId: admin.id,
+                            userId: actingUserId,
                             content: `[SYSTEM] DHS Search: This ID number was not found on the NCR Debt Help System. Main status set to NOT_LINKED.`
                         }
                     });
@@ -586,14 +596,20 @@ export async function POST(request: Request) {
             // DHS succeeded — update case status
             await prisma.case.update({
                 where: { id: caseId },
-                data: { dhsStatus: 'PENDING', status: 'DHS_REQUESTED' }
+                data: { 
+                    dhsStatus: 'PENDING', 
+                    status: 'DHS_REQUESTED',
+                    updatedBy: attribution
+                }
             });
+            // Create workflow log
             await prisma.workflowLog.create({
                 data: {
-                    caseId,
+                    caseId: caseId,
                     fromStatus: caseData.status,
                     toStatus: 'DHS_REQUESTED',
-                    notes: 'Transfer request submitted via DHS automation'
+                    notes: 'Transfer request submitted via DHS automation',
+                    userId: actingUserId
                 }
             });
 
@@ -661,7 +677,11 @@ export async function POST(request: Request) {
                 if (resolvedEmail !== caseData.dcEmail) {
                     await prisma.case.update({
                         where: { id: caseId },
-                        data: { dcEmail: resolvedEmail, lastKnownEmail: resolvedEmail }
+                        data: { 
+                            dcEmail: resolvedEmail, 
+                            lastKnownEmail: resolvedEmail,
+                            updatedBy: attribution
+                        }
                     });
                     logger.info(`Updated case dcEmail to resolved address (source: ${emailSource})`);
                 }
@@ -683,12 +703,15 @@ export async function POST(request: Request) {
                 if (emailResult.emailSuccess) {
                     await prisma.case.update({
                         where: { id: caseId },
-                        data: { nextUpdate: addWorkingDays(new Date(), 5) }
+                        data: { 
+                            nextUpdate: addWorkingDays(new Date(), 5),
+                            updatedBy: attribution
+                        }
                     });
                     await prisma.caseComment.create({
                         data: {
                             caseId,
-                            userId: (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id || '',
+                            userId: actingUserId || '',
                             content: `[SYSTEM] Requested via DHS. Email sent to DC (${resolvedEmail}) [source: ${emailSource}] requesting: Form 16, Form 17.1, Form 17.2, Form 17.7, complete consumer file, court/consent orders, account schedules, and all supporting documentation. Next update: +5 working days.`
                         }
                     });

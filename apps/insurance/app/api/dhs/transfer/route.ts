@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { logger } from '@zenowethu/shared-lib';
+import { auth, logger } from '@zenowethu/shared-lib';
 import { requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
 import { prisma } from '@zenowethu/database';
 import path from 'path';
@@ -13,6 +13,7 @@ import fs from 'fs';
 
 export async function POST(request: Request) {
     try {
+        const session = await auth();
         const { caseId, idNumber, poaDocumentId, idDocumentId } = await request.json();
 
         if (!caseId || !idNumber) {
@@ -133,7 +134,8 @@ export async function POST(request: Request) {
                 where: { id: caseId },
                 data: {
                     dhsStatus: 'PENDING',
-                    status: 'DHS_REQUESTED'
+                    status: 'DHS_REQUESTED',
+                    updatedBy: { connect: { id: session?.user?.id } }
                 }
             });
 
@@ -143,7 +145,8 @@ export async function POST(request: Request) {
                     caseId: caseId,
                     fromStatus: caseData.status,
                     toStatus: 'DHS_REQUESTED',
-                    notes: 'Transfer request submitted via DHS automation'
+                    notes: 'Transfer request submitted via DHS automation',
+                    userId: session?.user?.id || null
                 }
             });
         }

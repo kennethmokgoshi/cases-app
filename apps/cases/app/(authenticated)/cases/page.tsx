@@ -27,6 +27,11 @@ type Case = {
     createdAt: string;
     updatedAt: string;
     createdById: string | null;
+    updatedById: string | null;
+    updatedBy?: {
+        firstName: string;
+        lastName: string;
+    } | null;
     assignedToId: string | null;
     services: string | null;
     client: {
@@ -90,7 +95,7 @@ function CasesContent() {
     const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set());
 
     // Sorting state
-    const [sortBy, setSortBy] = useState<'fileNumber' | 'client' | 'status' | 'nextUpdate' | 'updated' | 'services'>('updated');
+    const [sortBy, setSortBy] = useState<'fileNumber' | 'client' | 'status' | 'nextUpdate' | 'updated' | 'updatedBy' | 'services'>('updated');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     // Track hydration
@@ -219,6 +224,7 @@ function CasesContent() {
         else if (sortBy === 'status') comp = a.status.localeCompare(b.status);
         else if (sortBy === 'services') comp = (a.services || '').localeCompare(b.services || '');
         else if (sortBy === 'nextUpdate') comp = (a.nextUpdate ? new Date(a.nextUpdate).getTime() : 0) - (b.nextUpdate ? new Date(b.nextUpdate).getTime() : 0);
+        else if (sortBy === 'updatedBy') comp = `${a.updatedBy?.firstName || ''} ${a.updatedBy?.lastName || ''}`.localeCompare(`${b.updatedBy?.firstName || ''} ${b.updatedBy?.lastName || ''}`);
         else comp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
         return sortDirection === 'asc' ? comp : -comp;
     });
@@ -306,8 +312,8 @@ function CasesContent() {
                         <thead className="bg-zeno-blue/30 border-b border-white/5 text-gray-400 uppercase text-[10px] font-bold tracking-wider">
                             <tr>
                                 <th className="px-4 py-3 w-10">#</th>
-                                {['fileNumber', 'client', 'status', 'services', 'updated', 'project', 'nextUpdate'].map(col => {
-                                    const labels:any = {fileNumber: 'File #', client: 'Client', status: 'Process Status', services: 'Type', updated: 'Last Updated', project: 'Project', nextUpdate: 'Next Update'};
+                                {['fileNumber', 'client', 'status', 'services', 'updated', 'updatedBy', 'project', 'nextUpdate'].map(col => {
+                                    const labels:any = {fileNumber: 'File #', client: 'Client', status: 'Process Status', services: 'Type', updated: 'Last Updated', updatedBy: 'Last Updated By', project: 'Project', nextUpdate: 'Next Update'};
                                     return <th key={col} className="px-4 py-3 cursor-pointer hover:text-white" onClick={() => handleSort(col as any)}>{labels[col]} {sortBy === col && (sortDirection === 'asc' ? '↑' : '↓')}</th>;
                                 })}
                             </tr>
@@ -338,7 +344,15 @@ function CasesContent() {
                                                 } catch { return 'Error'; }
                                             })()}
                                         </td>
-                                        <td className="px-4 py-4 text-gray-400 text-xs">{new Date(c.updatedAt).toLocaleDateString()}</td>
+                                        <td className="px-4 py-4 text-gray-400 text-xs">
+                                            {new Date(c.updatedAt).toLocaleDateString()} {new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </td>
+                                        <td className="px-4 py-4 text-gray-400 text-xs">
+                                            {c.updatedBy ? `${c.updatedBy.firstName} ${c.updatedBy.lastName}` : '—'}
+                                            <div className="text-[10px] opacity-60">
+                                                {new Date(c.updatedAt).toLocaleDateString()} {new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </td>
                                         <td className="px-4 py-4">
                                             {(() => {
                                                 const primary = c.projects?.find(p => p.isPrimary) || c.projects?.[0];

@@ -91,7 +91,8 @@ export async function runAutomatedUnderwriting(assessmentId: string, userId: str
                     riskScore,
                     generatedAt: new Date().toISOString(),
                     generatedBy: userId
-                })
+                }),
+                updatedBy: { connect: { id: userId } }
             }
         });
 

@@ -91,13 +91,16 @@ export async function POST(
             }
         }
 
-        // Update case if there are case updates
-        if (Object.keys(caseUpdates).length > 0) {
+        // Update case with data and attribution
+        if (Object.keys(caseUpdates).length > 0 || Object.keys(clientUpdates).length > 0) {
             await prisma.case.update({
                 where: { id: caseId },
-                data: caseUpdates
+                data: {
+                    ...caseUpdates,
+                    updatedBy: { connect: { id: session.user.id } }
+                }
             });
-            logger.info('✅ Case updated with:', Object.keys(caseUpdates));
+            logger.info('✅ Case updated with attribution and fields:', Object.keys(caseUpdates));
         }
 
         // Log activity

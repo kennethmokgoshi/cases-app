@@ -172,7 +172,96 @@ export async function runB2BFileTrigger(
                     logger.warn(`[B2B_TRIGGER] GHL tag sync failed for ${caseId}:`, err);
                 });
             } else {
-                // Automation: If search returns no records, set status to NOT_LINKED
+                // Scenario 1: Consumer Not Linked on DHS
+                // TRIGGER: One-time Re-Analyse (GPT-4o) if not found, to catch extraction errors.
+                const reAnalyseLog = await prisma.workflowLog.findFirst({
+                    where: { caseId, action: 'AI_RE_ANALYSE' }
+                });
+
+                if (!reAnalyseLog) {
+                    logger.info(`[B2B_TRIGGER] ${caseData.fileNumber}: Not found on DHS. Triggering one-time Re-Analyse...`);
+                    
+                    await prisma.workflowLog.create({
+                        data: {
+                            caseId,
+                            fromStatus: caseData.status,
+                            toStatus: caseData.status,
+                            action: 'AI_RE_ANALYSE',
+                            notes: `[AI] Consumer not found in DHS (ID: ${idNumber}). Triggering document re-analysis to verify ID number.`
+                        }
+                    });
+
+                    // Find combined file or ID doc to re-analyse
+                    const combinedFile = caseData.documents.find(d => d.type === 'COMBINED' || d.type === 'OTHER');
+                    const idDoc = caseData.documents.find(d => d.type === 'ID');
+                    const docToProcess = combinedFile || idDoc;
+
+                    if (docToProcess) {
+                        await saveAIComment(caseId, adminId, {
+                            service: serviceLabels,
+                            triggeredBy,
+                            assessment: `DHS auto-check: consumer ID ${idNumber} was not found.`,
+                            action: `Triggering one-time Re-Analyse (GPT-4o Standard) on ${docToProcess.type} file to verify ID number. Will re-check DHS in 5 seconds...`
+                        });
+
+                        try {
+                            // This re-extracts and UPDATES the client record (via performAutoDhsExtraction update logic)
+                            await performAutoDhsExtraction(caseData, docToProcess, adminId, serviceLabels, triggeredBy);
+                            
+                            logger.info(`[B2B_TRIGGER] Re-analysis complete for ${caseData.fileNumber}. Waiting 5s...`);
+                            await delay(5000);
+
+                            // Refetch the latest client data to get the potentially updated ID number
+                            const refreshedClient = await prisma.client.findUnique({
+                                where: { id: caseData.clientId },
+                                select: { idNumber: true, firstName: true, lastName: true }
+                            });
+
+                            if (refreshedClient && refreshedClient.idNumber) {
+                                logger.info(`[B2B_TRIGGER] Running second DHS check for ${caseData.fileNumber} with ID: ${refreshedClient.idNumber}`);
+                                const secondDhsScrape = await scrapeDetailedConsumerInfo(refreshedClient.idNumber);
+
+                                if (secondDhsScrape.success && secondDhsScrape.data) {
+                                    const d = secondDhsScrape.data;
+                                    const dcName = d.dcFullName || d.debtCounsellorName || d.ncrdcNo || 'Unknown DC';
+
+                                    await prisma.case.update({
+                                        where: { id: caseId },
+                                        data: {
+                                            status:             'NOT_REQUESTED_VIA_DHS',
+                                            dhsStatus:          'Not Requested via DHS',
+                                            ncrdcNo:            d.ncrdcNo,
+                                            debtCounsellorName: d.dcFullName || d.debtCounsellorName,
+                                            dcTradingName:      d.dcTradingName,
+                                            dcOperatingStatus:  d.dcOperatingStatus,
+                                            dcMobile:           d.dcMobile,
+                                            dcEmail:            d.dcEmail,
+                                            consumerDhsStatus:  d.status,
+                                        },
+                                    });
+
+                                    await saveAIComment(caseId, adminId, {
+                                        service: serviceLabels,
+                                        triggeredBy,
+                                        assessment: `DHS re-check SUCCESS: consumer ID ${refreshedClient.idNumber} is linked on DHS under ${dcName}.`,
+                                        action: `Status set to "Not Requested via DHS". Proceeding with automation.`
+                                    });
+
+                                    // GHL Sync
+                                    GhlService.applyTags(caseId, ['dhs_linked', 'dhs_not_requested']).catch(e => logger.warn(e));
+                                    
+                                    // Successfully found - continue with Phase 2/3 by letting the rest of the function run
+                                    // (Actually, runB2BFileTrigger reloads the case after this block, so it will see the updated status)
+                                    return await runB2BFileTrigger(caseId, 'DOCUMENT_UPLOADED'); 
+                                }
+                            }
+                        } catch (reErr) {
+                            logger.error(`[B2B_TRIGGER] Re-analysis failed for ${caseData.fileNumber}:`, reErr);
+                        }
+                    }
+                }
+
+                // If we reach here, either it was already re-analysed OR re-analysis didn't find the consumer
                 await prisma.case.update({
                     where: { id: caseId },
                     data: {
@@ -338,6 +427,31 @@ async function performAutoDhsExtraction(
                 analyzedAt: new Date()
             }
         });
+    }
+
+    // Sync extracted client data back to the database
+    if (extraction.analysis) {
+        const updateData: any = {};
+        if (extraction.analysis.id) {
+            const id = extraction.analysis.id;
+            if (id.names && id.names !== 'NA') updateData.firstName = id.names;
+            if (id.surname && id.surname !== 'NA') updateData.lastName = id.surname;
+            if (id.idNumber && id.idNumber !== 'NA') updateData.idNumber = id.idNumber;
+        }
+        if (extraction.analysis.poa) {
+            const poa = extraction.analysis.poa;
+            if (poa.cellNumber && poa.cellNumber !== 'NA') updateData.phone = poa.cellNumber;
+            if (poa.email && poa.email !== 'NA') updateData.email = poa.email;
+            if (poa.address && poa.address !== 'NA') updateData.address = poa.address;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            await prisma.client.update({
+                where: { id: caseData.clientId },
+                data: updateData
+            });
+            logger.info(`[B2B_TRIGGER] Updated client ${caseData.clientId} data from auto-extraction`);
+        }
     }
 
     await saveAIComment(caseId, adminId, {

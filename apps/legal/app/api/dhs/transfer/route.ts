@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { logger } from '@zenowethu/shared-lib';
+import { auth, logger } from '@zenowethu/shared-lib';
 import { requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
 import { prisma } from '@zenowethu/database';
 import path from 'path';
@@ -13,6 +13,11 @@ import fs from 'fs';
 
 export async function POST(request: Request) {
     try {
+        const session = await auth();
+        // Attribution: Use session user or fallback to first admin
+        const actingUserId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
+        const attribution = actingUserId ? { connect: { id: actingUserId } } : undefined;
+
         const { caseId, idNumber, poaDocumentId, idDocumentId } = await request.json();
 
         if (!caseId || !idNumber) {
@@ -133,7 +138,8 @@ export async function POST(request: Request) {
                 where: { id: caseId },
                 data: {
                     dhsStatus: 'PENDING',
-                    status: 'DHS_REQUESTED'
+                    status: 'DHS_REQUESTED',
+                    updatedBy: attribution
                 }
             });
 
@@ -143,7 +149,8 @@ export async function POST(request: Request) {
                     caseId: caseId,
                     fromStatus: caseData.status,
                     toStatus: 'DHS_REQUESTED',
-                    notes: 'Transfer request submitted via DHS automation'
+                    notes: 'Transfer request submitted via DHS automation',
+                    userId: actingUserId
                 }
             });
         }

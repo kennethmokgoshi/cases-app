@@ -18,23 +18,21 @@ model Project {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   order           Int                @default(0)
+  accentColor     String?            @default("#C4953A")
+  companySlogan   String?
+  logoUrl         String?
+  primaryColor    String?            @default("#0B1D35")
+  termsUrl        String?
   apiKeys         ApiKey[]
   cases           CaseProject[]
+  consumers       ConsumerAccount[]
+  invoices        Invoice[]
   parent          Project?           @relation("ProjectHierarchy", fields: [parentId], references: [id])
   children        Project[]          @relation("ProjectHierarchy")
   members         ProjectMember[]
-  b2bPartnerUsers User[]             @relation("B2BPartnerUsers")
-  consumers       ConsumerAccount[]
-  resources       DocumentResource[] @relation("DocumentResourceToProject")
-  invoices        Invoice[]
-  
-  // White-Label Bundle Branding
-  primaryColor    String?            @default("#0B1D35")
-  accentColor     String?            @default("#C4953A")
-  logoUrl         String?
-  companySlogan   String?
-  termsUrl        String?
   referrer        Referrer?
+  b2bPartnerUsers User[]             @relation("B2BPartnerUsers")
+  resources       DocumentResource[] @relation("DocumentResourceToProject")
 }
 
 model ProjectMember {
@@ -51,89 +49,57 @@ model ProjectMember {
   @@index([userId])
 }
 
-// ============================================================
-// REFERRER — External persons who refer clients to Zenowethu
-// ============================================================
-
-enum ReferrerCommissionStage {
-  NEW_LEAD
-  ADMIN_FEE_PAID
-  QUOTE_SUBMITTED
-  QUOTE_ACCEPTED
-  DEPOSIT_PAID
-  PAYING_INSTALMENTS
-  UP_TO_DATE
-  ARREARS_1M
-  ARREARS_2M
-  ARREARS_3M
-  ARREARS_4M_PLUS
-  HANDED_OVER
-  SETTLED
-}
-
 model Referrer {
-  id                String    @id @default(cuid())
+  id                String               @id @default(cuid())
   firstName         String
   lastName          String
-  idNumber          String?   @unique
+  idNumber          String?              @unique
   email             String?
   cellNumber        String?
-
-  // Employment details
   employerName      String?
-  employmentType    String?   // EMPLOYED | SELF_EMPLOYED | CONTRACT | UNEMPLOYED | RETIRED
+  employmentType    String?
   employerAddress   String?
   employerPhone     String?
   occupation        String?
   monthlyIncome     Decimal?
-
-  // Banking details
   bankName          String?
   accountNumber     String?
-  accountType       String?   // CHEQUE | SAVINGS | CURRENT
+  accountType       String?
   branchCode        String?
   accountHolderName String?
-
-  // Auto-created sub-project (name = firstName + " " + lastName)
-  projectId         String?   @unique
-  project           Project?  @relation(fields: [projectId], references: [id])
-
-  cases             Case[]
-  commissions       ReferrerCommission[]
-  isActive          Boolean   @default(true)
+  projectId         String?              @unique
+  isActive          Boolean              @default(true)
   notes             String?
   createdById       String?
-  createdBy         User?     @relation("ReferrerCreator", fields: [createdById], references: [id])
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  cases             Case[]
+  createdBy         User?                @relation("ReferrerCreator", fields: [createdById], references: [id])
+  project           Project?             @relation(fields: [projectId], references: [id])
+  commissions       ReferrerCommission[]
 
   @@index([lastName])
   @@index([idNumber])
   @@index([isActive])
 }
 
-// One commission record per case linked to a referrer.
-// Stage auto-advances when case status changes.
-// Commission becomes eligible at DEPOSIT_PAID, PAYING_INSTALMENTS, UP_TO_DATE, or SETTLED.
 model ReferrerCommission {
   id               String                  @id @default(cuid())
   referrerId       String
-  referrer         Referrer                @relation(fields: [referrerId], references: [id], onDelete: Cascade)
   caseId           String                  @unique
-  case             Case                    @relation(fields: [caseId], references: [id], onDelete: Cascade)
-
   stage            ReferrerCommissionStage @default(NEW_LEAD)
-  isEligible       Boolean                 @default(false)  // true when stage is payable
-  commissionAmount Decimal?                                 // manually set by staff
+  isEligible       Boolean                 @default(false)
+  commissionAmount Decimal?
   isPaid           Boolean                 @default(false)
   paidAt           DateTime?
   paidById         String?
-  paidBy           User?                   @relation("CommissionPaidBy", fields: [paidById], references: [id])
-  paymentRef       String?                                  // EFT / payment reference
-
+  paymentRef       String?
   notes            String?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
+  case             Case                    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  paidBy           User?                   @relation("CommissionPaidBy", fields: [paidById], references: [id])
+  referrer         Referrer                @relation(fields: [referrerId], references: [id], onDelete: Cascade)
 
   @@index([referrerId])
   @@index([isPaid])
@@ -142,44 +108,40 @@ model ReferrerCommission {
 }
 
 model Client {
-  id             String        @id @default(cuid())
-  firstName      String
-  lastName       String
-  idNumber       String        @unique
+  id                String           @id @default(cuid())
+  firstName         String
+  lastName          String
+  idNumber          String           @unique
   email             String?
-  alternativeEmail  String?
-  phone              String?
-  alternativePhone   String?
-  alternativePhone2  String?
-  whatsappNumber     String?
+  phone             String?
+  whatsappNumber    String?
   telegramNumber    String?
-  ghlContactId   String?
-  address        String?
-  employer       String?
-  employeeNo     String?
-  grossSalary    Decimal?
-  netSalary      Decimal?
-  salaryPayDate  Int?
-  type           String        @default("Standard")
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  cases           Case[]
-  LegalMatter     LegalMatter[]
-  payments        Payment[]
-  invoices        Invoice[]
-  consumerAccount ConsumerAccount?
-  creditAccounts  CreditAccount[]
+  address           String?
+  employer          String?
+  employeeNo        String?
+  grossSalary       Decimal?
+  netSalary         Decimal?
+  salaryPayDate     Int?
+  type              String           @default("Standard")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  ghlContactId      String?
+  alternativeEmail  String?
+  alternativePhone  String?
+  alternativePhone2 String?
+  cases             Case[]
+  consumerAccount   ConsumerAccount?
+  creditAccounts    CreditAccount[]
+  invoices          Invoice[]
+  LegalMatter       LegalMatter[]
+  payments          Payment[]
 }
 
 model Case {
   id                      String                @id @default(cuid())
   fileNumber              String                @unique
   clientId                String
-  referrerId              String?
   acquisitionType         String                @default("B2C")
-  leadSource              String?
-  ghlOpportunityId        String?
-  marketingData           Json?
   partnerName             String?
   partnerBranch           String?
   r350Status              String                @default("NOT_APPLICABLE")
@@ -206,7 +168,6 @@ model Case {
   cb_status               String?
   cb_statusDate           DateTime?
   ncrdcNo                 String?
-  ncrSysRef               String?
   dhsStatus               String?
   dhsDaysCounter          String?
   debtReviewDate          DateTime?
@@ -214,23 +175,14 @@ model Case {
   dcTradingName           String?
   dcEmail                 String?
   lastKnownEmail          String?
-  lastUsedMobile          String?
   dcOperatingStatus       String?
   dcMobile                String?
-  dcTel                   String?
-  lastUsedTel             String?
-  dcProvince              String?
   consumerDhsStatus       String?
   requestedDhsStatus      String?
   dhsPreviousStatus       String?
   previousDebtCounsellor  String?
   dhsStatusDate           DateTime?
   dhsApplicationDate      DateTime?
-  nctCaseNumber           String?
-  nctStatus               String?
-  nctFilingDate           DateTime?
-  nctLastUpdated          DateTime?
-  nctEPurseBalance        Decimal?
   afterCareFees           Decimal?
   legalFees               Decimal?
   legalFeesStatus         String?
@@ -248,34 +200,50 @@ model Case {
   todos                   String?
   declineReason           String?
   declineReasonAttended   Boolean               @default(false)
-  aiAutonomyLevel         String                @default("CO_PILOT") // CO_PILOT, AUTOPILOT, MANUAL
-  planReadyToStart        Boolean               @default(false)
-  isAdminOnly             Boolean               @default(false)
   description             String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   assignedToId            String?
   createdById             String?
+  aiAutonomyLevel         String                @default("CO_PILOT")
+  nctCaseNumber           String?
+  nctEPurseBalance        Decimal?
+  nctFilingDate           DateTime?
+  nctLastUpdated          DateTime?
+  nctStatus               String?
+  planReadyToStart        Boolean               @default(false)
+  ncrSysRef               String?
+  dcProvince              String?
+  dcTel                   String?
+  lastUsedMobile          String?
+  lastUsedTel             String?
+  referrerId              String?
+  isAdminOnly             Boolean               @default(false)
+  ghlOpportunityId        String?
+  leadSource              String?
+  marketingData           Json?
+  updatedById             String?
   assignedTo              User?                 @relation("CaseAssignee", fields: [assignedToId], references: [id])
   client                  Client                @relation(fields: [clientId], references: [id])
   createdBy               User?                 @relation("CaseCreator", fields: [createdById], references: [id])
   referrer                Referrer?             @relation(fields: [referrerId], references: [id])
+  updatedBy               User?                 @relation("CaseUpdater", fields: [updatedById], references: [id])
+  assignments             CaseAssignment[]
   comments                CaseComment[]
+  followers               CaseFollower[]
+  plan                    CasePlan?
   projects                CaseProject[]
   creditAccounts          CreditAccount[]
+  debtReviewDocuments     DebtReviewDocument[]
   documents               Document[]
   ForensicAudit           ForensicAudit[]
   InsuranceAssessment     InsuranceAssessment[]
+  invoices                Invoice[]
   LegalMatter             LegalMatter[]
   notifications           NotificationLog[]
   payments                Payment[]
-  workflowLogs            WorkflowLog[]
-  invoices                Invoice[]
-  plan                    CasePlan?
-  debtReviewDocuments     DebtReviewDocument[]
-  assignments             CaseAssignment[]
-  followers               CaseFollower[]
   referrerCommission      ReferrerCommission?
+  workflowLogs            WorkflowLog[]
 
   @@index([status])
   @@index([isOverdue])
@@ -286,20 +254,20 @@ model Case {
 }
 
 model Document {
-  id            String    @id @default(cuid())
+  id            String                @id @default(cuid())
   caseId        String
   type          String
   fileName      String
   fileUrl       String
   fileSize      Int
   mimeType      String
-  uploadedAt    DateTime  @default(now())
+  uploadedAt    DateTime              @default(now())
   analyzedAt    DateTime?
   extractedData String?
   uploadedById  String?
-  isAdminOnly   Boolean   @default(false)
-  case          Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  uploadedBy    User?     @relation(fields: [uploadedById], references: [id])
+  isAdminOnly   Boolean               @default(false)
+  case          Case                  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  uploadedBy    User?                 @relation(fields: [uploadedById], references: [id])
   accessGrants  DocumentAccessGrant[]
 
   @@index([caseId])
@@ -315,8 +283,8 @@ model DocumentAccessGrant {
   grantedAt  DateTime @default(now())
   grantedBy  String
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user       User     @relation("DocumentAccessGrantee", fields: [userId], references: [id])
   granter    User     @relation("DocumentAccessGranter", fields: [grantedBy], references: [id])
+  user       User     @relation("DocumentAccessGrantee", fields: [userId], references: [id])
 
   @@unique([documentId, userId])
   @@index([documentId])
@@ -348,52 +316,53 @@ model WorkflowLog {
 }
 
 model User {
-  id                        String              @id @default(cuid())
-  username                  String              @unique
+  id                        String                @id @default(cuid())
+  username                  String                @unique
   firstName                 String
   lastName                  String
-  email                     String              @unique
+  email                     String                @unique
   password                  String
-  organization              String              @default("Zenowethu")
-  isAdmin                   Boolean             @default(false)
-  isLocked                  Boolean             @default(false)
-  emailNotificationsEnabled Boolean             @default(true)
-  createdAt                 DateTime            @default(now())
+  organization              String                @default("Zenowethu")
+  isAdmin                   Boolean               @default(false)
+  isLocked                  Boolean               @default(false)
+  emailNotificationsEnabled Boolean               @default(true)
+  createdAt                 DateTime              @default(now())
   lastLogin                 DateTime?
   b2bPartnerId              String?
   phone                     String?
-  idNumber                  String?             // SA ID number — required for Wesbank POA
-  address                   String?             // Residential address — required for Wesbank POA
-  role                      String              @default("MEMBER")
-  userType                  String              @default("STAFF")
+  role                      String                @default("MEMBER")
+  userType                  String                @default("STAFF")
   avatarUrl                 String?
   resetPasswordExpires      DateTime?
-  resetPasswordToken        String?             @unique
+  resetPasswordToken        String?               @unique
+  idNumber                  String?
+  address                   String?
   AuditEvidence             AuditEvidence[]
-  casesAssigned             Case[]              @relation("CaseAssignee")
-  casesCreated              Case[]              @relation("CaseCreator")
+  casesAssigned             Case[]                @relation("CaseAssignee")
+  casesCreated              Case[]                @relation("CaseCreator")
+  casesUpdated              Case[]                @relation("CaseUpdater")
+  caseAssignments           CaseAssignment[]
   comments                  CaseComment[]
+  caseFollows               CaseFollower[]
+  approvedPlans             CasePlan[]            @relation("PlanApprover")
   mentions                  CommentMention[]
+  dccpCredential            DCCPCredential?
+  approvedDebtReviewDocs    DebtReviewDocument[]  @relation("DebtReviewDocumentApprover")
   uploadedDocuments         Document[]
+  grantedDocumentAccess     DocumentAccessGrant[] @relation("DocumentAccessGranter")
+  documentAccessGrants      DocumentAccessGrant[] @relation("DocumentAccessGrantee")
   ForensicAudit             ForensicAudit[]
   inAppNotifications        InAppNotification[]
-  sentNotifications         NotificationLog[]   @relation("SentNotifications")
-  invoicesCreated           Invoice[]           @relation("InvoiceCreator")
-  recordedPayments          Payment[]           @relation("PaymentRecorder")
+  invoicesCreated           Invoice[]             @relation("InvoiceCreator")
+  sentNotifications         NotificationLog[]     @relation("SentNotifications")
+  recordedPayments          Payment[]             @relation("PaymentRecorder")
   uploadedBatches           PaymentBatch[]
   projectMemberships        ProjectMember[]
-  b2bPartner                Project?            @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
+  createdReferrers          Referrer[]            @relation("ReferrerCreator")
+  commissionsPaid           ReferrerCommission[]  @relation("CommissionPaidBy")
+  b2bPartner                Project?              @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
   groupMemberships          UserGroupMember[]
   workflowLogs              WorkflowLog[]
-  approvedPlans             CasePlan[]          @relation("PlanApprover")
-  approvedDebtReviewDocs    DebtReviewDocument[] @relation("DebtReviewDocumentApprover")
-  caseAssignments           CaseAssignment[]
-  caseFollows               CaseFollower[]
-  documentAccessGrants      DocumentAccessGrant[] @relation("DocumentAccessGrantee")
-  grantedDocumentAccess     DocumentAccessGrant[] @relation("DocumentAccessGranter")
-  dccpCredential            DCCPCredential?
-  createdReferrers          Referrer[]          @relation("ReferrerCreator")
-  commissionsPaid           ReferrerCommission[] @relation("CommissionPaidBy")
 }
 
 model CaseAssignment {
@@ -434,10 +403,10 @@ model CaseComment {
   updatedAt    DateTime         @updatedAt
   isInternal   Boolean          @default(true)
   type         String           @default("NOTE")
+  attachments  Json?
   case         Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
   user         User             @relation(fields: [userId], references: [id])
   mentions     CommentMention[]
-  attachments  Json?            // Array of { name, url, type, size }
 
   @@index([caseId])
   @@index([userId])
@@ -627,59 +596,36 @@ model PaymentBatch {
   @@index([uploadedAt])
 }
 
-enum DocumentType {
-  INVOICE
-  QUOTE
-}
-
-enum InvoiceStatus {
-  DRAFT
-  SENT
-  PAID
-  OVERDUE
-  CANCELLED
-}
-
 model Invoice {
   id            String        @id @default(cuid())
   invoiceNumber String        @unique
   status        InvoiceStatus @default(DRAFT)
-  type          DocumentType  @default(INVOICE)
-  publicToken   String?       @unique
-
   clientId      String?
   caseId        String?
   projectId     String?
-  client        Client?       @relation(fields: [clientId], references: [id])
-  case          Case?         @relation(fields: [caseId], references: [id])
-  project       Project?      @relation(fields: [projectId], references: [id])
-
-  // JSON array: [{ description: string, quantity: number, unitPrice: number }]
   lineItems     Json
-
   subtotal      Decimal       @default(0)
   vatRate       Decimal       @default(0.15)
   vatAmount     Decimal       @default(0)
   total         Decimal       @default(0)
-
   issuedAt      DateTime      @default(now())
   dueAt         DateTime
-
   pdfPath       String?
   sentAt        DateTime?
   sentTo        String?
-
   notes         String?
   reference     String?
-
   createdById   String?
-  createdBy     User?         @relation("InvoiceCreator", fields: [createdById], references: [id])
-
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
-
   bankAccountId String?
+  type          DocumentType  @default(INVOICE)
+  publicToken   String?       @unique
   bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
+  case          Case?         @relation(fields: [caseId], references: [id])
+  client        Client?       @relation(fields: [clientId], references: [id])
+  createdBy     User?         @relation("InvoiceCreator", fields: [createdById], references: [id])
+  project       Project?      @relation(fields: [projectId], references: [id])
 
   @@index([status])
   @@index([clientId])
@@ -688,38 +634,32 @@ model Invoice {
   @@index([dueAt])
 }
 
-// Company bank accounts displayed on invoices for payment instructions
 model BankAccount {
   id            String    @id @default(cuid())
   bankName      String
   accountName   String
   accountNumber String
   branchCode    String?
-  accountType   String    @default("CHEQUE") // CHEQUE, SAVINGS, CURRENT
+  accountType   String    @default("CHEQUE")
   isDefault     Boolean   @default(false)
   isActive      Boolean   @default(true)
   reference     String?
-  invoices      Invoice[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  invoices      Invoice[]
 
   @@index([isActive])
 }
 
-// Configurable pricing per service key (matches SERVICES_MAP keys)
 model ServicePrice {
-  id          String   @id @default(cuid())
-  serviceKey  String   @unique
-  label       String
-  price       Decimal  @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  serviceKey String   @unique
+  label      String
+  price      Decimal  @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
-
-// ============================================================
-// CREDO — Consumer-facing platform models
-// ============================================================
 
 model CredoTenant {
   id           String            @id @default(cuid())
@@ -739,28 +679,28 @@ model CredoTenant {
 }
 
 model ConsumerAccount {
-  id             String           @id @default(cuid())
-  email          String           @unique
-  password       String
-  firstName      String
-  lastName       String
-  idNumber       String?          @unique
-  phone          String?
-  province       String?
-  language       String           @default("English")
-  tenantId       String?
-  projectId      String?
-  role           String           @default("CONSUMER") // CONSUMER, STAFF, EXECUTIVE
-  isAdmin        Boolean          @default(false)
-  isVerified     Boolean          @default(false)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  linkedClientId String?          @unique
-  linkedClient   Client?          @relation(fields: [linkedClientId], references: [id])
-  tenant         CredoTenant?     @relation(fields: [tenantId], references: [id])
-  project        Project?         @relation(fields: [projectId], references: [id])
+  id              String           @id @default(cuid())
+  email           String           @unique
+  password        String
+  firstName       String
+  lastName        String
+  idNumber        String?          @unique
+  phone           String?
+  province        String?
+  language        String           @default("English")
+  tenantId        String?
+  isVerified      Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  linkedClientId  String?          @unique
+  isAdmin         Boolean          @default(false)
+  projectId       String?
+  role            String           @default("CONSUMER")
+  linkedClient    Client?          @relation(fields: [linkedClientId], references: [id])
+  project         Project?         @relation(fields: [projectId], references: [id])
+  tenant          CredoTenant?     @relation(fields: [tenantId], references: [id])
+  documents       CredoDocument[]
   serviceRequests ServiceRequest[]
-  documents      CredoDocument[]
 
   @@index([email])
   @@index([tenantId])
@@ -769,12 +709,12 @@ model ConsumerAccount {
 model CredoDocument {
   id           String          @id @default(cuid())
   consumerId   String
-  fileName     String          // stored filename (cuid-based, no path traversal risk)
-  originalName String          // original upload filename shown in UI
+  fileName     String
+  originalName String
   mimeType     String
-  size         Int             // bytes
-  category     String          // IDENTITY | INCOME | BUREAU | LEGAL | CORRESPONDENCE
-  storagePath  String          // absolute path on server filesystem
+  size         Int
+  category     String
+  storagePath  String
   createdAt    DateTime        @default(now())
   consumer     ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
 
@@ -801,13 +741,13 @@ model CouponCode {
 model ServiceRequest {
   id              String          @id @default(cuid())
   consumerId      String
-  services        String          // JSON array of selected service names
+  services        String
   subtotal        Decimal
   vatAmount       Decimal         @default(0)
   total           Decimal
   couponId        String?
   discountPercent Int             @default(0)
-  status          String          @default("PENDING") // PENDING, ACCEPTED, IN_PROGRESS, CONVERTED, CANCELLED
+  status          String          @default("PENDING")
   linkedCaseId    String?
   notes           String?
   createdAt       DateTime        @default(now())
@@ -819,18 +759,14 @@ model ServiceRequest {
   @@index([status])
 }
 
-// ============================================================
-// DEBT REVIEW — Credit provider registry & generated documents
-// ============================================================
-
 model CreditProvider {
   id             String          @id @default(cuid())
   name           String          @unique
-  type           String          // BANK, MICRO_LENDER, TELECOM, RETAILER, OTHER
+  type           String
   email          String?
   phone          String?
   address        String?
-  attorney       String?         // Attorney / collector firm name
+  attorney       String?
   attorneyEmail  String?
   attorneyPhone  String?
   isActive       Boolean         @default(true)
@@ -845,9 +781,7 @@ model CreditProvider {
 model DebtReviewDocument {
   id               String    @id @default(cuid())
   caseId           String
-  // FORM_16 | FORM_17_1 | SECTION_86_NOTICE | DEBT_RESTRUCTURING_PROPOSAL
   documentType     String
-  // DRAFT | SENT_FOR_SIGNING | SIGNED | APPROVED | SENT_TO_CREDITORS
   status           String    @default("DRAFT")
   fileUrl          String?
   signedFileUrl    String?
@@ -857,11 +791,11 @@ model DebtReviewDocument {
   approvedAt       DateTime?
   sentToCreditors  Boolean   @default(false)
   sentToCreditorAt DateTime?
-  emailsSentTo     String?   // JSON array of recipient emails
+  emailsSentTo     String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-  case             Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
   approvedBy       User?     @relation("DebtReviewDocumentApprover", fields: [approvedById], references: [id])
+  case             Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId])
   @@index([documentType])
@@ -893,9 +827,9 @@ model CreditAccount {
   prescriptionDate   DateTime?
   status             String                       @default("ACTIVE")
   isIncluded         Boolean                      @default(true)
-  creditProviderId   String?
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @updatedAt
+  creditProviderId   String?
   case               Case                         @relation(fields: [caseId], references: [id], onDelete: Cascade)
   client             Client                       @relation(fields: [clientId], references: [id])
   creditProvider     CreditProvider?              @relation(fields: [creditProviderId], references: [id])
@@ -1202,11 +1136,11 @@ model CasePlan {
   approvedById    String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-  case            Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
   approvedBy      User?            @relation("PlanApprover", fields: [approvedById], references: [id])
+  case            Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  events          CasePlanEvent[]
   steps           CasePlanStep[]
   updates         CasePlanUpdate[]
-  events          CasePlanEvent[]
 
   @@index([caseId])
   @@index([status])
@@ -1272,82 +1206,42 @@ model CasePlanEvent {
   @@index([eventType])
 }
 
-// ============================================================
-// DCCP — DC Credit Protect insurance integration
-// ============================================================
-
-enum DCCPPolicyType {
-  CLI      // Credit Life Insurance replacement
-  AIP      // Assistance Income Protector
-  FUNERAL  // Funeral Cover (Individual or Family)
-}
-
-enum DCCPPolicyStatus {
-  DRAFT       // captured locally, not yet submitted to DCCP portal
-  SUBMITTED   // sent to DCCP portal, awaiting confirmation
-  ACTIVE      // confirmed active by DCCP
-  LAPSED      // policy lapsed (2 missed premiums)
-  CANCELLED   // cancelled by client or DC
-}
-
-enum DCCPFuneralCoverType {
-  INDIVIDUAL
-  FAMILY
-}
-
 model DCCPPolicy {
-  id              String            @id @default(cuid())
-  caseId          String?           // optional link to a debt review case
-  clientId        String?           // optional link to Client record
-  policyType      DCCPPolicyType
-  status          DCCPPolicyStatus  @default(DRAFT)
-  policyNumber    String?           // assigned by DCCP after submission
-
-  // Client personal details (captured at time of policy)
-  clientFirstName  String
-  clientLastName   String
-  clientIdNumber   String
-  clientDob        DateTime
-  clientEmail      String?
-  clientPhone      String
-  clientAddress    String
-
-  // Employment details (required for AIP)
-  employerName     String?
-  employmentType   String?           // "PERMANENT" only for AIP
-  employedSince    DateTime?
-
-  // Debit order
-  bankName         String?
-  accountNumber    String?
-  accountType      String?           // "CHEQUE" | "SAVINGS"
-  debitOrderDate   Int?              // preferred day of month (1-31)
-
-  // AIP-specific fields
-  aipCoverAmount   Int?              // 5000 | 10000 | 15000 (monthly benefit)
-
-  // Funeral-specific fields
-  funeralCoverType DCCPFuneralCoverType?
-  funeralCoverAmount Int?            // 10000 | 20000 | 30000
-
-  // Financials
-  retailPremium    Decimal           @db.Decimal(10, 2)
-  referralFee      Decimal           @db.Decimal(10, 2)  // our commission
-
-  // Waiting period waiver
-  previousInsurerName     String?
-  previousPolicyNumber    String?
-  previousPolicySchedule  Boolean   @default(false)
-
-  // Timestamps
-  inceptionDate    DateTime?         // 1st of month cover starts
-  submittedAt      DateTime?         // when pushed to DCCP portal
-  confirmedAt      DateTime?         // when DCCP confirmed active
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-
-  creditAccounts   DCCPCreditAccount[]
-  funeralDependants DCCPFuneralDependant[]
+  id                     String                 @id @default(cuid())
+  caseId                 String?
+  clientId               String?
+  policyType             DCCPPolicyType
+  status                 DCCPPolicyStatus       @default(DRAFT)
+  policyNumber           String?
+  clientFirstName        String
+  clientLastName         String
+  clientIdNumber         String
+  clientDob              DateTime
+  clientEmail            String?
+  clientPhone            String
+  clientAddress          String
+  employerName           String?
+  employmentType         String?
+  employedSince          DateTime?
+  bankName               String?
+  accountNumber          String?
+  accountType            String?
+  debitOrderDate         Int?
+  aipCoverAmount         Int?
+  funeralCoverType       DCCPFuneralCoverType?
+  funeralCoverAmount     Int?
+  retailPremium          Decimal                @db.Decimal(10, 2)
+  referralFee            Decimal                @db.Decimal(10, 2)
+  previousInsurerName    String?
+  previousPolicyNumber   String?
+  previousPolicySchedule Boolean                @default(false)
+  inceptionDate          DateTime?
+  submittedAt            DateTime?
+  confirmedAt            DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  creditAccounts         DCCPCreditAccount[]
+  funeralDependants      DCCPFuneralDependant[]
 
   @@index([policyType])
   @@index([status])
@@ -1356,62 +1250,59 @@ model DCCPPolicy {
 }
 
 model DCCPCreditAccount {
-  id              String      @id @default(cuid())
-  policyId        String
-  creditProvider  String      // e.g. "ABSA", "Capitec", "African Bank"
-  accountNumber   String?
-  accountType     String      // e.g. "Personal Loan", "Credit Card", "Store Account"
-  outstandingBalance Decimal  @db.Decimal(10, 2)
-  currentPremium  Decimal     @db.Decimal(10, 2)  // what client currently pays
-  newPremium      Decimal     @db.Decimal(10, 2)  // DCCP replacement premium
-  saving          Decimal     @db.Decimal(10, 2)  // currentPremium - newPremium
-
-  policy          DCCPPolicy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  id                 String     @id @default(cuid())
+  policyId           String
+  creditProvider     String
+  accountNumber      String?
+  accountType        String
+  outstandingBalance Decimal    @db.Decimal(10, 2)
+  currentPremium     Decimal    @db.Decimal(10, 2)
+  newPremium         Decimal    @db.Decimal(10, 2)
+  saving             Decimal    @db.Decimal(10, 2)
+  policy             DCCPPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
   @@index([policyId])
 }
 
 model DCCPFuneralDependant {
-  id           String      @id @default(cuid())
+  id           String     @id @default(cuid())
   policyId     String
-  relationship String      // "SPOUSE" | "CHILD_14_21" | "CHILD_7_13" | "CHILD_0_6" | "STILLBORN"
+  relationship String
   firstName    String
   lastName     String
   idNumber     String?
   dob          DateTime?
-  coverAmount  Int         // payout amount for this dependant
-
-  policy       DCCPPolicy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  coverAmount  Int
+  policy       DCCPPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
   @@index([policyId])
 }
 
 model DCCPCredential {
   id        String   @id @default(cuid())
-  userId    String   @unique  // Each user has their own DCCP portal login
   username  String
-  password  String            // AES-256 encrypted at application layer
-  portalUrl String   @default("https://portal.colms.co.za/arsys/shared/login.jsp?/arsys/")
+  password  String
   isActive  Boolean  @default(true)
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
+  userId    String   @unique
+  portalUrl String   @default("https://portal.colms.co.za/arsys/shared/login.jsp?/arsys/")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DCCPCommissionRecord {
-  id              String    @id @default(cuid())
-  month           String    // "2026-04" format
-  policyId        String
-  policyType      DCCPPolicyType
-  clientName      String
-  policyNumber    String?
-  retailPremium   Decimal   @db.Decimal(10, 2)
-  referralFee     Decimal   @db.Decimal(10, 2)
-  isPaid          Boolean   @default(false)
-  paidAt          DateTime?
-  createdAt       DateTime  @default(now())
+  id            String         @id @default(cuid())
+  month         String
+  policyId      String
+  policyType    DCCPPolicyType
+  clientName    String
+  policyNumber  String?
+  retailPremium Decimal        @db.Decimal(10, 2)
+  referralFee   Decimal        @db.Decimal(10, 2)
+  isPaid        Boolean        @default(false)
+  paidAt        DateTime?
+  createdAt     DateTime       @default(now())
 
   @@index([month])
   @@index([policyId])
@@ -1419,43 +1310,85 @@ model DCCPCommissionRecord {
 }
 
 model DCCPMonthlyCommissionSummary {
-  id              String    @id @default(cuid())
-  month           String    @unique  // "2026-04"
-  totalPolicies   Int       @default(0)
-  cliPolicies     Int       @default(0)
-  aipPolicies     Int       @default(0)
-  funeralPolicies Int       @default(0)
-  totalPremium    Decimal   @db.Decimal(10, 2) @default(0)
-  totalFee        Decimal   @db.Decimal(10, 2) @default(0)
-  isPaid          Boolean   @default(false)
-  paidAt          DateTime?
+  id                String    @id @default(cuid())
+  month             String    @unique
+  totalPolicies     Int       @default(0)
+  cliPolicies       Int       @default(0)
+  aipPolicies       Int       @default(0)
+  funeralPolicies   Int       @default(0)
+  totalPremium      Decimal   @default(0) @db.Decimal(10, 2)
+  totalFee          Decimal   @default(0) @db.Decimal(10, 2)
+  isPaid            Boolean   @default(false)
+  paidAt            DateTime?
   reportConfirmedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([month])
   @@index([isPaid])
 }
 
-// ============================================================
-// AI PROVIDER MANAGEMENT — Multi-provider AI routing
-// ============================================================
-
 model AiProvider {
   id              String   @id @default(cuid())
-  name            String   // Display name e.g. "OpenRouter", "OpenAI Direct"
-  provider        String   // "openai" | "openrouter" | "anthropic" | "google"
-  apiKey          String   // Stored masked in GET responses
-  baseUrl         String?  // Override base URL (required for OpenRouter)
+  name            String
+  provider        String
+  apiKey          String
+  baseUrl         String?
   isActive        Boolean  @default(true)
   isDefault       Boolean  @default(false)
-  // JSON map of task → model ID e.g. { "document_analysis": "gpt-4o", "legal_drafting": "anthropic/claude-opus-4" }
   taskAssignments Json     @default("{}")
-  // JSON array of model IDs available for this provider
   models          Json     @default("[]")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([provider])
   @@index([isActive])
+}
+
+enum ReferrerCommissionStage {
+  NEW_LEAD
+  ADMIN_FEE_PAID
+  QUOTE_SUBMITTED
+  QUOTE_ACCEPTED
+  DEPOSIT_PAID
+  PAYING_INSTALMENTS
+  UP_TO_DATE
+  ARREARS_1M
+  ARREARS_2M
+  ARREARS_3M
+  ARREARS_4M_PLUS
+  HANDED_OVER
+  SETTLED
+}
+
+enum DocumentType {
+  INVOICE
+  QUOTE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum DCCPPolicyType {
+  CLI
+  AIP
+  FUNERAL
+}
+
+enum DCCPPolicyStatus {
+  DRAFT
+  SUBMITTED
+  ACTIVE
+  LAPSED
+  CANCELLED
+}
+
+enum DCCPFuneralCoverType {
+  INDIVIDUAL
+  FAMILY
 }

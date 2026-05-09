@@ -169,6 +169,7 @@ export async function POST(request: Request) {
                                 requestedDhsStatus: item.status_code,
                                 consumerDhsStatus: item.status_code,
                             } : {}),
+                            updatedBy: { connect: { id: user.id } }
                         }
                     });
 

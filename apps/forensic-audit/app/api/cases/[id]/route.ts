@@ -14,6 +14,12 @@ export async function GET(
             where: { id },
             include: {
                 client: true,
+                updatedBy: {
+                    select: {
+                        firstName: true,
+                        lastName: true
+                    }
+                },
                 projects: {
                     include: {
                         project: {
@@ -501,11 +507,22 @@ export async function PATCH(
         }
 
         // Normal update - update the existing client
+        const session = await auth();
+        if (session?.user?.id) {
+            caseUpdateData.updatedBy = { connect: { id: session.user.id } };
+        }
+
         const updatedCase = await prisma.case.update({
             where: { id },
             data: caseUpdateData,
             include: {
                 client: true,
+                updatedBy: {
+                    select: {
+                        firstName: true,
+                        lastName: true
+                    }
+                },
                 projects: {
                     include: {
                         project: true

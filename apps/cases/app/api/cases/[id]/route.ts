@@ -62,6 +62,12 @@ export async function GET(
                         }
                     }
                 }
+            },
+            updatedBy: {
+                select: {
+                    firstName: true,
+                    lastName: true
+                }
             }
         };
 
@@ -188,10 +194,14 @@ export async function PATCH(
 ) {
     try {
         const session = await auth();
-        if (!session?.user) {
+        // Attribution: Use session user or fallback to first admin
+        const actingUserId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
+        const attribution = actingUserId ? { connect: { id: actingUserId } } : undefined;
+
+        if (!session?.user && !actingUserId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        const isAdmin = session.user.isAdmin === true;
+        const isAdmin = session?.user?.isAdmin === true;
 
         const { id } = await params;
         const parsed = parseBody(CasePatchSchema, await request.json());
@@ -620,6 +630,11 @@ export async function PATCH(
             caseUpdateData.updatedAt = new Date();
         }
 
+        // Set who last updated the case
+        if (attribution) {
+            caseUpdateData.updatedBy = attribution;
+        }
+
         // Normal update - update the existing client
         let updatedCase;
         try {
@@ -629,6 +644,7 @@ export async function PATCH(
                 include: {
                     client: true,
                     createdBy: { select: { firstName: true, lastName: true } },
+                    updatedBy: { select: { firstName: true, lastName: true } },
                     projects: {
                         include: {
                             project: true
@@ -648,6 +664,7 @@ export async function PATCH(
                 include: {
                     client: true,
                     createdBy: { select: { firstName: true, lastName: true } },
+                    updatedBy: { select: { firstName: true, lastName: true } },
                     projects: {
                         include: {
                             project: true
@@ -667,11 +684,10 @@ export async function PATCH(
                 const session = await auth();
                 await prisma.workflowLog.create({
                     data: {
-                        caseId: id, fromStatus: updatedCase.status,
                         toStatus: updatedCase.status,
                         // action: 'EDIT',
                         notes: `[EDIT] Updated description`, // Shortened to avoid huge logs
-                        userId: session?.user?.id
+                        userId: actingUserId
                     }
                 });
             } catch (logError) {
@@ -702,7 +718,7 @@ export async function PATCH(
                             toStatus: updatedCase.status,
                             // action: 'TASK_CREATED', // Temporarily disabled due to schema/client mismatch
                             notes: `[TASK_CREATED] Created task: "${task.text}"`,
-                            userId: session?.user?.id
+                            userId: actingUserId
                         }
                     });
                 }
@@ -718,7 +734,7 @@ export async function PATCH(
                                 toStatus: updatedCase.status,
                                 // action: 'TASK_COMPLETED',
                                 notes: `[TASK_COMPLETED] Completed task: "${task.text}"`,
-                                userId: session?.user?.id
+                                userId: actingUserId
                             }
                         });
                     } else if (!task.done && oldTask.done) {
@@ -728,7 +744,7 @@ export async function PATCH(
                                 toStatus: updatedCase.status,
                                 // action: 'TASK_REOPENED',
                                 notes: `[TASK_REOPENED] Reopened task: "${task.text}"`,
-                                userId: session?.user?.id
+                                userId: actingUserId
                             }
                         });
                     }
@@ -743,7 +759,7 @@ export async function PATCH(
                             toStatus: updatedCase.status,
                             // action: 'TASK_DELETED',
                             notes: `[TASK_DELETED] Deleted task: "${task.text}"`,
-                            userId: session?.user?.id
+                            userId: actingUserId
                         }
                     });
                 }

@@ -16,7 +16,7 @@ import {
     scrapeDetailedConsumerInfo 
 } from '@zenowethu/shared-lib/src/dhs';
 import { prisma } from '@zenowethu/database';
-import { addWorkingDays } from '@zenowethu/shared-lib';
+import { addWorkingDays, auth } from '@zenowethu/shared-lib';
 import path, { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -31,6 +31,7 @@ const getFilePath = (fileUrl: string) => {
 // Force dependency rebuild for lib/dhs.ts
 export async function POST(request: Request) {
     try {
+        const session = await auth();
         const { idNumber, caseId, action } = await request.json();
 
         if (!idNumber) {
@@ -54,6 +55,9 @@ export async function POST(request: Request) {
             where: { id: caseId },
             include: { documents: true }
         }) : null;
+
+        // Get a user ID for operations (Session User or Fallback Admin)
+        const userId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
 
         if (action === 'check_status' || !action) {
             // Check existing transfer status with timeout protection
@@ -186,47 +190,27 @@ export async function POST(request: Request) {
 
                     // Rule 10: Declined
                     else if (result.status === 'DECLINED') {
-                        logger.info('=== DECLINED STATUS DETECTED ===');
-                        logger.info('Decline reason value:', result.declineReason);
-                        logger.info('Decline reason type:', typeof result.declineReason);
-
                         updateData.dhsStatus = 'Declined Via DHS';
-                        // Map specific decline reasons if possible, otherwise default to generic rejection
-                        // For now we don't auto-update main status to avoid closing cases prematurely, 
-                        // but we log it heavily.
-                        // Future: Map `result.declineReason` to specific rejection statuses
                         if (result.declineReason) {
-                            const comment = `DHS Check: Declined. Reason: ${result.declineReason}`;
-                            logger.info('Adding comment WITH reason:', comment);
-                            comments.push(comment);
+                            comments.push(`DHS Check: Declined. Reason: ${result.declineReason}`);
                         } else {
-                            const comment = 'DHS Check: Declined. Could not retrieve reason.';
-                            logger.info('Adding comment WITHOUT reason:', comment);
-                            comments.push(comment);
+                            comments.push('DHS Check: Declined. Could not retrieve reason.');
                         }
-                        logger.info('Comments array now has', comments.length, 'items');
                     }
                 }
 
                 // Execute Updates
                 await prisma.case.update({
                     where: { id: caseId },
-                    data: updateData
+                    data: {
+                        ...updateData,
+                        updatedBy: userId ? { connect: { id: userId } } : undefined
+                    }
                 });
-
-                // Get a user ID for the comments (System or Admin)
-                const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
-                const userId = admin?.id;
-
-                logger.info('Admin user found:', !!admin);
-                logger.info('User ID for comments:', userId);
-                logger.info('Comments to save:', comments.length);
 
                 // Add Comments
                 if (userId && comments.length > 0) {
-                    logger.info('=== SAVING COMMENTS ===');
                     for (const content of comments) {
-                        logger.info('Creating comment:', content.substring(0, 100) + '...');
                         await prisma.caseComment.create({
                             data: {
                                 caseId,
@@ -234,14 +218,11 @@ export async function POST(request: Request) {
                                 content: `[SYSTEM] ${content}`
                             }
                         });
-                        logger.info('✅ Comment saved successfully');
                     }
-                } else {
-                    logger.info('⚠️ NOT saving comments. userId:', userId, 'comments.length:', comments.length);
                 }
 
                 // Notify Project Manager (Admins)
-                if (notifyManager && userId) { // Assuming admin is the user
+                if (notifyManager && userId) {
                     const admins = await prisma.user.findMany({ where: { isAdmin: true } });
                     for (const adminUser of admins) {
                         try {
@@ -285,7 +266,6 @@ export async function POST(request: Request) {
 
                     if (previousCase?.dcEmail) {
                         lastUsedEmail = previousCase.dcEmail;
-                        logger.info(`Found previous email for DC ${data.ncrdcNo}: ${lastUsedEmail}`);
                     }
                 }
 
@@ -302,7 +282,8 @@ export async function POST(request: Request) {
                             dcOperatingStatus: data.dcOperatingStatus,
                             dcMobile: data.dcMobile,
                             dcEmail: data.dcEmail,
-                            lastKnownEmail: lastUsedEmail
+                            lastKnownEmail: lastUsedEmail,
+                            updatedBy: userId ? { connect: { id: userId } } : undefined
                         }
                     });
                 }
@@ -314,7 +295,6 @@ export async function POST(request: Request) {
                 };
             }
         } else if (action === 'search') {
-            // Search for consumer (for new transfer)
             result = await searchConsumer(idNumber);
         } else if (action === 'validate_and_request') {
             logger.info('Starting Validate & Request Transfer flow...');
@@ -323,7 +303,6 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: false, message: 'Case ID not provided or case not found' }, { status: 400 });
             }
 
-            // 1. Check for existing ID and POA
             let idDoc = caseData.documents.find(d => d.type === 'ID');
             let poaDoc = caseData.documents.find(d => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
             const otherDocs = caseData.documents.filter(d => d.type === 'OTHER' || d.type === 'COMBINED');
@@ -332,15 +311,9 @@ export async function POST(request: Request) {
             if (!idDoc) missingDocs.push('ID');
             if (!poaDoc) missingDocs.push('POA');
 
-            logger.info(`Document Check: ID=${!!idDoc}, POA=${!!poaDoc}, OTHER=${otherDocs.length}`);
-
-            // 2. Attempt Extraction if missing
             if (missingDocs.length > 0 && otherDocs.length > 0) {
-                logger.info(`Missing ${missingDocs.join(', ')}. Attempting extraction from ${otherDocs.length} 'Other' documents...`);
-
-                // Prepare docs for analysis
                 const docsToAnalyze = otherDocs.map(d => ({
-                    base64: '', // We need to read the file to get base64. 
+                    base64: '', 
                     filePath: getFilePath(d.fileUrl),
                     type: d.type as any,
                     mimeType: d.mimeType
@@ -349,57 +322,31 @@ export async function POST(request: Request) {
                 const analyzedDocsWithContent = [];
                 for (const docData of docsToAnalyze) {
                     let resolvedPath = docData.filePath;
-
-                    logger.info(`Checking file at: ${resolvedPath}`);
-
-                    if (!existsSync(resolvedPath)) {
-                        // Fallback: try prepending uploads if missing
-                        const altPath = path.join(process.cwd(), 'public', 'uploads', path.basename(resolvedPath));
-                        logger.info(`File not found data direct path. Trying fallback: ${altPath}`);
-                        if (existsSync(altPath)) {
-                            resolvedPath = altPath;
-                        }
-                    }
-
                     if (existsSync(resolvedPath)) {
                         try {
                             const fileBuffer = readFileSync(resolvedPath);
-                            logger.info(`Read file success: ${resolvedPath} (${fileBuffer.length} bytes)`);
                             analyzedDocsWithContent.push({
                                 base64: fileBuffer.toString('base64'),
-                                type: 'OTHER', // Treat as OTHER for analysis
+                                type: 'OTHER',
                                 mimeType: docData.mimeType,
                                 originalId: otherDocs.find(od => od.fileUrl.includes(path.basename(docData.filePath)))?.id,
-                                fileName: path.basename(resolvedPath) // Tracking filename for logs
+                                fileName: path.basename(resolvedPath)
                             });
                         } catch (err) {
                             logger.error(`Error reading file ${resolvedPath}:`, err);
                         }
-                    } else {
-                        logger.error(`File NOT FOUND at ${resolvedPath}`);
                     }
                 }
 
                 if (analyzedDocsWithContent.length > 0) {
-                    logger.info(`Docs for analysis: ${analyzedDocsWithContent.length}`);
                     const { analyzeMultipleDocumentsAsCombined } = require('@zenowethu/shared-lib');
-
                     try {
                         const analysis = await analyzeMultipleDocumentsAsCombined(analyzedDocsWithContent as any);
-                        logger.info('Extraction Analysis Result FULL:', JSON.stringify(analysis));
-                        logger.info('Validation Report:', JSON.stringify(analysis.validation));
-
-                        // IF OpenAI confirms they exist, we "create" them by duplicating the reference
-                        // We assume the FIRST 'Other' doc is the one containing them for now if multiple exist
-                        // Or we use the one that analysis matched. 
-                        const sourceDoc = otherDocs[0]; // Best guess or use analysis to pinpoint
-
-                        // FIX: Ensure we create records if missingID is FALSE (meaning it IS present)
+                        const sourceDoc = otherDocs[0];
                         const idFound = analysis.validation && analysis.validation.missingID === false;
                         const poaFound = analysis.validation && analysis.validation.missingPOA === false;
 
                         if (idFound && !idDoc) {
-                            logger.info('AI detected ID in Other document. Creating reference...');
                             idDoc = await prisma.document.create({
                                 data: {
                                     caseId: caseId,
@@ -414,64 +361,55 @@ export async function POST(request: Request) {
                         }
 
                         if (poaFound && !poaDoc) {
-                            logger.info('AI detected POA in Other document. Creating reference...');
                             poaDoc = await prisma.document.create({
                                 data: {
                                     caseId: caseId,
                                     type: 'POA',
                                     fileName: `Extracted_POA_${sourceDoc.fileName}`,
-                                    fileUrl: sourceDoc.fileUrl, // Point to same file
+                                    fileUrl: sourceDoc.fileUrl,
                                     fileSize: sourceDoc.fileSize,
                                     mimeType: sourceDoc.mimeType,
                                     extractedData: JSON.stringify(analysis.poa)
                                 }
                             });
                         }
-
                     } catch (e) {
                         logger.error('Extraction failed:', e);
-                        // Continue to standard check to fail gracefully
                     }
                 }
             }
 
-            // 3. Final Validation
             if (!idDoc || !poaDoc) {
                 const stillMissing = [];
                 if (!idDoc) stillMissing.push('ID');
                 if (!poaDoc) stillMissing.push('POA');
-
                 return NextResponse.json({
                     success: false,
                     message: `Cannot request transfer. Missing mandatory documents: ${stillMissing.join(', ')}. Please upload them or ensure they are clear in 'Other' files.`
                 });
             }
 
-            // 4. Proceed to Request
             const poaPath = getFilePath(poaDoc.fileUrl);
             const idPath = getFilePath(idDoc.fileUrl);
 
-            logger.info('Proceeding to request transfer with:', { poaPath, idPath });
-
-            // Call the shared request function
             const requestResult = await requestTransfer(idNumber, poaPath, idPath);
             result = requestResult;
 
             if (result.success) {
-                // Update specific status for explicit request
                 await prisma.case.update({
                     where: { id: caseId },
                     data: {
                         dhsStatus: 'Requested via DHS',
                         status: 'REQUESTED_VIA_DHS',
-                        nextUpdate: addWorkingDays(new Date(), 5)
+                        nextUpdate: addWorkingDays(new Date(), 5),
+                        updatedBy: userId ? { connect: { id: userId } } : undefined
                     }
                 });
 
                 await prisma.caseComment.create({
                     data: {
                         caseId,
-                        userId: (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id || '',
+                        userId: session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id || '',
                         content: `[SYSTEM] Manual Transfer Request initiated. Status updated to 'Requested via DHS'.`
                     }
                 });

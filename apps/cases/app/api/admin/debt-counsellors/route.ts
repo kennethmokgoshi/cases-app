@@ -146,7 +146,10 @@ export async function PATCH(request: Request) {
 
         const result = await prisma.case.updateMany({
             where: { ncrdcNo },
-            data,
+            data: {
+                ...data,
+                updatedById: session.user.id
+            },
         });
 
         logger.info(`DC details updated for NCRDC ${ncrdcNo}: ${result.count} cases`);

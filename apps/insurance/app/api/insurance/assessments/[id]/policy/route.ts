@@ -105,7 +105,10 @@ export async function POST(
             // Update the Case status (Global Case flow)
             prisma.case.update({
                 where: { id: assessment.caseId },
-                data: { status: 'INSURANCE_ACTIVE' }
+                data: { 
+                    status: 'INSURANCE_ACTIVE',
+                    updatedBy: { connect: { id: session.user.id } }
+                }
             }),
             // Log the workflow
             prisma.workflowLog.create({
