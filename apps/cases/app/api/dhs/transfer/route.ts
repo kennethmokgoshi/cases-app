@@ -189,6 +189,7 @@ export async function POST(request: Request) {
         if (result.success) {
             await prisma.case.update({
                 where: { id: caseId },
+                data: {
                     dhsStatus: 'PENDING',
                     status: 'DHS_REQUESTED',
                     updatedBy: attribution
