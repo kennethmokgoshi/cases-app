@@ -312,8 +312,8 @@ function CasesContent() {
                         <thead className="bg-zeno-blue/30 border-b border-white/5 text-gray-400 uppercase text-[10px] font-bold tracking-wider">
                             <tr>
                                 <th className="px-4 py-3 w-10">#</th>
-                                {['fileNumber', 'client', 'status', 'services', 'updated', 'updatedBy', 'project', 'nextUpdate'].map(col => {
-                                    const labels:any = {fileNumber: 'File #', client: 'Client', status: 'Process Status', services: 'Type', updated: 'Last Updated', updatedBy: 'Last Updated By', project: 'Project', nextUpdate: 'Next Update'};
+                                {['fileNumber', 'client', 'status', 'services', 'updatedBy', 'project', 'nextUpdate'].map(col => {
+                                    const labels:any = {fileNumber: 'File #', client: 'Client', status: 'Process Status', services: 'Type', updatedBy: 'Last Updated By', project: 'Project', nextUpdate: 'Next Update'};
                                     return <th key={col} className="px-4 py-3 cursor-pointer hover:text-white" onClick={() => handleSort(col as any)}>{labels[col]} {sortBy === col && (sortDirection === 'asc' ? '↑' : '↓')}</th>;
                                 })}
                             </tr>
@@ -343,9 +343,6 @@ function CasesContent() {
                                                     return s[0] ? (SERVICES_MAP[s[0]] || s[0]) : <span className="text-gray-600 italic">None</span>;
                                                 } catch { return 'Error'; }
                                             })()}
-                                        </td>
-                                        <td className="px-4 py-4 text-gray-400 text-xs">
-                                            {new Date(c.updatedAt).toLocaleDateString()} {new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td className="px-4 py-4 text-gray-400 text-xs">
                                             {c.updatedBy ? `${c.updatedBy.firstName} ${c.updatedBy.lastName}` : '—'}
