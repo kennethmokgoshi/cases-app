@@ -34,10 +34,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Case not found' }, { status: 404 });
     }
 
-    // B2B: require staff to tick "Information sufficient to proceed"
-    if (caseRecord.acquisitionType === 'B2B' && !caseRecord.planReadyToStart) {
+    // All cases: require staff to tick "Information sufficient to proceed"
+    if (!caseRecord.planReadyToStart) {
       return NextResponse.json(
-        { error: 'B2B case requires staff to mark information as sufficient before plan generation.' },
+        { error: 'Case requires staff to mark information as sufficient before plan generation.' },
         { status: 403 },
       );
     }

@@ -358,21 +358,19 @@ export async function POST(request: Request) {
             }
         }
 
-        // --- B2B TRIGGER: Fire when a relevant document is uploaded to a B2B case ---
+        // --- CASE AUTOMATION TRIGGER: Fire when a relevant document is uploaded ---
         // Re-checks whether the AI can now act (e.g. POA or ID just became available)
-        if (isB2BCase) {
-            const uploadedTypes = savedDocuments.map((d: { type: string }) => d.type);
-            const hasRelevantDoc = uploadedTypes.some(
-                (t: string) => t === 'ID' || t === 'POA' || t === 'ZENOWETHU_POA'
-            );
+        const uploadedTypes = savedDocuments.map((d: { type: string }) => d.type);
+        const hasRelevantDoc = uploadedTypes.some(
+            (t: string) => t === 'ID' || t === 'POA' || t === 'ZENOWETHU_POA'
+        );
 
-            if (hasRelevantDoc) {
-                import('@zenowethu/shared-lib/src/ai/b2b-trigger').then(({ runB2BFileTrigger }) => {
-                    runB2BFileTrigger(caseId, 'DOCUMENT_UPLOADED').catch(err => {
-                        logger.error(`❌ B2B document trigger failed for ${caseId}:`, err);
-                    });
+        if (hasRelevantDoc) {
+            import('@zenowethu/shared-lib/src/ai/case-automation-trigger').then(({ runCaseAutomationTrigger }) => {
+                runCaseAutomationTrigger(caseId, 'DOCUMENT_UPLOADED').catch(err => {
+                    logger.error(`❌ Case automation trigger failed for ${caseId}:`, err);
                 });
-            }
+            });
         }
 
         logger.info('📤 Returning response with extracted data:', Object.keys(extractedData));

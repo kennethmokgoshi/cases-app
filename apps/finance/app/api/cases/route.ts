@@ -603,14 +603,12 @@ Please review and process this referral.`;
             })();
         }
 
-        // Fire B2B AI trigger (async, non-blocking — does not affect response time)
-        if (newCase.acquisitionType === 'B2B') {
-            import('@zenowethu/shared-lib/src/ai/b2b-trigger').then(({ runB2BFileTrigger }) => {
-                runB2BFileTrigger(newCase.id, 'CASE_CREATED').catch(err => {
-                    logger.error(`❌ B2B trigger failed for ${newCase.id}:`, err);
-                });
+        // Fire Case Automation trigger (async, non-blocking — does not affect response time)
+        import('@zenowethu/shared-lib/src/ai/case-automation-trigger').then(({ runCaseAutomationTrigger }) => {
+            runCaseAutomationTrigger(newCase.id, 'CASE_CREATED').catch(err => {
+                logger.error(`❌ Case automation trigger failed for ${newCase.id}:`, err);
             });
-        }
+        });
 
         return NextResponse.json(newCase, { status: 201 });
     } catch (error: any) {

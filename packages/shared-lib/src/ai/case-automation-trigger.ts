@@ -1,7 +1,7 @@
 /**
- * B2B File Created Trigger — AI Employee
+ * Case Created Automation Trigger — AI Employee
  *
- * Fires after a B2B case is created OR after documents are uploaded to a B2B case.
+ * Fires after a case is created OR after documents are uploaded to a case.
  * The trigger inspects the service type and available documents, then acts:
  *
  *   - Credit Profile Enquiry / Debt Review / Debt Review Flag Removal
@@ -12,7 +12,7 @@
  *   - Debt Review Flag Removal (additionally, if POA + ID present)
  *       → Email the DC on record requesting the file
  *       → Update status to REQUESTED_VIA_DHS (or "Requested Again via DHS" if previously requested)
- *       → Notify managers
+ *       → Notify relevant users
  *
  *   - Documents missing (DRR only)
  *       → Log comment; will re-run automatically when documents are uploaded
@@ -33,12 +33,12 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { GhlService } from '../integrations/ghl-service';
 
-const logger = createLogger('ai/b2b-trigger');
+const logger = createLogger('ai/case-automation-trigger');
 
 /** Service IDs as stored in Case.services (JSON array) */
 const DEBT_REVIEW_REMOVAL_ID = 'debt_review_flag_removal';
 
-/** Services that require an automatic DHS check on B2B case creation */
+/** Services that require an automatic DHS check on case creation */
 const DHS_AUTO_CHECK_SERVICES = [
     'credit_profile_enquiry',
     'debt_review_flag_removal',
@@ -51,7 +51,7 @@ export type B2BTriggerAction =
     | 'MISSING_DOCS'        // POA or ID not yet uploaded
     | 'NO_DC_EMAIL'         // No DC email found; DHS portal lookup needed
     | 'NOT_APPLICABLE'      // Service type does not need automatic DHS action
-    | 'SKIPPED';            // Not a B2B case or case not found
+    | 'SKIPPED';            // Not a relevant case or case not found
 
 export interface B2BTriggerResult {
     action: B2BTriggerAction;
@@ -65,13 +65,13 @@ export type B2BTriggerSource = 'CASE_CREATED' | 'DOCUMENT_UPLOADED';
 // Main trigger
 // ---------------------------------------------------------------------------
 
-export async function runB2BFileTrigger(
+export async function runCaseAutomationTrigger(
     caseId: string,
     triggeredBy: B2BTriggerSource = 'CASE_CREATED'
 ): Promise<B2BTriggerResult> {
-    logger.info(`[B2B_TRIGGER] Waiting 5 seconds before processing case ${caseId}...`);
+    logger.info(`[CASE_AUTOMATION] Waiting 5 seconds before processing case ${caseId}...`);
     await delay(5000); // User requested delay to ensure all initial updates are done
-    logger.info(`[B2B_TRIGGER] Running for case ${caseId} (triggered by: ${triggeredBy})`);
+    logger.info(`[CASE_AUTOMATION] Running for case ${caseId} (triggered by: ${triggeredBy})`);
 
     // ── 1. Load case ──────────────────────────────────────────────────────────
     const caseData = await prisma.case.findUnique({
@@ -89,14 +89,11 @@ export async function runB2BFileTrigger(
     });
 
     if (!caseData) {
-        logger.error(`[B2B_TRIGGER] Case ${caseId} not found`);
+        logger.error(`[CASE_AUTOMATION] Case ${caseId} not found`);
         return { action: 'SKIPPED', message: 'Case not found' };
     }
 
-    // ── 2. B2B only ───────────────────────────────────────────────────────────
-    if (caseData.acquisitionType !== 'B2B') {
-        return { action: 'SKIPPED', message: 'Not a B2B case — trigger does not apply' };
-    }
+    // ── 2. Automation logic applies to all acquisition types ───────────────────
 
     // ── 3. Parse services ─────────────────────────────────────────────────────
     let services: string[] = [];
@@ -135,7 +132,7 @@ export async function runB2BFileTrigger(
     // ── 5b. Auto DHS check for Credit Profile Enquiry / Debt Review / DRR ────
     const idNumber = caseData.client.idNumber;
     if (idNumber) {
-        logger.info(`[B2B_TRIGGER] Running auto DHS check for ${caseData.fileNumber} (ID: ${idNumber})`);
+        logger.info(`[CASE_AUTOMATION] Running auto DHS check for ${caseData.fileNumber} (ID: ${idNumber})`);
         try {
             const dhsScrape = await scrapeDetailedConsumerInfo(idNumber);
 
@@ -165,11 +162,11 @@ export async function runB2BFileTrigger(
                     action: `Status set to "Not Requested via DHS". DC info saved (NCRDC: ${d.ncrdcNo || 'N/A'}). A transfer request has not been submitted yet — please proceed via the DHS portal.`
                 });
 
-                logger.info(`[B2B_TRIGGER] ✅ ${caseData.fileNumber}: linked on DHS under ${dcName}`);
+                logger.info(`[CASE_AUTOMATION] ✅ ${caseData.fileNumber}: linked on DHS under ${dcName}`);
                 
                 // GHL Sync
                 GhlService.applyTags(caseId, ['dhs_linked', 'dhs_not_requested']).catch(err => {
-                    logger.warn(`[B2B_TRIGGER] GHL tag sync failed for ${caseId}:`, err);
+                    logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
                 });
             } else {
                 // Scenario 1: Consumer Not Linked on DHS
@@ -179,7 +176,7 @@ export async function runB2BFileTrigger(
                 });
 
                 if (!reAnalyseLog) {
-                    logger.info(`[B2B_TRIGGER] ${caseData.fileNumber}: Not found on DHS. Triggering one-time Re-Analyse...`);
+                    logger.info(`[CASE_AUTOMATION] ${caseData.fileNumber}: Not found on DHS. Triggering one-time Re-Analyse...`);
                     
                     await prisma.workflowLog.create({
                         data: {
@@ -208,7 +205,7 @@ export async function runB2BFileTrigger(
                             // This re-extracts and UPDATES the client record (via performAutoDhsExtraction update logic)
                             await performAutoDhsExtraction(caseData, docToProcess, adminId, serviceLabels, triggeredBy);
                             
-                            logger.info(`[B2B_TRIGGER] Re-analysis complete for ${caseData.fileNumber}. Waiting 5s...`);
+                            logger.info(`[CASE_AUTOMATION] Re-analysis complete for ${caseData.fileNumber}. Waiting 5s...`);
                             await delay(5000);
 
                             // Refetch the latest client data to get the potentially updated ID number
@@ -218,7 +215,7 @@ export async function runB2BFileTrigger(
                             });
 
                             if (refreshedClient && refreshedClient.idNumber) {
-                                logger.info(`[B2B_TRIGGER] Running second DHS check for ${caseData.fileNumber} with ID: ${refreshedClient.idNumber}`);
+                                logger.info(`[CASE_AUTOMATION] Running second DHS check for ${caseData.fileNumber} with ID: ${refreshedClient.idNumber}`);
                                 const secondDhsScrape = await scrapeDetailedConsumerInfo(refreshedClient.idNumber);
 
                                 if (secondDhsScrape.success && secondDhsScrape.data) {
@@ -251,12 +248,12 @@ export async function runB2BFileTrigger(
                                     GhlService.applyTags(caseId, ['dhs_linked', 'dhs_not_requested']).catch(e => logger.warn(e));
                                     
                                     // Successfully found - continue with Phase 2/3 by letting the rest of the function run
-                                    // (Actually, runB2BFileTrigger reloads the case after this block, so it will see the updated status)
-                                    return await runB2BFileTrigger(caseId, 'DOCUMENT_UPLOADED'); 
+                                    // (Actually, runCaseAutomationTrigger reloads the case after this block, so it will see the updated status)
+                                    return await runCaseAutomationTrigger(caseId, 'DOCUMENT_UPLOADED'); 
                                 }
                             }
                         } catch (reErr) {
-                            logger.error(`[B2B_TRIGGER] Re-analysis failed for ${caseData.fileNumber}:`, reErr);
+                            logger.error(`[CASE_AUTOMATION] Re-analysis failed for ${caseData.fileNumber}:`, reErr);
                         }
                     }
                 }
@@ -279,13 +276,13 @@ export async function runB2BFileTrigger(
                 
                 // GHL Sync
                 GhlService.applyTags(caseId, ['dhs_not_linked']).catch(err => {
-                    logger.warn(`[B2B_TRIGGER] GHL tag sync failed for ${caseId}:`, err);
+                    logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
                 });
 
-                logger.info(`[B2B_TRIGGER] ℹ️  ${caseData.fileNumber}: not found in DHS (Status updated to NOT_LINKED)`);
+                logger.info(`[CASE_AUTOMATION] ℹ️  ${caseData.fileNumber}: not found in DHS (Status updated to NOT_LINKED)`);
             }
         } catch (dhsErr) {
-            logger.error(`[B2B_TRIGGER] DHS auto-check failed for ${caseData.fileNumber}:`, dhsErr);
+            logger.error(`[CASE_AUTOMATION] DHS auto-check failed for ${caseData.fileNumber}:`, dhsErr);
             await saveAIComment(caseId, adminId, {
                 service: serviceLabels,
                 triggeredBy,
@@ -322,13 +319,13 @@ export async function runB2BFileTrigger(
     if (!poaDoc || !idDoc) {
         const combinedFile = currentCase.documents.find(d => d.type === 'COMBINED' || d.type === 'OTHER');
         if (combinedFile) {
-            logger.info(`[B2B_TRIGGER] Missing docs for ${currentCase.fileNumber} but found combined file ${combinedFile.id}. Running auto-extraction...`);
+            logger.info(`[CASE_AUTOMATION] Missing docs for ${currentCase.fileNumber} but found combined file ${combinedFile.id}. Running auto-extraction...`);
             
             try {
                 await performAutoDhsExtraction(currentCase, combinedFile, adminId, serviceLabels, triggeredBy);
                 
                 // Wait 5 seconds as requested by user before proceeding to the next step
-                logger.info(`[B2B_TRIGGER] Extraction complete for ${currentCase.fileNumber}. Waiting 5s before checking for transfer...`);
+                logger.info(`[CASE_AUTOMATION] Extraction complete for ${currentCase.fileNumber}. Waiting 5s before checking for transfer...`);
                 await delay(5000);
 
                 // Re-check for docs after extraction
@@ -336,14 +333,14 @@ export async function runB2BFileTrigger(
                 poaDoc = refreshedDocs.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
                 idDoc = refreshedDocs.find(d => d.type === 'ID');
             } catch (extractErr) {
-                logger.error(`[B2B_TRIGGER] Auto-extraction failed for ${currentCase.id}:`, extractErr);
+                logger.error(`[CASE_AUTOMATION] Auto-extraction failed for ${currentCase.id}:`, extractErr);
             }
         }
     }
 
     //  Step 3c: If we now have both docs, run the transfer request
     if (poaDoc && idDoc) {
-        logger.info(`[B2B_TRIGGER] Found all docs for ${currentCase.fileNumber}. Running auto-transfer request...`);
+        logger.info(`[CASE_AUTOMATION] Found all docs for ${currentCase.fileNumber}. Running auto-transfer request...`);
         return await performAutoDhsTransferRequest(currentCase, adminId, serviceLabels, triggeredBy);
     }
 
@@ -450,7 +447,7 @@ async function performAutoDhsExtraction(
                 where: { id: caseData.clientId },
                 data: updateData
             });
-            logger.info(`[B2B_TRIGGER] Updated client ${caseData.clientId} data from auto-extraction`);
+            logger.info(`[CASE_AUTOMATION] Updated client ${caseData.clientId} data from auto-extraction`);
         }
     }
 
@@ -495,7 +492,7 @@ async function performAutoDhsTransferRequest(
             });
             emailSuccess = emailResult.emailSuccess;
         } catch (err) {
-            logger.error(`[B2B_TRIGGER] Auto-email to DC failed:`, err);
+            logger.error(`[CASE_AUTOMATION] Auto-email to DC failed:`, err);
         }
 
         await prisma.case.update({
@@ -513,7 +510,7 @@ async function performAutoDhsTransferRequest(
                 fromStatus: caseData.status,
                 toStatus: 'REQUESTED_VIA_DHS',
                 timestamp: new Date(),
-                notes: `[AI] Auto B2B trigger: ${dhsStatusLabel} — triggered by ${triggeredBy}`,
+                notes: `[AI] Auto case automation trigger: ${dhsStatusLabel} — triggered by ${triggeredBy}`,
                 userId: adminId || null
             }
         });
@@ -529,7 +526,7 @@ async function performAutoDhsTransferRequest(
  
         // GHL Sync
         GhlService.applyTags(caseId, ['dhs_file_requested']).catch(err => {
-            logger.warn(`[B2B_TRIGGER] GHL tag sync failed for ${caseId}:`, err);
+            logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
         });
 
         return {
@@ -581,9 +578,9 @@ async function saveAIComment(
     payload: AICommentPayload
 ): Promise<void> {
     const content =
-        `[AI EMPLOYEE — B2B TRIGGER]\n` +
+        `[AI EMPLOYEE — CASE AUTOMATION]\n` +
         `Service: ${payload.service}\n` +
-        `Trigger: ${payload.triggeredBy === 'CASE_CREATED' ? 'New B2B referral created' : 'Document uploaded to B2B case'}\n` +
+        `Trigger: ${payload.triggeredBy === 'CASE_CREATED' ? 'New case created' : 'Document uploaded to case'}\n` +
         `Assessment: ${payload.assessment}\n` +
         `Action: ${payload.action}`;
 
@@ -613,14 +610,14 @@ async function notifyManagers(
                     userId: adminUser.id,
                     type: 'STATUS_CHANGE',
                     title: `AI Action: ${fileNumber}`,
-                    message: `B2B trigger updated case ${fileNumber} → ${dhsStatusLabel}`,
+                    message: `Case automation updated case ${fileNumber} → ${dhsStatusLabel}`,
                     caseId,
                     linkUrl: `/cases/${caseId}`
                 }
             });
         }
     } catch (err) {
-        logger.error(`[B2B_TRIGGER] Failed to notify managers for ${caseId}:`, err);
+        logger.error(`[CASE_AUTOMATION] Failed to notify managers for ${caseId}:`, err);
     }
 }
 
