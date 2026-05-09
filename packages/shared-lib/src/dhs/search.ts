@@ -144,9 +144,17 @@ export async function searchConsumer(idNumber: string): Promise<{
         }
 
         // Wait for results
-        logger.info('[DHS search] Waiting 4s for results...');
-        await delay(4000);
+        logger.info('[DHS search] Waiting 6s for results...');
+        await delay(6000);
         await takeScreenshot('After Filter Clicked');
+
+        // RE-CHECK: If we see "No records found", wait another 2s and check again
+        // DHS AJAX can be extremely slow to clear the previous state
+        const initialNoRecords = await target.evaluate(() => document.body.innerText.includes('No records found'));
+        if (initialNoRecords) {
+            logger.info('[DHS search] "No records found" detected, waiting 2s for potential AJAX update...');
+            await delay(2000);
+        }
 
         // Robust results check
         const resultsInfo = await target.evaluate((targetId) => {

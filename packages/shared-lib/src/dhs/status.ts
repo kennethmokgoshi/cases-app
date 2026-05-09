@@ -217,7 +217,7 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
 
         // Wait for AJAX results to load
         logger.info('Waiting for search results...');
-        await delay(5000); // Increase wait time
+        await delay(6000); // Increase wait time to 6s
 
         // Take a screenshot after search
         screenshotPath = `storage/uploads/dhs-status-after-${Date.now()}.png`;
@@ -278,11 +278,11 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
         const hasResults = idFoundInTable || (displayingMatch && parseInt(displayingMatch.first) > 0);
 
         if (!hasResults && hasNoRecordsMessage) {
-            logger.info('No transfer records found for this ID — returning NOT_LINKED');
+            logger.info('No transfer records found for this ID on Manage Transfers page — returning NOT_REQUESTED');
             return {
                 found: false,
-                status: 'NOT_LINKED',
-                message: 'This ID number was not found on DHS. Please verify the ID number is correct.',
+                status: 'NOT_REQUESTED',
+                message: 'No active transfer request found for this ID on DHS.',
                 screenshot: screenshotPath
             };
         }

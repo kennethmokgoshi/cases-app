@@ -119,11 +119,18 @@ export async function POST(request: Request) {
                     : 'Requested via DHS';
 
                 // Rule 1: No Records Found -> NOT_LINKED
-                if (!result.found) {
+                if (!result.found && result.status === 'NOT_LINKED') {
                     updateData.dhsStatus = 'NOT_LINKED';
                     updateData.status = 'NOT_LINKED'; // Update main workflow status
                     const missingLabel = 'DHS Check: This ID number was not found on the NCR Debt Help System. Please verify the ID number is correct.';
                     comments.push(missingLabel);
+                }
+                // Rule 1.1: Consumer exists but no request found
+                else if (!result.found && result.status === 'NOT_REQUESTED') {
+                    updateData.dhsStatus = 'Not Requested via DHS';
+                    updateData.status = 'NOT_REQUESTED_VIA_DHS';
+                    const notReqLabel = 'DHS Check: Consumer is linked on DHS but no active transfer request was found.';
+                    comments.push(notReqLabel);
                 }
                 // Rules 2-10: Records Found
                 else {
@@ -227,7 +234,6 @@ export async function POST(request: Request) {
                 // Get a user ID for the comments
                 const userId = actingUserId;
 
-                logger.info('Admin user found:', !!admin);
                 logger.info('User ID for comments:', userId);
                 logger.info('Comments to save:', comments.length);
 
@@ -398,7 +404,8 @@ export async function POST(request: Request) {
                         lastUsedTel: dc?.tel || null,
                         lastKnownEmail: dc?.email || null,
                         // Request status is separate from consumer status
-                        dhsStatus: 'PENDING', // Default to pending when linked info is found
+                        status: 'NOT_REQUESTED_VIA_DHS',
+                        dhsStatus: 'Not Requested via DHS',
                         updatedBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined
                     }
                 });
