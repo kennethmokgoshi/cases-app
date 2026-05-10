@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { Pagination } from '@zenowethu/ui'
 
 type Invoice = {
   id: string
@@ -317,28 +318,11 @@ export default function InvoicesPage() {
         )}
       </div>
 
-      {/* Pagination */}
-      {pages > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-500">
-          <span>Page {page} of {pages}</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => fetchInvoices(page - 1)}
-              disabled={page <= 1}
-              className="px-3 py-1 rounded border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              Prev
-            </button>
-            <button
-              onClick={() => fetchInvoices(page + 1)}
-              disabled={page >= pages}
-              className="px-3 py-1 rounded border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination 
+        currentPage={page} 
+        totalPages={pages} 
+        onPageChange={fetchInvoices} 
+      />
     </div>
   )
 }

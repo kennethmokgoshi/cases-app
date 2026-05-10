@@ -1,14 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { SERVICES_MAP } from '@zenowethu/config'
+import { SERVICES_MAP, SERVICE_DESCRIPTIONS } from '@zenowethu/config'
 
 type AccountLine = {
   creditor:     string
   serviceKey:   string
   serviceLabel: string
+  description:  string
+  accountNumber?: string
+  balance?:      number
+  caseNumber?:   string
   quantity:     number
   unitPrice:    number
+  inclPrice:    number // Transient for UI calculation
 }
 
 type BankAccount = {
@@ -33,12 +38,15 @@ function in30days() {
 }
 
 function emptyLine(serviceKey?: string, serviceLabel?: string): AccountLine {
+  const key = serviceKey ?? SERVICES_LIST[0]?.key ?? ''
   return {
     creditor:     '',
-    serviceKey:   serviceKey ?? SERVICES_LIST[0]?.key ?? '',
+    serviceKey:   key,
     serviceLabel: serviceLabel ?? SERVICES_LIST[0]?.label ?? '',
+    description:  SERVICE_DESCRIPTIONS[key] ?? '',
     quantity:     1,
     unitPrice:    0,
+    inclPrice:    0,
   }
 }
 
@@ -50,6 +58,9 @@ interface SendQuoteModalProps {
   clientName:  string
   clientEmail: string | null | undefined
   services:    string | null // JSON array of service keys from the case
+  isAdmin?:     boolean
+  isExecutive?: boolean
+  isFinance?:   boolean
 }
 
 export default function SendQuoteModal({
@@ -60,6 +71,9 @@ export default function SendQuoteModal({
   clientName,
   clientEmail,
   services,
+  isAdmin,
+  isExecutive,
+  isFinance,
 }: SendQuoteModalProps) {
   const [docType, setDocType]   = useState<'QUOTE' | 'INVOICE'>('QUOTE')
   const [dueAt, setDueAt]       = useState(in30days())
@@ -103,7 +117,12 @@ export default function SendQuoteModal({
     } else {
       setLines([emptyLine()])
     }
-  }, [isOpen, services, clientEmail])
+
+    // Restrict staff to Quote only
+    if (!isAdmin && !isExecutive && !isFinance) {
+      setDocType('QUOTE')
+    }
+  }, [isOpen, services, clientEmail, isAdmin, isExecutive, isFinance])
 
   // Load bank accounts once
   useEffect(() => {
@@ -123,11 +142,58 @@ export default function SendQuoteModal({
   const updateLine = (i: number, field: keyof AccountLine, value: string | number) => {
     setLines(prev => prev.map((line, idx) => {
       if (idx !== i) return line
+      
+      const newLine = { ...line, [field]: value }
+
+      // Dynamic Description Generation Logic
+      let autoDesc = line.description
+
+      if (field === 'serviceKey' || field === 'creditor' || field === 'accountNumber' || field === 'balance' || field === 'unitPrice' || field === 'caseNumber') {
+        const sKey = field === 'serviceKey' ? String(value) : line.serviceKey
+        const cred = field === 'creditor' ? String(value) : line.creditor
+        const acc  = field === 'accountNumber' ? String(value) : line.accountNumber
+        const bal  = field === 'balance' ? parseFloat(String(value)) : line.balance
+        const caseNo = field === 'caseNumber' ? String(value) : line.caseNumber
+        const quoted = field === 'unitPrice' ? parseFloat(String(value)) : line.unitPrice
+
+        if (sKey === 'debt_review_flag_removal') {
+          autoDesc = 'Remove debt review flag from all major credit bureaus (TransUnion, Experian, XDS, etc)'
+        } else if (sKey === 'prescription_of_accounts') {
+          const savings = (bal || 0) - (quoted || 0)
+          autoDesc = `Remove ${cred || 'Account'} ${acc ? `(${acc})` : ''} from all major credit bureaus that has a balance of ${formatZAR(bal || 0)}. ${savings > 0 ? `Saving you ${formatZAR(savings)}!` : ''}`
+        } else if (sKey === 'rescission_unpaid_judgments' || sKey === 'paid_judgments') {
+          autoDesc = `Rescission and removal of Court Order Judgment ${caseNo ? `(Case: ${caseNo})` : ''} from all major credit bureaus.`
+        } else if (field === 'serviceKey') {
+          autoDesc = SERVICE_DESCRIPTIONS[sKey] ?? ''
+        }
+      }
+
       if (field === 'serviceKey') {
         const found = SERVICES_LIST.find(s => s.key === value)
-        return { ...line, serviceKey: String(value), serviceLabel: found?.label ?? String(value) }
+        return { 
+          ...newLine, 
+          serviceLabel: found?.label ?? String(value),
+          description: autoDesc,
+          // Reset conditional fields on service change
+          accountNumber: '',
+          balance: 0,
+          caseNumber: ''
+        }
       }
-      return { ...line, [field]: value }
+
+      if (field === 'inclPrice') {
+        const incl = parseFloat(String(value)) || 0
+        const excl = incl / (1 + vatRate)
+        return { ...newLine, inclPrice: incl, unitPrice: excl, description: autoDesc }
+      }
+
+      if (field === 'unitPrice') {
+        const excl = parseFloat(String(value)) || 0
+        const incl = excl * (1 + vatRate)
+        return { ...newLine, unitPrice: excl, inclPrice: incl, description: autoDesc }
+      }
+
+      return { ...newLine, description: autoDesc }
     }))
   }
 
@@ -140,10 +206,18 @@ export default function SendQuoteModal({
 
   const handleCreate = async (andSend = false) => {
     setError('')
-    if (lines.some(l => !l.creditor.trim())) {
-      setError('All rows must have a creditor / account name.'); return
+    const invalid = lines.some(l => {
+      if (l.serviceKey === 'debt_review_flag_removal') return false // Creditor not required for Debt Review
+      return !l.creditor.trim()
+    })
+    if (invalid) {
+      setError('Please provide a creditor / account name for the selected services.')
+      return
     }
     if (!dueAt) { setError('Due date is required.'); return }
+    if (!isAdmin && !selectedBankId) {
+      setError('A bank account must be selected for this document.'); return
+    }
 
     setSaving(true)
     try {
@@ -159,6 +233,7 @@ export default function SendQuoteModal({
             creditor:     l.creditor.trim(),
             serviceKey:   l.serviceKey,
             serviceLabel: l.serviceLabel,
+            description:  l.description.trim() || undefined,
             quantity:     l.quantity,
             unitPrice:    l.unitPrice,
           })),
@@ -330,19 +405,24 @@ export default function SendQuoteModal({
 
               {/* Type toggle */}
               <div className="flex gap-2">
-                {(['QUOTE', 'INVOICE'] as const).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setDocType(t)}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                      docType === t
-                        ? 'bg-emerald-500 border-emerald-500 text-white'
-                        : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
-                    }`}
-                  >
-                    {t === 'QUOTE' ? 'Quotation' : 'Invoice'}
-                  </button>
-                ))}
+                {(['QUOTE', 'INVOICE'] as const).map(t => {
+                  const isRestricted = t === 'INVOICE' && !isAdmin && !isExecutive && !isFinance;
+                  if (isRestricted) return null; // Hide Invoice option for general staff
+                  
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setDocType(t)}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                        docType === t
+                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                          : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
+                      }`}
+                    >
+                      {t === 'QUOTE' ? 'Quotation' : 'Invoice'}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Services table */}
@@ -358,47 +438,125 @@ export default function SendQuoteModal({
                 </div>
 
                 <div className="grid grid-cols-12 gap-2 text-xs text-gray-600 uppercase tracking-wider mb-1.5 px-1">
-                  <span className="col-span-4">Creditor / Account</span>
-                  <span className="col-span-4">Service</span>
-                  <span className="col-span-3 text-right">Amount</span>
+                  <span className="col-span-3">Creditor / Account</span>
+                  <span className="col-span-3">Service</span>
+                  <span className="col-span-2 text-right">Unit (Excl)</span>
+                  <span className="col-span-3 text-right">Total (Incl)</span>
                   <span className="col-span-1" />
                 </div>
 
                 <div className="space-y-2">
                   {lines.map((line, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-center group">
-                      <input
-                        className="col-span-4 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
-                        placeholder="e.g. Nedbank"
-                        value={line.creditor}
-                        onChange={e => updateLine(i, 'creditor', e.target.value)}
-                      />
-                      <select
-                        className="col-span-4 bg-[var(--color-bg-primary)] border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
-                        value={line.serviceKey}
-                        onChange={e => updateLine(i, 'serviceKey', e.target.value)}
-                      >
-                        {SERVICES_LIST.map(s => (
-                          <option key={s.key} value={s.key} className="bg-gray-900">{s.label}</option>
-                        ))}
-                      </select>
-                      <input
-                        className="col-span-3 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white text-right focus:outline-none focus:border-emerald-500/50"
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={line.unitPrice}
-                        onChange={e => updateLine(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                      />
-                      <div className="col-span-1 flex justify-end">
-                        {lines.length > 1 && (
-                          <button onClick={() => removeLine(i)} className="text-gray-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        )}
+                    <div key={i} className="space-y-3 p-4 rounded-2xl bg-white/5 border border-white/10 group relative">
+                      <div className="grid grid-cols-12 gap-3 items-center">
+                        <div className="col-span-4">
+                          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block ml-1">Service Required</label>
+                          <select
+                            className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50 appearance-none"
+                            value={line.serviceKey}
+                            onChange={e => updateLine(i, 'serviceKey', e.target.value)}
+                          >
+                            {SERVICES_LIST.map(s => (
+                              <option key={s.key} value={s.key} className="bg-[#1a1d23] text-white">{s.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-4">
+                          {line.serviceKey !== 'debt_review_flag_removal' && (
+                            <div className="animate-in fade-in zoom-in-95 duration-200">
+                              <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block ml-1">Creditor / Account Name</label>
+                              <input
+                                className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
+                                placeholder="e.g. Nedbank"
+                                value={line.creditor}
+                                onChange={e => updateLine(i, 'creditor', e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block text-right mr-1">Unit (Excl)</label>
+                          <input
+                            className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-xs text-gray-400 text-right focus:outline-none"
+                            type="number"
+                            value={line.unitPrice.toFixed(2)}
+                            onChange={e => updateLine(i, 'unitPrice', e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-2 relative">
+                          <label className="text-[10px] text-emerald-500 uppercase font-bold mb-1 block text-right mr-1">Total (Incl)</label>
+                          <input
+                            className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2 text-sm text-emerald-400 font-bold text-right focus:outline-none"
+                            type="number"
+                            placeholder="0.00"
+                            value={line.inclPrice || (line.unitPrice * (1 + vatRate)).toFixed(2)}
+                            onChange={e => updateLine(i, 'inclPrice', e.target.value)}
+                          />
+                        </div>
                       </div>
+
+                      {/* Conditional Value-Add Fields */}
+                      {(line.serviceKey === 'prescription_of_accounts' || line.serviceKey === 'rescission_unpaid_judgments' || line.serviceKey === 'paid_judgments') && (
+                        <div className="grid grid-cols-12 gap-3 pt-2 border-t border-white/5 animate-in fade-in slide-in-from-top-1">
+                          {line.serviceKey === 'prescription_of_accounts' && (
+                            <>
+                              <div className="col-span-4">
+                                <label className="text-[10px] text-amber-500/70 uppercase font-bold mb-1 block ml-1 italic tracking-wider">Account Number</label>
+                                <input
+                                  className="w-full bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-1.5 text-sm text-amber-200 placeholder-amber-900 focus:outline-none"
+                                  placeholder="e.g. 123456789"
+                                  value={line.accountNumber || ''}
+                                  onChange={e => updateLine(i, 'accountNumber', e.target.value)}
+                                />
+                              </div>
+                              <div className="col-span-4">
+                                <label className="text-[10px] text-amber-500/70 uppercase font-bold mb-1 block ml-1 italic tracking-wider">Current Balance (R)</label>
+                                <input
+                                  className="w-full bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-1.5 text-sm text-amber-200 placeholder-amber-900 focus:outline-none"
+                                  type="number"
+                                  placeholder="0.00"
+                                  value={line.balance || ''}
+                                  onChange={e => updateLine(i, 'balance', e.target.value)}
+                                />
+                              </div>
+                              <div className="col-span-4 flex items-end">
+                                {line.balance && line.unitPrice && (line.balance - line.unitPrice > 0) && (
+                                  <div className="text-[10px] text-emerald-500 font-bold bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 w-full text-center">
+                                    Client Saving: {formatZAR(line.balance - line.unitPrice)} ✨
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                          {(line.serviceKey === 'rescission_unpaid_judgments' || line.serviceKey === 'paid_judgments') && (
+                            <div className="col-span-6">
+                              <label className="text-[10px] text-blue-500/70 uppercase font-bold mb-1 block ml-1 italic tracking-wider">Case Number</label>
+                              <input
+                                className="w-full bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-1.5 text-sm text-blue-200 placeholder-blue-900 focus:outline-none"
+                                placeholder="e.g. 1234/2024"
+                                value={line.caseNumber || ''}
+                                onChange={e => updateLine(i, 'caseNumber', e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Generated Description Preview */}
+                      <div className="bg-black/40 rounded-lg p-2 mt-2">
+                        <p className="text-[10px] text-gray-500 uppercase font-bold mb-1 ml-1 tracking-tighter">Professional Description (Preview)</p>
+                        <p className="text-xs text-gray-400 italic px-1 line-clamp-1">"{line.description}"</p>
+                      </div>
+
+                      {/* Remove Button */}
+                      {lines.length > 1 && (
+                        <button 
+                          onClick={() => removeLine(i)} 
+                          className="absolute -right-2 -top-2 w-6 h-6 rounded-full bg-red-500/20 text-red-400 border border-red-500/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -414,10 +572,11 @@ export default function SendQuoteModal({
                       <select
                         value={vatRate}
                         onChange={e => setVatRate(parseFloat(e.target.value))}
-                        className="bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-white focus:outline-none"
+                        className="bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-white focus:outline-none appearance-none"
+                        style={{ backgroundColor: '#1a1d23' }}
                       >
-                        <option value={0.15}>15%</option>
-                        <option value={0}>0%</option>
+                        <option value={0.15} className="bg-[#1a1d23] text-white">15%</option>
+                        <option value={0} className="bg-[#1a1d23] text-white">0%</option>
                       </select>
                     </span>
                     <span>{formatZAR(vatAmount)}</span>
@@ -473,23 +632,48 @@ export default function SendQuoteModal({
                   <p className="text-xs text-gray-600 italic">No bank accounts configured — document will use company defaults.</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors ${
-                      !selectedBankId ? 'border-amber-500/40 bg-amber-500/5 text-amber-300' : 'border-white/10 text-gray-500 hover:border-white/20'
-                    }`}>
-                      <input type="radio" name="bank" value="" checked={!selectedBankId} onChange={() => setSelectedBankId('')} className="accent-amber-400" />
-                      No bank details
-                    </label>
-                    {bankAccounts.map(bank => (
-                      <label key={bank.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors ${
-                        selectedBankId === bank.id ? 'border-emerald-500/40 bg-emerald-500/5 text-white' : 'border-white/10 text-gray-400 hover:border-white/20'
+                    {/* Only Admin can opt-out of banking details */}
+                    {isAdmin && (
+                      <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors ${
+                        !selectedBankId ? 'border-amber-500/40 bg-amber-500/5 text-amber-300' : 'border-white/10 text-gray-500 hover:border-white/20'
                       }`}>
-                        <input type="radio" name="bank" value={bank.id} checked={selectedBankId === bank.id} onChange={() => setSelectedBankId(bank.id)} className="accent-emerald-400" />
-                        <span>
-                          <span className="font-medium">{bank.bankName}</span>
-                          <span className="text-xs text-gray-500 ml-1">·{bank.accountNumber}</span>
-                        </span>
+                        <input type="radio" name="bank" value="" checked={!selectedBankId} onChange={() => setSelectedBankId('')} className="accent-amber-400" />
+                        No bank details
                       </label>
-                    ))}
+                    )}
+
+                    {/* Finance, Executive, and Admin can choose between bank accounts */}
+                    {(isAdmin || isExecutive || isFinance) ? (
+                      bankAccounts.map(bank => (
+                        <label key={bank.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors ${
+                          selectedBankId === bank.id ? 'border-emerald-500/40 bg-emerald-500/5 text-white' : 'border-white/10 text-gray-400 hover:border-white/20'
+                        }`}>
+                          <input type="radio" name="bank" value={bank.id} checked={selectedBankId === bank.id} onChange={() => setSelectedBankId(bank.id)} className="accent-emerald-400" />
+                          <span>
+                            <span className="font-medium">{bank.bankName}</span>
+                            <span className="text-xs text-gray-500 ml-1">·{bank.accountNumber}</span>
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      /* Other staff: Read-only view of the default/selected bank account */
+                      (() => {
+                        const bank = bankAccounts.find(b => b.id === selectedBankId) || bankAccounts.find(b => b.isDefault);
+                        if (!bank) return <p className="text-xs text-gray-500 italic">Default bank account not found.</p>;
+                        return (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-white text-sm">
+                            <svg className="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <span>
+                              <span className="font-medium">{bank.bankName}</span>
+                              <span className="text-xs text-gray-500 ml-1">·{bank.accountNumber}</span>
+                            </span>
+                            <span className="ml-auto text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">Default</span>
+                          </div>
+                        );
+                      })()
+                    )}
                   </div>
                 )}
               </div>

@@ -4,7 +4,7 @@ import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { DeleteConfirmationModal } from '@zenowethu/ui';
+import { DeleteConfirmationModal, Pagination } from '@zenowethu/ui';
 import { MoveProjectModal } from '@zenowethu/ui';
 import { DestinationPathSelector } from '@zenowethu/ui';
 
@@ -734,64 +734,11 @@ export default function ProjectsManagement() {
                     paginatedProjects.map(project => renderProjectRow(project))
                 )}
             </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-                <div className="mt-4 px-4 py-3 bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl flex items-center justify-between">
-                    <div className="text-sm text-gray-400">
-                        Page {currentPage} of {totalPages}
-                    </div>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                            disabled={currentPage === 1}
-                            className="px-4 py-2 bg-zeno-blue border border-white/10 text-white rounded-lg hover:bg-zeno-blue/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                            Previous
-                        </button>
-
-                        {/* Page numbers */}
-                        <div className="flex gap-1">
-                            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
-                                // Show first page, last page, current page, and pages around current
-                                const showPage = page === 1 ||
-                                    page === totalPages ||
-                                    (page >= currentPage - 1 && page <= currentPage + 1);
-
-                                if (!showPage) {
-                                    // Show ellipsis
-                                    if ((page === currentPage - 2 && currentPage > 3) ||
-                                        (page === currentPage + 2 && currentPage < totalPages - 2)) {
-                                        return <span key={page} className="px-2 py-2 text-gray-500">...</span>;
-                                    }
-                                    return null;
-                                }
-
-                                return (
-                                    <button
-                                        key={page}
-                                        onClick={() => setCurrentPage(page)}
-                                        className={`px-4 py-2 rounded-lg transition-all ${currentPage === page
-                                            ? 'bg-zeno-cyan text-zeno-navy font-bold'
-                                            : 'bg-zeno-blue border border-white/10 text-white hover:bg-zeno-blue/80'
-                                            }`}
-                                    >
-                                        {page}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                            disabled={currentPage === totalPages}
-                            className="px-4 py-2 bg-zeno-blue border border-white/10 text-white rounded-lg hover:bg-zeno-blue/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                            Next
-                        </button>
-                    </div>
-                </div>
-            )}
+            <Pagination 
+                currentPage={currentPage} 
+                totalPages={totalPages} 
+                onPageChange={setCurrentPage} 
+            />
 
             {showModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">

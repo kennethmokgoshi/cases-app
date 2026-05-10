@@ -22,6 +22,8 @@ import { DebtReviewTab } from './DebtReviewTab';
 import { SavingsAuditCard } from './SavingsAuditCard';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
 import SendQuoteModal from './SendQuoteModal';
+import SendMandateModal from './SendMandateModal';
+
 
 // Client-side logger (avoid importing createLogger from shared-lib)
 const createLogger = (name: string) => ({
@@ -314,6 +316,9 @@ export default function CaseDetailPage() {
     const [showCompareModal, setShowCompareModal] = useState(false);
     const [isPoaModalOpen, setIsPoaModalOpen]     = useState(false);
     const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
+    const [isMandateModalOpen, setIsMandateModalOpen] = useState(false);
+    const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
+
     const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN' | 'DEBT_REVIEW'>('ACTIVITY');
     // DC pre-send confirmation
     const [dcConfirmPending, setDcConfirmPending] = useState<'FILE_REQUEST' | 'INVOICE_REQUEST' | null>(null);
@@ -1541,53 +1546,77 @@ export default function CaseDetailPage() {
                     {/* Actions */}
                     {!isEditing && (
                         <div className="flex items-center gap-2">
-                            {isDebtReviewCase && (
-                                <a
-                                    href={`/api/cases/${params.id}/form16`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-3 py-1.5 bg-teal-500/10 border border-teal-500/30 text-teal-400 rounded hover:bg-teal-500/20 text-sm flex items-center gap-2 transition-colors"
-                                    title="Download Form 16 — Application for Debt Review"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                    Form 16
-                                </a>
-                            )}
-
-                            {/* Send POA — top bar shortcut */}
-                            {(() => {
-                                const svcList: string[] = (() => { try { return JSON.parse(caseData?.services ?? '[]'); } catch { return []; } })();
-                                const isDRR    = svcList.some(s => s.toLowerCase().includes('flag removal'));
-                                const drrReady = !isDRR || !!(caseData?.ncrdcNo && caseData?.debtCounsellorName);
-                                return (
-                                    <button
-                                        onClick={() => drrReady && setIsPoaModalOpen(true)}
-                                        disabled={!drrReady}
-                                        title={!drrReady ? 'Run DHS Auto-Fill first — NCRDC No and Debt Counsellor required for DRR cases.' : 'Send pre-filled Power of Attorney to client'}
-                                        className={`px-3 py-1.5 rounded text-sm flex items-center gap-2 transition-colors ${
-                                            drrReady
-                                                ? 'bg-purple-500/10 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20'
-                                                : 'bg-white/5 border border-white/10 text-gray-500 cursor-not-allowed opacity-50'
-                                        }`}
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                        Send POA
-                                    </button>
-                                );
-                            })()}
-                            {/* Send Quote / Invoice — finance, executive, admin only */}
-                            {canCreateInvoice && (
+                            {/* Unified Send Document Dropdown */}
+                            <div className="relative">
                                 <button
-                                    onClick={() => setIsQuoteModalOpen(true)}
-                                    className="px-3 py-1.5 rounded text-sm flex items-center gap-2 transition-colors bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
-                                    title="Create Invoice or Quotation for this client"
+                                    onClick={() => setIsSendDropdownOpen(!isSendDropdownOpen)}
+                                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                     </svg>
-                                    Send Quote
+                                    Send Document
+                                    <svg className={`w-3 h-3 transition-transform ${isSendDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
                                 </button>
-                            )}
+
+                                {isSendDropdownOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setIsSendDropdownOpen(false)} />
+                                        <div className="absolute right-0 mt-2 w-56 bg-[#1a1d23] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                            <div className="p-2 space-y-1">
+                                                {/* POA Option */}
+                                                {(() => {
+                                                    const svcList: string[] = (() => { try { return JSON.parse(caseData?.services ?? '[]'); } catch { return []; } })();
+                                                    const isDRR    = svcList.some(s => s.toLowerCase().includes('flag removal'));
+                                                    const drrReady = !isDRR || !!(caseData?.ncrdcNo && caseData?.debtCounsellorName);
+                                                    return (
+                                                        <button
+                                                            disabled={!drrReady}
+                                                            onClick={() => { setIsPoaModalOpen(true); setIsSendDropdownOpen(false); }}
+                                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-3 transition-colors ${
+                                                                drrReady ? 'text-gray-300 hover:bg-white/5 hover:text-white' : 'text-gray-600 cursor-not-allowed'
+                                                            }`}
+                                                        >
+                                                            <span className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400">
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                            </span>
+                                                            <div className="flex flex-col">
+                                                                <span className="font-medium">Power of Attorney</span>
+                                                                {!drrReady && <span className="text-[9px] text-amber-500/70">Needs DC Info</span>}
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })()}
+
+                                                {/* Quote Option */}
+                                                <button
+                                                    onClick={() => { setIsQuoteModalOpen(true); setIsSendDropdownOpen(false); }}
+                                                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors"
+                                                >
+                                                    <span className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                    </span>
+                                                    <span className="font-medium">Professional Quote</span>
+                                                </button>
+
+                                                {/* Mandate Option */}
+                                                <button
+                                                    onClick={() => { setIsMandateModalOpen(true); setIsSendDropdownOpen(false); }}
+                                                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/5 hover:text-white flex items-center gap-3 transition-colors"
+                                                >
+                                                    <span className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                                                    </span>
+                                                    <span className="font-medium">Debit Order Mandate</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
 
                             {isAdmin && (
                                 <button
@@ -3486,7 +3515,7 @@ export default function CaseDetailPage() {
             />
 
             {/* Send Quote / Invoice Modal */}
-            {caseData && canCreateInvoice && (
+            {caseData && (
                 <SendQuoteModal
                     isOpen={isQuoteModalOpen}
                     onClose={() => setIsQuoteModalOpen(false)}
@@ -3495,6 +3524,9 @@ export default function CaseDetailPage() {
                     clientName={`${caseData.client.firstName} ${caseData.client.lastName}`.trim()}
                     clientEmail={caseData.client.email}
                     services={caseData.services}
+                    isAdmin={isAdmin}
+                    isExecutive={isExecutive}
+                    isFinance={isFinance}
                 />
             )}
 
@@ -3510,6 +3542,27 @@ export default function CaseDetailPage() {
                     services={caseData.services}
                     dcName={caseData.debtCounsellorName}
                     dcNcrdcNo={caseData.ncrdcNo}
+                />
+            )}
+
+            {/* Send Mandate Modal */}
+            {caseData && (
+                <SendMandateModal
+                    isOpen={isMandateModalOpen}
+                    onClose={() => setIsMandateModalOpen(false)}
+                    caseId={caseData.id}
+                    clientName={`${caseData.client.firstName} ${caseData.client.lastName}`.trim()}
+                    clientEmail={caseData.client.email}
+                    initialData={{
+                        bankName: (caseData as any).bankName,
+                        accountHolder: (caseData as any).accountHolderName,
+                        accountNumber: (caseData as any).accountNumber,
+                        branchCode: (caseData as any).branchNumber,
+                        accountType: (caseData as any).accountType,
+                        contractAmount: caseData.totalDebtAmount?.toString(),
+                        instalmentAmount: caseData.totalMonthlyInstallment?.toString(),
+                        instalments: (caseData as any).instalments?.toString()
+                    }}
                 />
             )}
 

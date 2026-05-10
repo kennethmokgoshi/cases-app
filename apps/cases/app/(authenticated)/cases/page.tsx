@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from '@zenowethu/ui';
 import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory } from '@zenowethu/shared-lib';
-import { SearchWithSuggestions } from '@zenowethu/ui';
+import { SearchWithSuggestions, Pagination } from '@zenowethu/ui';
 import { SERVICES_MAP } from '@zenowethu/config';
 
 // Client-side logger
@@ -371,15 +371,11 @@ function CasesContent() {
                         </tbody>
                     </table>
                 </div>
-                {totalPages > 1 && (
-                    <div className="px-4 py-3 border-t border-white/5 flex justify-between items-center text-xs text-gray-400">
-                        <span>Page {currentPage} of {totalPages}</span>
-                        <div className="flex gap-2">
-                            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1 bg-zeno-blue border border-white/10 rounded-lg disabled:opacity-50">Prev</button>
-                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1 bg-zeno-blue border border-white/10 rounded-lg disabled:opacity-50">Next</button>
-                        </div>
-                    </div>
-                )}
+                <Pagination 
+                    currentPage={currentPage} 
+                    totalPages={totalPages} 
+                    onPageChange={setCurrentPage} 
+                />
             </div>
         </div>
     );

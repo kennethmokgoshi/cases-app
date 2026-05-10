@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
+import { Pagination } from '@zenowethu/ui'
 
 const logger = {
     info: (...args: any[]) => console.log('[INFO]', ...args),
@@ -194,17 +195,11 @@ function InsuranceAssessmentsContent() {
                 </tbody>
               </table>
             </div>
-            {pages > 1 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-white/5">
-                <p className="text-xs text-gray-500">Page {page} of {pages}</p>
-                <div className="flex gap-2">
-                  <button disabled={page <= 1} onClick={() => fetchAssessments(page - 1)}
-                    className="px-3 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-white rounded text-xs transition-colors">← Prev</button>
-                  <button disabled={page >= pages} onClick={() => fetchAssessments(page + 1)}
-                    className="px-3 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-white rounded text-xs transition-colors">Next →</button>
-                </div>
-              </div>
-            )}
+            <Pagination 
+              currentPage={page} 
+              totalPages={pages} 
+              onPageChange={fetchAssessments} 
+            />
           </>
         )}
       </div>

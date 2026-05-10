@@ -9,7 +9,17 @@ export const SERVICES_MAP: Record<string, string> = {
     'prescription_of_accounts': 'Prescription of Accounts',
     'paid_judgments': 'Paid Judgments',
     'paid_defaults': 'Paid Defaults',
-    'rescission_unpaid_judgments': 'Rescission of Not Paid Judgments' };
+    'rescission_unpaid_judgments': 'Rescission of Not Paid Judgments'
+};
+
+export const SERVICE_DESCRIPTIONS: Record<string, string> = {
+    'debt_review_flag_removal': 'Removal of debt review flag from all major credit bureaus (TransUnion, Experian, XDS, Compuscan)',
+    'credit_profile_enquiry': 'Comprehensive credit report and analysis from major bureaus.',
+    'admin_order_removal': 'Legal process to rescind and remove an administration order from your credit profile.',
+    'paid_judgments': 'Removal of paid judgment listings from all credit bureau records.',
+    'paid_defaults': 'Update and removal of settled default listings.'
+};
 
 export const BRANDING = {
-    appName: 'ZENOWETHU' };
+    appName: 'ZENOWETHU'
+};

@@ -28,6 +28,7 @@ const CreateInvoiceSchema = z.object({
   notes:     z.string().max(2000).optional(),
   reference: z.string().max(100).optional(),
   vatRate:   z.number().min(0).max(1).default(0.15),
+  bankAccountId: z.string().cuid().optional(),
 })
 
 export async function GET(request: Request) {
@@ -111,6 +112,21 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data
+
+  // Admin is the only user who can send a quote with or without banking details
+  const isAdmin = session.user.isAdmin === true;
+  const isExecutive = session.user.isExecutive === true;
+  const isFinance = (session.user as any)?.role?.toUpperCase() === 'FINANCE';
+
+  // Restriction: Only Admin, Executive, or Finance can create an INVOICE
+  if (input.type === 'INVOICE' && !isAdmin && !isExecutive && !isFinance) {
+    return NextResponse.json({ error: 'You are not permitted to create invoices. Please use Quotation mode.' }, { status: 403 })
+  }
+
+  if (!input.bankAccountId && !isAdmin) {
+    return NextResponse.json({ error: 'Banking details are required for this document.' }, { status: 422 })
+  }
+
   const subtotal  = input.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
   const vatAmount = subtotal * input.vatRate
   const total     = subtotal + vatAmount
@@ -140,6 +156,7 @@ export async function POST(request: Request) {
           dueAt:       new Date(input.dueAt),
           notes:       input.notes     ?? null,
           reference:   input.reference ?? null,
+          bankAccountId: input.bankAccountId ?? null,
           createdById: session.user.id,
           status:      'DRAFT',
         },

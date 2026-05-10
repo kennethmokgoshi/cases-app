@@ -1,1 +1,1 @@
-export { SERVICES_MAP, BRANDING } from './constants'
+export { SERVICES_MAP, SERVICE_DESCRIPTIONS, BRANDING } from './constants'

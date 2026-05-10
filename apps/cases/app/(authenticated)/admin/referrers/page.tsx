@@ -4,6 +4,7 @@ import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { Pagination } from '@zenowethu/ui';
 
 type Referrer = {
     id: string;
@@ -336,17 +337,11 @@ export default function ReferrersPage() {
                 </table>
             </div>
 
-            {/* Pagination */}
-            {pages > 1 && (
-                <div className="flex items-center justify-between mt-4 text-sm text-gray-400">
-                    <span>Showing {referrers.length} of {total} referrers</span>
-                    <div className="flex gap-2">
-                        <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 rounded bg-zeno-blue/30 border border-zeno-blue/40 disabled:opacity-40 hover:border-zeno-cyan/50 transition-colors">Prev</button>
-                        <span className="px-3 py-1">{page} / {pages}</span>
-                        <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page === pages} className="px-3 py-1 rounded bg-zeno-blue/30 border border-zeno-blue/40 disabled:opacity-40 hover:border-zeno-cyan/50 transition-colors">Next</button>
-                    </div>
-                </div>
-            )}
+            <Pagination 
+                currentPage={page} 
+                totalPages={pages} 
+                onPageChange={setPage} 
+            />
 
             {/* Add / Edit Modal */}
             {modalOpen && (

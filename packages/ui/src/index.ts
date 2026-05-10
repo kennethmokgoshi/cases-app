@@ -24,6 +24,7 @@ export * from './projects/MoveProjectModal'
 export * from './projects/ProjectMembersModal'
 export * from './providers/SessionProvider'
 export * from './ui/DeleteConfirmationModal'
+export * from './ui/Pagination'
 export * from './ui/SignaturePad';
 export * from './ui/RichTextEditor'
 export * from './ui/SearchWithSuggestions'
