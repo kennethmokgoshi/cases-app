@@ -67,11 +67,11 @@ export async function GET(request: Request) {
         // Security: Filter by project membership (Inherited Access)
         const userRole = session.user.role?.toUpperCase();
         const isAdmin = userRole === 'ADMIN' || session.user.isAdmin === true;
-        const isStaff = session.user.userType === 'STAFF';
+        const isStaff = session.user.userType === 'STAFF' || userRole === 'STAFF';
 
         // Non-admins never see admin-only cases
         if (!isAdmin) {
-            where.isAdminOnly = false;
+            where.isAdminOnly = { not: true };
         }
 
         // Staff members (internal) should see all cases, Partners (external) are restricted to their projects
@@ -158,20 +158,21 @@ export async function GET(request: Request) {
                     getDescendantIds(id).forEach(dId => allDescendants.add(dId));
                 });
                 
-                const finalIds = Array.from(allDescendants);
+                const timelineProjectIds = Array.from(allDescendants);
                 
-                // Merge with existing projects filter if any
-                if (where.projects) {
-                    // For now, prioritize the more specific timeline filter
-                    where.projects = { some: { projectId: { in: finalIds } } };
+                // Merge with existing projects filter if any (intersection)
+                if (where.projects?.some?.projectId?.in) {
+                    const allowedIds = where.projects.some.projectId.in;
+                    const intersection = timelineProjectIds.filter(id => allowedIds.includes(id));
+                    where.projects = { some: { projectId: { in: intersection } } };
                 } else {
-                    where.projects = { some: { projectId: { in: finalIds } } };
+                    where.projects = { some: { projectId: { in: timelineProjectIds } } };
                 }
             }
         }
 
         // Apply filters
-        if (status) {
+        if (status && status !== 'ALL') {
             if (status.includes(',')) {
                 where.status = { in: status.split(',').map(s => s.trim()) };
             } else {
