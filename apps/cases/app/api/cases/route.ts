@@ -224,16 +224,29 @@ export async function GET(request: Request) {
             orderBy: { updatedAt: 'desc' }
         });
 
-        const enriched = cases.map(c => ({
-            ...c,
-            projects: (c.projects || []).map((cp: any) => ({
-                ...cp,
-                project: {
-                    ...cp.project,
-                    fullPath: buildFullPath(cp.projectId, projectMap)
-                }
-            }))
-        }));
+        const enriched = cases.map(c => {
+            try {
+                return {
+                    ...c,
+                    projects: (c.projects || []).map((cp: any) => {
+                        try {
+                            const pData = cp?.project || {};
+                            return {
+                                ...cp,
+                                project: {
+                                    ...pData,
+                                    fullPath: cp?.projectId ? buildFullPath(cp.projectId, projectMap) : 'Unknown Project'
+                                }
+                            };
+                        } catch (e) {
+                            return cp;
+                        }
+                    })
+                };
+            } catch (e) {
+                return c;
+            }
+        });
 
         // Manual serialization to handle Decimals/BigInts which often crash NextResponse.json
         const json = JSON.stringify(enriched, (key, value) => 
