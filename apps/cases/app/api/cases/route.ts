@@ -173,8 +173,20 @@ export async function GET(request: Request) {
 
         return new Response(json, { status: 200, headers: { 'Content-Type': 'application/json' } });
     } catch (err: any) {
+        const errorDetail = {
+            message: err?.message || 'No message',
+            stack: err?.stack || 'No stack',
+            timestamp: new Date().toISOString()
+        };
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const debugPath = path.join(process.cwd(), 'api-debug-error.log');
+            fs.appendFileSync(debugPath, JSON.stringify(errorDetail, null, 2) + '\n---\n');
+        } catch (e) {}
+        
         logger.error('[API] Critical Error:', err);
-        return new Response(JSON.stringify({ error: 'Internal Server Error', message: err?.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Internal Server Error', message: err?.message, _debug: errorDetail }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 }
 
