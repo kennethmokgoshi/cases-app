@@ -390,8 +390,11 @@ export async function GET(request: Request) {
         }
         return NextResponse.json(enrichedCases);
     } catch (error: any) {
-        logger.error('Error fetching cases:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        console.error('[API] Error fetching cases:', error);
+        return NextResponse.json({ 
+            error: error.message || 'Internal Server Error',
+            details: error instanceof Error ? error.stack : String(error)
+        }, { status: 500 });
     }
 }
 
