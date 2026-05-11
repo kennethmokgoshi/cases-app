@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger } from '@zenowethu/shared-lib';
+import { auth, logger, WORKFLOW_STATUSES } from '@zenowethu/shared-lib';
 
 export async function GET() {
     try {
@@ -64,6 +64,12 @@ export async function GET() {
 
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
+        const completedCodes = WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED').map(s => s.code);
+        const beginningCodes = WORKFLOW_STATUSES.filter(s => s.category === 'BEGINNING').map(s => s.code);
+        const overdueCodes = WORKFLOW_STATUSES.filter(s => s.category === 'OVERDUE').map(s => s.code);
+        const lostCodes = WORKFLOW_STATUSES.filter(s => s.category === 'LOST').map(s => s.code);
+        const payingCodes = WORKFLOW_STATUSES.filter(s => s.category === 'PAYING').map(s => s.code);
+
         // Run all counts in parallel — each is a single fast SQL COUNT query
         const [
             totalCases,
@@ -81,29 +87,29 @@ export async function GET() {
             prisma.case.count({
                 where: {
                     ...projectWhere,
-                    status: { notIn: ['COMPLETED', 'CLOSED', 'CANCELLED'] },
+                    status: { notIn: [...completedCodes, ...lostCodes] },
                 },
             }),
 
             prisma.case.count({
-                where: { ...projectWhere, status: 'COMPLETED' },
+                where: { ...projectWhere, status: { in: completedCodes } },
             }),
 
             prisma.case.count({
                 where: {
                     ...projectWhere,
-                    status: { in: ['NEW_LEAD', 'Outstanding Documents'] },
+                    status: { in: [...beginningCodes, ...overdueCodes] },
                 },
             }),
 
             prisma.case.count({
-                where: { ...projectWhere, status: 'NEW_LEAD' },
+                where: { ...projectWhere, status: { in: beginningCodes } },
             }),
 
             prisma.case.count({
                 where: {
                     ...projectWhere,
-                    status: 'NEW_LEAD',
+                    status: { in: beginningCodes },
                     createdAt: { gte: sevenDaysAgo },
                 },
             }),
@@ -111,7 +117,7 @@ export async function GET() {
             prisma.case.count({
                 where: {
                     ...projectWhere,
-                    status: 'COMPLETED',
+                    status: { in: completedCodes },
                     updatedAt: { gte: sevenDaysAgo },
                 },
             }),

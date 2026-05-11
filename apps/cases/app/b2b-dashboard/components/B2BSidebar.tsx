@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 
 // Client-side logger
@@ -51,10 +51,18 @@ const MONTH_ORDER: Record<string, number> = {
 
 export function B2BSidebar() {
     const pathname = usePathname();
+    const searchParams = useSearchParams();
     const { data: session } = useSession();
 
+    // Active Filter Helpers
+    const activeYear = searchParams.get('year');
+    const activeMonth = searchParams.get('month');
+    const activeProjectId = searchParams.get('projectId');
+    const activeTab = searchParams.get('tab');
+
     const allMenuItems = [
-        { label: 'My Cases', href: '/b2b-dashboard', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
+        { label: 'Dashboard', href: '/b2b-dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+        { label: 'All Referrals', href: '/b2b-dashboard/cases', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
         { label: '+Submit New Referral', href: '/b2b-dashboard/cases/new', icon: 'M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z' },
         { label: 'Reporting', href: '/b2b-dashboard/reporting', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', managerOnly: true },
     ];
@@ -321,7 +329,15 @@ export function B2BSidebar() {
             {/* Navigation */}
             <nav className="flex-1 px-4 py-8 space-y-2">
                 {menuItems.map((item) => {
-                    const isActive = pathname === item.href;
+                    // Standard active check: pathname matches exactly
+                    // Special case: if on /cases, check if tab matches or if it's the 'All Referrals' base link
+                    let isActive = pathname === item.href;
+                    
+                    if (item.href === '/b2b-dashboard/cases') {
+                        // Highlight 'All Referrals' if on cases page AND no special tab is active
+                        isActive = pathname === '/b2b-dashboard/cases' && !activeTab;
+                    }
+
                     return (
                         <Link
                             key={item.label}
@@ -380,7 +396,7 @@ export function B2BSidebar() {
                                                     </svg>
                                                     <Link
                                                         href={`/b2b-dashboard/cases?projectId=${branch.projectId}`}
-                                                        className="font-semibold truncate hover:text-zeno-cyan transition-colors"
+                                                        className={`font-semibold truncate transition-colors ${activeProjectId === branch.projectId ? 'text-zeno-cyan' : 'hover:text-zeno-cyan'}`}
                                                     >
                                                         {branch.name}
                                                     </Link>
@@ -415,7 +431,7 @@ export function B2BSidebar() {
                                                                         </svg>
                                                                         <Link
                                                                             href={`/b2b-dashboard/cases?projectId=${year.projectId}`}
-                                                                            className="font-medium hover:text-zeno-cyan transition-colors"
+                                                                            className={`font-medium transition-colors ${activeProjectId === year.projectId ? 'text-zeno-cyan' : 'hover:text-zeno-cyan'}`}
                                                                         >
                                                                             {year.name}
                                                                         </Link>
@@ -435,10 +451,10 @@ export function B2BSidebar() {
                                                                             <Link
                                                                                 key={month.projectId}
                                                                                 href={`/b2b-dashboard/cases?projectId=${month.projectId}`}
-                                                                                className="flex items-center justify-between px-3 py-1.5 text-xs text-gray-500 hover:text-white transition-colors rounded-md hover:bg-white/5"
+                                                                                className={`flex items-center justify-between px-3 py-1.5 text-xs transition-colors rounded-md hover:bg-white/5 ${activeProjectId === month.projectId ? 'bg-zeno-cyan/10 text-zeno-cyan font-semibold' : 'text-gray-500 hover:text-white'}`}
                                                                             >
                                                                                 <span>{month.name}</span>
-                                                                                <span className="text-[10px] text-gray-600">
+                                                                                <span className={`text-[10px] ${activeProjectId === month.projectId ? 'text-zeno-cyan' : 'text-gray-600'}`}>
                                                                                     {month.cases}
                                                                                 </span>
                                                                             </Link>
@@ -460,18 +476,29 @@ export function B2BSidebar() {
                                ═══════════════════════════════════════════ */
                             sortedYears.map(year => (
                                 <div key={year} className="group">
-                                    <button
-                                        onClick={() => toggleYear(year)}
-                                        className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
-                                    >
+                                    <div className="w-full flex items-center justify-between px-3 py-2 text-sm transition-colors">
                                         <div className="flex items-center gap-2">
-                                            <Chevron expanded={expandedYears.includes(year)} />
-                                            <span className="font-medium">{year}</span>
+                                            <button
+                                                onClick={() => toggleYear(year)}
+                                                className="hover:text-white transition-colors"
+                                                aria-label={expandedYears.includes(year) ? 'Collapse' : 'Expand'}
+                                            >
+                                                <Chevron expanded={expandedYears.includes(year)} />
+                                            </button>
+                                            <Link
+                                                href={`/b2b-dashboard/cases?year=${year}`}
+                                                className={`font-medium transition-colors ${activeYear === year && !activeMonth ? 'text-zeno-cyan' : 'text-gray-400 hover:text-white'}`}
+                                            >
+                                                {year}
+                                            </Link>
                                         </div>
-                                        <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded group-hover:bg-white/10 transition-colors">
+                                        <Link
+                                            href={`/b2b-dashboard/cases?year=${year}`}
+                                            className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${activeYear === year && !activeMonth ? 'bg-zeno-cyan/20 text-zeno-cyan' : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'}`}
+                                        >
                                             {timelineData[year].count}
-                                        </span>
-                                    </button>
+                                        </Link>
+                                    </div>
 
                                     {expandedYears.includes(year) && (
                                         <div className="ml-4 pl-4 border-l border-white/5 mt-1 space-y-1">
@@ -479,10 +506,10 @@ export function B2BSidebar() {
                                                 <Link
                                                     key={`${year}-${month}`}
                                                     href={`/b2b-dashboard/cases?year=${year}&month=${month}`}
-                                                    className="flex items-center justify-between px-3 py-1.5 text-xs text-gray-500 hover:text-white transition-colors rounded-md hover:bg-white/5"
+                                                    className={`flex items-center justify-between px-3 py-1.5 text-xs transition-colors rounded-md hover:bg-white/5 ${activeYear === year && activeMonth === month ? 'bg-zeno-cyan/10 text-zeno-cyan font-semibold' : 'text-gray-500 hover:text-white'}`}
                                                 >
                                                     <span>{month}</span>
-                                                    <span className="text-[10px] text-gray-600">
+                                                    <span className={`text-[10px] ${activeYear === year && activeMonth === month ? 'text-zeno-cyan' : 'text-gray-600'}`}>
                                                         {timelineData[year].months[month]}
                                                     </span>
                                                 </Link>

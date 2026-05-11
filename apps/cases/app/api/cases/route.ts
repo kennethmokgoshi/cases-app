@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { calculateSlaDeadline, sendStatusChangeNotification, auth, createLogger } from '@zenowethu/shared-lib';
+import { calculateSlaDeadline, sendStatusChangeNotification, auth, createLogger, WORKFLOW_STATUSES } from '@zenowethu/shared-lib';
 import { CaseCreateSchema, parseBody } from '@/lib/schemas';
 import fs from 'fs';
 import path from 'path';
@@ -109,33 +109,44 @@ export async function GET(request: Request) {
             where.projects = { some: { projectId: { in: scope } } };
         }
 
-        // 2. Timeline filtering
+        // 2. Timeline filtering (Date Range vs Project Assignment)
         if (urlYear || urlMonth) {
-            let timelineIds: string[] = [];
+            const dateWhere: any = {};
             if (urlYear && urlMonth) {
-                timelineIds = allProjects.filter(p => (p.name || '').toLowerCase() === urlMonth.toLowerCase() && p.parentId && projectMap.get(p.parentId)?.name === urlYear).map(p => p.id);
+                const monthIndex = new Date(`${urlMonth} 1, ${urlYear}`).getMonth();
+                const startDate = new Date(parseInt(urlYear), monthIndex, 1);
+                const endDate = new Date(parseInt(urlYear), monthIndex + 1, 1);
+                dateWhere.createdAt = { gte: startDate, lt: endDate };
             } else if (urlYear) {
-                timelineIds = allProjects.filter(p => (p.name || '') === urlYear).map(p => p.id);
+                const startDate = new Date(parseInt(urlYear), 0, 1);
+                const endDate = new Date(parseInt(urlYear) + 1, 0, 1);
+                dateWhere.createdAt = { gte: startDate, lt: endDate };
             }
+            
+            // Apply date range to main where
+            Object.assign(where, dateWhere);
 
-            if (timelineIds.length > 0) {
-                const timelineSet = new Set<string>();
-                timelineIds.forEach(id => {
-                    timelineSet.add(id);
-                    getDescendantIds(id, childrenMap).forEach(d => timelineSet.add(d));
-                });
-                const timelineList = Array.from(timelineSet);
-                if (where.projects?.some?.projectId?.in) {
-                    const current = where.projects.some.projectId.in;
-                    where.projects.some.projectId.in = timelineList.filter(id => current.includes(id));
-                } else {
-                    where.projects = { some: { projectId: { in: timelineList } } };
-                }
-            }
+            // Note: We intentionally DO NOT narrow down by project IDs here if urlYear/urlMonth are provided.
+            // The sidebar timeline counts by createdAt, so the list should filter by createdAt.
+            // Project-based scoping (for restricted users) is already in 'where.projects' from step 1.
         }
 
         // 3. Status
-        if (status && status !== 'ALL') where.status = status.includes(',') ? { in: status.split(',').map(s => s.trim()) } : status;
+        if (status && status !== 'ALL') {
+            const completedCodes = WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED').map(s => s.code);
+            const beginningCodes = WORKFLOW_STATUSES.filter(s => s.category === 'BEGINNING').map(s => s.code);
+            const overdueCodes = WORKFLOW_STATUSES.filter(s => s.category === 'OVERDUE').map(s => s.code);
+            const lostCodes = WORKFLOW_STATUSES.filter(s => s.category === 'LOST').map(s => s.code);
+            const payingCodes = WORKFLOW_STATUSES.filter(s => s.category === 'PAYING').map(s => s.code);
+
+            if (status === 'active') {
+                where.status = { notIn: [...completedCodes, ...lostCodes] };
+            } else if (status === 'pending') {
+                where.status = { in: [...beginningCodes, ...overdueCodes] };
+            } else {
+                where.status = status.includes(',') ? { in: status.split(',').map(s => s.trim()) } : status;
+            }
+        }
 
         // 4. Execution
         if (slim) {

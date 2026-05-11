@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
 import { PDFDocument } from 'pdf-lib';
+import { 
+    STATUS_CATEGORIES, 
+    WORKFLOW_STATUSES, 
+    getStatusByCode, 
+    formatStatus as sharedFormatStatus 
+} from '@zenowethu/shared-lib';
 
 // Client-side logger
 const logger = {
@@ -335,18 +341,102 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
     };
 
     const getStatusColor = (status: string) => {
-        const statusColors: { [key: string]: string } = {
-            'NEW_LEAD': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-            'OUTSTANDING_DOCUMENTS': 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-            'DOCUMENTS_RECEIVED': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-            'IN_PROGRESS': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-            'COMPLETED': 'bg-green-500/10 text-green-400 border-green-500/20' };
-        return statusColors[status] || 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+        const statusObj = getStatusByCode(status);
+        const category = statusObj?.category || 'BEGINNING';
+        const catConfig = STATUS_CATEGORIES.find(c => c.code === category);
+        
+        const colors: Record<string, string> = {
+            'blue': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+            'red': 'bg-red-500/10 text-red-400 border-red-500/20',
+            'cyan': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+            'orange': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+            'indigo': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+            'amber': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+            'teal': 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+            'green': 'bg-green-500/10 text-green-400 border-green-500/20',
+            'gray': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+            'emerald': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+        };
+
+        return colors[catConfig?.color || 'gray'] || 'bg-gray-500/10 text-gray-400 border-gray-500/20';
     };
 
     const formatStatus = (status: string) => {
-        return status.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ');
+        return sharedFormatStatus(status);
     };
+
+    function WorkflowProgressBar({ currentStatus }: { currentStatus: string }) {
+        const statusObj = getStatusByCode(currentStatus);
+        const currentCategory = statusObj?.category;
+        const currentStep = STATUS_CATEGORIES.findIndex(cat => cat.code === currentCategory) + 1;
+        const totalSteps = STATUS_CATEGORIES.length;
+
+        return (
+            <div className="mb-10 bg-zeno-gray/30 border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-zeno-cyan/20 rounded-lg flex items-center justify-center">
+                            <svg className="w-4 h-4 text-zeno-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </div>
+                        <h3 className="text-sm font-bold text-white uppercase tracking-widest">Workflow Journey</h3>
+                    </div>
+                    <span className="text-xs font-bold text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 px-3 py-1 rounded-full">
+                        {currentStep > 0 ? `Stage ${currentStep} of ${totalSteps}` : 'Unknown Stage'}
+                    </span>
+                </div>
+                
+                <div className="flex gap-2 h-2.5">
+                    {STATUS_CATEGORIES.map((cat, index) => {
+                        const stepNum = index + 1;
+                        const isCompleted = currentStep > stepNum;
+                        const isCurrent = currentStep === stepNum;
+                        
+                        return (
+                            <div
+                                key={cat.code}
+                                className={`flex-1 rounded-full transition-all duration-700 relative group ${
+                                    isCompleted ? 'bg-zeno-cyan shadow-[0_0_10px_rgba(6,182,212,0.3)]' :
+                                    isCurrent ? 'bg-zeno-cyan shadow-[0_0_20px_rgba(6,182,212,0.6)] animate-pulse' :
+                                    'bg-white/10'
+                                }`}
+                            >
+                                {/* Tooltip */}
+                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20">
+                                    <div className="bg-zeno-navy border border-white/10 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-xl">
+                                        {cat.name}
+                                    </div>
+                                    <div className="w-2 h-2 bg-zeno-navy border-r border-b border-white/10 rotate-45 mx-auto -mt-1" />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                <div className="mt-6 flex justify-between items-center overflow-x-auto pb-2 scrollbar-hide">
+                    {STATUS_CATEGORIES.map((cat, index) => {
+                        const stepNum = index + 1;
+                        const isActive = currentStep >= stepNum;
+                        return (
+                            <div key={cat.code} className="flex flex-col items-center min-w-[80px]">
+                                <span className={`text-[9px] font-black uppercase tracking-tighter mb-1 transition-colors ${
+                                    isActive ? 'text-zeno-cyan' : 'text-gray-600'
+                                }`}>
+                                    Step {index + 1}
+                                </span>
+                                <span className={`text-[10px] font-bold whitespace-nowrap transition-colors ${
+                                    isActive ? 'text-white' : 'text-gray-500'
+                                }`}>
+                                    {cat.name.split('. ')[1] || cat.name}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
 
     if (loading) {
         return (
@@ -405,6 +495,9 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                         </div>
                     </div>
                 </div>
+
+                {/* Progress Bar */}
+                <WorkflowProgressBar currentStatus={caseData.status} />
 
                 {/* Case Information */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

@@ -3,6 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from '@zenowethu/ui';
+import { 
+    STATUS_CATEGORIES, 
+    getStatusByCode, 
+    formatStatus as sharedFormatStatus 
+} from '@zenowethu/shared-lib';
 
 // Client-side logger
 const logger = {
@@ -90,17 +95,28 @@ export default function B2BDashboard() {
     };
 
     const getStatusColor = (status: string) => {
+        const statusObj = getStatusByCode(status);
+        const category = statusObj?.category || 'BEGINNING';
+        const catConfig = STATUS_CATEGORIES.find(c => c.code === category);
+        
         const colors: Record<string, string> = {
-            'COMPLETED': 'bg-green-500/20 text-green-400',
-            'NEW_LEAD': 'bg-blue-500/20 text-blue-400',
-            'IN_PROGRESS': 'bg-cyan-500/20 text-cyan-400',
-            'Outstanding Documents': 'bg-yellow-500/20 text-yellow-400',
-            'APPROVED': 'bg-green-500/20 text-green-400' };
-        return colors[status] || 'bg-gray-500/20 text-gray-400';
+            'blue': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+            'red': 'bg-red-500/10 text-red-400 border-red-500/20',
+            'cyan': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+            'orange': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+            'indigo': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+            'amber': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+            'teal': 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+            'green': 'bg-green-500/10 text-green-400 border-green-500/20',
+            'gray': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+            'emerald': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+        };
+
+        return colors[catConfig?.color || 'gray'] || 'bg-gray-500/10 text-gray-400 border-gray-500/20';
     };
 
     const formatStatus = (status: string) => {
-        return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return sharedFormatStatus(status);
     };
 
     if (loading) {
@@ -233,7 +249,7 @@ export default function B2BDashboard() {
                 {/* Total Cases */}
                 <Link href="/b2b-dashboard/cases" className="bg-zeno-gray border border-white/10 rounded-xl p-6 hover:border-zeno-cyan/50 hover:shadow-lg hover:shadow-zeno-cyan/10 transition-all cursor-pointer group block">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-medium text-gray-400 group-hover:text-zeno-cyan transition-colors">Total Cases</h3>
+                        <h3 className="text-sm font-medium text-gray-400 group-hover:text-zeno-cyan transition-colors">Total Referrals</h3>
                         <div className="w-12 h-12 bg-zeno-cyan/10 rounded-lg flex items-center justify-center group-hover:bg-zeno-cyan/20 transition-colors">
                             <svg className="w-6 h-6 text-zeno-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -246,7 +262,7 @@ export default function B2BDashboard() {
                 {/* Active Cases */}
                 <Link href="/b2b-dashboard/cases?status=active" className="bg-zeno-gray border border-white/10 rounded-xl p-6 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/10 transition-all cursor-pointer group block">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-medium text-gray-400 group-hover:text-blue-400 transition-colors">Active Cases</h3>
+                        <h3 className="text-sm font-medium text-gray-400 group-hover:text-blue-400 transition-colors">Active Referrals</h3>
                         <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
                             <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -416,7 +432,7 @@ export default function B2BDashboard() {
             {/* Recent Cases */}
             <div className="bg-zeno-gray border border-white/10 rounded-xl p-6">
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-white">Your Cases</h2>
+                    <h2 className="text-xl font-bold text-white">Recent Referrals</h2>
                     <Link
                         href="/b2b-dashboard/cases"
                         className="text-zeno-cyan hover:text-cyan-400 text-sm font-medium transition-colors"
@@ -430,7 +446,7 @@ export default function B2BDashboard() {
                         <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <h3 className="text-lg font-bold text-white mb-2">No Cases Yet</h3>
+                        <h3 className="text-lg font-bold text-white mb-2">No Referrals Yet</h3>
                         <p className="text-gray-400 mb-6">You haven't submitted any referrals yet. Get started by submitting your first client case.</p>
                         <Link
                             href="/b2b-dashboard/cases/new"
@@ -465,7 +481,7 @@ export default function B2BDashboard() {
                             href="/b2b-dashboard/cases"
                             className="block text-center py-3 text-zeno-cyan hover:text-cyan-400 text-sm font-medium transition-colors"
                         >
-                            View All Cases →
+                            View All Referrals →
                         </Link>
                     </div>
                 )}

@@ -1,8 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
+import { 
+    STATUS_CATEGORIES, 
+    getStatusByCode, 
+    formatStatus as sharedFormatStatus 
+} from '@zenowethu/shared-lib';
 
 // Client-side logger
 const logger = {
@@ -42,29 +47,36 @@ export default function B2BMyCasesPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const casesPerPage = 20;
 
-    useEffect(() => {
-        fetchCases();
+    const searchParams = useSearchParams();
+    const yearFilter = searchParams.get('year');
+    const monthFilter = searchParams.get('month');
+    const projectIdFilter = searchParams.get('projectId');
+    const projectIdsFilter = searchParams.get('projectIds');
+    const filterParam = searchParams.get('filter');
 
-        // Read tab from URL parameter
-        if (typeof window !== 'undefined') {
-            const urlParams = new URLSearchParams(window.location.search);
-            const tabParam = urlParams.get('tab');
-            if (tabParam && ['all', 'my_cases', 'new', 'in_progress', 'completed'].includes(tabParam)) {
-                setFilter(tabParam as any);
-            }
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab && ['all', 'my_cases', 'new', 'in_progress', 'completed'].includes(tab)) {
+            setFilter(tab as any);
+        } else {
+            setFilter('all');
         }
-    }, []);
+        fetchCases();
+    }, [searchParams]);
 
     useEffect(() => {
-        // Reset to page 1 when filter changes
+        // Reset to page 1 when filter or search params change
         setCurrentPage(1);
-    }, [filter]);
+    }, [filter, searchParams]);
 
     const fetchCases = async () => {
         try {
             setLoading(true);
-            const urlParams = new URLSearchParams(window.location.search);
-            const res = await fetch(`/api/cases?${urlParams.toString()}`);
+            // Request more cases to avoid truncation (e.g., 1000)
+            const params = new URLSearchParams(searchParams.toString());
+            if (!params.has('take')) params.set('take', '1000');
+            
+            const res = await fetch(`/api/cases?${params.toString()}`);
             const data = await res.json();
             
             if (res.ok && Array.isArray(data)) {
@@ -82,58 +94,42 @@ export default function B2BMyCasesPage() {
     };
 
     const getStatusColor = (status: string) => {
+        const statusObj = getStatusByCode(status);
+        const category = statusObj?.category || 'BEGINNING';
+        const catConfig = STATUS_CATEGORIES.find(c => c.code === category);
+        
         const colors: Record<string, string> = {
-            'NEW_LEAD': 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-            'PENDING_REVIEW': 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-            'APPROVED': 'bg-green-500/10 text-green-400 border-green-500/30',
-            'IN_PROGRESS': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
-            'COMPLETED': 'bg-purple-500/10 text-purple-400 border-purple-500/30' };
-        return colors[status] || 'bg-gray-500/10 text-gray-400 border-gray-500/30';
+            'blue': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+            'red': 'bg-red-500/10 text-red-400 border-red-500/20',
+            'cyan': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+            'orange': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+            'indigo': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+            'amber': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+            'teal': 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+            'green': 'bg-green-500/10 text-green-400 border-green-500/20',
+            'gray': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+            'emerald': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+        };
+
+        return colors[catConfig?.color || 'gray'] || 'bg-gray-500/10 text-gray-400 border-gray-500/20';
     };
 
     const formatStatus = (status: string) => {
-        return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return sharedFormatStatus(status);
     };
 
-    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-    const yearFilter = searchParams.get('year');
-    const monthFilter = searchParams.get('month');
-    const projectIdFilter = searchParams.get('projectId');
-    const projectIdsFilter = searchParams.get('projectIds');
     const projectIdsSet = projectIdsFilter ? new Set(projectIdsFilter.split(',').filter(Boolean)) : null;
-    const filterParam = searchParams.get('filter');
 
     const filteredCases = Array.isArray(cases) ? cases.filter(c => {
-        // 1. Pre-filter by My Cases if parameter present
-        if (filterParam === 'my-cases' && c.createdById !== session?.user?.id) return false;
+        const statusObj = getStatusByCode(c.status);
+        const category = statusObj?.category;
 
-        // 2. Filter by Year/Month
-        if (yearFilter) {
-            const date = new Date(c.createdAt);
-            if (date.getFullYear().toString() !== yearFilter) return false;
-        }
-        if (monthFilter) {
-            const date = new Date(c.createdAt);
-            const monthName = date.toLocaleString('default', { month: 'long' });
-            if (monthName !== monthFilter) return false;
-        }
-
-        // 3. Filter by single Project (month-level click)
-        if (projectIdFilter) {
-            if (!c.projects?.some(p => p.project.id === projectIdFilter)) return false;
-        }
-
-        // 4. Filter by multiple Projects (branch-level or year-level click)
-        if (projectIdsSet && projectIdsSet.size > 0) {
-            if (!c.projects?.some(p => projectIdsSet.has(p.project.id))) return false;
-        }
-
-        // 5. Tab Filter
+        // Tab Filter
         if (filter === 'all') return true;
         if (filter === 'my_cases') return c.createdById === session?.user?.id;
-        if (filter === 'new') return c.status === 'NEW_LEAD';
-        if (filter === 'in_progress') return c.status === 'IN_PROGRESS' || c.status === 'APPROVED';
-        if (filter === 'completed') return c.status === 'COMPLETED';
+        if (filter === 'new') return category === 'BEGINNING';
+        if (filter === 'in_progress') return ['IN_PROGRESS', 'DETOUR', 'ADVANCED', 'ADVANCED_DETOUR', 'ADVANCED_PROGRESS', 'PAYING'].includes(category as string);
+        if (filter === 'completed') return ['COMPLETED', 'SETTLED'].includes(category as string);
         return true;
     }) : [];
 
@@ -147,7 +143,7 @@ export default function B2BMyCasesPage() {
         switch (filter) {
             case 'my_cases':
                 return {
-                    title: 'No cases uploaded by you',
+                    title: 'No referrals uploaded by you',
                     description: 'You haven\'t submitted any referrals yet' };
             case 'new':
                 return {
@@ -180,8 +176,47 @@ export default function B2BMyCasesPage() {
         <div className="space-y-8">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">My Cases</h1>
-                    <p className="text-gray-400">View and track all your referrals</p>
+                    <div className="flex items-center gap-3 mb-2">
+                        <h1 className="text-3xl font-bold text-white">
+                            {monthFilter || yearFilter || projectIdFilter || projectIdsFilter 
+                                ? 'Filtered Referrals' 
+                                : filter === 'my_cases' ? 'My Cases' : 'All Referrals'}
+                        </h1>
+                        <span className="bg-zeno-cyan/20 text-zeno-cyan px-2.5 py-1 rounded-full text-sm font-bold border border-zeno-cyan/30">
+                            {filteredCases.length}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <p className="text-gray-400">View and track all your referrals</p>
+                        {(monthFilter || yearFilter || projectIdFilter || projectIdsFilter) && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-gray-600">•</span>
+                                <div className="flex gap-1.5">
+                                    {yearFilter && (
+                                        <span className="bg-white/5 text-zeno-cyan px-2 py-0.5 rounded text-xs border border-white/10">
+                                            {yearFilter}
+                                        </span>
+                                    )}
+                                    {monthFilter && (
+                                        <span className="bg-white/5 text-zeno-cyan px-2 py-0.5 rounded text-xs border border-white/10">
+                                            {monthFilter}
+                                        </span>
+                                    )}
+                                    {(projectIdFilter || projectIdsFilter) && (
+                                        <span className="bg-white/5 text-zeno-cyan px-2 py-0.5 rounded text-xs border border-white/10">
+                                            Project Filter Active
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => router.push('/b2b-dashboard/cases')}
+                                    className="text-[10px] text-gray-500 hover:text-white transition-colors"
+                                >
+                                    Clear Filters
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <button
                     onClick={() => router.push('/b2b-dashboard/cases/new')}
@@ -195,25 +230,30 @@ export default function B2BMyCasesPage() {
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex gap-2 border-b border-white/10">
-                {[
-                    { label: 'All Cases', value: 'all' },
-                    { label: 'My Cases', value: 'my_cases' },
-                    { label: 'New Leads', value: 'new' },
-                    { label: 'In Progress', value: 'in_progress' },
-                    { label: 'Completed', value: 'completed' },
-                ].map(tab => (
-                    <button
-                        key={tab.value}
-                        onClick={() => setFilter(tab.value as any)}
-                        className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${filter === tab.value
-                            ? 'text-zeno-cyan border-zeno-cyan'
-                            : 'text-gray-400 border-transparent hover:text-white'
-                            }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
+            <div className="flex items-center justify-between border-b border-white/10">
+                <div className="flex gap-2">
+                    {[
+                        { label: 'All Referrals', value: 'all' },
+                        { label: 'My Cases', value: 'my_cases' },
+                        { label: 'New Leads', value: 'new' },
+                        { label: 'In Progress', value: 'in_progress' },
+                        { label: 'Completed', value: 'completed' },
+                    ].map(tab => (
+                        <button
+                            key={tab.value}
+                            onClick={() => setFilter(tab.value as any)}
+                            className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 ${filter === tab.value
+                                ? 'text-zeno-cyan border-zeno-cyan'
+                                : 'text-gray-400 border-transparent hover:text-white'
+                                }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+                <div className="text-sm text-gray-500 pb-2">
+                    <span className="text-white font-bold">{filteredCases.length}</span> {filteredCases.length === 1 ? 'referral' : 'referrals'} found
+                </div>
             </div>
 
             {/* Cases List */}

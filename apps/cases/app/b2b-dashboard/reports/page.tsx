@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { SLATier } from '@zenowethu/shared-lib';
+import { SLATier, STATUS_CATEGORIES, getStatusByCode, formatStatus as sharedFormatStatus } from '@zenowethu/shared-lib';
 
 type RecentCase = {
     id: string;
@@ -45,14 +45,28 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 function formatStatus(status: string): string {
-    return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return sharedFormatStatus(status);
 }
 
 function statusColour(status: string) {
-    if (status === 'NEW_LEAD') return { bg: 'bg-cyan-500/10', text: 'text-cyan-400', dot: 'bg-cyan-400' };
-    if (status === 'CANCELLED') return { bg: 'bg-red-500/10', text: 'text-red-400', dot: 'bg-red-400' };
-    if (status === 'COMPLETED' || status === 'CLOSED') return { bg: 'bg-green-500/10', text: 'text-green-400', dot: 'bg-green-400' };
-    return { bg: 'bg-blue-500/10', text: 'text-blue-400', dot: 'bg-blue-400' };
+    const statusObj = getStatusByCode(status);
+    const category = statusObj?.category || 'BEGINNING';
+    const catConfig = STATUS_CATEGORIES.find(c => c.code === category);
+
+    const colors: Record<string, { bg: string, text: string, dot: string }> = {
+        'blue': { bg: 'bg-blue-500/10', text: 'text-blue-400', dot: 'bg-blue-400' },
+        'red': { bg: 'bg-red-500/10', text: 'text-red-400', dot: 'bg-red-400' },
+        'cyan': { bg: 'bg-cyan-500/10', text: 'text-cyan-400', dot: 'bg-cyan-400' },
+        'orange': { bg: 'bg-orange-500/10', text: 'text-orange-400', dot: 'bg-orange-400' },
+        'indigo': { bg: 'bg-indigo-500/10', text: 'text-indigo-400', dot: 'bg-indigo-400' },
+        'amber': { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400' },
+        'teal': { bg: 'bg-teal-500/10', text: 'text-teal-400', dot: 'bg-teal-400' },
+        'green': { bg: 'bg-green-500/10', text: 'text-green-400', dot: 'bg-green-400' },
+        'gray': { bg: 'bg-gray-500/10', text: 'text-gray-400', dot: 'bg-gray-400' },
+        'emerald': { bg: 'bg-emerald-500/10', text: 'text-emerald-400', dot: 'bg-emerald-400' },
+    };
+
+    return colors[catConfig?.color || 'gray'] || { bg: 'bg-gray-500/10', text: 'text-gray-400', dot: 'bg-gray-400' };
 }
 
 function monthChange(thisMonth: number, lastMonth: number): { label: string; positive: boolean } {
