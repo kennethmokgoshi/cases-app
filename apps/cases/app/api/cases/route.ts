@@ -40,13 +40,17 @@ export async function GET(request: Request) {
         const getDescendantIds = (rootId: string): string[] => {
             const descendants: string[] = [];
             const queue = [rootId];
+            const seen = new Set<string>([rootId]);
             while (queue.length > 0) {
                 const currId = queue.shift()!;
                 const children = childrenMap.get(currId);
                 if (children) {
                     for (const childId of children) {
-                        descendants.push(childId);
-                        queue.push(childId);
+                        if (!seen.has(childId)) {
+                            seen.add(childId);
+                            descendants.push(childId);
+                            queue.push(childId);
+                        }
                     }
                 }
             }
@@ -71,7 +75,7 @@ export async function GET(request: Request) {
 
         // Non-admins never see admin-only cases
         if (!isAdmin) {
-            where.isAdminOnly = { not: true };
+            where.isAdminOnly = false;
         }
 
         // Staff members (internal) should see all cases, Partners (external) are restricted to their projects
