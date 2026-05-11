@@ -135,7 +135,7 @@ export default function B2BMyCasesPage() {
         if (filter === 'in_progress') return c.status === 'IN_PROGRESS' || c.status === 'APPROVED';
         if (filter === 'completed') return c.status === 'COMPLETED';
         return true;
-    });
+    }) : [];
 
     // Pagination
     const totalPages = Math.ceil(filteredCases.length / casesPerPage);
