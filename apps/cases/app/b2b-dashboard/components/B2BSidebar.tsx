@@ -379,14 +379,14 @@ export function B2BSidebar() {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                                     </svg>
                                                     <Link
-                                                        href={`/b2b-dashboard/cases?projectIds=${branch.years.flatMap(y => y.months.map(m => m.projectId)).join(',')}`}
+                                                        href={`/b2b-dashboard/cases?projectId=${branch.projectId}`}
                                                         className="font-semibold truncate hover:text-zeno-cyan transition-colors"
                                                     >
                                                         {branch.name}
                                                     </Link>
                                                 </div>
                                                 <Link
-                                                    href={`/b2b-dashboard/cases?projectIds=${branch.years.flatMap(y => y.months.map(m => m.projectId)).join(',')}`}
+                                                    href={`/b2b-dashboard/cases?projectId=${branch.projectId}`}
                                                     className="text-[10px] bg-zeno-cyan/10 text-zeno-cyan px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 hover:bg-zeno-cyan/20 transition-colors"
                                                 >
                                                     {branch.totalCases}
@@ -414,14 +414,14 @@ export function B2BSidebar() {
                                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                                         </svg>
                                                                         <Link
-                                                                            href={`/b2b-dashboard/cases?projectIds=${year.months.map(m => m.projectId).join(',')}`}
+                                                                            href={`/b2b-dashboard/cases?projectId=${year.projectId}`}
                                                                             className="font-medium hover:text-zeno-cyan transition-colors"
                                                                         >
                                                                             {year.name}
                                                                         </Link>
                                                                     </div>
                                                                     <Link
-                                                                        href={`/b2b-dashboard/cases?projectIds=${year.months.map(m => m.projectId).join(',')}`}
+                                                                        href={`/b2b-dashboard/cases?projectId=${year.projectId}`}
                                                                         className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded group-hover:bg-white/10 transition-colors hover:text-white"
                                                                     >
                                                                         {year.totalCases}

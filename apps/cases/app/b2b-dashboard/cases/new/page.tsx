@@ -338,6 +338,13 @@ function PartnerNewCaseComponent() {
             return;
         }
 
+        if (isJointApplication) {
+            if (!jointSurname || !jointFullNames || !jointIdNumber) {
+                alert('Please fill in Joint Applicant Surname, Full Names, and ID Number');
+                return;
+            }
+        }
+
         // Validate ID Number: Must be exactly 13 digits
         const idNumberClean = idNumber.replace(/\D/g, ''); // Remove non-digits
         if (idNumberClean.length !== 13) {
@@ -539,127 +546,11 @@ function PartnerNewCaseComponent() {
                     <div className="bg-zeno-gray border border-white/10 rounded-xl p-6">
                         <h2 className="text-xl font-bold text-white mb-6">Case Details</h2>
 
-                        <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    1. Year <span className="text-red-400">*</span>
-                                </label>
-                                <select
-                                    value={selectedYear}
-                                    onChange={(e) => setSelectedYear(e.target.value)}
-                                    className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
-                                >
-                                    {years.map(year => (
-                                        <option key={year} value={year} className="bg-zeno-dark text-white">{year}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    2. Month <span className="text-red-400">*</span>
-                                </label>
-                                <select
-                                    value={selectedMonth}
-                                    onChange={(e) => setSelectedMonth(e.target.value)}
-                                    className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
-                                >
-                                    {availableMonths.map(month => (
-                                        <option key={month} value={month} className="bg-zeno-dark text-white">{month}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="mb-6 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
-                            <h3 className="text-indigo-300 font-bold mb-1">B2B Partner Case</h3>
-                            <p className="text-indigo-200/80 text-sm">No R350 registration fee required</p>
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
-                                3. Main Source <span className="text-red-400">*</span>
-                            </label>
-                            <select
-                                value={selectedParentId}
-                                onChange={(e) => setSelectedParentId(e.target.value)}
-                                className="w-full bg-zeno-navy border border-zeno-cyan/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
-                            >
-                                <option value="" className="bg-zeno-dark text-white">Choose partner source...</option>
-                                {filteredParentProjects.map(project => (
-                                    <option key={project.id} value={project.id} className="bg-zeno-dark text-white">
-                                        {project.name} {project.clientType && `(${project.clientType})`}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {selectedParentId && subprojects.length > 0 && (
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    4. Branch/Subproject <span className="text-gray-500">(Optional)</span>
-                                </label>
-                                <select
-                                    value={selectedSubprojectId}
-                                    onChange={(e) => setSelectedSubprojectId(e.target.value)}
-                                    className="w-full bg-zeno-navy border border-zeno-cyan/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
-                                >
-                                    <option value="" className="bg-zeno-dark text-white">No subproject (use main source)</option>
-                                    {subprojects.map(sub => (
-                                        <option key={sub.id} value={sub.id} className="bg-zeno-dark text-white">{sub.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-
-                        <div>
-                            <div className="flex justify-between items-center mb-3">
-                                <label className="block text-sm font-medium text-gray-300">
-                                    6. Services Required <span className="text-red-400">*</span>
-                                </label>
-                                <button
-                                    onClick={handleSelectAllServices}
-                                    className="text-xs text-zeno-cyan hover:text-cyan-300"
-                                >
-                                    {selectedServices.length === SERVICES.length ? 'Deselect All' : 'Select All'}
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2 bg-zeno-navy/50 rounded-lg">
-                                {SERVICES.map(service => (
-                                    <label key={service.id} className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-2 rounded">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedServices.includes(service.id)}
-                                            onChange={() => handleServiceToggle(service.id)}
-                                            className="w-4 h-4 rounded border-gray-500 text-zeno-cyan focus:ring-zeno-cyan"
-                                        />
-                                        <span className="text-sm text-gray-200">{service.label}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-
-                        {selectedParentId && (
-                            <div className="mt-6 p-4 bg-zeno-navy rounded-lg border border-zeno-cyan/30">
-                                <p className="text-sm text-gray-400 mb-1">Case summary:</p>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                    <p className="text-zeno-cyan font-bold">
-                                        {selectedParent?.name}
-                                        {selectedSubprojectId && ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
-                                        {` ${selectedMonth} ${selectedYear}`}
-                                    </p>
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isJointApplication ? 'bg-indigo-500/20 text-indigo-300' : 'bg-gray-500/20 text-gray-400'}`}>
-                                        {isJointApplication ? 'Joint' : 'Single'}
-                                    </span>
-                                </div>
-                                <p className="text-sm text-gray-400 mt-2">Services: {selectedServices.length} selected</p>
-                            </div>
-                        )}
-
                         {/* Application Type */}
-                        <div className="mt-8">
-                            <label className="block text-sm font-medium text-gray-300 mb-4">
-                                7. Application Type <span className="text-red-400">*</span>
+                        <div className="mb-10 pb-8 border-b border-white/5">
+                            <label className="block text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-zeno-cyan text-zeno-navy flex items-center justify-center text-xs font-bold">1</span>
+                                Application Type <span className="text-red-400">*</span>
                             </label>
                             <div className="grid grid-cols-2 gap-4">
                                 <button
@@ -701,6 +592,128 @@ function PartnerNewCaseComponent() {
                                 </button>
                             </div>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">2</span>
+                                    Year <span className="text-red-400">*</span>
+                                </label>
+                                <select
+                                    value={selectedYear}
+                                    onChange={(e) => setSelectedYear(e.target.value)}
+                                    className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
+                                >
+                                    {years.map(year => (
+                                        <option key={year} value={year} className="bg-zeno-dark text-white">{year}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">3</span>
+                                    Month <span className="text-red-400">*</span>
+                                </label>
+                                <select
+                                    value={selectedMonth}
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
+                                >
+                                    {availableMonths.map(month => (
+                                        <option key={month} value={month} className="bg-zeno-dark text-white">{month}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="mb-6 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
+                            <h3 className="text-indigo-300 font-bold mb-1">B2B Partner Case</h3>
+                            <p className="text-indigo-200/80 text-sm">No R350 registration fee required</p>
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">4</span>
+                                Main Source <span className="text-red-400">*</span>
+                            </label>
+                            <select
+                                value={selectedParentId}
+                                onChange={(e) => setSelectedParentId(e.target.value)}
+                                className="w-full bg-zeno-navy border border-zeno-cyan/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
+                            >
+                                <option value="" className="bg-zeno-dark text-white">Choose partner source...</option>
+                                {filteredParentProjects.map(project => (
+                                    <option key={project.id} value={project.id} className="bg-zeno-dark text-white">
+                                        {project.name} {project.clientType && `(${project.clientType})`}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {selectedParentId && subprojects.length > 0 && (
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">5</span>
+                                    Branch/Subproject <span className="text-gray-500">(Optional)</span>
+                                </label>
+                                <select
+                                    value={selectedSubprojectId}
+                                    onChange={(e) => setSelectedSubprojectId(e.target.value)}
+                                    className="w-full bg-zeno-navy border border-zeno-cyan/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
+                                >
+                                    <option value="" className="bg-zeno-dark text-white">No subproject (use main source)</option>
+                                    {subprojects.map(sub => (
+                                        <option key={sub.id} value={sub.id} className="bg-zeno-dark text-white">{sub.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <div>
+                            <div className="flex justify-between items-center mb-3">
+                                <label className="block text-sm font-medium text-gray-300 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">6</span>
+                                    Services Required <span className="text-red-400">*</span>
+                                </label>
+                                <button
+                                    onClick={handleSelectAllServices}
+                                    className="text-xs text-zeno-cyan hover:text-cyan-300"
+                                >
+                                    {selectedServices.length === SERVICES.length ? 'Deselect All' : 'Select All'}
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2 bg-zeno-navy/50 rounded-lg">
+                                {SERVICES.map(service => (
+                                    <label key={service.id} className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-2 rounded">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedServices.includes(service.id)}
+                                            onChange={() => handleServiceToggle(service.id)}
+                                            className="w-4 h-4 rounded border-gray-500 text-zeno-cyan focus:ring-zeno-cyan"
+                                        />
+                                        <span className="text-sm text-gray-200">{service.label}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        {selectedParentId && (
+                            <div className="mt-6 p-4 bg-zeno-navy rounded-lg border border-zeno-cyan/30">
+                                <p className="text-sm text-gray-400 mb-1">Case summary:</p>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    <p className="text-zeno-cyan font-bold">
+                                        {selectedParent?.name}
+                                        {selectedSubprojectId && ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                        {` ${selectedMonth} ${selectedYear}`}
+                                    </p>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isJointApplication ? 'bg-indigo-500/20 text-indigo-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                                        {isJointApplication ? 'Joint' : 'Single'}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-gray-400 mt-2">Services: {selectedServices.length} selected</p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex justify-end">

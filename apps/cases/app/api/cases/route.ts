@@ -84,6 +84,11 @@ export async function GET(request: Request) {
                 select: { projectId: true }
             });
             const rootAllowedIds = userMemberships.map((m: { projectId: string }) => m.projectId);
+            
+            // CRITICAL FIX: Also include the project assigned via b2bPartnerId
+            if (session.user.b2bPartnerId && !rootAllowedIds.includes(session.user.b2bPartnerId)) {
+                rootAllowedIds.push(session.user.b2bPartnerId);
+            }
 
             if (rootAllowedIds.length === 0) {
                 // No project memberships — fall back to cases created by this user
