@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { calculateSlaDeadline, sendStatusChangeNotification, auth, createLogger } from '@zenowethu/shared-lib';
 import { CaseCreateSchema, parseBody } from '@/lib/schemas';
+import fs from 'fs';
+import path from 'path';
+
+console.log('>>> LOADING CASE API ROUTE');
 
 const logger = createLogger('api/cases');
 
@@ -179,8 +183,6 @@ export async function GET(request: Request) {
             timestamp: new Date().toISOString()
         };
         try {
-            const fs = require('fs');
-            const path = require('path');
             const debugPath = path.join(process.cwd(), 'api-debug-error.log');
             fs.appendFileSync(debugPath, JSON.stringify(errorDetail, null, 2) + '\n---\n');
         } catch (e) {}
