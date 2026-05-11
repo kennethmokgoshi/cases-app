@@ -230,7 +230,7 @@ export async function GET(request: Request) {
             ];
         }
 
-        console.log(`[API] Final GET Where Clause: ${JSON.stringify(where)}`);
+        console.log(`[API] Final GET Where Clause: keys [${Object.keys(where).join(', ')}]`);
 
         // Slim mode: sidebar only needs id + createdAt for timeline grouping
         if (slim) {
@@ -397,11 +397,12 @@ export async function GET(request: Request) {
         }
         return NextResponse.json(enrichedCases);
     } catch (error: any) {
-        console.error('[API] Error fetching cases:', error);
-        return NextResponse.json({ 
-            error: error.message || 'Internal Server Error',
-            details: error instanceof Error ? error.stack : String(error)
-        }, { status: 500 });
+        const message = error?.message || 'Internal Server Error';
+        console.error('[API] GET /api/cases Error:', message);
+        return new Response(JSON.stringify({ error: message }), { 
+            status: 500, 
+            headers: { 'Content-Type': 'application/json' } 
+        });
     }
 }
 
