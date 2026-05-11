@@ -121,10 +121,12 @@ export const CasePatchSchema = z.object({
     insuranceNotes: optionalString,
     adminFee: z.number().optional().nullable(),
     distributeWaitList: z.boolean().optional(),
-    isAdminOnly: z.boolean().optional() }).passthrough(); // allow remaining fields via otherCaseData spread in the route
+    isAdminOnly: z.boolean().optional(),
+    nextUpdate: z.string().optional().nullable() }).passthrough(); // allow remaining fields via otherCaseData spread in the route
 
 export const CaseStatusSchema = z.object({
     newStatus: z.string().min(1, 'New status is required'),
+    nextUpdate: z.string().optional().nullable(),
     skipNotification: z.boolean().optional().default(false) });
 
 // ─── User schemas ─────────────────────────────────────────────────────────────

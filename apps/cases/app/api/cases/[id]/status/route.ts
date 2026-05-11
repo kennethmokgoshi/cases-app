@@ -46,10 +46,16 @@ export async function PATCH(
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
-        // Calculate deadline if SLA is enabled
-        let deadline: Date | null = null;
-        if (statusInfo?.slaEnabled && statusInfo.slaDays) {
-            deadline = calculateSlaDeadline(new Date());
+        // Calculate nextUpdate: default to 7 days from now
+        let nextUpdateDate = new Date();
+        nextUpdateDate.setDate(nextUpdateDate.getDate() + 7);
+        
+        // If manual nextUpdate is provided in body, use it
+        if (body.nextUpdate) {
+            nextUpdateDate = new Date(body.nextUpdate);
+        } else if (statusInfo?.slaEnabled && statusInfo.slaDays) {
+            // Fallback to SLA if enabled and no manual update provided
+            nextUpdateDate = calculateSlaDeadline(new Date());
         }
 
         // Update the case
@@ -58,8 +64,7 @@ export async function PATCH(
             data: {
                 status: newStatus,
                 statusEntryDate: new Date(),
-                nextUpdate: deadline, // Use the calculated SLA date as nextUpdate
-                // deadline: deadline, // Removed as requested
+                nextUpdate: nextUpdateDate,
                 isOverdue: false, // Reset overdue state on status change
                 daysInStatus: 0, // Reset days counter
                 updatedBy: { connect: { id: session.user.id } },

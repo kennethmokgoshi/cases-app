@@ -204,6 +204,14 @@ export async function POST(
             }
         });
 
+        // Reset nextUpdate to 7 days from now after every comment update
+        const nextUpdateDate = new Date();
+        nextUpdateDate.setDate(nextUpdateDate.getDate() + 7);
+        await prisma.case.update({
+            where: { id },
+            data: { nextUpdate: nextUpdateDate }
+        });
+
         // Create in-app notifications for mentioned users
         const currentUser = await prisma.user.findUnique({
             where: { id: session.user.id },

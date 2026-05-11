@@ -598,6 +598,7 @@ export async function PATCH(
         if (declineReason !== undefined) caseUpdateData.declineReason = declineReason;
         if (declineReasonAttended !== undefined) caseUpdateData.declineReasonAttended = declineReasonAttended;
         if (description !== undefined) caseUpdateData.description = description; // Add description field
+        if (body.nextUpdate !== undefined) caseUpdateData.nextUpdate = body.nextUpdate ? new Date(body.nextUpdate) : null;
 
         // Fetch old case data for diffing
         const oldCase = await prisma.case.findUnique({

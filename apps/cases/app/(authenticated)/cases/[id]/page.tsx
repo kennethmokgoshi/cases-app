@@ -347,6 +347,8 @@ export default function CaseDetailPage() {
     const [activityUpdate, setActivityUpdate] = useState(0); // Trigger for ActivityTab refresh
 
     const [isSavingDescription, setIsSavingDescription] = useState(false);
+    const [isEditingNextUpdate, setIsEditingNextUpdate] = useState(false);
+    const [customNextUpdateDate, setCustomNextUpdateDate] = useState<string>('');
 
 
 
@@ -522,6 +524,30 @@ export default function CaseDetailPage() {
         } catch (error) {
             log.error({ err: error }, 'Failed to update status', error);
             alert('Failed to update status. Please try again.');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleUpdateNextUpdate = async (date: Date | null) => {
+        if (!caseData) return;
+        setUpdating(true);
+        try {
+            const res = await fetch(`/api/cases/${params.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nextUpdate: date ? date.toISOString() : null })
+            });
+
+            if (!res.ok) throw new Error('Failed to update next update date');
+
+            const updatedCase = await res.json();
+            setCaseData(updatedCase);
+            setIsEditingNextUpdate(false);
+            setActivityUpdate(prev => prev + 1);
+        } catch (error) {
+            log.error({ err: error }, 'Failed to update next update date', error);
+            alert('Failed to update next update date. Please try again.');
         } finally {
             setUpdating(false);
         }
@@ -2386,8 +2412,16 @@ export default function CaseDetailPage() {
                                 <label className="text-xs text-gray-500 uppercase">File Created</label>
                                 <p className="text-white">{mounted ? new Date(caseData.createdAt).toLocaleDateString() : ''}</p>
                             </div>
-                            <div>
-                                <label className="text-xs text-gray-500 uppercase">Next Update</label>
+                            <div className="relative group">
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-xs text-gray-500 uppercase">Next Update</label>
+                                    <button 
+                                        onClick={() => setIsEditingNextUpdate(!isEditingNextUpdate)}
+                                        className="text-[10px] text-zeno-cyan hover:underline uppercase font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        Edit
+                                    </button>
+                                </div>
                                 <p className={`font-medium ${mounted && caseData.nextUpdate && new Date(caseData.nextUpdate) < new Date() ? 'text-red-400' : 'text-zeno-cyan'}`}>
                                     {mounted ? (() => {
                                         if (caseData.nextUpdate) {
@@ -2398,6 +2432,62 @@ export default function CaseDetailPage() {
                                         return nextUpdate.toLocaleDateString();
                                     })() : ''}
                                 </p>
+
+                                {isEditingNextUpdate && (
+                                    <div className="absolute top-full left-0 mt-2 p-3 bg-zeno-navy border border-white/10 rounded-xl shadow-2xl z-50 min-w-[200px]">
+                                        <p className="text-[10px] text-gray-500 uppercase font-bold mb-2">Set Next Update</p>
+                                        <div className="grid grid-cols-2 gap-2 mb-3">
+                                            {[
+                                                { label: '2 Days', days: 2 },
+                                                { label: '3 Days', days: 3 },
+                                                { label: '1 Week', days: 7 },
+                                                { label: '2 Weeks', days: 14 },
+                                                { label: '1 Month', days: 30 }
+                                            ].map(opt => (
+                                                <button
+                                                    key={opt.label}
+                                                    onClick={() => {
+                                                        const d = new Date();
+                                                        d.setDate(d.getDate() + opt.days);
+                                                        handleUpdateNextUpdate(d);
+                                                    }}
+                                                    className="px-2 py-1.5 bg-white/5 hover:bg-zeno-cyan/20 text-white text-[11px] rounded transition-colors text-center"
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="border-t border-white/5 pt-2">
+                                            <label className="text-[9px] text-gray-500 uppercase block mb-1">Custom Date</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="date"
+                                                    value={customNextUpdateDate}
+                                                    className="flex-1 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-zeno-cyan"
+                                                    onChange={(e) => setCustomNextUpdateDate(e.target.value)}
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        if (customNextUpdateDate) {
+                                                            handleUpdateNextUpdate(new Date(customNextUpdateDate));
+                                                            setCustomNextUpdateDate('');
+                                                        }
+                                                    }}
+                                                    disabled={!customNextUpdateDate}
+                                                    className="px-3 py-1 bg-zeno-cyan text-zeno-navy text-[10px] font-bold uppercase rounded hover:bg-cyan-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => setIsEditingNextUpdate(false)}
+                                            className="w-full mt-2 py-1 text-[10px] text-gray-500 hover:text-white uppercase font-bold"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label className="text-xs text-gray-500 uppercase">Last Updated By</label>
