@@ -260,8 +260,28 @@ export async function GET(request: Request) {
             headers: { 'Content-Type': 'application/json' } 
         });
     } catch (err: any) {
-        logger.error('[API] GET Cases Failed:', err);
-        return new Response(JSON.stringify({ error: err.message || 'Internal Server Error' }), { 
+        const errorDetail = {
+            message: err?.message || 'No message',
+            stack: err?.stack || 'No stack',
+            name: err?.name || 'UnknownError',
+            timestamp: new Date().toISOString(),
+            url: request.url
+        };
+        
+        // Log to terminal
+        logger.error('[API] GET Cases Critical Failure:', errorDetail);
+
+        // ATTEMPT TO WRITE TO A DEBUG FILE
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const debugPath = path.join(process.cwd(), 'api-debug-error.log');
+            fs.appendFileSync(debugPath, JSON.stringify(errorDetail, null, 2) + '\n---\n');
+        } catch (e) {
+            // Ignore fs errors
+        }
+
+        return new Response(JSON.stringify({ error: err.message || 'Internal Server Error', _debug: errorDetail }), { 
             status: 500, 
             headers: { 'Content-Type': 'application/json' } 
         });
