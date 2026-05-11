@@ -142,12 +142,20 @@ export async function GET(request: Request) {
             let timelineIds: string[] = [];
             if (urlYear && urlMonth) {
                 timelineIds = allProjects
-                    .filter(p => p.name.toLowerCase() === urlMonth.toLowerCase() && 
-                                p.parentId && projectMap.get(p.parentId)?.name === urlYear)
+                    .filter(p => {
+                        const pName = p.name || '';
+                        if (pName.toLowerCase() !== urlMonth.toLowerCase()) return false;
+                        if (!p.parentId) return false;
+                        const parent = projectMap.get(p.parentId);
+                        return parent?.name === urlYear;
+                    })
                     .map(p => p.id);
             } else if (urlYear) {
                 timelineIds = allProjects
-                    .filter(p => p.name === urlYear && (p.type === 'YEAR' || !isNaN(Number(p.name))))
+                    .filter(p => {
+                        const pName = p.name || '';
+                        return pName === urlYear && (p.type === 'YEAR' || !isNaN(Number(pName)));
+                    })
                     .map(p => p.id);
             }
 
