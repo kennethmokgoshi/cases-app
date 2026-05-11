@@ -221,10 +221,23 @@ export async function GET(request: Request) {
             }))
         }));
 
-        return NextResponse.json(enriched);
+        // Manual serialization to handle Decimals/BigInts which often crash NextResponse.json
+        const json = JSON.stringify(enriched, (key, value) => 
+            typeof value === 'bigint' ? value.toString() : 
+            (value && value.constructor && value.constructor.name === 'Decimal') ? value.toString() : 
+            value
+        );
+
+        return new Response(json, { 
+            status: 200, 
+            headers: { 'Content-Type': 'application/json' } 
+        });
     } catch (err: any) {
         logger.error('[API] GET Cases Failed:', err);
-        return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+        return new Response(JSON.stringify({ error: err.message || 'Internal Server Error' }), { 
+            status: 500, 
+            headers: { 'Content-Type': 'application/json' } 
+        });
     }
 }
 
