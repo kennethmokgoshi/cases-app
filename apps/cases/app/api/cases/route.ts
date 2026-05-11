@@ -26,18 +26,22 @@ export async function GET(request: Request) {
             return NextResponse.json(data);
         }
 
-        console.log('>>> API CASES FULL MODE (NO INCLUDES)');
+        console.log('>>> API CASES FULL MODE (CLIENT INCLUDE)');
         const cases = await prisma.case.findMany({
+            include: {
+                client: true,
+                projects: { include: { project: true } }
+            },
             take: 20,
             orderBy: { createdAt: 'desc' }
         });
 
-        // No enrichment
         const enriched = cases.map(c => ({
             ...c,
-            clientName: 'Loading...'
+            // Ensure client object exists for frontend
+            client: c.client || { firstName: 'Unknown', lastName: 'Client', idNumber: 'N/A', phone: 'N/A' }
         }));
-
+        
         console.log('>>> API CASES SUCCESS, COUNT:', enriched.length);
         return NextResponse.json(enriched);
     } catch (err: any) {
