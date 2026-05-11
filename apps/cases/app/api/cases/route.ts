@@ -145,7 +145,7 @@ export async function GET(request: Request) {
 
         const cases = await prisma.case.findMany({
             where,
-            include: { client: true, jointClient: true, projects: { include: { project: true } } },
+            include: { client: true, projects: { include: { project: true } } },
             take: isNaN(take) ? 50 : take,
             skip: isNaN(skip) ? 0 : skip,
             orderBy: { createdAt: 'desc' }
