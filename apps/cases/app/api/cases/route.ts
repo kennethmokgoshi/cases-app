@@ -26,20 +26,16 @@ export async function GET(request: Request) {
             return NextResponse.json(data);
         }
 
-        console.log('>>> API CASES FULL MODE');
+        console.log('>>> API CASES FULL MODE (NO INCLUDES)');
         const cases = await prisma.case.findMany({
-            include: {
-                client: true,
-                projects: { include: { project: true } }
-            },
             take: 20,
             orderBy: { createdAt: 'desc' }
         });
 
-        // Minimal enrichment
+        // No enrichment
         const enriched = cases.map(c => ({
             ...c,
-            clientName: `${c.client?.firstName || ''} ${c.client?.lastName || ''}`.trim()
+            clientName: 'Loading...'
         }));
 
         console.log('>>> API CASES SUCCESS, COUNT:', enriched.length);
