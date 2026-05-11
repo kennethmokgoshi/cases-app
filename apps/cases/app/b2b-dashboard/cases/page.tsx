@@ -70,7 +70,7 @@ export default function B2BMyCasesPage() {
             if (res.ok && Array.isArray(data)) {
                 setCases(data);
             } else {
-                logger.error('API returned non-array data or error:', data);
+                logger.error(`API Error (${res.status}):`, data);
                 setCases([]);
             }
         } catch (error) {

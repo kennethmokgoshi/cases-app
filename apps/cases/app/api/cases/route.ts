@@ -71,7 +71,7 @@ export async function GET(request: Request) {
 
         // Non-admins never see admin-only cases
         if (!isAdmin) {
-            where.isAdminOnly = { not: true };
+            where.isAdminOnly = false;
         }
 
         // Staff members (internal) should see all cases, Partners (external) are restricted to their projects
@@ -384,6 +384,10 @@ export async function GET(request: Request) {
         }));
 
         console.log(`[API] Cases found: ${cases.length}, Enriched: ${enrichedCases.length}, IsArray: ${Array.isArray(enrichedCases)}`);
+        if (!Array.isArray(enrichedCases)) {
+            console.error('[API] CRITICAL: enrichedCases is not an array!', typeof enrichedCases);
+            return NextResponse.json({ error: 'Internal Error: Data format mismatch', type: typeof enrichedCases }, { status: 500 });
+        }
         return NextResponse.json(enrichedCases);
     } catch (error: any) {
         logger.error('Error fetching cases:', error);
