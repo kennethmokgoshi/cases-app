@@ -24,6 +24,7 @@ export async function GET(
         // Define inclusion logic once to reuse for fallback
         const standardInclude: any = {
             client: true,
+            jointClient: true,
             projects: {
                 include: {
                     project: {
@@ -91,6 +92,9 @@ export async function GET(
             // Critical Fallback: Retry without assignments if schema/data mismatch
             const fallbackInclude = { ...standardInclude };
             delete fallbackInclude.assignments;
+            delete fallbackInclude.jointClient; // Also delete if causing issues in older DBs
+            // Actually, keep it if it's new, but usually fallbacks are for breaking changes.
+            // I'll keep it simple.
 
             caseDetail = await prisma.case.findUnique({
                 where: { id },

@@ -244,6 +244,7 @@ export async function GET(request: Request) {
                 where,
                 include: {
                     client: true,
+                    jointClient: true,
                     updatedBy: {
                         select: {
                             firstName: true,
@@ -290,6 +291,7 @@ export async function GET(request: Request) {
                     where: fallbackWhere,
                     include: {
                         client: true,
+                        jointClient: true,
                         updatedBy: {
                             select: {
                                 firstName: true,
@@ -398,6 +400,7 @@ export async function POST(request: Request) {
         const body = parsed.data as z.infer<typeof CaseCreateSchema>;
         const {
             client,
+            jointClient,
             projectId,
             secondaryProjectIds,
             acquisitionType,
@@ -565,6 +568,19 @@ export async function POST(request: Request) {
                                     type: client.type || 'Standard'
                                 }
                             },
+                        jointClient: jointClient && jointClient.idNumber ? {
+                            connectOrCreate: {
+                                where: { idNumber: jointClient.idNumber },
+                                create: {
+                                    firstName: jointClient.firstName,
+                                    lastName: jointClient.lastName,
+                                    idNumber: jointClient.idNumber,
+                                    email: jointClient.email || null,
+                                    phone: jointClient.phone || null,
+                                    type: jointClient.type || 'Standard'
+                                }
+                            }
+                        } : undefined,
                         projects: {
                             create: [
                                 // Primary project
@@ -596,6 +612,7 @@ export async function POST(request: Request) {
                     },
                     include: {
                         client: true,
+                        jointClient: true,
                         createdBy: true,
                         projects: {
                             include: {

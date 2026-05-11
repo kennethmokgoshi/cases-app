@@ -65,6 +65,7 @@ export const ClientUpdateSchema = z.object({
 
 export const CaseCreateSchema = z.object({
     client: ClientCreateSchema,
+    jointClient: ClientCreateSchema.optional().nullable(),
     projectId: z.string().min(1, 'Project ID is required'),
     secondaryProjectIds: z.array(z.string()).optional().default([]),
     acquisitionType: z.enum(['B2C', 'B2B']).optional().default('B2C'),
