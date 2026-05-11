@@ -66,6 +66,12 @@ function buildFullPath(projectId: string, projectMap: Map<string, ProjectNode>):
 }
 
 export async function GET(request: Request) {
+    // DIAGNOSTIC TEST: If this returns, the API itself is reachable
+    const { searchParams: diagnosticParams } = new URL(request.url);
+    if (diagnosticParams.get('diag') === 'true') {
+        return NextResponse.json({ status: 'ok', message: 'API is reachable' });
+    }
+
     try {
         const session = await auth();
         if (!session?.user?.id) {
