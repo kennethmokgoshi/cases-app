@@ -62,11 +62,20 @@ export default function B2BMyCasesPage() {
 
     const fetchCases = async () => {
         try {
-            const res = await fetch('/api/cases');
+            setLoading(true);
+            const urlParams = new URLSearchParams(window.location.search);
+            const res = await fetch(`/api/cases?${urlParams.toString()}`);
             const data = await res.json();
-            setCases(data);
+            
+            if (res.ok && Array.isArray(data)) {
+                setCases(data);
+            } else {
+                logger.error('API returned non-array data or error:', data);
+                setCases([]);
+            }
         } catch (error) {
             logger.error('Failed to fetch cases:', error);
+            setCases([]);
         } finally {
             setLoading(false);
         }
@@ -94,7 +103,7 @@ export default function B2BMyCasesPage() {
     const projectIdsSet = projectIdsFilter ? new Set(projectIdsFilter.split(',').filter(Boolean)) : null;
     const filterParam = searchParams.get('filter');
 
-    const filteredCases = cases.filter(c => {
+    const filteredCases = Array.isArray(cases) ? cases.filter(c => {
         // 1. Pre-filter by My Cases if parameter present
         if (filterParam === 'my-cases' && c.createdById !== session?.user?.id) return false;
 
