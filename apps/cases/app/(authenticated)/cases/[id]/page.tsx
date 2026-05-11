@@ -121,6 +121,14 @@ type CaseDetail = {
         grossSalary: string | number | null;
         netSalary: string | number | null;
     };
+    jointClient?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        idNumber: string;
+        email: string | null;
+        phone: string | null;
+    } | null;
     projects: Array<{
         isPrimary: boolean;
         project: {
@@ -220,6 +228,12 @@ type EditFormData = {
     cb_statusDate: string;
     idNumber: string;
     category: string;
+    // Joint Client fields
+    jointFirstName: string;
+    jointLastName: string;
+    jointIdNumber: string;
+    jointEmail: string;
+    jointPhone: string;
 };
 
 export default function CaseDetailPage() {
@@ -297,7 +311,12 @@ export default function CaseDetailPage() {
         cb_status: '',
         cb_statusDate: '',
         idNumber: '',
-        category: ''
+        category: '',
+        jointFirstName: '',
+        jointLastName: '',
+        jointIdNumber: '',
+        jointEmail: '',
+        jointPhone: ''
     });
 
     const [mounted, setMounted] = useState(false);
@@ -834,7 +853,12 @@ export default function CaseDetailPage() {
             cb_status: caseData.cb_status || '',
             cb_statusDate: caseData.cb_statusDate || '',
             idNumber: caseData.client.idNumber || '',
-            category: caseData.category || ''
+            category: caseData.category || '',
+            jointFirstName: caseData.jointClient?.firstName || '',
+            jointLastName: caseData.jointClient?.lastName || '',
+            jointIdNumber: caseData.jointClient?.idNumber || '',
+            jointEmail: caseData.jointClient?.email || '',
+            jointPhone: caseData.jointClient?.phone || ''
         });
         setIsEditing(true);
     };
@@ -1206,6 +1230,13 @@ export default function CaseDetailPage() {
                         telegramNumber: editForm.telegramNumber || null,
                         address: editForm.address || null
                     },
+                    jointClient: editForm.jointIdNumber ? {
+                        firstName: editForm.jointFirstName,
+                        lastName: editForm.jointLastName,
+                        idNumber: editForm.jointIdNumber,
+                        email: editForm.jointEmail || null,
+                        phone: editForm.jointPhone || null
+                    } : null,
                     serviceFee: editForm.serviceFee || null,
                     partnerName: editForm.partnerName || null,
                     partnerBranch: editForm.partnerBranch || null,
@@ -1538,13 +1569,27 @@ export default function CaseDetailPage() {
 
 
 
-                    {/* Client Name */}
-                    <h1 className="text-xl font-bold text-white ml-2">
-                        {caseData?.client.firstName} {caseData?.client.lastName}
-                    </h1>
-
-                    {/* Client ID */}
-                    <span className="text-gray-500 font-normal text-lg ml-1">{caseData?.client.idNumber}</span>
+                    {/* Client Name & ID */}
+                    <div className="flex flex-col ml-2">
+                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                            {caseData?.client.firstName} {caseData?.client.lastName}
+                            {caseData?.jointClient && (
+                                <>
+                                    <span className="text-zeno-cyan/50 text-sm">&</span>
+                                    <span>{caseData.jointClient.firstName} {caseData.jointClient.lastName}</span>
+                                </>
+                            )}
+                        </h1>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 font-mono">
+                            <span>{caseData?.client.idNumber}</span>
+                            {caseData?.jointClient && (
+                                <>
+                                    <span className="text-gray-700">•</span>
+                                    <span>{caseData.jointClient.idNumber}</span>
+                                </>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Phone */}
                     {caseData?.client.phone && (
@@ -1988,6 +2033,63 @@ export default function CaseDetailPage() {
                                             placeholder="Street address, city, postal code"
                                         />
                                     </div>
+
+                                    {/* Joint Applicant Section */}
+                                    <div className="pt-4 border-t border-white/5 mt-4">
+                                        <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-xs text-gray-500 uppercase">First Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={editForm.jointFirstName}
+                                                    onChange={(e) => setEditForm({ ...editForm, jointFirstName: e.target.value })}
+                                                    className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                                    placeholder="Optional"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-gray-500 uppercase">Last Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={editForm.jointLastName}
+                                                    onChange={(e) => setEditForm({ ...editForm, jointLastName: e.target.value })}
+                                                    className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                                    placeholder="Optional"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3">
+                                            <label className="text-xs text-gray-500 uppercase">ID Number</label>
+                                            <input
+                                                type="text"
+                                                value={editForm.jointIdNumber}
+                                                onChange={(e) => setEditForm({ ...editForm, jointIdNumber: e.target.value })}
+                                                className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white font-mono focus:border-zeno-cyan focus:outline-none"
+                                                placeholder="Optional"
+                                            />
+                                        </div>
+                                        <div className="mt-3">
+                                            <label className="text-xs text-gray-500 uppercase">Email</label>
+                                            <input
+                                                type="email"
+                                                value={editForm.jointEmail}
+                                                onChange={(e) => setEditForm({ ...editForm, jointEmail: e.target.value })}
+                                                className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                                placeholder="Optional"
+                                            />
+                                        </div>
+                                        <div className="mt-3">
+                                            <label className="text-xs text-gray-500 uppercase">Phone</label>
+                                            <input
+                                                type="tel"
+                                                value={editForm.jointPhone}
+                                                onChange={(e) => setEditForm({ ...editForm, jointPhone: e.target.value })}
+                                                className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                                placeholder="Optional"
+                                            />
+                                        </div>
+                                    </div>
                                 </>
                             ) : (
                                 <>
@@ -2054,6 +2156,35 @@ export default function CaseDetailPage() {
                                         <div>
                                             <label className="text-xs text-gray-500 uppercase">Address</label>
                                             <p className="text-white">{caseData.client.address}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Joint Applicant Information (View Mode) */}
+                                    {caseData.jointClient && (
+                                        <div className="pt-4 border-t border-white/5 mt-4">
+                                            <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant</h4>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-xs text-gray-500 uppercase">Full Name</label>
+                                                    <p className="text-white">{caseData.jointClient.firstName} {caseData.jointClient.lastName}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500 uppercase">ID Number</label>
+                                                    <p className="text-white font-mono">{caseData.jointClient.idNumber}</p>
+                                                </div>
+                                                {caseData.jointClient.email && (
+                                                    <div>
+                                                        <label className="text-xs text-gray-500 uppercase">Email</label>
+                                                        <p className="text-white">{caseData.jointClient.email}</p>
+                                                    </div>
+                                                )}
+                                                {caseData.jointClient.phone && (
+                                                    <div>
+                                                        <label className="text-xs text-gray-500 uppercase">Phone</label>
+                                                        <p className="text-white">{caseData.jointClient.phone}</p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </>
@@ -3611,7 +3742,10 @@ export default function CaseDetailPage() {
                     onClose={() => setIsQuoteModalOpen(false)}
                     caseId={caseData.id}
                     clientId={caseData.client.id}
-                    clientName={`${caseData.client.firstName} ${caseData.client.lastName}`.trim()}
+                    clientName={caseData.jointClient 
+                        ? `${caseData.client.firstName} ${caseData.client.lastName} & ${caseData.jointClient.firstName} ${caseData.jointClient.lastName}`
+                        : `${caseData.client.firstName} ${caseData.client.lastName}`.trim()
+                    }
                     clientEmail={caseData.client.email}
                     services={caseData.services}
                     isAdmin={isAdmin}
@@ -3626,7 +3760,10 @@ export default function CaseDetailPage() {
                     isOpen={isPoaModalOpen}
                     onClose={() => setIsPoaModalOpen(false)}
                     caseId={caseData.id}
-                    clientName={`${caseData.client?.firstName ?? ''} ${caseData.client?.lastName ?? ''}`.trim()}
+                    clientName={caseData.jointClient 
+                        ? `${caseData.client.firstName} ${caseData.client.lastName} & ${caseData.jointClient.firstName} ${caseData.jointClient.lastName}`
+                        : `${caseData.client?.firstName ?? ''} ${caseData.client?.lastName ?? ''}`.trim()
+                    }
                     clientEmail={caseData.client?.email}
                     clientPhone={caseData.client?.whatsappNumber ?? caseData.client?.phone}
                     services={caseData.services}
@@ -3641,7 +3778,10 @@ export default function CaseDetailPage() {
                     isOpen={isMandateModalOpen}
                     onClose={() => setIsMandateModalOpen(false)}
                     caseId={caseData.id}
-                    clientName={`${caseData.client.firstName} ${caseData.client.lastName}`.trim()}
+                    clientName={caseData.jointClient 
+                        ? `${caseData.client.firstName} ${caseData.client.lastName} & ${caseData.jointClient.firstName} ${caseData.jointClient.lastName}`
+                        : `${caseData.client.firstName} ${caseData.client.lastName}`.trim()
+                    }
                     clientEmail={caseData.client.email}
                     initialData={{
                         bankName: (caseData as any).bankName,

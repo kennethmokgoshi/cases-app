@@ -76,6 +76,7 @@ export const CaseCreateSchema = z.object({
 
 export const CasePatchSchema = z.object({
     client: ClientUpdateSchema.optional(),
+    jointClient: ClientUpdateSchema.optional().nullable(),
     closedAccounts: z.number().int().min(0).optional(),
     openAccounts: z.number().int().min(0).optional(),
     prescribedAccounts: z.number().int().min(0).optional(),

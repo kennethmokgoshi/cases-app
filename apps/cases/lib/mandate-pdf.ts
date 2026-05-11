@@ -13,6 +13,11 @@ export interface MandateData {
     phone?: string;
     address?: string;
   };
+  jointClient?: {
+    firstName?: string;
+    lastName?: string;
+    idNumber?: string;
+  };
   bankDetails?: {
     bankName: string;
     accountHolder: string;
@@ -108,8 +113,17 @@ export async function generateMandatePdf(data: MandateData): Promise<Uint8Array>
   drawLine(page, MARGIN, cursor - 2, MARGIN + 85, cursor - 2, 1, DARK_TEXT)
   cursor -= 15
 
-  cursor = drawTableRow('Customer name', `${data.client.firstName || ''} ${data.client.lastName || ''}`.trim(), cursor)
-  cursor = drawTableRow('Identity number', data.client.idNumber || '', cursor)
+  const primaryName = `${data.client.firstName || ''} ${data.client.lastName || ''}`.trim()
+  const jointName = data.jointClient ? `${data.jointClient.firstName || ''} ${data.jointClient.lastName || ''}`.trim() : ''
+  const displayName = jointName ? `${primaryName} & ${jointName}` : primaryName
+
+  cursor = drawTableRow('Customer name', displayName, cursor)
+  
+  const displayId = data.jointClient 
+    ? `${data.client.idNumber || ''} / ${data.jointClient.idNumber || ''}`
+    : (data.client.idNumber || '')
+    
+  cursor = drawTableRow('Identity number', displayId, cursor)
   cursor = drawTableRow('Contact numbers', data.client.phone || '', cursor)
   const addrParts = (data.client.address || '').split('\n')
   cursor = drawTableRow('Address', addrParts[0] || '', cursor)
@@ -250,7 +264,7 @@ export async function generateMandatePdf(data: MandateData): Promise<Uint8Array>
   drawText(page2, 'accordingly as stipulated on the agreement.', MARGIN + 10, fCursor, regular, 9, DARK_TEXT)
   fCursor -= 25
 
-  fCursor = drawField(page2, 'Customer name', `${data.client.firstName || ''} ${data.client.lastName || ''}`.trim(), fCursor)
+  fCursor = drawField(page2, 'Customer name', displayName, fCursor)
   fCursor = drawField(page2, 'Customer signature', '', fCursor)
   fCursor = drawField(page2, 'Date', today, fCursor)
 

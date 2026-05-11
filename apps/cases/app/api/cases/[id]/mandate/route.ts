@@ -21,6 +21,7 @@ export async function POST(
       where: { id },
       include: {
         client: true,
+        jointClient: true,
       }
     })
 
@@ -38,6 +39,11 @@ export async function POST(
         phone: caseData.client.phone || '',
         address: caseData.client.address || '',
       },
+      jointClient: caseData.jointClient ? {
+        firstName: caseData.jointClient.firstName,
+        lastName: caseData.jointClient.lastName,
+        idNumber: caseData.jointClient.idNumber,
+      } : undefined,
       bankDetails: bankDetails || {
         bankName: (caseData as any).bankName || '',
         accountHolder: (caseData as any).accountHolderName || '',
@@ -73,7 +79,7 @@ export async function POST(
       from: `"Zenowethu Debt Management" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
       to,
       subject: subject || 'Debit Order Mandate - Zenowethu',
-      text: `Please find attached the Debit Order Mandate for ${caseData.client.firstName} ${caseData.client.lastName}.`,
+      text: `Please find attached the Debit Order Mandate for ${caseData.client.firstName} ${caseData.client.lastName}${caseData.jointClient ? ` & ${caseData.jointClient.firstName} ${caseData.jointClient.lastName}` : ''}.`,
       attachments: [
         {
           filename: `Mandate_${caseData.fileNumber}.pdf`,

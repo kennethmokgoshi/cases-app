@@ -240,7 +240,14 @@ function NewCaseWithAIComponent() {
         cb_contactNo: '',
         cb_applicationDate: '',
         cb_status: '',
-        cb_statusDate: '' });
+        cb_statusDate: '',
+        // Joint Application
+        isJointApplication: false,
+        jointSurname: '',
+        jointNames: '',
+        jointIdNumber: '',
+        jointCellNumber: '',
+        jointEmail: '' });
 
     // Cell number verification from multiple documents
     const [cellVerification, setCellVerification] = useState<{
@@ -630,7 +637,9 @@ function NewCaseWithAIComponent() {
                 openAccounts: 0, prescribedAccounts: 0, ncrdcNo: '', serviceFee: '',
                 instalments: 1, totalDebtAmount: '', totalMonthlyInstallment: '',
                 cb_ncrdcNo: '', cb_debtCounsellor: '', cb_contactNo: '',
-                cb_applicationDate: '', cb_status: '', cb_statusDate: ''
+                cb_applicationDate: '', cb_status: '', cb_statusDate: '',
+                isJointApplication: false, jointSurname: '', jointNames: '',
+                jointIdNumber: '', jointCellNumber: '', jointEmail: ''
             });
             // Preserve all document arrays while resetting for manual mode
             setUploadedFiles(prev => ({ 
@@ -715,6 +724,13 @@ function NewCaseWithAIComponent() {
                         salaryPayDate: formData.salaryPayDate || null,
                         type: formData.category
                     },
+                    jointClient: formData.isJointApplication ? {
+                        firstName: formData.jointNames.split(' ')[0],
+                        lastName: formData.jointSurname,
+                        idNumber: formData.jointIdNumber,
+                        phone: formData.jointCellNumber || null,
+                        email: formData.jointEmail || null,
+                    } : null,
                     services: selectedServices,
                     serviceFee: formData.serviceFee || null,
                     instalments: formData.instalments || 1,
@@ -1002,7 +1018,13 @@ function NewCaseWithAIComponent() {
                 cb_contactNo: naStr(result.extractedData?.creditReport?.debtRestructuring?.debtCounsellorNumber),
                 cb_applicationDate: naStr(result.extractedData?.creditReport?.debtRestructuring?.debtReviewDate),
                 cb_status: naStr(result.extractedData?.creditReport?.debtRestructuring?.dhsStatus),
-                cb_statusDate: naStr(result.extractedData?.creditReport?.debtRestructuring?.statusDate) });
+                cb_statusDate: naStr(result.extractedData?.creditReport?.debtRestructuring?.statusDate),
+                isJointApplication: detectedCategory === 'Joint',
+                jointSurname: '',
+                jointNames: '',
+                jointIdNumber: '',
+                jointCellNumber: '',
+                jointEmail: '' });
 
             setStep(3); // Move to review step
             window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1087,7 +1109,13 @@ function NewCaseWithAIComponent() {
                 cb_contactNo: '',
                 cb_applicationDate: '',
                 cb_status: '',
-                cb_statusDate: '' });
+                cb_statusDate: '',
+                isJointApplication: false,
+                jointSurname: '',
+                jointNames: '',
+                jointIdNumber: '',
+                jointCellNumber: '',
+                jointEmail: '' });
             setIsManualEntry(true);
             setStep(3);
             window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1538,17 +1566,54 @@ function NewCaseWithAIComponent() {
 
                     {/* Summary */}
                     {selectedMonth && selectedServices.length > 0 && (
-                        <div className="mb-6 p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
-                            <p className="text-sm text-gray-400 mb-1">Case will be created under:</p>
-                            <p className="text-white font-medium">
-                                {selectedParent && selectedParent.name}
-                                {selectedSubprojectId && subprojects.find(s => s.id === selectedSubprojectId) &&
-                                    ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
-                                {` ${selectedMonth} ${selectedYear}`}
-                            </p>
-                            <p className="text-sm text-gray-400 mt-2">
-                                Services: <span className="text-zeno-cyan">{selectedServices.length} selected</span>
-                            </p>
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-400 mb-3">
+                                7. Application Type
+                            </label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, isJointApplication: false }))}
+                                    className={`p-4 rounded-xl border transition-all text-left group ${!formData.isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/5 hover:border-white/20'}`}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-2xl">👤</span>
+                                        {!formData.isJointApplication && <span className="text-indigo-400 text-xs font-bold uppercase tracking-widest">Selected</span>}
+                                    </div>
+                                    <span className="text-sm font-bold text-white block">Single Application</span>
+                                    <span className="text-xs text-gray-500">Capture data for one applicant</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, isJointApplication: true }))}
+                                    className={`p-4 rounded-xl border transition-all text-left group ${formData.isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/5 hover:border-white/20'}`}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-2xl">👥</span>
+                                        {formData.isJointApplication && <span className="text-indigo-400 text-xs font-bold uppercase tracking-widest">Selected</span>}
+                                    </div>
+                                    <span className="text-sm font-bold text-white block">Joint Application</span>
+                                    <span className="text-xs text-gray-500">Capture data for two applicants (e.g. Spouse)</span>
+                                </button>
+                            </div>
+
+                            <div className="p-4 bg-zeno-navy/50 rounded-lg border border-white/5">
+                                <p className="text-sm text-gray-400 mb-1">Case summary:</p>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    <p className="text-white font-medium">
+                                        {selectedParent && selectedParent.name}
+                                        {selectedSubprojectId && subprojects.find(s => s.id === selectedSubprojectId) &&
+                                            ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                        {` ${selectedMonth} ${selectedYear}`}
+                                    </p>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${formData.isJointApplication ? 'bg-indigo-500/20 text-indigo-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                                        {formData.isJointApplication ? 'Joint' : 'Single'}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-gray-400 mt-2">
+                                    Services: <span className="text-zeno-cyan">{selectedServices.length} selected</span>
+                                </p>
+                            </div>
                         </div>
                     )}
 
@@ -1662,6 +1727,67 @@ function NewCaseWithAIComponent() {
                                 />
                             </div>
                         </div>
+
+                        {/* Joint Application Toggle (Manual Entry) */}
+                        <div className="mt-4 pt-4 border-t border-white/5">
+                            <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/10">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.isJointApplication}
+                                    onChange={(e) => setFormData({ ...formData, isJointApplication: e.target.checked })}
+                                    className="w-4 h-4 rounded border-white/20 bg-zeno-navy text-zeno-cyan focus:ring-zeno-cyan focus:ring-offset-0"
+                                />
+                                <div>
+                                    <span className="text-sm font-medium text-white block">Joint Application</span>
+                                    <span className="text-xs text-gray-400">Include a secondary applicant for this case</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        {formData.isJointApplication && (
+                            <div className="mt-4 p-4 bg-indigo-900/10 rounded-lg border border-indigo-500/20">
+                                <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant Details</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Surname</label>
+                                        <input
+                                            type="text"
+                                            value={formData.jointSurname}
+                                            onChange={(e) => setFormData({ ...formData, jointSurname: e.target.value })}
+                                            className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Full Names</label>
+                                        <input
+                                            type="text"
+                                            value={formData.jointNames}
+                                            onChange={(e) => setFormData({ ...formData, jointNames: e.target.value })}
+                                            className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">ID Number</label>
+                                        <input
+                                            type="text"
+                                            value={formData.jointIdNumber}
+                                            onChange={(e) => setFormData({ ...formData, jointIdNumber: e.target.value })}
+                                            maxLength={13}
+                                            className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none font-mono"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Cell Number</label>
+                                        <input
+                                            type="text"
+                                            value={formData.jointCellNumber}
+                                            onChange={(e) => setFormData({ ...formData, jointCellNumber: e.target.value })}
+                                            className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Upload Documents (optional — no AI) */}
@@ -2494,6 +2620,67 @@ function NewCaseWithAIComponent() {
                                     />
                                 </div>
                             </div>
+
+                            {/* Joint Application Toggle (Review Entry) */}
+                            <div className="mt-4 pt-4 border-t border-white/5">
+                                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/10">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.isJointApplication}
+                                        onChange={(e) => setFormData({ ...formData, isJointApplication: e.target.checked })}
+                                        className="w-4 h-4 rounded border-white/20 bg-zeno-navy text-zeno-cyan focus:ring-zeno-cyan focus:ring-offset-0"
+                                    />
+                                    <div>
+                                        <span className="text-sm font-medium text-white block">Joint Application</span>
+                                        <span className="text-xs text-gray-400">Include a secondary applicant for this case</span>
+                                    </div>
+                                </label>
+                            </div>
+
+                            {formData.isJointApplication && (
+                                <div className="mt-4 p-4 bg-indigo-900/10 rounded-lg border border-indigo-500/20">
+                                    <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant Details</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Surname</label>
+                                            <input
+                                                type="text"
+                                                value={formData.jointSurname}
+                                                onChange={(e) => setFormData({ ...formData, jointSurname: e.target.value })}
+                                                className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Full Names</label>
+                                            <input
+                                                type="text"
+                                                value={formData.jointNames}
+                                                onChange={(e) => setFormData({ ...formData, jointNames: e.target.value })}
+                                                className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">ID Number</label>
+                                            <input
+                                                type="text"
+                                                value={formData.jointIdNumber}
+                                                onChange={(e) => setFormData({ ...formData, jointIdNumber: e.target.value })}
+                                                maxLength={13}
+                                                className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none font-mono"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Cell Number</label>
+                                            <input
+                                                type="text"
+                                                value={formData.jointCellNumber}
+                                                onChange={(e) => setFormData({ ...formData, jointCellNumber: e.target.value })}
+                                                className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Financial Info */}

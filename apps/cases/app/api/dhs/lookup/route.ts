@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         // Fetch full case data if available to get documents for auto-request
         const caseData = caseId ? await prisma.case.findUnique({
             where: { id: caseId },
-            include: { documents: true, client: true }
+            include: { documents: true, client: true, jointClient: true }
         }) : null;
 
         if (action === 'check_status' || !action) {
@@ -71,6 +71,37 @@ export async function POST(request: Request) {
 
                 const duration = ((Date.now() - startTime) / 1000).toFixed(2);
                 logger.info(`✅ checkTransferStatus completed in ${duration}s`);
+                
+                // Joint Application Check
+                if (caseData?.jointClient?.idNumber && caseData.jointClient.idNumber !== idNumber) {
+                    logger.info(`Joint Client found (${caseData.jointClient.idNumber}). Checking DHS for Joint Client...`);
+                    const jointStartTime = Date.now();
+                    const jointResult = await Promise.race([
+                        checkTransferStatus(caseData.jointClient.idNumber),
+                        new Promise<any>((_, reject) =>
+                            setTimeout(() => reject(new Error('Joint checkTransferStatus timed out after 90 seconds')), 90000)
+                        )
+                    ]);
+                    
+                    const jointDuration = ((Date.now() - jointStartTime) / 1000).toFixed(2);
+                    logger.info(`✅ Joint checkTransferStatus completed in ${jointDuration}s`);
+                    
+                    // Attach joint result to main result for reference
+                    result.jointResult = jointResult;
+                    
+                    // For flag removal/clearance: if the primary is NOT_LINKED (removed), but joint is still linked,
+                    // we must not mark the whole case as completely removed.
+                    if (!result.found && result.status === 'NOT_LINKED') {
+                        if (jointResult.found || jointResult.status !== 'NOT_LINKED') {
+                            logger.warn(`Primary ID is NOT_LINKED, but Joint ID is still linked! Reverting status to Joint's status.`);
+                            result.found = jointResult.found;
+                            result.status = jointResult.status;
+                            result.combinedStatus = jointResult.combinedStatus;
+                            result.message = `Primary is cleared, but Joint is still: ${jointResult.status}`;
+                        }
+                    }
+                }
+
             } catch (error: any) {
                 const duration = ((Date.now() - startTime) / 1000).toFixed(2);
                 logger.error(`❌ checkTransferStatus failed after ${duration}s:`, error.message);

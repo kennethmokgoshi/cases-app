@@ -106,6 +106,14 @@ function PartnerNewCaseComponent() {
         optional: File[];
     }>({ optional: [] });
 
+    // Joint Application State
+    const [isJointApplication, setIsJointApplication] = useState(false);
+    const [jointSurname, setJointSurname] = useState('');
+    const [jointFullNames, setJointFullNames] = useState('');
+    const [jointIdNumber, setJointIdNumber] = useState('');
+    const [jointCellNumber, setJointCellNumber] = useState('');
+    const [jointEmail, setJointEmail] = useState('');
+
     // Duplicate Check State
     const [duplicateError, setDuplicateError] = useState<any | null>(null);
     const [prefixedIdInput, setPrefixedIdInput] = useState('');
@@ -384,6 +392,15 @@ function PartnerNewCaseComponent() {
                         idNumber: idNumber,
                         phone: cellNumber || null,
                         email: email || null },
+                    
+                    jointClient: isJointApplication ? {
+                        firstName: jointFullNames,
+                        lastName: jointSurname,
+                        idNumber: jointIdNumber,
+                        phone: jointCellNumber || null,
+                        email: jointEmail || null
+                    } : null,
+
                     projectId: finalProjectId,
                     acquisitionType: 'B2B',
                     partnerName: getPartnerNameFromProject(),
@@ -622,17 +639,68 @@ function PartnerNewCaseComponent() {
                             </div>
                         </div>
 
-                        {selectedParentId && selectedServices.length > 0 && (
+                        {selectedParentId && (
                             <div className="mt-6 p-4 bg-zeno-navy rounded-lg border border-zeno-cyan/30">
-                                <p className="text-sm text-gray-400 mb-1">Case will be created under:</p>
-                                <p className="text-zeno-cyan font-bold">
-                                    {selectedParent?.name}
-                                    {selectedSubprojectId && ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
-                                    {` ${selectedMonth} ${selectedYear}`}
-                                </p>
+                                <p className="text-sm text-gray-400 mb-1">Case summary:</p>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    <p className="text-zeno-cyan font-bold">
+                                        {selectedParent?.name}
+                                        {selectedSubprojectId && ` ${subprojects.find(s => s.id === selectedSubprojectId)?.name}`}
+                                        {` ${selectedMonth} ${selectedYear}`}
+                                    </p>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isJointApplication ? 'bg-indigo-500/20 text-indigo-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                                        {isJointApplication ? 'Joint' : 'Single'}
+                                    </span>
+                                </div>
                                 <p className="text-sm text-gray-400 mt-2">Services: {selectedServices.length} selected</p>
                             </div>
                         )}
+
+                        {/* Application Type */}
+                        <div className="mt-8">
+                            <label className="block text-sm font-medium text-gray-300 mb-4">
+                                7. Application Type <span className="text-red-400">*</span>
+                            </label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsJointApplication(false)}
+                                    className={`p-5 rounded-xl border-2 transition-all text-left group ${!isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/10 hover:border-white/30'}`}
+                                >
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-colors ${!isJointApplication ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400 group-hover:bg-gray-700'}`}>
+                                            👤
+                                        </div>
+                                        {!isJointApplication && (
+                                            <span className="bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider animate-pulse">
+                                                Selected
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h3 className="font-bold text-white text-lg">Single Application</h3>
+                                    <p className="text-sm text-gray-400 mt-1">Capture data for one applicant</p>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setIsJointApplication(true)}
+                                    className={`p-5 rounded-xl border-2 transition-all text-left group ${isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/10 hover:border-white/30'}`}
+                                >
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-colors ${isJointApplication ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400 group-hover:bg-gray-700'}`}>
+                                            👥
+                                        </div>
+                                        {isJointApplication && (
+                                            <span className="bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider animate-pulse">
+                                                Selected
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h3 className="font-bold text-white text-lg">Joint Application</h3>
+                                    <p className="text-sm text-gray-400 mt-1">Capture data for two applicants (e.g. Spouse)</p>
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="flex justify-end">
@@ -651,7 +719,12 @@ function PartnerNewCaseComponent() {
             {step === 2 && (
                 <div className="space-y-6">
                     <div className="bg-zeno-gray border border-white/10 rounded-xl p-6">
-                        <h2 className="text-xl font-bold text-zeno-cyan mb-6">PERSONAL INFORMATION</h2>
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-xl font-bold text-zeno-cyan uppercase tracking-wider">Primary Applicant Information</h2>
+                            <div className="px-3 py-1 rounded-full bg-zeno-cyan/10 border border-zeno-cyan/30 text-zeno-cyan text-[10px] font-bold uppercase">
+                                Applicant 1
+                            </div>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-4 mb-6">
                             <div>
@@ -699,15 +772,6 @@ function PartnerNewCaseComponent() {
                                         }`}
                                     placeholder="0000000000000"
                                 />
-                                <div className="flex justify-between items-center mt-1">
-                                    <p className="text-xs text-gray-400">13 digits required</p>
-                                    <p className={`text-xs ${idNumber.replace(/\D/g, '').length === 13
-                                        ? 'text-green-400'
-                                        : 'text-gray-500'
-                                        }`}>
-                                        {idNumber.replace(/\D/g, '').length}/13
-                                    </p>
-                                </div>
                             </div>
 
                             <div>
@@ -718,20 +782,9 @@ function PartnerNewCaseComponent() {
                                     type="text"
                                     value={cellNumber}
                                     onChange={(e) => setCellNumber(e.target.value)}
-                                    className={`w-full bg-zeno-navy border rounded-lg px-4 py-3 text-white focus:outline-none ${(() => {
-                                        if (cellNumber.trim() === '') return 'border-white/20 focus:border-zeno-cyan';
-                                        const clean = cellNumber.replace(/[\s\-()]/g, '');
-                                        const digits = clean.replace(/\D/g, '');
-                                        const isIntl = clean.startsWith('+27');
-                                        const isValid = isIntl ? clean.length === 12 : digits.length === 10;
-                                        return isValid
-                                            ? 'border-green-500 focus:border-green-400'
-                                            : 'border-red-500 focus:border-red-400';
-                                    })()
-                                        }`}
-                                    placeholder="0823456789 or +27823456789"
+                                    className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan"
+                                    placeholder="0823456789"
                                 />
-                                <p className="text-xs text-gray-400 mt-1">Optional - 10 digits (local) or +27XXXXXXXXX (international)</p>
                             </div>
 
                             <div>
@@ -742,20 +795,99 @@ function PartnerNewCaseComponent() {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className={`w-full bg-zeno-navy border rounded-lg px-4 py-3 text-white focus:outline-none ${(() => {
-                                        if (email.trim() === '') return 'border-white/20 focus:border-zeno-cyan';
-                                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                                        return emailRegex.test(email)
-                                            ? 'border-green-500 focus:border-green-400'
-                                            : 'border-red-500 focus:border-red-400';
-                                    })()
-                                        }`}
+                                    className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan"
                                     placeholder="email@example.com"
                                 />
-                                <p className="text-xs text-gray-400 mt-1">Optional - must be valid format (e.g., name@example.com)</p>
                             </div>
                         </div>
                     </div>
+
+                    {/* JOINT APPLICANT SECTION */}
+                    {isJointApplication && (
+                        <div className="bg-zeno-gray border border-indigo-500/30 rounded-xl p-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold text-indigo-400 uppercase tracking-wider">Joint Applicant Information</h2>
+                                <div className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold uppercase">
+                                    Applicant 2
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Joint Surname <span className="text-red-400">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={jointSurname}
+                                        onChange={(e) => setJointSurname(e.target.value)}
+                                        className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="Enter joint surname"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Joint Full Names <span className="text-red-400">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={jointFullNames}
+                                        onChange={(e) => setJointFullNames(e.target.value)}
+                                        className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="Enter joint full names"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4 mb-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Joint ID Number <span className="text-red-400">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={jointIdNumber}
+                                        onChange={(e) => setJointIdNumber(e.target.value)}
+                                        maxLength={13}
+                                        className={`w-full bg-zeno-navy border rounded-lg px-4 py-3 text-white focus:outline-none ${jointIdNumber.replace(/\D/g, '').length === 13
+                                            ? 'border-green-500 focus:border-green-400'
+                                            : jointIdNumber.length > 0
+                                                ? 'border-red-500 focus:border-red-400'
+                                                : 'border-white/20 focus:border-indigo-500'
+                                            }`}
+                                        placeholder="0000000000000"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Joint Cell Number
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={jointCellNumber}
+                                        onChange={(e) => setJointCellNumber(e.target.value)}
+                                        className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="0823456789"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Joint Email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={jointEmail}
+                                        onChange={(e) => setJointEmail(e.target.value)}
+                                        className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="joint@example.com"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="bg-zeno-gray border border-white/10 rounded-xl p-6">
                         <h2 className="text-xl font-bold text-white mb-4">Upload Documents</h2>

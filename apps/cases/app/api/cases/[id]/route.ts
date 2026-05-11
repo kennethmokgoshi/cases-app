@@ -210,6 +210,7 @@ export async function PATCH(
         const body = parsed.data as z.infer<typeof CasePatchSchema>;
         const {
             client,
+            jointClient,
             closedAccounts,
             openAccounts,
             prescribedAccounts,
@@ -548,10 +549,56 @@ export async function PATCH(
             if (client.type !== undefined) clientUpdateData.type = client.type || 'Standard';
         }
 
+        // Build jointClient logic
+        let jointClientIdToConnect: string | undefined = undefined;
+        let shouldDisconnectJoint = false;
+
+        if (jointClient) {
+            if (jointClient.idNumber) {
+                const existingJoint = await prisma.client.findUnique({
+                    where: { idNumber: jointClient.idNumber }
+                });
+                
+                const jData: any = {};
+                if (jointClient.firstName !== undefined) jData.firstName = jointClient.firstName;
+                if (jointClient.lastName !== undefined) jData.lastName = jointClient.lastName;
+                if (jointClient.email !== undefined) jData.email = jointClient.email || null;
+                if (jointClient.phone !== undefined) jData.phone = jointClient.phone || null;
+                
+                if (existingJoint) {
+                    jointClientIdToConnect = existingJoint.id;
+                    if (Object.keys(jData).length > 0) {
+                        await prisma.client.update({
+                            where: { id: existingJoint.id },
+                            data: jData
+                        });
+                    }
+                } else {
+                    const newJoint = await prisma.client.create({
+                        data: {
+                            firstName: jointClient.firstName || '',
+                            lastName: jointClient.lastName || '',
+                            idNumber: jointClient.idNumber,
+                            email: jointClient.email || null,
+                            phone: jointClient.phone || null
+                        }
+                    });
+                    jointClientIdToConnect = newJoint.id;
+                }
+            }
+        } else if (jointClient === null) {
+            shouldDisconnectJoint = true;
+        }
+
         // Build case update data
         const caseUpdateData: Record<string, unknown> = {};
         if (Object.keys(clientUpdateData).length > 0) {
             caseUpdateData.client = { update: clientUpdateData };
+        }
+        if (jointClientIdToConnect) {
+            caseUpdateData.jointClient = { connect: { id: jointClientIdToConnect } };
+        } else if (shouldDisconnectJoint) {
+            caseUpdateData.jointClient = { disconnect: true };
         }
         if (closedAccounts !== undefined) caseUpdateData.closedAccounts = closedAccounts || 0;
         if (openAccounts !== undefined) caseUpdateData.openAccounts = openAccounts || 0;
