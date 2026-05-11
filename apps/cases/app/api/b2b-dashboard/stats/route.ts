@@ -25,6 +25,11 @@ export async function GET() {
             });
             const rootProjectIds = memberships.map((m) => m.projectId);
 
+            // CRITICAL FIX: Also include the project assigned via b2bPartnerId
+            if (session.user.b2bPartnerId && !rootProjectIds.includes(session.user.b2bPartnerId)) {
+                rootProjectIds.push(session.user.b2bPartnerId);
+            }
+
             if (rootProjectIds.length === 0) {
                 // No project memberships — show only cases this user created directly
                 projectWhere = { createdById: userId };

@@ -71,7 +71,7 @@ export async function GET(request: Request) {
 
         // Non-admins never see admin-only cases
         if (!isAdmin) {
-            where.isAdminOnly = false;
+            where.isAdminOnly = { not: true };
         }
 
         // Staff members (internal) should see all cases, Partners (external) are restricted to their projects
@@ -372,16 +372,23 @@ export async function GET(request: Request) {
                 .join(' ');
         };
 
-        const enrichedCases = cases.map((c: any) => ({
-            ...c,
-            projects: (c.projects || []).map((cp: any) => ({
-                ...cp,
-                project: {
-                    ...cp.project,
-                    fullPath: getFullPath(cp.project.id)
-                }
-            }))
-        }));
+        const enrichedCases = cases.map((c: any) => {
+            try {
+                return {
+                    ...c,
+                    projects: (c.projects || []).map((cp: any) => ({
+                        ...cp,
+                        project: {
+                            ...(cp.project || {}),
+                            fullPath: cp.project ? getFullPath(cp.project.id) : 'Unknown Path'
+                        }
+                    }))
+                };
+            } catch (err) {
+                console.error(`[API] Enrichment failed for case ${c.id}:`, err);
+                return c;
+            }
+        });
 
         console.log(`[API] Cases found: ${cases.length}, Enriched: ${enrichedCases.length}, IsArray: ${Array.isArray(enrichedCases)}`);
         if (!Array.isArray(enrichedCases)) {
