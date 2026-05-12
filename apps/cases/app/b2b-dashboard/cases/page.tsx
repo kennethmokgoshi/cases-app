@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import { 
@@ -39,6 +39,14 @@ type CaseType = {
 };
 
 export default function B2BMyCasesPage() {
+    return (
+        <Suspense fallback={<div className="text-white flex items-center justify-center min-h-screen">Loading cases...</div>}>
+            <B2BMyCasesComponent />
+        </Suspense>
+    );
+}
+
+function B2BMyCasesComponent() {
     const router = useRouter();
     const { data: session } = useSession();
     const [cases, setCases] = useState<CaseType[]>([]);

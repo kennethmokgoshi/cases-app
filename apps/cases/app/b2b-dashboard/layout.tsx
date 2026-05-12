@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { B2BSidebar } from './components/B2BSidebar';
 import { useSession, signOut } from '@zenowethu/ui';
 import Link from 'next/link';
@@ -23,7 +24,9 @@ export default function B2BLayout({
     return (
         <div className="min-h-screen bg-zeno-navy flex">
             {/* Sidebar */}
-            <B2BSidebar />
+            <Suspense fallback={<div className="w-64 bg-zeno-gray border-r border-white/10 shrink-0" />}>
+                <B2BSidebar />
+            </Suspense>
 
             {/* Main Content Area */}
             <div className="flex-1 ml-64 flex flex-col min-w-0">
