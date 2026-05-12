@@ -33,6 +33,16 @@ const createLogger = (name: string) => ({
     debug: (...args: any[]) => console.debug(`[${name}]`, ...args),
 });
 
+const isDebtReviewSelected = (servicesJson: string | null) => {
+    if (!servicesJson) return false;
+    try {
+        const services = JSON.parse(servicesJson) as string[];
+        return services.includes('debt_review_flag_removal') || services.includes('debt_review_application');
+    } catch {
+        return false;
+    }
+};
+
 type CaseDetail = {
     id: string;
     fileNumber: string;
@@ -2034,7 +2044,8 @@ export default function CaseDetailPage() {
                                         />
                                     </div>
 
-                                    {/* Joint Applicant Section */}
+                                     {/* Joint Applicant Section - Restricted to Debt Review */}
+                                     {isDebtReviewSelected(caseData.services) && (
                                     <div className="pt-4 border-t border-white/5 mt-4">
                                         <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant</h4>
                                         <div className="grid grid-cols-2 gap-3">
@@ -2086,10 +2097,11 @@ export default function CaseDetailPage() {
                                                 value={editForm.jointPhone}
                                                 onChange={(e) => setEditForm({ ...editForm, jointPhone: e.target.value })}
                                                 className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
-                                                placeholder="Optional"
-                                            />
-                                        </div>
-                                    </div>
+                                                 placeholder="Optional"
+                                             />
+                                         </div>
+                                     </div>
+                                 )}
                                 </>
                             ) : (
                                 <>
@@ -2159,8 +2171,8 @@ export default function CaseDetailPage() {
                                         </div>
                                     )}
 
-                                    {/* Joint Applicant Information (View Mode) */}
-                                    {caseData.jointClient && (
+                                     {/* Joint Applicant Information (View Mode) - Restricted to Debt Review */}
+                                     {caseData.jointClient && isDebtReviewSelected(caseData.services) && (
                                         <div className="pt-4 border-t border-white/5 mt-4">
                                             <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant</h4>
                                             <div className="space-y-3">

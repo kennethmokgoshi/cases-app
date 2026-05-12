@@ -132,6 +132,9 @@ export default function NewCaseWithAIPage() {
 }
 
 function NewCaseWithAIComponent() {
+    const isDebtReviewSelected = (services: string[]) =>
+        services.includes('debt_review_flag_removal') || services.includes('debt_review_application');
+
     const router = useRouter();
     const searchParams = useSearchParams();
     const { data: session, status } = useSession();
@@ -248,6 +251,12 @@ function NewCaseWithAIComponent() {
         jointIdNumber: '',
         jointCellNumber: '',
         jointEmail: '' });
+
+    useEffect(() => {
+        if (!isDebtReviewSelected(selectedServices) && formData.isJointApplication) {
+            setFormData(prev => ({ ...prev, isJointApplication: false }));
+        }
+    }, [selectedServices, formData.isJointApplication]);
 
     // Cell number verification from multiple documents
     const [cellVerification, setCellVerification] = useState<{
@@ -1565,7 +1574,7 @@ function NewCaseWithAIComponent() {
 
 
                     {/* Summary */}
-                    {selectedMonth && selectedServices.length > 0 && (
+                    {selectedMonth && selectedServices.length > 0 && isDebtReviewSelected(selectedServices) && (
                         <div className="mb-6">
                             <label className="block text-sm font-medium text-gray-400 mb-3">
                                 7. Application Type
@@ -1729,20 +1738,22 @@ function NewCaseWithAIComponent() {
                         </div>
 
                         {/* Joint Application Toggle (Manual Entry) */}
-                        <div className="mt-4 pt-4 border-t border-white/5">
-                            <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/10">
-                                <input
-                                    type="checkbox"
-                                    checked={formData.isJointApplication}
-                                    onChange={(e) => setFormData({ ...formData, isJointApplication: e.target.checked })}
-                                    className="w-4 h-4 rounded border-white/20 bg-zeno-navy text-zeno-cyan focus:ring-zeno-cyan focus:ring-offset-0"
-                                />
-                                <div>
-                                    <span className="text-sm font-medium text-white block">Joint Application</span>
-                                    <span className="text-xs text-gray-400">Include a secondary applicant for this case</span>
-                                </div>
-                            </label>
-                        </div>
+                        {isDebtReviewSelected(selectedServices) && (
+                            <div className="mt-4 pt-4 border-t border-white/5">
+                                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/10">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.isJointApplication}
+                                        onChange={(e) => setFormData({ ...formData, isJointApplication: e.target.checked })}
+                                        className="w-4 h-4 rounded border-white/20 bg-zeno-navy text-zeno-cyan focus:ring-zeno-cyan focus:ring-offset-0"
+                                    />
+                                    <div>
+                                        <span className="text-sm font-medium text-white block">Joint Application</span>
+                                        <span className="text-xs text-gray-400">Include a secondary applicant for this case</span>
+                                    </div>
+                                </label>
+                            </div>
+                        )}
 
                         {formData.isJointApplication && (
                             <div className="mt-4 p-4 bg-indigo-900/10 rounded-lg border border-indigo-500/20">
@@ -2622,20 +2633,22 @@ function NewCaseWithAIComponent() {
                             </div>
 
                             {/* Joint Application Toggle (Review Entry) */}
-                            <div className="mt-4 pt-4 border-t border-white/5">
-                                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/10">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.isJointApplication}
-                                        onChange={(e) => setFormData({ ...formData, isJointApplication: e.target.checked })}
-                                        className="w-4 h-4 rounded border-white/20 bg-zeno-navy text-zeno-cyan focus:ring-zeno-cyan focus:ring-offset-0"
-                                    />
-                                    <div>
-                                        <span className="text-sm font-medium text-white block">Joint Application</span>
-                                        <span className="text-xs text-gray-400">Include a secondary applicant for this case</span>
-                                    </div>
-                                </label>
-                            </div>
+                            {isDebtReviewSelected(selectedServices) && (
+                                <div className="mt-4 pt-4 border-t border-white/5">
+                                    <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/10">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.isJointApplication}
+                                            onChange={(e) => setFormData({ ...formData, isJointApplication: e.target.checked })}
+                                            className="w-4 h-4 rounded border-white/20 bg-zeno-navy text-zeno-cyan focus:ring-zeno-cyan focus:ring-offset-0"
+                                        />
+                                        <div>
+                                            <span className="text-sm font-medium text-white block">Joint Application</span>
+                                            <span className="text-xs text-gray-400">Include a secondary applicant for this case</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            )}
 
                             {formData.isJointApplication && (
                                 <div className="mt-4 p-4 bg-indigo-900/10 rounded-lg border border-indigo-500/20">

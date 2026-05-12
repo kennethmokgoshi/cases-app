@@ -130,7 +130,7 @@ model Client {
   alternativePhone  String?
   alternativePhone2 String?
   cases             Case[]            @relation("PrimaryClient")
-  // jointCases        Case[]            @relation("JointClient")
+  jointCases        Case[]            @relation("JointClient")
   consumerAccount   ConsumerAccount?
   creditAccounts    CreditAccount[]
   invoices          Invoice[]
@@ -142,7 +142,7 @@ model Case {
   id                      String                @id @default(cuid())
   fileNumber              String                @unique
   clientId                String
-  // jointClientId           String?
+  jointClientId           String?
   acquisitionType         String                @default("B2C")
   partnerName             String?
   partnerBranch           String?
@@ -227,7 +227,7 @@ model Case {
   updatedById             String?
   assignedTo              User?                 @relation("CaseAssignee", fields: [assignedToId], references: [id])
   client                  Client                @relation("PrimaryClient", fields: [clientId], references: [id])
-  // jointClient             Client?               @relation("JointClient", fields: [jointClientId], references: [id])
+  jointClient             Client?               @relation("JointClient", fields: [jointClientId], references: [id])
   createdBy               User?                 @relation("CaseCreator", fields: [createdById], references: [id])
   referrer                Referrer?             @relation(fields: [referrerId], references: [id])
   updatedBy               User?                 @relation("CaseUpdater", fields: [updatedById], references: [id])

@@ -204,16 +204,47 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+    let body: any;
     try {
         const session = await auth();
-        const body = await request.json();
+        body = await request.json();
+        
+        logger.info('Creating new case from body:', JSON.stringify({
+            ...body,
+            client: { ...body.client, idNumber: body.client?.idNumber ? '***' : undefined },
+            jointClient: body.jointClient ? { ...body.jointClient, idNumber: '***' } : undefined
+        }));
+
         const parsed = CaseCreateSchema.safeParse(body);
-        if (!parsed.success) return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 });
+        if (!parsed.success) {
+            logger.warn('Validation failed:', parsed.error.issues);
+            return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 });
+        }
+        
         const data = parsed.data;
         const count = await prisma.case.count();
-        const fileNumber = `ZDM-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`;
+        const fileNumber = `ZDM-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
         const deadline = calculateSlaDeadline(new Date());
 
+        // 1. Handle Primary Client
+        const client = await prisma.client.upsert({
+            where: { idNumber: data.client.idNumber },
+            update: data.client,
+            create: data.client
+        });
+
+        // 2. Handle Joint Client if present
+        let jointClientId: string | undefined = undefined;
+        if (data.jointClient) {
+            const joint = await prisma.client.upsert({
+                where: { idNumber: data.jointClient.idNumber },
+                update: data.jointClient,
+                create: data.jointClient
+            });
+            jointClientId = joint.id;
+        }
+
+        // 3. Create Case
         const newCase = await prisma.case.create({
             data: {
                 fileNumber,
@@ -223,12 +254,11 @@ export async function POST(request: Request) {
                 partnerName: data.partnerName,
                 partnerBranch: data.partnerBranch,
                 partnerSplitPercent: data.partnerSplitPercent,
-                createdById: session?.user?.id,
-                clientId: (await prisma.client.upsert({
-                    where: { idNumber: data.client.idNumber },
-                    update: data.client,
-                    create: data.client
-                })).id,
+                createdBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined,
+                client: { connect: { id: client.id } },
+                jointClient: jointClientId ? { connect: { id: jointClientId } } : undefined,
+                referrerId: data.referrerId,
+                services: Array.isArray(data.services) ? data.services.join(',') : data.services,
                 projects: {
                     create: [
                         { projectId: data.projectId, isPrimary: true },
@@ -237,8 +267,20 @@ export async function POST(request: Request) {
                 }
             }
         });
+
+        logger.info('Case created successfully:', newCase.id);
         return NextResponse.json(newCase);
     } catch (err: any) {
-        return NextResponse.json({ error: 'Internal Server Error', message: err?.message }, { status: 500 });
+        logger.error('[API/POST] Critical Error creating case:', {
+            message: err.message,
+            stack: err.stack,
+            body: body ? JSON.stringify(body).substring(0, 500) : 'none'
+        });
+        
+        return NextResponse.json({ 
+            error: err?.message || 'Internal Server Error',
+            message: err?.message,
+            _stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        }, { status: 500 });
     }
 }
