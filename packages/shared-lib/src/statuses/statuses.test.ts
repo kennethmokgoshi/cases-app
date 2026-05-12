@@ -18,7 +18,7 @@ describe('Workflow Statuses', () => {
         const status = getStatusByCode('NEW_LEAD');
         expect(status).toBeDefined();
         expect(status?.name).toBe('New Lead');
-        expect(status?.category).toBe('INTAKE');
+        expect(status?.category).toBe('BEGINNING');
     });
 
     it('should return undefined for invalid code', () => {
@@ -27,10 +27,10 @@ describe('Workflow Statuses', () => {
     });
 
     it('should retrieve statuses by category', () => {
-        const intakeStatuses = getStatusesByCategory('INTAKE');
+        const intakeStatuses = getStatusesByCategory('BEGINNING');
         expect(intakeStatuses.length).toBeGreaterThan(0);
         intakeStatuses.forEach(s => {
-            expect(s.category).toBe('INTAKE');
+            expect(s.category).toBe('BEGINNING');
         });
     });
 
@@ -46,7 +46,11 @@ describe('Workflow Statuses', () => {
     });
 
     it('should use valid categories for all statuses', () => {
-        const validCategories = ['INTAKE', 'DOCUMENTATION', 'DHS_PROCESS', 'LEGAL', 'DISPUTE', 'COMPLETION', 'PAYMENT', 'FOLLOW_UP', 'INACTIVE'];
+        const validCategories = [
+            'BEGINNING', 'OVERDUE', 'IN_PROGRESS', 'DETOUR', 
+            'ADVANCED', 'ADVANCED_DETOUR', 'ADVANCED_PROGRESS', 
+            'COMPLETED', 'PAYING', 'SETTLED', 'LOST'
+        ];
         WORKFLOW_STATUSES.forEach(s => {
             expect(validCategories).toContain(s.category);
         });

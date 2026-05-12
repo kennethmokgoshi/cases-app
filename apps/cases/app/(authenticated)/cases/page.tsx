@@ -197,7 +197,7 @@ function CasesContent() {
     }, [searchTerm, statusFilter, categoryFilter, serviceFilter, cases]);
 
     const getStatusInfo = (code: string) => {
-        return WORKFLOW_STATUSES.find(s => s.code === code) || { name: code, category: 'INTAKE' as StatusCategory };
+        return WORKFLOW_STATUSES.find(s => s.code === code) || { name: code, category: 'BEGINNING' as StatusCategory };
     };
 
     const handleReset = () => {

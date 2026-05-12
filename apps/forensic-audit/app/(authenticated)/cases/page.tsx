@@ -277,7 +277,7 @@ function CasesContent() {
     const getStatusInfo = (code: string) => {
         return WORKFLOW_STATUSES.find(s => s.code === code) || {
             name: code,
-            category: 'INTAKE' as StatusCategory };
+            category: 'BEGINNING' as StatusCategory };
     };
 
     const getCategoryColor = (category: StatusCategory) => {
@@ -660,25 +660,27 @@ function CasesContent() {
                                                     ? 'bg-green-500/20 text-green-300 border border-green-500/30'
                                                     : c.status === 'CLOSED' || c.status === 'CANCELLED'
                                                         ? 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-                                                        : statusInfo.category === 'INTAKE'
+                                                        : statusInfo.category === 'BEGINNING'
                                                             ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                                                            : statusInfo.category === 'DOCUMENTATION'
-                                                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                                                : statusInfo.category === 'DHS_PROCESS'
+                                                            : statusInfo.category === 'OVERDUE'
+                                                                ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                                                : statusInfo.category === 'IN_PROGRESS'
                                                                     ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                                                                    : statusInfo.category === 'LEGAL'
+                                                                    : statusInfo.category === 'DETOUR'
                                                                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                                                        : statusInfo.category === 'DISPUTE'
-                                                                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                                                                            : statusInfo.category === 'COMPLETION'
-                                                                                ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                                                                                : statusInfo.category === 'PAYMENT'
-                                                                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                                                                    : statusInfo.category === 'FOLLOW_UP'
-                                                                                        ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
-                                                                                        : statusInfo.category === 'INACTIVE'
-                                                                                            ? 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-                                                                                            : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
+                                                                        : statusInfo.category === 'ADVANCED'
+                                                                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                                                            : statusInfo.category === 'ADVANCED_DETOUR'
+                                                                                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                                                                                : statusInfo.category === 'ADVANCED_PROGRESS'
+                                                                                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                                                                    : statusInfo.category === 'COMPLETED'
+                                                                                        ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                                                                                        : statusInfo.category === 'PAYING'
+                                                                                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                                                                            : statusInfo.category === 'SETTLED'
+                                                                                                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                                                                                                : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
                                                     }`}>
                                                     {statusInfo.name}
                                                 </span>
