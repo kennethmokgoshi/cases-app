@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import path from "path";
 
 
 const securityHeaders = [
@@ -21,10 +22,11 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ['@zenowethu/ui', '@zenowethu/shared-lib', '@zenowethu/plan-engine'],
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream', 'puppeteer', 'puppeteer-core', 'pdfjs-dist', 'googleapis', 'google-auth-library'],
   experimental: {
-    turbo: {
+    turbopack: {
       root: '../../',
     },
     serverActions: {
