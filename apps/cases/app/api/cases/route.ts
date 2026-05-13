@@ -278,6 +278,14 @@ export async function POST(request: Request) {
         });
 
         logger.info('Case created successfully:', newCase.id);
+
+        // Fire Case Automation trigger (async, non-blocking)
+        import('@zenowethu/shared-lib/src/ai/case-automation-trigger').then(({ runCaseAutomationTrigger }) => {
+            runCaseAutomationTrigger(newCase.id, 'CASE_CREATED').catch(err => {
+                logger.error(`❌ Case automation trigger failed for ${newCase.id}:`, err);
+            });
+        });
+
         return NextResponse.json(newCase);
     } catch (err: any) {
         logger.error('[API/POST] Critical Error creating case:', {

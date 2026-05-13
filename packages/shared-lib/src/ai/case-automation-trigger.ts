@@ -426,20 +426,37 @@ async function performAutoDhsExtraction(
         });
     }
 
-    // Sync extracted client data back to the database
+    // Sync extracted client data back to the database - ONLY fill in missing/default data
     if (extraction.analysis) {
         const updateData: any = {};
+        const client = caseData.client || {};
+
         if (extraction.analysis.id) {
             const id = extraction.analysis.id;
-            if (id.names && id.names !== 'NA') updateData.firstName = id.names;
-            if (id.surname && id.surname !== 'NA') updateData.lastName = id.surname;
-            if (id.idNumber && id.idNumber !== 'NA') updateData.idNumber = id.idNumber;
+            // Only update if current data is missing, N/A, or default "Client"
+            if (id.names && id.names !== 'NA' && (!client.firstName || client.firstName === 'Unknown' || client.firstName === 'NA')) {
+                updateData.firstName = id.names;
+            }
+            if (id.surname && id.surname !== 'NA' && (!client.lastName || client.lastName === 'Client' || client.lastName === 'NA')) {
+                updateData.lastName = id.surname;
+            }
+            // CRITICAL: Never overwrite a valid 13-digit ID number with AI extraction
+            if (id.idNumber && id.idNumber !== 'NA' && (!client.idNumber || client.idNumber.length < 13)) {
+                updateData.idNumber = id.idNumber;
+            }
         }
+        
         if (extraction.analysis.poa) {
             const poa = extraction.analysis.poa;
-            if (poa.cellNumber && poa.cellNumber !== 'NA') updateData.phone = poa.cellNumber;
-            if (poa.email && poa.email !== 'NA') updateData.email = poa.email;
-            if (poa.address && poa.address !== 'NA') updateData.address = poa.address;
+            if (poa.cellNumber && poa.cellNumber !== 'NA' && !client.phone) {
+                updateData.phone = poa.cellNumber;
+            }
+            if (poa.email && poa.email !== 'NA' && !client.email) {
+                updateData.email = poa.email;
+            }
+            if (poa.address && poa.address !== 'NA' && !client.address) {
+                updateData.address = poa.address;
+            }
         }
 
         if (Object.keys(updateData).length > 0) {

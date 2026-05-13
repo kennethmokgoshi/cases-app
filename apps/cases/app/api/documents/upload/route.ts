@@ -362,7 +362,7 @@ export async function POST(request: Request) {
         // Re-checks whether the AI can now act (e.g. POA or ID just became available)
         const uploadedTypes = savedDocuments.map((d: { type: string }) => d.type);
         const hasRelevantDoc = uploadedTypes.some(
-            (t: string) => t === 'ID' || t === 'POA' || t === 'ZENOWETHU_POA'
+            (t: string) => t === 'ID' || t === 'POA' || t === 'ZENOWETHU_POA' || t === 'COMBINED'
         );
 
         if (hasRelevantDoc) {
