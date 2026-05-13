@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 export const saIdNumber = z
     .string()
+    .trim()
     .min(1, 'ID number is required')
     .max(30, 'ID number too long');
 

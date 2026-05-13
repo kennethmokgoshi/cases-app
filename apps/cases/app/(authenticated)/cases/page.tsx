@@ -187,7 +187,7 @@ function CasesContent() {
         let filtered = [...cases];
 
         if (searchTerm) {
-            const term = searchTerm.toLowerCase();
+            const term = searchTerm.trim().toLowerCase();
             filtered = filtered.filter(c =>
                 c.fileNumber.toLowerCase().includes(term) ||
                 `${c.client.firstName} ${c.client.lastName}`.toLowerCase().includes(term) ||

@@ -246,6 +246,24 @@ export async function POST(request: Request) {
         }
         
         const data = parsed.data;
+        
+        // 0. Check for existing active case for this ID number to prevent duplicates
+        const activeCase = await prisma.case.findFirst({
+            where: {
+                client: { idNumber: data.client.idNumber.trim() },
+                status: { notIn: [...WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED' || s.category === 'LOST').map(s => s.code)] }
+            },
+            select: { fileNumber: true }
+        });
+
+        if (activeCase) {
+            logger.warn(`Blocked duplicate case creation for ID ${data.client.idNumber}. Existing case: ${activeCase.fileNumber}`);
+            return NextResponse.json({ 
+                error: 'Duplicate Case', 
+                message: `An active case (${activeCase.fileNumber}) already exists for this ID number. To prevent duplicates, please search for and update the existing case.` 
+            }, { status: 400 });
+        }
+
         const count = await prisma.case.count();
         const fileNumber = `ZDM-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
         const deadline = calculateSlaDeadline(new Date());
