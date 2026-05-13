@@ -117,12 +117,6 @@ function PartnerNewCaseComponent() {
     const [jointCellNumber, setJointCellNumber] = useState('');
     const [jointEmail, setJointEmail] = useState('');
 
-    useEffect(() => {
-        if (!isDebtReviewSelected(selectedServices) && isJointApplication) {
-            setIsJointApplication(false);
-        }
-    }, [selectedServices, isJointApplication]);
-
     // Duplicate Check State
     const [duplicateError, setDuplicateError] = useState<any | null>(null);
     const [prefixedIdInput, setPrefixedIdInput] = useState('');
@@ -662,54 +656,52 @@ function PartnerNewCaseComponent() {
                             </div>
                         </div>
 
-                        {/* Application Type - Conditionally Rendered */}
-                        {isDebtReviewSelected(selectedServices) && (
-                            <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <label className="block text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-full bg-zeno-cyan text-zeno-navy flex items-center justify-center text-xs font-bold">7</span>
-                                    Application Type <span className="text-red-400">*</span>
-                                </label>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsJointApplication(false)}
-                                        className={`p-5 rounded-xl border-2 transition-all text-left group ${!isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/10 hover:border-white/30'}`}
-                                    >
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-colors ${!isJointApplication ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400 group-hover:bg-gray-700'}`}>
-                                                👤
-                                            </div>
-                                            {!isJointApplication && (
-                                                <span className="bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
-                                                    Selected
-                                                </span>
-                                            )}
+                        {/* Application Type */}
+                        <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <label className="block text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-zeno-cyan text-zeno-navy flex items-center justify-center text-xs font-bold">7</span>
+                                Application Type <span className="text-red-400">*</span>
+                            </label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsJointApplication(false)}
+                                    className={`p-5 rounded-xl border-2 transition-all text-left group ${!isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/10 hover:border-white/30'}`}
+                                >
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-colors ${!isJointApplication ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400 group-hover:bg-gray-700'}`}>
+                                            👤
                                         </div>
-                                        <h3 className="font-bold text-white text-lg">Single Application</h3>
-                                        <p className="text-sm text-gray-400 mt-1">Capture data for one applicant</p>
-                                    </button>
+                                        {!isJointApplication && (
+                                            <span className="bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                                                Selected
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h3 className="font-bold text-white text-lg">Single Application</h3>
+                                    <p className="text-sm text-gray-400 mt-1">Capture data for one applicant</p>
+                                </button>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsJointApplication(true)}
-                                        className={`p-5 rounded-xl border-2 transition-all text-left group ${isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/10 hover:border-white/30'}`}
-                                    >
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-colors ${isJointApplication ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400 group-hover:bg-gray-700'}`}>
-                                                👥
-                                            </div>
-                                            {isJointApplication && (
-                                                <span className="bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
-                                                    Selected
-                                                </span>
-                                            )}
+                                <button
+                                    type="button"
+                                    onClick={() => setIsJointApplication(true)}
+                                    className={`p-5 rounded-xl border-2 transition-all text-left group ${isJointApplication ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-zeno-navy border-white/10 hover:border-white/30'}`}
+                                >
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-colors ${isJointApplication ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400 group-hover:bg-gray-700'}`}>
+                                            👥
                                         </div>
-                                        <h3 className="font-bold text-white text-lg">Joint Application</h3>
-                                        <p className="text-sm text-gray-400 mt-1">Capture data for two applicants (e.g. Spouse)</p>
-                                    </button>
-                                </div>
+                                        {isJointApplication && (
+                                            <span className="bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                                                Selected
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h3 className="font-bold text-white text-lg">Joint Application</h3>
+                                    <p className="text-sm text-gray-400 mt-1">Capture data for two applicants (e.g. Spouse)</p>
+                                </button>
                             </div>
-                        )}
+                        </div>
 
                         {selectedParentId && (
                             <div className="mt-6 p-4 bg-zeno-navy rounded-lg border border-zeno-cyan/30">

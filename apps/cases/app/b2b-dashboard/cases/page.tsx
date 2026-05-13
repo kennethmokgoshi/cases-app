@@ -26,6 +26,10 @@ type CaseType = {
         idNumber: string;
         phone: string;
     };
+    jointClient?: {
+        firstName: string;
+        lastName: string;
+    } | null;
     status: string;
     createdAt: string;
     createdById: string;
@@ -289,9 +293,14 @@ function B2BMyCasesComponent() {
                                         </h3>
                                         <p className="text-sm text-gray-400">{caseItem.fileNumber}</p>
                                     </div>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(caseItem.status)}`}>
-                                        {formatStatus(caseItem.status)}
-                                    </span>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${caseItem.jointClient ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
+                                            {caseItem.jointClient ? 'Joint' : 'Single'}
+                                        </span>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(caseItem.status)}`}>
+                                            {formatStatus(caseItem.status)}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-4 text-sm">

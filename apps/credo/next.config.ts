@@ -32,9 +32,6 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@zenowethu/shared-lib", "@zenowethu/database", "@zenowethu/config", "@zenowethu/ui", "@zenowethu/plan-engine"],
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
-  turbopack: {
-    root: "../../",
-  },
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",

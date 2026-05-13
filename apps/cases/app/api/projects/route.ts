@@ -159,13 +159,13 @@ export async function GET(request: NextRequest) {
                         id: true,
                         name: true,
                         type: true,
-                        parentId: true,
-                        _count: { select: { cases: true } }
+                        parentId: true
                     },
                     orderBy: { name: 'asc' }
                 });
 
-                return NextResponse.json(projects);
+                const projectsWithCounts = await addActiveCaseCounts(projects);
+                return NextResponse.json(projectsWithCounts);
             }
 
             const projects = await prisma.project.findMany({

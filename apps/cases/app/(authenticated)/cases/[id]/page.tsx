@@ -36,8 +36,18 @@ const createLogger = (name: string) => ({
 const isDebtReviewSelected = (servicesJson: string | null) => {
     if (!servicesJson) return false;
     try {
-        const services = JSON.parse(servicesJson) as string[];
-        return services.includes('debt_review_flag_removal') || services.includes('debt_review_application');
+        let services: string[] = [];
+        if (servicesJson.startsWith('[')) {
+            services = JSON.parse(servicesJson);
+        } else {
+            services = servicesJson.split(',').map(s => s.trim());
+        }
+        return services.some(s => 
+            s.toLowerCase().includes('debt review') || 
+            s.toLowerCase().includes('flag removal') ||
+            s === 'debt_review_flag_removal' ||
+            s === 'debt_review_application'
+        );
     } catch {
         return false;
     }
@@ -1612,15 +1622,20 @@ export default function CaseDetailPage() {
                     )}
 
                     {/* Status Badge */}
-                    {caseData?.status && (
-                        <span className={`ml-4 px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${
-                            caseData.status === 'NOT_LINKED' 
-                                ? 'bg-red-500/20 text-red-400 border-red-500/30 shadow-[0_0_8px_rgba(239,68,68,0.3)]' 
-                                : 'bg-zeno-cyan/20 text-zeno-cyan border-zeno-cyan/30'
-                        }`}>
-                            {caseData.status.replace(/_/g, ' ')}
+                    <div className="flex items-center gap-2 ml-4">
+                        <span className={`px-2 py-0.5 rounded-[4px] text-[10px] font-black uppercase tracking-tighter border ${caseData.jointClient ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-gray-500/10 text-gray-500 border-white/5'}`}>
+                            {caseData.jointClient ? 'Joint Application' : 'Single Application'}
                         </span>
-                    )}
+                        {caseData?.status && (
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${
+                                caseData.status === 'NOT_LINKED' 
+                                    ? 'bg-red-500/20 text-red-400 border-red-500/30 shadow-[0_0_8px_rgba(239,68,68,0.3)]' 
+                                    : 'bg-zeno-cyan/20 text-zeno-cyan border-zeno-cyan/30'
+                            }`}>
+                                {caseData.status.replace(/_/g, ' ')}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -2044,8 +2059,8 @@ export default function CaseDetailPage() {
                                         />
                                     </div>
 
-                                     {/* Joint Applicant Section - Restricted to Debt Review */}
-                                     {isDebtReviewSelected(caseData.services) && (
+                                     {/* Joint Applicant Section */}
+                                     {(isDebtReviewSelected(caseData.services) || caseData.jointClient) && (
                                     <div className="pt-4 border-t border-white/5 mt-4">
                                         <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant</h4>
                                         <div className="grid grid-cols-2 gap-3">
@@ -2171,8 +2186,8 @@ export default function CaseDetailPage() {
                                         </div>
                                     )}
 
-                                     {/* Joint Applicant Information (View Mode) - Restricted to Debt Review */}
-                                     {caseData.jointClient && isDebtReviewSelected(caseData.services) && (
+                                     {/* Joint Applicant Information (View Mode) */}
+                                     {caseData.jointClient && (
                                         <div className="pt-4 border-t border-white/5 mt-4">
                                             <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Joint Applicant</h4>
                                             <div className="space-y-3">
@@ -2303,43 +2318,7 @@ export default function CaseDetailPage() {
                         </div>
                     </div>
 
-                    {/* Services Required - Moved to Left Column */}
-                    {caseData && (
-                        <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6 mt-6">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-lg font-semibold text-white">Services Required</h3>
-                                <button
-                                    onClick={() => setIsEditServicesOpen(true)}
-                                    className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                                    title="Edit Services"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {(() => {
-                                    try {
-                                        const services = caseData.services ? JSON.parse(caseData.services) : [];
-                                        if (services.length === 0) {
-                                            return <span className="text-gray-500 italic text-sm">No services selected</span>;
-                                        }
-                                        return services.map((serviceId: string) => (
-                                            <span
-                                                key={serviceId}
-                                                className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                                            >
-                                                {SERVICES_MAP[serviceId] || serviceId}
-                                            </span>
-                                        ));
-                                    } catch {
-                                        return <span className="text-gray-400">Unable to load services</span>;
-                                    }
-                                })()}
-                            </div>
-                        </div>
-                    )}
+
 
 
 

@@ -12,7 +12,21 @@ export const ProjectTreeItem = ({ project, depth = 0, autoExpandDate, yearContex
     const { data: session } = useSession();
     const searchParams = useSearchParams();
     const projectIdParam = searchParams.get('projectId');
-    const activeProjectId = projectIdParam;
+    const yearParam = searchParams.get('year');
+    const monthParam = searchParams.get('month');
+    const sourceParam = searchParams.get('source');
+
+    // Determine if this item is active
+    let isActive = false;
+    if (project.type === 'V_YEAR') {
+        isActive = yearParam === project.name && !monthParam;
+    } else if (project.type === 'V_MONTH') {
+        isActive = yearParam === yearContext && monthParam === project.name && !sourceParam;
+    } else if (project.type === 'V_SOURCE') {
+        isActive = sourceParam === project.name;
+    } else {
+        isActive = projectIdParam === project.id;
+    }
 
     const hasChildren = project.children && project.children.length > 0;
     const paddingLeft = depth * 12 + 12; // indentation
@@ -33,7 +47,7 @@ export const ProjectTreeItem = ({ project, depth = 0, autoExpandDate, yearContex
     return (
         <li>
             <div
-                className={`flex items-center justify-between py-2 pr-3 rounded-lg transition-colors group ${activeProjectId === project.id ? 'bg-zeno-cyan/10 text-zeno-cyan' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                className={`flex items-center justify-between py-2 pr-3 rounded-lg transition-colors group ${isActive ? 'bg-zeno-cyan/10 text-zeno-cyan' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                 style={{ paddingLeft: `${paddingLeft}px` }}
             >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -122,7 +136,7 @@ export const ProjectTreeItem = ({ project, depth = 0, autoExpandDate, yearContex
                     )}
                 </div>
                 {totalCases > 0 ? (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded transition-colors shrink-0 ${activeProjectId === project.id ? 'bg-zeno-cyan/20 text-zeno-cyan' : 'bg-zeno-blue text-gray-300 group-hover:bg-zeno-cyan/20 group-hover:text-zeno-cyan'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded transition-colors shrink-0 ${isActive ? 'bg-zeno-cyan/20 text-zeno-cyan' : 'bg-zeno-blue text-gray-300 group-hover:bg-zeno-cyan/20 group-hover:text-zeno-cyan'}`}>
                         {totalCases}
                     </span>
                 ) : null}

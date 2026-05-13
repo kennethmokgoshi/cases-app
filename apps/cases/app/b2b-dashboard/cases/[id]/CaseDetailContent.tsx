@@ -32,6 +32,13 @@ type CaseDetail = {
         phone: string;
         email: string | null;
     };
+    jointClient?: {
+        firstName: string;
+        lastName: string;
+        idNumber: string;
+        phone: string;
+        email: string | null;
+    } | null;
     services: string | null;
     partnerName: string | null;
     partnerBranch: string | null;
@@ -468,7 +475,16 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
         );
     }
 
-    const services = caseData.services ? JSON.parse(caseData.services) : [];
+    const services = (() => {
+        if (!caseData.services) return [];
+        try {
+            const parsed = JSON.parse(caseData.services);
+            return Array.isArray(parsed) ? parsed : [parsed];
+        } catch (e) {
+            // Handle legacy comma-separated string
+            return caseData.services.split(',').filter(Boolean);
+        }
+    })();
 
     return (
         <div className="min-h-screen bg-zeno-dark p-6">
@@ -490,8 +506,13 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                             <h1 className="text-3xl font-bold text-white mb-2">{caseData.fileNumber}</h1>
                             <p className="text-gray-400">Case Details</p>
                         </div>
-                        <div className={`px-4 py-2 rounded-lg border ${getStatusColor(caseData.status)}`}>
-                            {formatStatus(caseData.status)}
+                        <div className="flex items-center gap-3">
+                            <div className={`px-4 py-2 rounded-lg border ${caseData.jointClient ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'} text-sm font-bold uppercase tracking-wider`}>
+                                {caseData.jointClient ? 'Joint Application' : 'Single Application'}
+                            </div>
+                            <div className={`px-4 py-2 rounded-lg border ${getStatusColor(caseData.status)}`}>
+                                {formatStatus(caseData.status)}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -507,7 +528,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                             <svg className="w-6 h-6 mr-2 text-zeno-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                             </svg>
-                            Client Information
+                            {caseData.jointClient ? 'Primary Applicant' : 'Client Information'}
                         </h2>
                         <div className="space-y-3">
                             <div>
@@ -529,6 +550,35 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                                 </div>
                             )}
                         </div>
+
+                        {caseData.jointClient && (
+                            <div className="mt-8 pt-6 border-t border-white/5 space-y-3">
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center">
+                                    <svg className="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                    </svg>
+                                    Joint Applicant
+                                </h3>
+                                <div>
+                                    <label className="text-sm text-gray-400">Full Name</label>
+                                    <p className="text-white font-medium">{caseData.jointClient.firstName} {caseData.jointClient.lastName}</p>
+                                </div>
+                                <div>
+                                    <label className="text-sm text-gray-400">ID Number</label>
+                                    <p className="text-white font-medium">{caseData.jointClient.idNumber}</p>
+                                </div>
+                                <div>
+                                    <label className="text-sm text-gray-400">Phone</label>
+                                    <p className="text-white font-medium">{caseData.jointClient.phone}</p>
+                                </div>
+                                {caseData.jointClient.email && (
+                                    <div>
+                                        <label className="text-sm text-gray-400">Email</label>
+                                        <p className="text-white font-medium">{caseData.jointClient.email}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Case Information */}

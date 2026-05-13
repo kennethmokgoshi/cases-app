@@ -58,7 +58,7 @@ export async function GET(request: Request) {
         const urlYear = searchParams.get('year');
         const urlMonth = searchParams.get('month');
         const status = searchParams.get('status');
-        const take = parseInt(searchParams.get('take') || '50');
+        const take = parseInt(searchParams.get('take') || '10000');
         const skip = parseInt(searchParams.get('skip') || '0');
 
         // Load hierarchy once
@@ -154,13 +154,16 @@ export async function GET(request: Request) {
             return NextResponse.json(data);
         }
 
-        const cases = await prisma.case.findMany({
-            where,
-            include: { client: true, projects: { include: { project: true } } },
-            take: isNaN(take) ? 50 : take,
-            skip: isNaN(skip) ? 0 : skip,
-            orderBy: { createdAt: 'desc' }
-        });
+        const [cases, totalCount] = await Promise.all([
+            prisma.case.findMany({
+                where,
+                include: { client: true, jointClient: true, projects: { include: { project: true } } },
+                take: isNaN(take) ? 10000 : take,
+                skip: isNaN(skip) ? 0 : skip,
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.case.count({ where })
+        ]);
 
         // 5. Defensive Enrichment
         const enriched = cases.map(c => {
@@ -186,7 +189,13 @@ export async function GET(request: Request) {
             value
         );
 
-        return new Response(json, { status: 200, headers: { 'Content-Type': 'application/json' } });
+        return new Response(json, { 
+            status: 200, 
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Total-Count': totalCount.toString()
+            } 
+        });
     } catch (err: any) {
         const errorDetail = {
             message: err?.message || 'No message',
@@ -258,7 +267,7 @@ export async function POST(request: Request) {
                 client: { connect: { id: client.id } },
                 jointClient: jointClientId ? { connect: { id: jointClientId } } : undefined,
                 referrerId: data.referrerId,
-                services: Array.isArray(data.services) ? data.services.join(',') : data.services,
+                services: data.services ? JSON.stringify(data.services) : null,
                 projects: {
                     create: [
                         { projectId: data.projectId, isPrimary: true },

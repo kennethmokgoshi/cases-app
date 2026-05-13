@@ -130,7 +130,8 @@ export async function GET(request: Request) {
             overdueCases,
             myCasesCount,
             assignedCasesCount,
-            pendingInvoicesCount
+            pendingInvoicesCount,
+            allCasesDates
         ] = await Promise.all([
             safeQuery(() => prisma.case.count({ where: projectFilter }), 'totalActiveCases'),
             safeQuery(() => prisma.case.count({
@@ -166,8 +167,29 @@ export async function GET(request: Request) {
                         ...projectFilter
                     }
                 });
-            }, 'pendingInvoices')
+            }, 'pendingInvoices'),
+            prisma.case.findMany({
+                where: projectFilter,
+                select: { createdAt: true }
+            })
         ]);
+
+        // Aggregate timeline counts in memory
+        const timeline: Record<string, { total: number; months: Record<string, number> }> = {};
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        (allCasesDates as any[]).forEach((c: { createdAt: Date }) => {
+            if (!c.createdAt) return;
+            const date = new Date(c.createdAt);
+            const year = date.getFullYear().toString();
+            const month = monthNames[date.getMonth()];
+            
+            if (!timeline[year]) timeline[year] = { total: 0, months: {} };
+            if (!timeline[year].months[month]) timeline[year].months[month] = 0;
+            
+            timeline[year].total++;
+            timeline[year].months[month]++;
+        });
 
         const slaBreaches = overdueCases;
         const pendingInvoices = (pendingInvoicesCount || 0) * 350;
@@ -179,7 +201,9 @@ export async function GET(request: Request) {
             slaBreaches,
             overdueCases,
             myCasesCount,
-            assignedCasesCount });
+            assignedCasesCount,
+            timeline
+        });
     } catch (error: any) {
         logger.error('Error fetching dashboard stats:', error);
         return NextResponse.json({

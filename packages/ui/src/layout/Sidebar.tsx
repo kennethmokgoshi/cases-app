@@ -156,10 +156,12 @@ function SidebarInner() {
                 ]);
 
                 let totalCasesOverride = 0;
+                let timelineStats = undefined;
                 if (statsResult.status === 'fulfilled' && statsResult.value.ok) {
                     try {
                         const stats = await statsResult.value.json();
                         totalCasesOverride = stats.totalActiveCases || stats.totalCases || 0;
+                        timelineStats = stats.timeline;
                     } catch (e) {
                         logger.error('Failed to parse stats', e);
                     }
@@ -178,7 +180,7 @@ function SidebarInner() {
                 if (Array.isArray(data)) {
                     let tree: ProjectNode[] = [];
                     if (viewMode === 'TIME') {
-                        tree = buildTimeTree(data);
+                        tree = buildTimeTree(data, timelineStats);
                     } else {
                         tree = buildSourceTree(data);
                     }

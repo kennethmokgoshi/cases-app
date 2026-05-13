@@ -42,6 +42,11 @@ type Case = {
         email: string | null;
         phone: string | null;
     };
+    jointClient?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+    } | null;
     category: string;
     projects: {
         projectId: string;
@@ -80,6 +85,7 @@ function CasesContent() {
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalResults, setTotalResults] = useState(0);
     const ITEMS_PER_PAGE = 20;
 
     // Filters
@@ -121,6 +127,7 @@ function CasesContent() {
                 if (urlFilter) params.set('filter', urlFilter);
                 if (urlSearch) params.set('search', urlSearch);
                 if (urlProjectId) params.set('projectId', urlProjectId);
+                if (!params.has('take')) params.set('take', '10000');
                 if (urlYear) params.set('year', urlYear);
                 if (urlMonth) params.set('month', urlMonth);
                 if (urlSource) params.set('source', urlSource);
@@ -132,9 +139,16 @@ function CasesContent() {
                 const res = await fetch(`/api/cases?${params.toString()}`, { cache: 'no-store' });
                 const data = await res.json();
                 
+                // Handle total count from header
+                const total = res.headers.get('X-Total-Count');
+                if (total) {
+                    setTotalResults(parseInt(total));
+                }
+
                 if (res.ok && Array.isArray(data)) {
                     setCases(data);
                     setFilteredCases(data);
+                    if (!total) setTotalResults(data.length);
                 } else {
                     setCases([]);
                     setFilteredCases([]);
@@ -248,7 +262,11 @@ function CasesContent() {
                             projectName || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.fullPath || cases[0]?.projects?.find(p => p.project.id === urlProjectId)?.project.name || 'Project Cases'
                         ) : 'All Cases'}
                     </h1>
-                    <p className="text-gray-400 text-sm">Showing {paginated.length} of {filteredCases.length}</p>
+                    <p className="text-gray-400 text-sm">
+                        Showing {Math.min(filteredCases.length, (currentPage - 1) * ITEMS_PER_PAGE + 1)}
+                        - {Math.min(filteredCases.length, currentPage * ITEMS_PER_PAGE)}
+                        of {searchTerm ? filteredCases.length : totalResults}
+                    </p>
                 </div>
                 <Link href="/cases/new" className="px-6 py-3 bg-zeno-cyan text-zeno-navy font-bold rounded-lg hover:bg-cyan-400 transition-all">+ New Case</Link>
             </div>
@@ -324,8 +342,24 @@ function CasesContent() {
                                 return (
                                     <tr key={c.id} className="hover:bg-white/5 transition-colors">
                                         <td className="px-4 py-4 text-gray-500 font-mono text-xs">{(currentPage-1)*ITEMS_PER_PAGE + i + 1}</td>
-                                        <td className="px-4 py-4 text-zeno-cyan font-bold"><Link href={`/cases/${c.id}`}>{c.fileNumber}</Link></td>
-                                        <td className="px-4 py-4">{c.client.firstName} {c.client.lastName}</td>
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-2">
+                                                <Link href={`/cases/${c.id}`} className="text-zeno-cyan font-bold">{c.fileNumber}</Link>
+                                                <span className={`px-1.5 py-0.5 rounded-[4px] text-[9px] font-black uppercase tracking-tighter border ${c.jointClient ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-gray-500/10 text-gray-500 border-white/5'}`}>
+                                                    {c.jointClient ? 'Joint' : 'Single'}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-white">{c.client.firstName} {c.client.lastName}</span>
+                                                {c.jointClient && (
+                                                    <span className="text-[10px] text-indigo-400/80 font-bold uppercase tracking-tight">
+                                                        Joint: {c.jointClient.firstName} {c.jointClient.lastName}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-4 py-4">
                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                                 c.status === 'COMPLETED' ? 'bg-green-500/20 text-green-300' : 
