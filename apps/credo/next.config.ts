@@ -33,6 +33,9 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@zenowethu/shared-lib", "@zenowethu/database", "@zenowethu/config", "@zenowethu/ui", "@zenowethu/plan-engine"],
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
   experimental: {
+    turbo: {
+      root: '../../',
+    },
     serverActions: {
       bodySizeLimit: "10mb",
     },
