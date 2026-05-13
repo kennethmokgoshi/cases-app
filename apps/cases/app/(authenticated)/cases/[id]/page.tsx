@@ -3139,9 +3139,11 @@ export default function CaseDetailPage() {
                                                 {/* Document readiness check — shown when transfer has NOT been requested yet */}
                                                 {(() => {
                                                     const s = (caseData.dhsStatus || '').toUpperCase().replace(/[\s_]+/g, '');
-                                                    if (s !== '' && s !== 'NOTREQUESTED') return null;
+                                                    // Only show if status is empty (new) or contains "NOTREQUESTED" (linked)
+                                                    if (s !== '' && !s.includes('NOTREQUESTED')) return null;
+
                                                     const hasId = caseData.documents.some(d => d.type === 'ID');
-                                                    const hasPoa = caseData.documents.some(d => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
+                                                    const hasPoa = caseData.documents.some(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
                                                     const hasCombined = caseData.documents.some(d => d.type === 'COMBINED' || d.type === 'OTHER');
 
                                                     if (hasId && hasPoa) {
@@ -3149,9 +3151,9 @@ export default function CaseDetailPage() {
                                                             <div className="mt-3 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
                                                                 <div className="flex items-center gap-2 mb-1.5">
                                                                     <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
-                                                                    <span className="text-xs text-green-400 font-semibold">Ready to Request Transfer</span>
+                                                                    <span className="text-xs text-green-400 font-semibold">Ready to Request via DHS</span>
                                                                 </div>
-                                                                <p className="text-[11px] text-gray-400 mb-2">ID and POA documents are present.</p>
+                                                                <p className="text-[11px] text-gray-400 mb-2">ID and Zenowethu POA documents are present.</p>
                                                                 <button
                                                                     onClick={handleRequestTransfer}
                                                                     disabled={requestingTransfer}
@@ -3160,7 +3162,7 @@ export default function CaseDetailPage() {
                                                                     {requestingTransfer ? (
                                                                         <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />Requesting...</>
                                                                     ) : (
-                                                                        <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>Request Transfer</>
+                                                                        <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>Request via DHS</>
                                                                     )}
                                                                 </button>
                                                             </div>
@@ -3169,7 +3171,7 @@ export default function CaseDetailPage() {
 
                                                     const missingDocs: string[] = [];
                                                     if (!hasId) missingDocs.push('ID');
-                                                    if (!hasPoa) missingDocs.push('POA');
+                                                    if (!hasPoa) missingDocs.push('Zenowethu POA');
 
                                                     return (
                                                         <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
@@ -3193,13 +3195,13 @@ export default function CaseDetailPage() {
                                                                     </label>
                                                                 )}
                                                                 {!hasPoa && (
-                                                                    <label className={`px-2.5 py-1.5 bg-amber-600/20 border border-amber-600/40 text-amber-300 rounded text-xs cursor-pointer hover:bg-amber-600/30 transition-all flex items-center gap-1.5 ${uploadingDocType === 'POA' ? 'opacity-70 pointer-events-none' : ''}`}>
-                                                                        {uploadingDocType === 'POA'
+                                                                    <label className={`px-2.5 py-1.5 bg-amber-600/20 border border-amber-600/40 text-amber-300 rounded text-xs cursor-pointer hover:bg-amber-600/30 transition-all flex items-center gap-1.5 ${uploadingDocType === 'ZENOWETHU_POA' || uploadingDocType === 'POA' ? 'opacity-70 pointer-events-none' : ''}`}>
+                                                                        {uploadingDocType === 'ZENOWETHU_POA' || uploadingDocType === 'POA'
                                                                             ? <span className="w-3 h-3 border border-amber-300 border-t-transparent rounded-full animate-spin inline-block" />
                                                                             : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                                                                         }
-                                                                        Upload POA
-                                                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => { if (e.target.files?.[0]) handleDocUpload(e.target.files[0], 'POA'); e.target.value = ''; }} />
+                                                                        Upload Zenowethu POA
+                                                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => { if (e.target.files?.[0]) handleDocUpload(e.target.files[0], 'ZENOWETHU_POA'); e.target.value = ''; }} />
                                                                     </label>
                                                                 )}
                                                                 <label className={`px-2.5 py-1.5 bg-purple-600/20 border border-purple-600/40 text-purple-300 rounded text-xs cursor-pointer hover:bg-purple-600/30 transition-all flex items-center gap-1.5 ${uploadingDocType === 'COMBINED' ? 'opacity-70 pointer-events-none' : ''}`}>
@@ -3211,10 +3213,11 @@ export default function CaseDetailPage() {
                                                                     <input type="file" className="hidden" accept=".pdf" onChange={(e) => { if (e.target.files?.[0]) handleDocUpload(e.target.files[0], 'COMBINED'); e.target.value = ''; }} />
                                                                 </label>
                                                             </div>
-                                                            <p className="text-[10px] text-gray-500 mt-2">Upload a combined PDF — the system will extract the ID and POA automatically.</p>
+                                                            <p className="text-[10px] text-gray-500 mt-2">Upload a combined PDF — the system will extract the ID and Zenowethu POA automatically.</p>
                                                         </div>
                                                     );
                                                 })()}
+
                                             </div>
                                         </div>
                                     </div>

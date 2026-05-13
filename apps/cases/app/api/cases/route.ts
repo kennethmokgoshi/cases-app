@@ -58,6 +58,7 @@ export async function GET(request: Request) {
         const urlYear = searchParams.get('year');
         const urlMonth = searchParams.get('month');
         const status = searchParams.get('status');
+        const filter = searchParams.get('filter'); // overdue, my-cases, new-leads
         const take = parseInt(searchParams.get('take') || '10000');
         const skip = parseInt(searchParams.get('skip') || '0');
 
@@ -131,14 +132,28 @@ export async function GET(request: Request) {
             // Project-based scoping (for restricted users) is already in 'where.projects' from step 1.
         }
 
-        // 3. Status
-        if (status && status !== 'ALL') {
-            const completedCodes = WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED').map(s => s.code);
-            const beginningCodes = WORKFLOW_STATUSES.filter(s => s.category === 'BEGINNING').map(s => s.code);
-            const overdueCodes = WORKFLOW_STATUSES.filter(s => s.category === 'OVERDUE').map(s => s.code);
-            const lostCodes = WORKFLOW_STATUSES.filter(s => s.category === 'LOST').map(s => s.code);
-            const payingCodes = WORKFLOW_STATUSES.filter(s => s.category === 'PAYING').map(s => s.code);
+        // 3. Status & Quick Filters
+        const completedCodes = WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED').map(s => s.code);
+        const beginningCodes = WORKFLOW_STATUSES.filter(s => s.category === 'BEGINNING').map(s => s.code);
+        const overdueCodes = WORKFLOW_STATUSES.filter(s => s.category === 'OVERDUE').map(s => s.code);
+        const lostCodes = WORKFLOW_STATUSES.filter(s => s.category === 'LOST').map(s => s.code);
+        const payingCodes = WORKFLOW_STATUSES.filter(s => s.category === 'PAYING').map(s => s.code);
 
+        if (filter === 'overdue') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            where.nextUpdate = { lt: today };
+            where.status = { notIn: [...completedCodes, ...lostCodes] };
+        } else if (filter === 'my-cases') {
+            where.OR = [
+                { createdById: session.user.id },
+                { assignedToId: session.user.id }
+            ];
+        } else if (filter === 'new-leads') {
+            where.status = 'NEW_LEAD';
+        }
+
+        if (status && status !== 'ALL') {
             if (status === 'active') {
                 where.status = { notIn: [...completedCodes, ...lostCodes] };
             } else if (status === 'pending') {
