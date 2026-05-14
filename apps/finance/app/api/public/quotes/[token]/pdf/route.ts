@@ -8,8 +8,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const invoice = await prisma.invoice.findUnique({
     where:   { publicToken: token },
     include: {
-      client: { select: { firstName: true, lastName: true, email: true } },
-      case:   { select: { fileNumber: true } },
+      client:      { select: { firstName: true, lastName: true, email: true } },
+      case:        { select: { fileNumber: true } },
+      bankAccount: { select: { bankName: true, accountName: true, accountNumber: true, branchCode: true } },
     },
   })
 
@@ -31,6 +32,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     total:          Number(invoice.total),
     notes:          invoice.notes ?? undefined,
     reference:      invoice.reference ?? undefined,
+    bankingDetails: invoice.bankAccount ? {
+      bankName:      invoice.bankAccount.bankName,
+      accountHolder: invoice.bankAccount.accountName,
+      accountNumber: invoice.bankAccount.accountNumber,
+      branchCode:    invoice.bankAccount.branchCode ?? undefined,
+    } : null,
   })
 
   return new Response(Buffer.from(pdfBytes), {

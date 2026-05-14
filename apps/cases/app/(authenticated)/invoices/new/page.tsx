@@ -299,7 +299,9 @@ export default function NewInvoicePage() {
             <div>
               <h2 className="text-sm font-semibold text-white">Banking Details</h2>
               <p className="text-xs text-gray-500 mt-0.5">Select a bank account to include payment instructions on the PDF</p>
-                        {!bankAccountsLoaded ? (
+            </div>
+
+            {!bankAccountsLoaded ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-400" />
             ) : bankAccounts.length === 0 ? (
               <p className="text-xs text-gray-500 italic">No bank accounts configured. Admins can send without banking details.</p>
@@ -310,8 +312,8 @@ export default function NewInvoicePage() {
                 </div>
                 {bankAccounts.find(a => a.isDefault) ? (
                   <div className="text-sm">
-                    <p className="text-white font-medium">{bankAccounts.find(a => a.isDefault).bankName}</p>
-                    <p className="text-gray-500 text-xs">{bankAccounts.find(a => a.isDefault).accountNumber}</p>
+                    <p className="text-white font-medium">{bankAccounts.find(a => a.isDefault)!.bankName}</p>
+                    <p className="text-gray-500 text-xs">{bankAccounts.find(a => a.isDefault)!.accountNumber}</p>
                   </div>
                 ) : (
                   <p className="text-gray-500 text-xs italic">Loading default banking details…</p>
@@ -362,6 +364,7 @@ export default function NewInvoicePage() {
                       <p className="text-xs text-gray-500">{bank.accountName} · {bank.accountNumber}</p>
                     </div>
                   </label>
+                ))}
               </div>
             )}
           </div>

@@ -321,26 +321,27 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   }
  
   cursor -= 12
-  page.drawRectangle({ x: TOTALS_X - 10, y: cursor - 8, width: RIGHT - TOTALS_X + 10, height: 28, color: PRIMARY_NAVY })
+  page.drawRectangle({ x: TOTALS_X - 10, y: cursor - 8, width: RIGHT - TOTALS_X + 10, height: 32, color: PRIMARY_NAVY })
   const finalTotalY = cursor + 5
-  drawText(page, 'TOTAL DUE (INCL)', TOTALS_X, finalTotalY, bold, 9, WHITE)
-  drawRightAlignedText(page, formatZAR(data.total), RIGHT - 10, finalTotalY, bold, 12, ACCENT_EMERALD)
+  drawText(page, 'TOTAL DUE (INCL)', TOTALS_X, finalTotalY, bold, 11, WHITE)
+  drawRightAlignedText(page, formatZAR(data.total), RIGHT - 10, finalTotalY, bold, 18, ACCENT_EMERALD)
 
-  cursor -= 50
+  cursor -= 60
 
   // 5. BANKING
   if (data.bankAccount) {
-    page.drawRectangle({ x: MARGIN, y: cursor - 70, width: 280, height: 70, color: LIGHT_GRAY, borderColor: BORDER_COLOR, borderWidth: 0.5 })
-    page.drawLine({ start: { x: MARGIN, y: cursor }, end: { x: MARGIN + 280, y: cursor }, thickness: 2, color: ACCENT_EMERALD })
+    // Increased height to 90 for better visibility
+    page.drawRectangle({ x: MARGIN, y: cursor - 90, width: 320, height: 90, color: LIGHT_GRAY, borderColor: BORDER_COLOR, borderWidth: 0.5 })
+    page.drawLine({ start: { x: MARGIN, y: cursor }, end: { x: MARGIN + 320, y: cursor }, thickness: 2.5, color: ACCENT_EMERALD })
     
-    let bankY = cursor - 15
-    drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, bankY, bold, 8, ACCENT_EMERALD)
-    bankY -= 15
+    let bankY = cursor - 18
+    drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 12, bankY, bold, 11, ACCENT_EMERALD)
+    bankY -= 22
     const bank = data.bankAccount
-    drawText(page, `${bank.bankName} - ${bank.accountNumber}`, MARGIN + 10, bankY, bold, 9, DARK_TEXT)
-    bankY -= 12
-    drawText(page, `Acc Name: ${bank.accountName}`, MARGIN + 10, bankY, regular, 8, GRAY_TEXT)
-    if (bank.branchCode) drawText(page, `Branch: ${bank.branchCode}`, MARGIN + 160, bankY, regular, 8, GRAY_TEXT)
+    drawText(page, `${bank.bankName} - ${bank.accountNumber}`, MARGIN + 12, bankY, bold, 14, DARK_TEXT)
+    bankY -= 18
+    drawText(page, `Acc Name: ${bank.accountName}`, MARGIN + 12, bankY, regular, 10, GRAY_TEXT)
+    if (bank.branchCode) drawText(page, `Branch: ${bank.branchCode}`, MARGIN + 12, bankY - 14, regular, 10, GRAY_TEXT)
   }
 
   return pdfDoc.save()

@@ -381,27 +381,27 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // Total (Premium Card Style)
   page.drawRectangle({
     x: TOTALS_X - 10, y: cursor - 8,
-    width: RIGHT - TOTALS_X + 10, height: 28,
+    width: RIGHT - TOTALS_X + 10, height: 32,
     color: PRIMARY_NAVY })
  
   const finalTotalY = cursor + 5
-  drawText(page, 'TOTAL DUE (INCL)', TOTALS_X, finalTotalY, bold, 9, WHITE)
-  drawRightAlignedText(page, formatZAR(data.total), RIGHT - 10, finalTotalY, bold, 12, ACCENT_EMERALD)
+  drawText(page, 'TOTAL DUE (INCL)', TOTALS_X, finalTotalY, bold, 11, WHITE)
+  drawRightAlignedText(page, formatZAR(data.total), RIGHT - 10, finalTotalY, bold, 18, ACCENT_EMERALD)
 
-  cursor -= 40
+  cursor -= 50
 
   // ─────────────────────────────────────────────
   // 5. PAYMENT INSTRUCTIONS
   // ─────────────────────────────────────────────
   if (data.bankingDetails !== null) {
     page.drawRectangle({
-      x: MARGIN, y: cursor - 82,
-      width: CONTENT_W, height: 82,
+      x: MARGIN, y: cursor - 110,
+      width: CONTENT_W, height: 110,
       color: rgb(0.97, 0.97, 0.97),
       borderColor: rgb(0.88, 0.88, 0.88),
       borderWidth: 0.5 })
 
-    drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, cursor - 14, bold, 8, GRAY_TEXT)
+    drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, cursor - 18, bold, 11, ACCENT_EMERALD)
 
     const bankName    = data.bankingDetails?.bankName    || process.env.COMPANY_BANK_NAME    || 'First National Bank'
     const accountName = data.bankingDetails?.accountHolder || 'Zenowethu Debt Management (Pty) Ltd'
@@ -416,14 +416,14 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
       ['Reference',       data.invoiceNumber],
     ]
 
-    let bankY = cursor - 28
+    let bankY = cursor - 38
     for (const [label, value] of bankRows) {
-      drawText(page, `${label}:`, MARGIN + 10, bankY, bold, 8, GRAY_TEXT)
-      drawText(page, value, MARGIN + 90, bankY, regular, 8, DARK_TEXT)
-      bankY -= 13
+      drawText(page, `${label}:`, MARGIN + 10, bankY, bold, 10, GRAY_TEXT)
+      drawText(page, value, MARGIN + 110, bankY, (label === 'Account Number' || label === 'Bank') ? bold : regular, 11, DARK_TEXT)
+      bankY -= 15
     }
 
-    cursor -= 90
+    cursor -= 120
   }
 
   // ─────────────────────────────────────────────
