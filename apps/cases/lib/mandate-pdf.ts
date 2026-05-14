@@ -1,6 +1,6 @@
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib'
-import fs from 'fs'
-import path from 'path'
+import fs, { existsSync, readFileSync } from 'fs'
+import path, { join } from 'path'
 
 // ---- Types ----
 
@@ -39,6 +39,19 @@ export interface MandateData {
 
 // ---- Helpers ----
 
+async function loadLetterhead(): Promise<Uint8Array> {
+  const candidates = [
+    join(process.cwd(), 'public', 'templates', 'poa', 'Letterhead.pdf'),
+    join(process.cwd(), '..', '..', 'letterhead', 'Letter head Clean.pdf'),
+    join(process.cwd(), 'apps', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
+    'C:\\Visual Studio Code\\06 March 2026\\letterhead\\Letter head Clean.pdf',
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return readFileSync(p);
+  }
+  throw new Error(`Letterhead not found. Searched:\n${candidates.join('\n')}`);
+}
+
 function drawText(
   page: PDFPage,
   text: string,
@@ -72,13 +85,10 @@ export async function generateMandatePdf(data: MandateData): Promise<Uint8Array>
 
   // 1. EMBED LETTERHEAD
   try {
-    const letterheadPath = path.join(process.cwd(), '../../letterhead/Letter head Clean.pdf')
-    if (fs.existsSync(letterheadPath)) {
-      const letterheadBytes = fs.readFileSync(letterheadPath)
-      const letterheadDoc = await PDFDocument.load(letterheadBytes)
-      const [embeddedPage] = await pdfDoc.embedPdf(letterheadDoc)
-      page.drawPage(embeddedPage, { x: 0, y: 0, width: W, height: H })
-    }
+    const lhBytes = await loadLetterhead()
+    const lhDoc = await PDFDocument.load(lhBytes, { ignoreEncryption: true })
+    const [embeddedPage] = await pdfDoc.embedPdf(lhDoc)
+    page.drawPage(embeddedPage, { x: 0, y: 0, width: W, height: H })
   } catch (e) {
     console.error('Mandate letterhead load failed:', e)
   }
@@ -196,13 +206,10 @@ export async function generateMandatePdf(data: MandateData): Promise<Uint8Array>
   
   // Apply letterhead to page 2 too
   try {
-    const letterheadPath = path.join(process.cwd(), '../../letterhead/Letter head Clean.pdf')
-    if (fs.existsSync(letterheadPath)) {
-      const letterheadBytes = fs.readFileSync(letterheadPath)
-      const letterheadDoc = await PDFDocument.load(letterheadBytes)
-      const [embeddedPage] = await pdfDoc.embedPdf(letterheadDoc)
-      page2.drawPage(embeddedPage, { x: 0, y: 0, width: W, height: H })
-    }
+    const lhBytes = await loadLetterhead()
+    const lhDoc = await PDFDocument.load(lhBytes, { ignoreEncryption: true })
+    const [embeddedPage] = await pdfDoc.embedPdf(lhDoc)
+    page2.drawPage(embeddedPage, { x: 0, y: 0, width: W, height: H })
   } catch (e) {
     console.error('Mandate page 2 letterhead load failed:', e)
   }

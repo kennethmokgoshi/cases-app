@@ -115,16 +115,43 @@ export async function POST(request: Request) {
 
   // Admin is the only user who can send a quote with or without banking details
   const isAdmin = session.user.isAdmin === true;
-  const isExecutive = session.user.isExecutive === true;
-  const isFinance = (session.user as any)?.role?.toUpperCase() === 'FINANCE';
+  const isExecutive = session.user.isExecutive === true || (session.user as any)?.role?.toUpperCase() === 'EXECUTIVE';
+  const isFinance = (session.user as any)?.role?.toUpperCase() === 'FINANCE' || (session.user as any)?.userType?.toUpperCase() === 'FINANCE';
 
   // Restriction: Only Admin, Executive, or Finance can create an INVOICE
   if (input.type === 'INVOICE' && !isAdmin && !isExecutive && !isFinance) {
     return NextResponse.json({ error: 'You are not permitted to create invoices. Please use Quotation mode.' }, { status: 403 })
   }
 
-  if (!input.bankAccountId && !isAdmin) {
-    return NextResponse.json({ error: 'Banking details are required for this document.' }, { status: 422 })
+  let finalBankAccountId = input.bankAccountId;
+
+  // Staff and Managers can only send quote with default banking details
+  if (!isAdmin && !isExecutive && !isFinance) {
+    const defaultBank = await prisma.bankAccount.findFirst({ where: { isDefault: true, isActive: true } });
+    if (!defaultBank) {
+      return NextResponse.json({ error: 'No default banking details found. Please contact an administrator.' }, { status: 500 });
+    }
+    
+    if (input.bankAccountId && input.bankAccountId !== defaultBank.id) {
+        return NextResponse.json({ error: 'Staff and Managers can only use default banking details.' }, { status: 403 });
+    }
+    finalBankAccountId = defaultBank.id;
+  } else {
+    // Executive, Finance and Admin can change banking details
+    // (They use whatever is in input.bankAccountId)
+    
+    // Admin can send Quotes without banking details
+    if (input.type === 'QUOTE' && !input.bankAccountId && isAdmin) {
+      finalBankAccountId = undefined;
+    } else if (!input.bankAccountId) {
+      // If not Admin (or Admin creating Invoice), default to default bank if available
+      const defaultBank = await prisma.bankAccount.findFirst({ where: { isDefault: true, isActive: true } });
+      if (defaultBank) finalBankAccountId = defaultBank.id;
+    }
+  }
+
+  if (input.type === 'INVOICE' && !finalBankAccountId) {
+    return NextResponse.json({ error: 'Banking details are required for Invoices.' }, { status: 422 })
   }
 
   const subtotal  = input.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
@@ -156,7 +183,7 @@ export async function POST(request: Request) {
           dueAt:       new Date(input.dueAt),
           notes:       input.notes     ?? null,
           reference:   input.reference ?? null,
-          bankAccountId: input.bankAccountId ?? null,
+          bankAccountId: finalBankAccountId ?? null,
           createdById: session.user.id,
           status:      'DRAFT',
         },

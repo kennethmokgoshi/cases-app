@@ -105,10 +105,12 @@ export async function POST(
       total:             Number(invoice.total),
       notes:             invoice.notes     ?? undefined,
       reference:         invoice.reference ?? undefined,
-      bankName:          invoice.bankAccount?.bankName,
-      bankAccountName:   invoice.bankAccount?.accountName,
-      bankAccountNumber: invoice.bankAccount?.accountNumber,
-      branchCode:        invoice.bankAccount?.branchCode ?? undefined,
+      bankAccount: invoice.bankAccount ? {
+        bankName:      invoice.bankAccount.bankName,
+        accountName:   invoice.bankAccount.accountName,
+        accountNumber: invoice.bankAccount.accountNumber,
+        branchCode:    invoice.bankAccount.branchCode ?? undefined,
+      } : undefined
     }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)

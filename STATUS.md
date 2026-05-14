@@ -1,9 +1,17 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-05 (Fix: document extraction returning 0 documents)
+> Last updated: 2026-05-14 (Fix: DHS Status Check Enhancements)
 
 ---
+
+### DHS Status Check Enhancements (2026-05-14)
+- [x] **`packages/shared-lib/src/dhs/extraction.ts`** — Updated `getDeclineReason` to be case-insensitive and more robust. It now correctly identifies and clicks "declined ( click to view reason)" links to extract the underlying reason via both DOM scraping and network interception.
+- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — Updated `PENDING` logic to handle the 30-day window. It now extracts the day count from the counter (e.g. "10 Day(s)") and sets the `nextUpdate` to **+2 working days** for any request pending for 5+ days, ensuring frequent monitoring as requested.
+- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — Updated system comments to reflect that "Auto Transferred" is now rare, while still maintaining the logic to handle it if it occurs.
+
+---
+
 
 ### Fix: Document Extraction Returning 0 Documents (2026-05-05)
 - [x] **`packages/shared-lib/src/openai/pdf-process.ts`** — `identifyDocumentPages` now always adds page images to the identification request, not only as a fallback when text extraction fails. For scanned/image-based PDFs that extract partial garbage text, `!extractedText` was `false` so images were never sent — AI received insufficient text and returned an empty `documents` array. Graceful degradation: if image conversion fails but text is available, continues text-only.

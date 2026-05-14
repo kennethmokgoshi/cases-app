@@ -25,7 +25,9 @@ export async function GET(
       where: { id },
       include: {
         client: { select: { firstName: true, lastName: true, email: true } },
-        case:   { select: { fileNumber: true } } } })
+        case:   { select: { fileNumber: true } },
+        bankAccount: true,
+      } })
 
     if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -74,7 +76,14 @@ export async function GET(
       vatAmount:       Number(invoice.vatAmount),
       total:           Number(invoice.total),
       notes:           invoice.notes ?? undefined,
-      reference:       invoice.reference ?? undefined })
+      reference:       invoice.reference ?? undefined,
+      bankingDetails:  invoice.bankAccount ? {
+        bankName:      invoice.bankAccount.bankName,
+        accountHolder: invoice.bankAccount.accountName,
+        accountNumber: invoice.bankAccount.accountNumber,
+        branchCode:    invoice.bankAccount.branchCode ?? undefined,
+      } : (invoice.type === 'QUOTE' ? null : undefined)
+    })
 
     // Cache to disk — TODO: replace with object storage in production
     const relPath  = path.join('uploads', 'invoices', `${invoice.invoiceNumber}.pdf`)

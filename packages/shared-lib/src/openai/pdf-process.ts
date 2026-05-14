@@ -209,7 +209,7 @@ export async function splitPdf(
 ): Promise<Array<{ type: string; base64Pdf: string; pageCount: number }>> {
     try {
         const pdfBytes = Buffer.from(base64Pdf, 'base64');
-        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
         const totalPages = pdfDoc.getPageCount();
 
         const results: Array<{ type: string; base64Pdf: string; pageCount: number }> = [];
@@ -268,7 +268,7 @@ export async function mergeDocuments(documents: Array<{ base64: string; type: st
     for (const doc of sortedDocs) {
         try {
             const pdfBytes = Buffer.from(doc.base64, 'base64');
-            const sourcePdf = await PDFDocument.load(pdfBytes);
+            const sourcePdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
             const pages = await mergedPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
             pages.forEach(page => mergedPdf.addPage(page));
         } catch (e) {

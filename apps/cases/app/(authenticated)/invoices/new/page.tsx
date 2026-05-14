@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { SERVICES_MAP } from '@zenowethu/config'
+import { useSession } from '@zenowethu/ui'
 
 type AccountLine = {
   creditor:     string
@@ -68,6 +69,12 @@ export default function NewInvoicePage() {
   const [bankAccounts, setBankAccounts]         = useState<BankAccount[]>([])
   const [selectedBankId, setSelectedBankId]     = useState<string>('')
   const [bankAccountsLoaded, setBankAccountsLoaded] = useState(false)
+
+  const { data: session } = useSession()
+  const isAdmin = session?.user?.isAdmin === true;
+  const isExecutive = (session?.user as any)?.isExecutive === true || (session?.user as any)?.role?.toUpperCase() === 'EXECUTIVE';
+  const isFinance = (session?.user as any)?.role?.toUpperCase() === 'FINANCE' || (session?.user as any)?.userType?.toUpperCase() === 'FINANCE';
+  const canChangeBank = isAdmin || isExecutive || isFinance;
 
   // Account lines
   const [lines, setLines] = useState<AccountLine[]>([emptyLine()])
@@ -292,31 +299,45 @@ export default function NewInvoicePage() {
             <div>
               <h2 className="text-sm font-semibold text-white">Banking Details</h2>
               <p className="text-xs text-gray-500 mt-0.5">Select a bank account to include payment instructions on the PDF</p>
-            </div>
-
-            {!bankAccountsLoaded ? (
+                        {!bankAccountsLoaded ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-400" />
             ) : bankAccounts.length === 0 ? (
               <p className="text-xs text-gray-500 italic">No bank accounts configured. Admins can send without banking details.</p>
+            ) : !canChangeBank ? (
+              <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/10 uppercase tracking-wider">Default Account</span>
+                </div>
+                {bankAccounts.find(a => a.isDefault) ? (
+                  <div className="text-sm">
+                    <p className="text-white font-medium">{bankAccounts.find(a => a.isDefault).bankName}</p>
+                    <p className="text-gray-500 text-xs">{bankAccounts.find(a => a.isDefault).accountNumber}</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-xs italic">Loading default banking details…</p>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
-                {/* No banking option */}
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  !selectedBankId ? 'border-amber-500/40 bg-amber-500/5' : 'border-white/10 hover:border-white/20'
-                }`}>
-                  <input
-                    type="radio"
-                    name="bankAccount"
-                    value=""
-                    checked={!selectedBankId}
-                    onChange={() => setSelectedBankId('')}
-                    className="accent-amber-400"
-                  />
-                  <div>
-                    <p className="text-sm text-amber-300 font-medium">No banking details</p>
-                    <p className="text-xs text-gray-500">Admins can still send — uses company default banking info</p>
-                  </div>
-                </label>
+                {/* No banking option (Admin Only) */}
+                {isAdmin && (
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    !selectedBankId ? 'border-amber-500/40 bg-amber-500/5' : 'border-white/10 hover:border-white/20'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="bankAccount"
+                      value=""
+                      checked={!selectedBankId}
+                      onChange={() => setSelectedBankId('')}
+                      className="accent-amber-400"
+                    />
+                    <div>
+                      <p className="text-sm text-amber-300 font-medium">No banking details</p>
+                      <p className="text-xs text-gray-500">Omit payment instructions from the generated PDF</p>
+                    </div>
+                  </label>
+                )}
 
                 {/* Bank account options */}
                 {bankAccounts.map(bank => (
@@ -339,14 +360,15 @@ export default function NewInvoicePage() {
                         )}
                       </div>
                       <p className="text-xs text-gray-500">{bank.accountName} · {bank.accountNumber}</p>
-                      {bank.branchCode && <p className="text-xs text-gray-600">Branch: {bank.branchCode}</p>}
                     </div>
                   </label>
                 ))}
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Selected bank summary */}
+        {/* Selected bank summary */}
             {selectedBank && (
               <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-xs text-gray-400 space-y-1">
                 <p><span className="text-gray-500">Bank:</span> <span className="text-white">{selectedBank.bankName}</span></p>

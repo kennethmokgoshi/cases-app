@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { SERVICES_MAP } from '@zenowethu/config'
+import { useSession } from '@zenowethu/ui'
 
 type AccountLine = {
   creditor:     string
@@ -57,6 +58,16 @@ export default function NewInvoicePage() {
   // Account lines
   const [lines, setLines] = useState<AccountLine[]>([emptyLine()])
 
+  // Banking
+  const { data: session } = useSession()
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])
+  const [bankAccountId, setBankAccountId] = useState('')
+
+  const isAdmin = session?.user?.isAdmin === true;
+  const isExecutive = (session?.user as any)?.isExecutive === true || (session?.user as any)?.role?.toUpperCase() === 'EXECUTIVE';
+  const isFinance = (session?.user as any)?.role?.toUpperCase() === 'FINANCE' || (session?.user as any)?.userType?.toUpperCase() === 'FINANCE';
+  const canChangeBank = isAdmin || isExecutive || isFinance;
+
   const subtotal  = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0)
   const vatAmount = subtotal * vatRate
   const total     = subtotal + vatAmount
@@ -73,6 +84,18 @@ export default function NewInvoicePage() {
     }, 300)
     return () => clearTimeout(t)
   }, [clientSearch])
+
+  // Fetch bank accounts
+  useEffect(() => {
+    fetch('/api/finance/bank-accounts')
+      .then(res => res.json())
+      .then(data => {
+        setBankAccounts(data.accounts || [])
+        const def = data.accounts?.find((a: any) => a.isDefault)
+        if (def) setBankAccountId(def.id)
+      })
+      .catch(err => console.error('Failed to fetch bank accounts', err))
+  }, [])
 
   const selectClient = (c: ClientResult) => {
     setSelectedClient(c)
@@ -122,6 +145,7 @@ export default function NewInvoicePage() {
           vatRate,
           reference: reference.trim() || undefined,
           notes:     notes.trim()     || undefined,
+          bankAccountId: bankAccountId || undefined,
         }),
       })
 
@@ -254,6 +278,49 @@ export default function NewInvoicePage() {
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 resize-none"
               />
             </div>
+          </div>
+
+          {/* Banking Details */}
+          <div className="bg-[var(--color-bg-secondary)] rounded-xl border border-white/5 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Banking Details</h2>
+              {!canChangeBank && (
+                <span className="text-[10px] bg-white/5 text-gray-500 px-2 py-0.5 rounded border border-white/5 uppercase tracking-wider">Default Only</span>
+              )}
+            </div>
+
+            {canChangeBank ? (
+              <div className="space-y-3">
+                <select
+                  value={bankAccountId}
+                  onChange={e => setBankAccountId(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                >
+                  <option value="" className="bg-gray-900">
+                    {isAdmin && docType === 'QUOTE' ? '— No banking details —' : 'Select Bank Account…'}
+                  </option>
+                  {bankAccounts.map(a => (
+                    <option key={a.id} value={a.id} className="bg-gray-900">
+                      {a.bankName} - {a.accountNumber} {a.isDefault ? '(Default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-500 italic">
+                  {isAdmin ? 'As an Administrator, you can omit banking details on quotations.' : 'You have permission to select a non-default bank account.'}
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+                {bankAccounts.find(a => a.id === bankAccountId) ? (
+                  <div className="text-sm">
+                    <p className="text-white font-medium">{bankAccounts.find(a => a.id === bankAccountId).bankName}</p>
+                    <p className="text-gray-500 text-xs">{bankAccounts.find(a => a.id === bankAccountId).accountNumber}</p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-xs italic">Loading default banking details…</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

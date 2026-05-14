@@ -356,10 +356,12 @@ class GhlBaseProvider {
         message: string,
         type: 'SMS' | 'Email' | 'WhatsApp',
         subject?: string,
+        attachments?: string[],
     ): Promise<{ success: boolean; messageId?: string; error?: string }> {
         try {
-            const body: Record<string, string> = { type, contactId, message };
+            const body: Record<string, any> = { type, contactId, message };
             if (type === 'Email' && subject) body.subject = subject;
+            if (type === 'Email' && attachments?.length) body.attachments = attachments;
 
             const response = await fetch(`${GHL_BASE_URL}/conversations/messages`, {
                 method: 'POST',
@@ -395,7 +397,12 @@ export class GhlEmailProvider extends GhlBaseProvider implements EmailProvider {
     async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         const contactId = await this.ensureContactId(to, 'email');
         if (!contactId) return { success: false, error: 'Contact could not be found or created', provider: this.name };
-        const res = await this.sendMessage(contactId, htmlBody, 'Email', subject);
+        
+        // GHL Email API expects attachment URLs. If we have local buffers, we'd need to upload them first.
+        // For now, we assume the attachments passed are already URLs or we handle URL extraction.
+        const attachmentUrls = options?.attachments?.map(a => typeof a.content === 'string' ? a.content : '').filter(url => url.startsWith('http') || url.startsWith('/'));
+
+        const res = await this.sendMessage(contactId, htmlBody, 'Email', subject, attachmentUrls);
         return { ...res, contactId, provider: this.name };
     }
 }

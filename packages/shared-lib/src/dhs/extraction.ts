@@ -200,16 +200,12 @@ export async function getDeclineReason(page: Page): Promise<string | undefined> 
         logger.info('Looking for element with text "Declined (Click to View Reason)" using XPath...');
 
         const clickResult = await page.evaluate(() => {
-            // Use XPath to find any element containing this exact text
-            const xpathResult = document.evaluate(
-                '//*[contains(text(), "Declined") and contains(text(), "Click to View Reason")]',
-                document,
-                null,
-                XPathResult.FIRST_ORDERED_NODE_TYPE,
-                null
-            );
-
-            const element = xpathResult.singleNodeValue as HTMLElement | null;
+            // Find all elements and check their text content case-insensitively
+            const allElements = Array.from(document.querySelectorAll('a, span, td, div'));
+            const element = allElements.find(el => {
+                const text = (el.textContent || '').toLowerCase().trim();
+                return text.includes('declined') && text.includes('click to view reason');
+            }) as HTMLElement | null;
 
             if (!element) {
                 return {

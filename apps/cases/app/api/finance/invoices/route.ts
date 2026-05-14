@@ -114,6 +114,38 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data
+
+  const isAdmin = session.user.isAdmin === true;
+  const isExecutive = (session.user as any)?.isExecutive === true || (session.user as any)?.role?.toUpperCase() === 'EXECUTIVE';
+  const isFinance = (session.user as any)?.role?.toUpperCase() === 'FINANCE' || (session.user as any)?.userType?.toUpperCase() === 'FINANCE';
+
+  let finalBankAccountId = input.bankAccountId;
+
+  // Staff and Managers can only send quote with default banking details
+  if (!isAdmin && !isExecutive && !isFinance) {
+    const defaultBank = await prisma.bankAccount.findFirst({ where: { isDefault: true, isActive: true } });
+    if (!defaultBank) {
+      return NextResponse.json({ error: 'No default banking details found. Please contact an administrator.' }, { status: 500 });
+    }
+    
+    if (input.bankAccountId && input.bankAccountId !== defaultBank.id) {
+        return NextResponse.json({ error: 'Staff and Managers can only use default banking details.' }, { status: 403 });
+    }
+    finalBankAccountId = defaultBank.id;
+  } else {
+    // Executive, Finance and Admin can change banking details
+    // Admin can send Quotes without banking details
+    if (input.type === 'QUOTE' && !input.bankAccountId && isAdmin) {
+      finalBankAccountId = undefined;
+    } else if (!input.bankAccountId) {
+      const defaultBank = await prisma.bankAccount.findFirst({ where: { isDefault: true, isActive: true } });
+      if (defaultBank) finalBankAccountId = defaultBank.id;
+    }
+  }
+
+  if (input.type === 'INVOICE' && !finalBankAccountId) {
+    return NextResponse.json({ error: 'Banking details are required for Invoices.' }, { status: 422 })
+  }
   const subtotal  = input.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
   const vatAmount = subtotal * input.vatRate
   const total     = subtotal + vatAmount
@@ -135,7 +167,7 @@ export async function POST(request: Request) {
           clientId:      input.clientId      ?? null,
           caseId:        input.caseId        ?? null,
           projectId:     input.projectId     ?? null,
-          bankAccountId: input.bankAccountId ?? null,
+          bankAccountId: finalBankAccountId  ?? null,
           lineItems:     input.lineItems as Prisma.InputJsonValue,
           subtotal,
           vatRate:       input.vatRate,

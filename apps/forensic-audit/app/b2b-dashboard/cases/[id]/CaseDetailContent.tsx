@@ -254,7 +254,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
         try {
             logger.info(`[SHRINK] Starting compression for ${selectedFile.name}...`);
             const arrayBuffer = await selectedFile.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
 
             // Re-saving with useObjectStreams often significantly reduces size
             const compressedBytes = await pdfDoc.save({
@@ -284,7 +284,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
         try {
             logger.info(`[SPLIT] Starting split for ${selectedFile.name}...`);
             const arrayBuffer = await selectedFile.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
             const pageCount = pdfDoc.getPageCount();
 
             if (pageCount < 2) {

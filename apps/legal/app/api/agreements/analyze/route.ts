@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
         let text = "";
         if (file.type === "application/pdf") {
             const arrayBuffer = await file.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
             // Note: pdf-lib is great for modifying PDFs but basic text extraction is tricky.
             // For a robust prototype without adding heavy deps like pdf.js-dist, we'll try a simple extraction
             // or just assume for the prototype we might need a text-based input or use a clearer extraction method.

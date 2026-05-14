@@ -81,10 +81,12 @@ export async function GET(
       total:             Number(invoice.total),
       notes:             invoice.notes     ?? undefined,
       reference:         invoice.reference ?? undefined,
-      bankName:          invoice.bankAccount?.bankName,
-      bankAccountName:   invoice.bankAccount?.accountName,
-      bankAccountNumber: invoice.bankAccount?.accountNumber,
-      branchCode:        invoice.bankAccount?.branchCode ?? undefined,
+      bankAccount: invoice.bankAccount ? {
+        bankName:      invoice.bankAccount.bankName,
+        accountName:   invoice.bankAccount.accountName,
+        accountNumber: invoice.bankAccount.accountNumber,
+        branchCode:    invoice.bankAccount.branchCode ?? undefined,
+      } : undefined
     })
 
     // Cache to disk

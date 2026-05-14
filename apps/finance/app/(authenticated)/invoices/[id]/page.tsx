@@ -33,6 +33,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       client:    { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true } },
       case:      { select: { fileNumber: true, acquisitionType: true } },
       project:   { select: { id: true, name: true } },
+      bankAccount: true,
       createdBy: { select: { firstName: true, lastName: true } } } })
 
   if (!invoice) notFound()
@@ -138,6 +139,37 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
           )}
         </div>
+      </div>
+
+      {/* Banking Details (if any) */}
+      <div className="bg-[var(--color-bg-secondary)] rounded-xl border border-white/5 p-5 space-y-4">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Banking Details</h2>
+        {invoice.bankAccount ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-gray-500 mb-1">Bank</p>
+              <p className="text-white font-medium">{invoice.bankAccount.bankName}</p>
+            </div>
+            <div>
+              <p className="text-gray-500 mb-1">Account Name</p>
+              <p className="text-white font-medium">{invoice.bankAccount.accountName}</p>
+            </div>
+            <div>
+              <p className="text-gray-500 mb-1">Account Number</p>
+              <p className="text-white font-medium font-mono">{invoice.bankAccount.accountNumber}</p>
+            </div>
+            {invoice.bankAccount.branchCode && (
+              <div>
+                <p className="text-gray-500 mb-1">Branch Code</p>
+                <p className="text-white font-medium">{invoice.bankAccount.branchCode}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-gray-600 text-sm italic">
+            {invoice.type === 'QUOTE' ? 'Banking details omitted from this quotation.' : 'No banking details linked.'}
+          </p>
+        )}
       </div>
 
       {/* Line items */}

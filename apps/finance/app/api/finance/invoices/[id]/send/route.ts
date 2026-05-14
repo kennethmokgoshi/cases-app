@@ -74,6 +74,7 @@ export async function POST(
       include: {
         client: { select: { firstName: true, lastName: true, email: true } },
         case:   { select: { fileNumber: true } },
+        bankAccount: true,
       },
     })
 
@@ -101,7 +102,14 @@ export async function POST(
       vatAmount:      Number(invoice.vatAmount),
       total:          Number(invoice.total),
       notes:          invoice.notes ?? undefined,
-      reference:      invoice.reference ?? undefined }
+      reference:      invoice.reference ?? undefined,
+      bankingDetails: invoice.bankAccount ? {
+        bankName:      invoice.bankAccount.bankName,
+        accountHolder: invoice.bankAccount.accountName,
+        accountNumber: invoice.bankAccount.accountNumber,
+        branchCode:    invoice.bankAccount.branchCode ?? undefined,
+      } : (invoice.type === 'QUOTE' ? null : undefined) // Explicitly null for quotes with no bank account
+    }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)
 

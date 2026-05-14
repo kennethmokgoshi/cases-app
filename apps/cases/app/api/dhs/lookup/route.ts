@@ -189,13 +189,22 @@ export async function POST(request: Request) {
 
                     // Rules 2-7: Pending Status Logic
                     if (result.status === 'PENDING') {
-                        let daysToAdd = 5; // Default for "New" (Rule 3) or Empty (Rule 2)
+                        let daysToAdd = 5; // Default for "New"
                         const counter = result.daysCounter || '';
+                        
+                        // Extract number from counter (e.g. "5 Day(s)")
+                        const dayMatch = counter.match(/(\d+)/);
+                        const dayNum = dayMatch ? parseInt(dayMatch[1]) : 0;
 
-                        if (counter.includes('1 Day')) daysToAdd = 4;      // Rule 4
-                        else if (counter.includes('2 Day')) daysToAdd = 3; // Rule 5
-                        else if (counter.includes('3 Day')) daysToAdd = 2; // Rule 6
-                        else if (counter.includes('4 Day')) daysToAdd = 1; // Rule 7
+                        if (dayNum === 1) daysToAdd = 4;
+                        else if (dayNum === 2) daysToAdd = 3;
+                        else if (dayNum === 3) daysToAdd = 2;
+                        else if (dayNum === 4) daysToAdd = 1;
+                        else if (dayNum >= 5) {
+                            // "On the look out" for files pending up to 30 days
+                            // Check every 2 days instead of waiting a full week
+                            daysToAdd = 2; 
+                        }
 
                         updateData.nextUpdate = addWorkingDays(new Date(), daysToAdd);
                         // Sync workflow status
@@ -217,7 +226,7 @@ export async function POST(request: Request) {
                         updateData.nextUpdate = addWorkingDays(new Date(), 5);
                         // Auto transfer is successful, so we treat it as Accepted via DHS
                         updateData.status = 'ACCEPTED_VIA_DHS';
-                        comments.push('DHS Check: Status is Auto Transferred. Workflow status updated to Accepted via DHS. Project Manager has been notified to proceed with this file.');
+                        comments.push('DHS Check: Status is Auto Transferred. (Note: Auto Transferred is now rare but captured if it occurs). Workflow status updated to Accepted via DHS. Project Manager has been notified.');
                         notifyManager = true;
                     }
 

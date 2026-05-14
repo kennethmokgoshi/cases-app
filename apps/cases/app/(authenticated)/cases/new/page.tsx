@@ -721,7 +721,7 @@ function NewCaseWithAIComponent() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     client: {
-                        firstName: formData.names.split(' ')[0],
+                        firstName: formData.names,
                         lastName: formData.surname,
                         idNumber: formData.idNumber,
                         email: formData.email || null,
@@ -734,7 +734,7 @@ function NewCaseWithAIComponent() {
                         type: formData.category
                     },
                     jointClient: formData.isJointApplication ? {
-                        firstName: formData.jointNames.split(' ')[0],
+                        firstName: formData.jointNames,
                         lastName: formData.jointSurname,
                         idNumber: formData.jointIdNumber,
                         phone: formData.jointCellNumber || null,
@@ -1255,7 +1255,7 @@ function NewCaseWithAIComponent() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     client: {
-                        firstName: formData.names.split(' ')[0], // Simplistic split, maybe user should enter separate? Form has 'names' field.
+                        firstName: formData.names,
                         lastName: formData.surname,
                         idNumber: formData.idNumber,
                         email: clean(formData.email),
@@ -1269,6 +1269,13 @@ function NewCaseWithAIComponent() {
                         netSalary: clean(formData.netSalary),
                         salaryPayDate: clean(formData.salaryPayDate),
                         type: formData.category },
+                    jointClient: formData.isJointApplication ? {
+                        firstName: formData.jointNames,
+                        lastName: formData.jointSurname,
+                        idNumber: formData.jointIdNumber,
+                        phone: clean(formData.jointCellNumber),
+                        email: clean(formData.jointEmail),
+                    } : null,
                     closedAccounts: formData.closedAccounts,
                     openAccounts: formData.openAccounts,
                     prescribedAccounts: formData.prescribedAccounts,
@@ -1708,11 +1715,10 @@ function NewCaseWithAIComponent() {
                                     value={formData.idNumber}
                                     onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
                                     placeholder="0000000000000"
-                                    maxLength={13}
                                     className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none font-mono"
                                 />
-                                {formData.idNumber.length > 0 && formData.idNumber.length !== 13 && (
-                                    <p className="text-xs text-red-400 mt-1">SA ID number must be 13 digits</p>
+                                {formData.idNumber.length > 0 && formData.idNumber.replace(/\s/g, '').length !== 13 && (
+                                    <p className="text-xs text-amber-400 mt-1">SA ID number should be 13 digits (excluding spaces)</p>
                                 )}
                             </div>
                             <div>
@@ -1779,13 +1785,12 @@ function NewCaseWithAIComponent() {
                                     </div>
                                     <div>
                                         <label className="block text-xs text-gray-400 mb-1">ID Number</label>
-                                        <input
-                                            type="text"
-                                            value={formData.jointIdNumber}
-                                            onChange={(e) => setFormData({ ...formData, jointIdNumber: e.target.value })}
-                                            maxLength={13}
-                                            className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none font-mono"
-                                        />
+                                            <input
+                                                type="text"
+                                                value={formData.jointIdNumber}
+                                                onChange={(e) => setFormData({ ...formData, jointIdNumber: e.target.value })}
+                                                className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none font-mono"
+                                            />
                                     </div>
                                     <div>
                                         <label className="block text-xs text-gray-400 mb-1">Cell Number</label>
@@ -2009,8 +2014,8 @@ function NewCaseWithAIComponent() {
                         </button>
                         <button
                             onClick={handleCreateManualCase}
-                            disabled={!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.length !== 13 || submitting}
-                            className={`flex-1 px-8 py-3 rounded-lg font-bold text-white transition-all ${!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.length !== 13 || submitting ? 'bg-gray-700 cursor-not-allowed opacity-50' : 'bg-zeno-cyan hover:bg-cyan-600 shadow-lg shadow-cyan-900/20'}`}
+                            disabled={!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.replace(/\s/g, '').length < 6 || submitting}
+                            className={`flex-1 px-8 py-3 rounded-lg font-bold text-white transition-all ${!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.replace(/\s/g, '').length < 6 || submitting ? 'bg-gray-700 cursor-not-allowed opacity-50' : 'bg-zeno-cyan hover:bg-cyan-600 shadow-lg shadow-cyan-900/20'}`}
                         >
                             {submitting ? 'Creating Case...' : 'Create Case'}
                         </button>
@@ -2678,7 +2683,6 @@ function NewCaseWithAIComponent() {
                                                 type="text"
                                                 value={formData.jointIdNumber}
                                                 onChange={(e) => setFormData({ ...formData, jointIdNumber: e.target.value })}
-                                                maxLength={13}
                                                 className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none font-mono"
                                             />
                                         </div>

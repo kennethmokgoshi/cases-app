@@ -39,15 +39,21 @@ export class GhlService {
 
     private static async handleInboundMessage(payload: Record<string, unknown>) {
         const contact = payload.contact as Record<string, unknown> | undefined;
-        const message = (payload.message ?? payload.body) as string | undefined;
+        const message = ((payload.message ?? payload.body) as string | undefined) || '';
         const contactId = payload.contactId as string | undefined;
         const phone = (payload.phone ?? contact?.phone) as string | undefined;
         const email = (payload.email ?? contact?.email) as string | undefined;
         const channel = (payload.channelType ?? 'SMS') as string;
+        const attachments = (payload.attachments as any[]) || [];
 
-        if (!message || (!phone && !email)) {
-            logger.warn('[GHL Webhook] Missing message or contact info');
+        if (!message && attachments.length === 0) {
+            logger.warn('[GHL Webhook] Missing message and attachments');
             return { success: false, error: 'Incomplete payload' };
+        }
+
+        if (!phone && !email) {
+            logger.warn('[GHL Webhook] Missing contact info');
+            return { success: false, error: 'No phone or email' };
         }
 
         const caseRecord = await prisma.case.findFirst({
@@ -56,6 +62,7 @@ export class GhlService {
                     { client: { phone: phone } },
                     { client: { email: email } },
                     { client: { phone: { endsWith: phone?.slice(-9) } } },
+                    { dcEmail: email },
                 ],
             },
             include: { client: true },
@@ -67,7 +74,7 @@ export class GhlService {
         }
 
         // Persist contactId on the Client if we now know it and didn't before
-        if (contactId && !caseRecord.client.ghlContactId) {
+        if (contactId && !caseRecord.client.ghlContactId && email === caseRecord.client.email) {
             await prisma.client.update({
                 where: { id: caseRecord.client.id },
                 data: { ghlContactId: contactId },
@@ -76,21 +83,43 @@ export class GhlService {
 
         const systemUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
 
+        // Check for specific intents
+        const messageLower = message.toLowerCase();
+        const isFeesOwed = messageLower.includes('fees owed') || messageLower.includes('outstanding fees') || messageLower.includes('pay fees');
+        const isPoP = messageLower.includes('proof of payment') || messageLower.includes('pop') || messageLower.includes('paid');
+
         await prisma.caseComment.create({
             data: {
                 caseId: caseRecord.id,
                 userId: systemUser?.id ?? 'system',
-                content: `[Inbound ${channel}] ${message}`,
+                content: `[Inbound ${channel}] ${message}${attachments.length > 0 ? ` (+ ${attachments.length} attachments)` : ''}`,
                 type: 'GHL',
                 isInternal: false,
-                activityType: 'INBOUND_MESSAGE',
+                activityType: isFeesOwed ? 'REJECTION_FEES_OWED' : isPoP ? 'PROOF_OF_PAYMENT_RECEIVED' : 'INBOUND_MESSAGE',
                 activityData: JSON.stringify({
                     channel,
                     contactId,
                     provider: 'GoHighLevel',
+                    attachments: attachments.map(a => ({ url: a.url, name: a.name, type: a.contentType })),
+                    intent: isFeesOwed ? 'FEES_OWED' : isPoP ? 'POP' : 'GENERAL'
                 }),
             },
         });
+
+        // Trigger Automated Invoicing if fees are owed
+        if (isFeesOwed) {
+            logger.info(`[GHL Webhook] Triggering automated invoice for case ${caseRecord.fileNumber}`);
+            this.triggerInvoiceGeneration(caseRecord.id).catch(err => {
+                logger.error('[GHL Webhook] Invoice generation failed:', err);
+            });
+        }
+
+        // Handle Inbound Attachments (PoP, etc.)
+        if (attachments.length > 0) {
+            // In a real implementation, we would download the files from a.url and save to our storage
+            // and then create Document records. For now, we log them.
+            logger.info(`[GHL Webhook] Received ${attachments.length} attachments for case ${caseRecord.id}`);
+        }
 
         // Notify AI Plan Engine of inbound event
         try {
@@ -101,9 +130,9 @@ export class GhlService {
                 caseId: caseRecord.id,
                 planId: '',
                 eventSource: 'GHL',
-                eventType: channel.toUpperCase().includes('EMAIL') ? 'DOCUMENT_RECEIVED' : 'REPLY_RECEIVED',
-                eventData: { channel, contactId, message, provider: 'GoHighLevel' },
-                description: `Inbound ${channel} from ${caseRecord.client.firstName} ${caseRecord.client.lastName}: "${message.substring(0, 200)}${message.length > 200 ? '...' : ''}"`,
+                eventType: isPoP ? 'PAYMENT_RECEIVED' : channel.toUpperCase().includes('EMAIL') ? 'DOCUMENT_RECEIVED' : 'REPLY_RECEIVED',
+                eventData: { channel, contactId, message, attachments, provider: 'GoHighLevel' },
+                description: `Inbound ${channel} from ${email === caseRecord.dcEmail ? 'Debt Counsellor' : 'Client'}: "${message.substring(0, 200)}"`,
             });
         } catch (err) {
             logger.warn('[GHL Webhook] Plan event notification failed (non-critical):', err);
@@ -238,40 +267,43 @@ export class GhlService {
         channel: 'SMS' | 'EMAIL' | 'WHATSAPP',
         message: string,
         subject?: string,
+        recipient?: string,
+        attachments?: string[],
     ): Promise<GhlSendResult> {
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
             include: { client: true },
         });
-
+ 
         if (!caseRecord) throw new Error(`Case not found: ${caseId}`);
-
+ 
         const { client } = caseRecord;
-
+ 
         const ghl = await getGHLCredentials();
         if (!ghl.apiKey || !ghl.locationId) {
             throw new Error('GHL not configured: missing apiKey or locationId');
         }
-
+ 
         // Determine the recipient address for this channel
-        const to =
+        const to = recipient ?? (
             channel === 'EMAIL'
                 ? client.email
-                : (client.whatsappNumber ?? client.phone);
-
+                : (client.whatsappNumber ?? client.phone)
+        );
+ 
         if (!to) {
             const missing = channel === 'EMAIL' ? 'email' : 'phone/whatsappNumber';
-            throw new Error(`Client ${client.id} has no ${missing} — cannot send ${channel}`);
+            throw new Error(`Recipient has no ${missing} — cannot send ${channel}`);
         }
-
+ 
         // Format SA numbers: 0821234567 → +27821234567
         const formattedTo =
             channel !== 'EMAIL' && to.startsWith('0')
                 ? '+27' + to.substring(1)
                 : to;
-
+ 
         let result: GhlSendResult;
-
+ 
         try {
             if (channel === 'SMS') {
                 const provider = new GhlSmsProvider(ghl.apiKey, ghl.locationId);
@@ -279,16 +311,23 @@ export class GhlService {
                 result = { ...res, channel, recipient: formattedTo };
             } else if (channel === 'EMAIL') {
                 const provider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
-                const res = await provider.send(formattedTo, subject ?? 'Message from Zenowethu Debt Counsellors', message);
+                const res = await provider.send(
+                    formattedTo, 
+                    subject ?? 'Message from Zenowethu Debt Counsellors', 
+                    message, 
+                    undefined, 
+                    { attachments: attachments?.map(url => ({ filename: url.split('/').pop() || 'attachment', content: url })) }
+                );
                 result = { ...res, channel, recipient: formattedTo };
             } else {
                 const provider = new GhlWhatsAppProvider(ghl.apiKey, ghl.locationId);
                 const res = await provider.send(formattedTo, message);
                 result = { ...res, channel, recipient: formattedTo };
             }
-
+ 
             // Persist the GHL contactId on the Client so future sends skip the lookup
-            if (result.contactId && !client.ghlContactId) {
+            // Only do this if we were sending to the client directly
+            if (!recipient && result.contactId && !client.ghlContactId) {
                 await prisma.client.update({
                     where: { id: client.id },
                     data: { ghlContactId: result.contactId },
@@ -399,5 +438,141 @@ export class GhlService {
             logger.error('[GHL Service] applyTags error:', err);
             return { success: false, error: message };
         }
+    }
+
+    /**
+     * Send specific documents from a case to a recipient via GHL.
+     * @param caseId The ID of the case
+     * @param types Array of document types to send (e.g. ['ID', 'POA'])
+     * @param recipient Optional recipient email. If not provided, defaults to the case's Debt Counsellor email.
+     * @param subject Optional email subject.
+     * @param body Optional email body message.
+     */
+    static async sendDocuments(
+        caseId: string,
+        types: string[],
+        recipient?: string,
+        subject?: string,
+        body?: string,
+    ): Promise<GhlSendResult> {
+        const caseRecord = await prisma.case.findUnique({
+            where: { id: caseId },
+            include: { documents: true },
+        });
+
+        if (!caseRecord) throw new Error(`Case not found: ${caseId}`);
+
+        // Resolve recipient
+        const to = recipient || caseRecord.dcEmail;
+        if (!to) {
+            throw new Error(`No recipient provided and no Debt Counsellor email found for case ${caseId}`);
+        }
+
+        // Find relevant documents
+        const docs = caseRecord.documents.filter(d => types.includes(d.type));
+        if (docs.length === 0) {
+            return { success: false, error: `No documents of type [${types.join(', ')}] found for case ${caseId}`, channel: 'EMAIL', recipient: to };
+        }
+
+        // Generate public URLs (assuming BASE_URL is configured or using relative paths if GHL supports it)
+        // Note: GHL needs absolute URLs.
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://cases.zenowethu.co.za';
+        const attachmentUrls = docs.map(d => `${baseUrl}${d.fileUrl}`);
+
+        const messageBody = body || `Please find the requested documents (${types.join(', ')}) attached for case ${caseRecord.fileNumber}.`;
+        const emailSubject = subject || `Documents for ${caseRecord.fileNumber}`;
+
+        return this.sendMessage(caseId, 'EMAIL', messageBody, emailSubject, to, attachmentUrls);
+    }
+
+    /**
+     * Automatically generates an invoice for a case when fees are owed.
+     */
+    static async triggerInvoiceGeneration(caseId: string) {
+        const caseRecord = await prisma.case.findUnique({
+            where: { id: caseId },
+            include: { client: true },
+        });
+
+        if (!caseRecord) return;
+
+        // Check if a draft invoice already exists for this case to avoid duplicates
+        const existingInvoice = await prisma.invoice.findFirst({
+            where: { caseId, status: 'DRAFT' },
+        });
+
+        if (existingInvoice) {
+            logger.info(`[GHL Service] Draft invoice already exists for case ${caseId}`);
+            return;
+        }
+
+        const year = new Date().getFullYear();
+        const count = await prisma.invoice.count({
+            where: { invoiceNumber: { startsWith: `INV-${year}-` } }
+        });
+        const seq = String(count + 1).padStart(4, '0');
+        const invoiceNumber = `INV-${year}-${seq}`;
+
+        // Standard Fee Clearance Line Item
+        const lineItems = [
+            {
+                description: 'Debt Review Fee Clearance / Archive Retrieval Fee',
+                quantity: 1,
+                unitPrice: 550, // Standard fee
+            }
+        ];
+
+        const subtotal = 550;
+        const vatRate = 0.15;
+        const vatAmount = subtotal * vatRate;
+        const total = subtotal + vatAmount;
+
+        const invoice = await prisma.invoice.create({
+            data: {
+                invoiceNumber,
+                clientId: caseRecord.clientId,
+                caseId: caseRecord.id,
+                lineItems: lineItems as any,
+                subtotal,
+                vatRate,
+                vatAmount,
+                total,
+                status: 'DRAFT',
+                dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+                notes: 'Generated automatically following Debt Counsellor request for fee clearance.',
+                publicToken: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
+            }
+        });
+
+        logger.info(`[GHL Service] Created invoice ${invoice.invoiceNumber} for case ${caseRecord.id}`);
+
+        // Notify client
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cases.zenowethu.co.za';
+        const invoiceUrl = `${baseUrl}/finance/invoices/public/${invoice.publicToken}`;
+        
+        await this.sendMessage(
+            caseId, 
+            'EMAIL', 
+            `Hello ${caseRecord.client.firstName},\n\nThe Debt Counsellor has requested fee clearance before they can release your file. We have generated an invoice for the retrieval fee.\n\nYou can view and pay your invoice here: ${invoiceUrl}\n\nPlease send us the proof of payment once settled so we can proceed with your application.`,
+            'Action Required: Fee Clearance Invoice'
+        );
+    }
+
+    /**
+     * Specifically handles the request for a file from a Debt Counsellor by sending the signed POA and ID.
+     */
+    static async requestFileFromDC(caseId: string) {
+        const caseRecord = await prisma.case.findUnique({
+            where: { id: caseId },
+            include: { client: true },
+        });
+
+        if (!caseRecord) throw new Error(`Case not found: ${caseId}`);
+
+        const subject = `File Request: ${caseRecord.client.firstName} ${caseRecord.client.lastName} (${caseRecord.client.idNumber})`;
+        const body = `Dear Debt Counsellor,\n\nPlease find attached the signed Power of Attorney and ID copy for our client, ${caseRecord.client.firstName} ${caseRecord.client.lastName}.\n\nWe kindly request that you provide us with the latest 17.W and any relevant court orders or certificates for this client.\n\nRegards,\nZenowethu Debt Management`;
+
+        // Send both ID and POA (and ZENOWETHU_POA if it exists)
+        return this.sendDocuments(caseId, ['ID', 'POA', 'ZENOWETHU_POA'], undefined, subject, body);
     }
 }

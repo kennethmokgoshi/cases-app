@@ -1,6 +1,6 @@
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib'
-import fs from 'fs'
-import path from 'path'
+import fs, { existsSync, readFileSync } from 'fs'
+import path, { join } from 'path'
 
 // ---- Types ----
 
@@ -61,6 +61,19 @@ const WHITE = rgb(1, 1, 1)
 const LIGHT_ROW = rgb(0.97, 0.97, 0.98)
 
 // ---- Helpers ----
+
+async function loadLetterhead(): Promise<Uint8Array> {
+  const candidates = [
+    join(process.cwd(), 'public', 'templates', 'poa', 'Letterhead.pdf'),
+    join(process.cwd(), '..', '..', 'letterhead', 'Letter head Clean.pdf'),
+    join(process.cwd(), 'apps', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
+    'C:\\Visual Studio Code\\06 March 2026\\letterhead\\Letter head Clean.pdf',
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return readFileSync(p);
+  }
+  throw new Error(`Letterhead not found. Searched:\n${candidates.join('\n')}`);
+}
 
 function formatZAR(amount: number): string {
   return new Intl.NumberFormat('en-ZA', {
@@ -144,13 +157,10 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // 0. EMBED LETTERHEAD
   let letterheadPage;
   try {
-    const letterheadPath = path.join(process.cwd(), '../../letterhead/Letter head Clean.pdf')
-    if (fs.existsSync(letterheadPath)) {
-      const letterheadBytes = fs.readFileSync(letterheadPath)
-      const letterheadDoc = await PDFDocument.load(letterheadBytes)
-      const [embeddedPage] = await pdfDoc.embedPdf(letterheadDoc)
-      letterheadPage = embeddedPage
-    }
+    const lhBytes = await loadLetterhead()
+    const lhDoc = await PDFDocument.load(lhBytes, { ignoreEncryption: true })
+    const [embeddedPage] = await pdfDoc.embedPdf(lhDoc)
+    letterheadPage = embeddedPage
   } catch (e) {
     console.error('Letterhead load failed:', e)
   }
