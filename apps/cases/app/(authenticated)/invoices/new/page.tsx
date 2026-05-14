@@ -362,22 +362,19 @@ export default function NewInvoicePage() {
                       <p className="text-xs text-gray-500">{bank.accountName} · {bank.accountNumber}</p>
                     </div>
                   </label>
-                ))}
               </div>
             )}
           </div>
-        </div>
 
-        {/* Selected bank summary */}
-            {selectedBank && (
-              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-xs text-gray-400 space-y-1">
-                <p><span className="text-gray-500">Bank:</span> <span className="text-white">{selectedBank.bankName}</span></p>
-                <p><span className="text-gray-500">Account:</span> <span className="text-white">{selectedBank.accountName}</span></p>
-                <p><span className="text-gray-500">Number:</span> <span className="text-white font-mono">{selectedBank.accountNumber}</span></p>
-                {selectedBank.branchCode && <p><span className="text-gray-500">Branch:</span> <span className="text-white">{selectedBank.branchCode}</span></p>}
-              </div>
-            )}
-          </div>
+          {/* Selected bank summary */}
+          {selectedBank && (
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-xs text-gray-400 space-y-1">
+              <p><span className="text-gray-500">Bank:</span> <span className="text-white">{selectedBank.bankName}</span></p>
+              <p><span className="text-gray-500">Account:</span> <span className="text-white">{selectedBank.accountName}</span></p>
+              <p><span className="text-gray-500">Number:</span> <span className="text-white font-mono">{selectedBank.accountNumber}</span></p>
+              {selectedBank.branchCode && <p><span className="text-gray-500">Branch:</span> <span className="text-white">{selectedBank.branchCode}</span></p>}
+            </div>
+          )}
         </div>
 
         {/* RIGHT — Account lines + Totals */}
