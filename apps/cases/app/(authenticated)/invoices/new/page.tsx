@@ -361,7 +361,7 @@ export default function NewInvoicePage() {
                           <span className="text-xs bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">Default</span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">{bank.accountName} · {bank.accountNumber}</p>
+                      <p className="text-xs text-gray-500">{bank.accountName} - {bank.accountNumber}</p>
                     </div>
                   </label>
                 ))}

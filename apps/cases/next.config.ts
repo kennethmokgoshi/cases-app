@@ -26,9 +26,6 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@zenowethu/ui', '@zenowethu/shared-lib', '@zenowethu/plan-engine'],
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream', 'puppeteer', 'puppeteer-core', 'pdfjs-dist', 'googleapis', 'google-auth-library'],
   experimental: {
-    turbopack: {
-      root: '../../',
-    },
     serverActions: {
       bodySizeLimit: '50mb'
     }
