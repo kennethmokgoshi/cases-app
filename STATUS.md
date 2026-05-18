@@ -1,7 +1,33 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-18 (DHS Email Attachments & Preferred DC Email)
+> Last updated: 2026-05-18 (AI Auto-Reply & Soft-Delete Trash Management)
+
+---
+
+### Case Soft-Delete & Trash Management (2026-05-18)
+- [x] **`packages/database/prisma/schema.prisma`** — Added `isDeleted` and `deletedAt` fields to the `Case` model for soft-deletion capability.
+- [x] **`packages/database/prisma/migrations/20260518_add_case_soft_delete/migration.sql`** — Created database migration for soft-deleting cases.
+- [x] **`apps/cases/app/api/cases/route.ts` & `search/route.ts`** — Updated GET and search handlers to exclude soft-deleted cases (`isDeleted: false` by default).
+- [x] **`apps/cases/app/api/cases/[id]/route.ts`** — Updated PATCH handler to support setting soft-delete flags, and added safety checks.
+- [x] **`apps/cases/app/api/admin/trash/route.ts`** — New API endpoint to list all soft-deleted cases, or permanently purge them.
+- [x] **`apps/cases/app/api/cases/[id]/restore/route.ts`** — New API endpoint to restore soft-deleted cases.
+- [x] **`apps/cases/app/(authenticated)/admin/trash/page.tsx`** — New administrative dashboard to view, restore, and permanently purge soft-deleted cases (Trash).
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — Enhanced case detail action bar with "Delete Case" support for administrators.
+
+---
+
+### GHL AI Auto-Reply for Inbound Messages (2026-05-18)
+- [x] **`packages/shared-lib/src/ai/auto-reply.ts`** — New module using `gpt-4o-mini` to generate context-aware replies to inbound messages from clients or debt counsellors. Features:
+  - Channel-aware: SMS ≤160 chars, WhatsApp ≤400 chars, Email full body + subject line
+  - Sender-aware: warm tone for clients, formal tone for debt counsellors
+  - AI decides `shouldSend: true/false` — declines to reply for legal/complex queries
+  - Falls back gracefully on any OpenAI error (no auto-reply sent)
+- [x] **`packages/shared-lib/src/integrations/ghl-service.ts`** — Wired auto-reply into `handleInboundMessage()`:
+  - Fires only for `GENERAL` intent (skips PoP and fees-owed handlers)
+  - Non-blocking (`catch` prevents any auto-reply failure from crashing the webhook)
+  - `sendAutoReply()` private method fetches recent case comments for AI context, sends reply via `sendManualMessage()`, and logs as an internal `AUTO_REPLY` comment on the case
+- [x] **`packages/shared-lib/src/ai/auto-reply.test.ts`** — 11 tests covering happy path, shouldSend=false, SMS truncation, OpenAI errors, null response, invalid response shape, and custom company config. All 200 shared-lib tests green.
 
 ---
 

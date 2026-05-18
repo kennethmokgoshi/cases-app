@@ -287,6 +287,9 @@ export default function CaseDetailPage() {
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+    const [deleteCountdown, setDeleteCountdown] = useState(0);
+    const [deleteCountdownActive, setDeleteCountdownActive] = useState(false);
     // DHS automation states
     const [dhsLoading, setDhsLoading] = useState(false);
     const [checkRequestLoading, setCheckRequestLoading] = useState(false);
@@ -1322,6 +1325,16 @@ export default function CaseDetailPage() {
     const handleDelete = async () => {
         if (!caseData || !isAdmin) return;
         setDeleting(true);
+
+        // Capture redirect destination before deletion
+        const statusObj = WORKFLOW_STATUSES.find(s => s.code === caseData.status);
+        let redirectTo = '/cases';
+        if (caseData.status === 'NEW_LEAD') {
+            redirectTo = '/cases?filter=new-leads';
+        } else if (statusObj?.category === 'OVERDUE') {
+            redirectTo = '/cases?filter=overdue';
+        }
+
         try {
             const res = await fetch(`/api/cases/${params.id}`, {
                 method: 'DELETE'
@@ -1332,8 +1345,7 @@ export default function CaseDetailPage() {
                 throw new Error(error.error || 'Failed to delete case');
             }
 
-            // Redirect to cases list after successful deletion
-            router.push('/cases');
+            router.push(redirectTo);
         } catch (error) {
             log.error({ err: error }, 'Failed to delete case', error);
             alert(error instanceof Error ? error.message : 'Failed to delete case. Please try again.');
@@ -1342,6 +1354,13 @@ export default function CaseDetailPage() {
             setDeleting(false);
         }
     };
+
+    // Countdown timer for delete confirmation
+    useEffect(() => {
+        if (!deleteCountdownActive || deleteCountdown <= 0) return;
+        const timer = setTimeout(() => setDeleteCountdown(prev => prev - 1), 1000);
+        return () => clearTimeout(timer);
+    }, [deleteCountdownActive, deleteCountdown]);
 
     // DHS Lookup - Check transfer status
     const handleNCTLookup = async () => {
@@ -1737,7 +1756,12 @@ export default function CaseDetailPage() {
 
                             {isAdmin && (
                                 <button
-                                    onClick={() => setShowDeleteConfirm(true)}
+                                    onClick={() => {
+                                        setDeleteConfirmText('');
+                                        setDeleteCountdown(0);
+                                        setDeleteCountdownActive(false);
+                                        setShowDeleteConfirm(true);
+                                    }}
                                     className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded hover:bg-red-500/20 text-sm flex items-center gap-2 transition-colors"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -3719,25 +3743,26 @@ export default function CaseDetailPage() {
             {/* Delete Confirmation Modal */}
             {
                 showDeleteConfirm && (
-                    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-                        <div className="bg-zeno-gray border border-red-500/30 rounded-xl p-6 max-w-md w-full mx-4">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+                        <div className="bg-zeno-gray border border-red-500/40 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                            {/* Header */}
+                            <div className="flex items-center gap-3 mb-5">
+                                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center shrink-0">
                                     <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">Delete Case</h3>
-                                    <p className="text-gray-400 text-sm">This action cannot be undone</p>
+                                    <h3 className="text-xl font-bold text-white">Delete Case Permanently</h3>
+                                    <p className="text-red-400 text-sm font-medium">This action cannot be undone</p>
                                 </div>
                             </div>
 
-                            <p className="text-gray-300 mb-6">
-                                Are you sure you want to delete case <span className="font-bold text-white">{caseData.fileNumber}</span>?
-                                This will permanently remove all associated data including:
+                            {/* What will be deleted */}
+                            <p className="text-gray-300 mb-3 text-sm">
+                                Deleting <span className="font-bold text-white">{caseData.fileNumber}</span> will permanently remove:
                             </p>
-                            <ul className="text-sm text-gray-400 mb-6 list-disc list-inside space-y-1">
+                            <ul className="text-sm text-gray-400 mb-5 list-disc list-inside space-y-1 bg-red-500/5 border border-red-500/20 rounded-lg p-3">
                                 <li>Client information</li>
                                 <li>Status history</li>
                                 <li>All documents</li>
@@ -3745,9 +3770,59 @@ export default function CaseDetailPage() {
                                 <li>Notification history</li>
                             </ul>
 
+                            {/* Step 1: Type to confirm */}
+                            <div className="mb-4">
+                                <label className="block text-sm text-gray-400 mb-1.5">
+                                    Step 1 — Type the file number <span className="font-mono font-bold text-white">{caseData.fileNumber}</span> to continue
+                                </label>
+                                <input
+                                    type="text"
+                                    value={deleteConfirmText}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        setDeleteConfirmText(val);
+                                        if (val === caseData.fileNumber && !deleteCountdownActive && deleteCountdown === 0) {
+                                            setDeleteCountdown(10);
+                                            setDeleteCountdownActive(true);
+                                        } else if (val !== caseData.fileNumber) {
+                                            setDeleteCountdown(0);
+                                            setDeleteCountdownActive(false);
+                                        }
+                                    }}
+                                    placeholder={caseData.fileNumber}
+                                    disabled={deleting}
+                                    className={`w-full px-3 py-2 rounded-lg border text-white text-sm font-mono bg-zeno-dark focus:outline-none transition-colors ${
+                                        deleteConfirmText === caseData.fileNumber
+                                            ? 'border-red-400 focus:border-red-300'
+                                            : 'border-white/10 focus:border-white/30'
+                                    }`}
+                                />
+                            </div>
+
+                            {/* Step 2: Countdown */}
+                            {deleteConfirmText === caseData.fileNumber && (
+                                <div className="mb-5">
+                                    <label className="block text-sm text-gray-400 mb-1.5">
+                                        Step 2 — {deleteCountdown > 0 ? `Wait ${deleteCountdown}s before the delete button unlocks` : 'You may now confirm deletion'}
+                                    </label>
+                                    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-1000 ${deleteCountdown > 0 ? 'bg-red-500' : 'bg-green-500'}`}
+                                            style={{ width: `${deleteCountdown > 0 ? (deleteCountdown / 10) * 100 : 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Actions */}
                             <div className="flex gap-3">
                                 <button
-                                    onClick={() => setShowDeleteConfirm(false)}
+                                    onClick={() => {
+                                        setShowDeleteConfirm(false);
+                                        setDeleteConfirmText('');
+                                        setDeleteCountdown(0);
+                                        setDeleteCountdownActive(false);
+                                    }}
                                     disabled={deleting}
                                     className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors disabled:opacity-50"
                                 >
@@ -3755,13 +3830,20 @@ export default function CaseDetailPage() {
                                 </button>
                                 <button
                                     onClick={handleDelete}
-                                    disabled={deleting}
-                                    className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                    disabled={deleting || deleteConfirmText !== caseData.fileNumber || deleteCountdown > 0}
+                                    className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {deleting ? (
                                         <>
                                             <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                                             Deleting...
+                                        </>
+                                    ) : deleteCountdown > 0 ? (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Wait {deleteCountdown}s...
                                         </>
                                     ) : (
                                         <>

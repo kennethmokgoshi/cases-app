@@ -226,10 +226,13 @@ model Case {
   leadSource              String?
   marketingData           Json?
   updatedById             String?
+  deletedAt               DateTime?
+  deletedById             String?
   assignedTo              User?                 @relation("CaseAssignee", fields: [assignedToId], references: [id])
   client                  Client                @relation("PrimaryClient", fields: [clientId], references: [id])
   jointClient             Client?               @relation("JointClient", fields: [jointClientId], references: [id])
   createdBy               User?                 @relation("CaseCreator", fields: [createdById], references: [id])
+  deletedBy               User?                 @relation("CaseDeleter", fields: [deletedById], references: [id])
   referrer                Referrer?             @relation(fields: [referrerId], references: [id])
   updatedBy               User?                 @relation("CaseUpdater", fields: [updatedById], references: [id])
   assignments             CaseAssignment[]
@@ -255,6 +258,7 @@ model Case {
   @@index([createdAt])
   @@index([referrerId])
   @@index([isAdminOnly])
+  @@index([deletedAt])
 }
 
 model Document {
@@ -344,6 +348,7 @@ model User {
   AuditEvidence             AuditEvidence[]
   casesAssigned             Case[]                @relation("CaseAssignee")
   casesCreated              Case[]                @relation("CaseCreator")
+  casesDeleted              Case[]                @relation("CaseDeleter")
   casesUpdated              Case[]                @relation("CaseUpdater")
   caseAssignments           CaseAssignment[]
   comments                  CaseComment[]

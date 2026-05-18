@@ -973,77 +973,40 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const isAdmin = session.user.isAdmin === true || session.user.role?.toUpperCase() === 'ADMIN';
+        if (!isAdmin) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id } = await params;
 
-        // Check if case exists
         const existingCase = await prisma.case.findUnique({
-            where: { id },
-            include: { client: true }
+            where: { id, deletedAt: null },
+            select: { id: true, fileNumber: true }
         });
 
         if (!existingCase) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
-        // Delete related records first (due to foreign key constraints)
-        // Note: CaseComment and Document have onDelete: Cascade, but we'll explicitly delete to be safe
-
-        // Delete comment mentions first (foreign key to CaseComment)
-        await prisma.commentMention.deleteMany({
-            where: { comment: { caseId: id } }
-        });
-
-        // Delete case comments
-        await prisma.caseComment.deleteMany({
-            where: { caseId: id }
-        });
-
-        // Delete case-project links
-        await prisma.caseProject.deleteMany({
-            where: { caseId: id }
-        });
-
-        // Delete case documents
-        await prisma.document.deleteMany({
-            where: { caseId: id }
-        });
-
-        // Delete workflow logs (status history)
-        await prisma.workflowLog.deleteMany({
-            where: { caseId: id }
-        });
-
-        // Delete notification logs
-        await prisma.notificationLog.deleteMany({
-            where: { caseId: id }
-        });
-
-        // Finally delete the case
-        await prisma.case.delete({
-            where: { id }
-        });
-
-        // Check if the client has any other cases
-        const otherCasesCount = await prisma.case.count({
-            where: { clientId: existingCase.clientId }
-        });
-
-        // If no other cases exist, delete the client to free up the ID number
-        if (otherCasesCount === 0) {
-            logger.info(`Deleting orphaned client ${existingCase.clientId} for case ${existingCase.fileNumber}`);
-            try {
-                await prisma.client.delete({
-                    where: { id: existingCase.clientId }
-                });
-            } catch (clientDeleteError) {
-                logger.error('Failed to delete orphaned client:', clientDeleteError);
-                // Don't fail the request if client delete fails, but log it
+        await prisma.case.update({
+            where: { id },
+            data: {
+                deletedAt: new Date(),
+                deletedById: session.user.id
             }
-        }
+        });
+
+        logger.info(`Case ${existingCase.fileNumber} soft-deleted by user ${session.user.id}`);
 
         return NextResponse.json({
             success: true,
-            message: `Case ${existingCase.fileNumber} deleted successfully`
+            message: `Case ${existingCase.fileNumber} moved to trash. It will be permanently deleted in 30 days.`
         });
     } catch (error) {
         logger.error('Error deleting case:', error);

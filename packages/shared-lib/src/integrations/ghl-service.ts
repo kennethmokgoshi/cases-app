@@ -11,6 +11,7 @@ import {
 import {
     sendManualMessage
 } from '../notifications/service';
+import { generateAutoReply } from '../ai/auto-reply';
 
 export interface GhlSendResult {
     success: boolean;
@@ -149,7 +150,102 @@ export class GhlService {
             logger.warn('[GHL Webhook] Plan event notification failed (non-critical):', err);
         }
 
+        // AI auto-reply — only for GENERAL messages (not PoP or fees-owed, those are handled specifically)
+        if (!isFeesOwed && !isPoP && message.trim()) {
+            this.sendAutoReply(caseRecord, channel, message, email, phone, !!isClient).catch(err =>
+                logger.warn('[GHL Webhook] Auto-reply failed (non-critical):', err)
+            );
+        }
+
         return { success: true, caseId: caseRecord.id };
+    }
+
+    private static async sendAutoReply(
+        caseRecord: any,
+        channelRaw: string,
+        inboundMessage: string,
+        senderEmail: string | undefined,
+        senderPhone: string | undefined,
+        senderIsClient: boolean,
+    ): Promise<void> {
+        const normalizedChannel: 'SMS' | 'EMAIL' | 'WHATSAPP' =
+            channelRaw.toUpperCase().includes('EMAIL')     ? 'EMAIL' :
+            channelRaw.toUpperCase().includes('WHATSAPP')  ? 'WHATSAPP' : 'SMS';
+
+        const replyTo = normalizedChannel === 'EMAIL' ? senderEmail : senderPhone;
+        if (!replyTo) {
+            logger.warn('[AutoReply] No reply address — skipping');
+            return;
+        }
+
+        // Pull last 3 non-system comments for AI context
+        const recentComments = await prisma.caseComment.findMany({
+            where: { caseId: caseRecord.id, isInternal: false, NOT: { content: { startsWith: '[SYSTEM]' } } },
+            orderBy: { createdAt: 'desc' },
+            take: 3,
+            select: { content: true },
+        });
+        const recentActivity = recentComments.map(c => c.content.substring(0, 120)).join(' | ');
+
+        const reply = await generateAutoReply({
+            inboundMessage,
+            channel: normalizedChannel,
+            senderType: senderIsClient ? 'CLIENT' : 'DEBT_COUNSELLOR',
+            caseContext: {
+                fileNumber: caseRecord.fileNumber,
+                statusLabel: caseRecord.dhsStatus || caseRecord.status || 'In Progress',
+                nextUpdate: caseRecord.nextUpdate?.toISOString() ?? null,
+                clientFirstName: caseRecord.client.firstName,
+                clientFullName: `${caseRecord.client.firstName} ${caseRecord.client.lastName}`,
+                dcName: caseRecord.debtCounsellorName ?? null,
+                recentActivity,
+            },
+        });
+
+        if (!reply.shouldSend) {
+            logger.info(`[AutoReply] AI skipped reply: ${reply.reasoning}`);
+            return;
+        }
+
+        // Format SA number: 0821234567 → +27821234567
+        const formattedTo = normalizedChannel !== 'EMAIL' && replyTo.startsWith('0')
+            ? '+27' + replyTo.substring(1)
+            : replyTo;
+
+        const result = await sendManualMessage(
+            caseRecord.id,
+            normalizedChannel,
+            formattedTo,
+            reply.body,
+            reply.subject || undefined,
+        );
+
+        const sent =
+            normalizedChannel === 'EMAIL'    ? result.emailSuccess :
+            normalizedChannel === 'WHATSAPP' ? result.whatsappSuccess :
+            result.smsSuccess;
+
+        // Log the auto-reply as a case comment
+        const systemUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+        await prisma.caseComment.create({
+            data: {
+                caseId: caseRecord.id,
+                userId: systemUser?.id ?? 'system',
+                content: `[Auto-Reply via ${normalizedChannel}] ${reply.body}`,
+                type: 'GHL',
+                isInternal: true,
+                activityType: 'AUTO_REPLY',
+                activityData: JSON.stringify({
+                    channel: normalizedChannel,
+                    replyTo: formattedTo,
+                    subject: reply.subject,
+                    reasoning: reply.reasoning,
+                    sent,
+                }),
+            },
+        });
+
+        logger.info(`[AutoReply] sent=${sent} channel=${normalizedChannel} to=${formattedTo} reason="${reply.reasoning}"`);
     }
 
     private static async processInboundAttachments(

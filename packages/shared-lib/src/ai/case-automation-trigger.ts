@@ -26,6 +26,7 @@ import { createLogger } from '../logger';
 import { sendStatusChangeNotification } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
 import { scrapeDetailedConsumerInfo } from '../dhs/search';
+import { checkTransferStatus } from '../dhs/status';
 import { delay } from '../dhs/browser';
 import { extractDhsDocuments } from '../openai/extraction';
 import { readFile, writeFile, mkdir } from 'fs/promises';
@@ -46,8 +47,9 @@ const DHS_AUTO_CHECK_SERVICES = [
 ];
 
 export type B2BTriggerAction =
-    | 'DHS_REQUESTED'       // First-time DHS request sent
+    | 'DHS_REQUESTED'       // First-time DHS request sent (DHS portal confirmed PENDING)
     | 'DHS_REQUESTED_AGAIN' // File was previously requested; re-requesting now
+    | 'DHS_NOT_CONFIRMED'   // DHS portal returned NOT_REQUESTED after 30s verification — status reverted
     | 'MISSING_DOCS'        // POA or ID not yet uploaded
     | 'NO_DC_EMAIL'         // No DC email found; DHS portal lookup needed
     | 'NOT_APPLICABLE'      // Service type does not need automatic DHS action
@@ -485,6 +487,7 @@ async function performAutoDhsTransferRequest(
     const caseId = caseData.id;
     const dcEmail = caseData.lastKnownEmail || caseData.dcEmail;
     const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`;
+    const idNumber = caseData.client.idNumber;
 
     const wasPreviouslyRequested =
         caseData.dhsStatus === 'Requested via DHS' ||
@@ -494,30 +497,61 @@ async function performAutoDhsTransferRequest(
     const dhsStatusLabel = wasPreviouslyRequested ? 'Requested Again via DHS' : 'Requested via DHS';
     const actionVerb = wasPreviouslyRequested ? 'Re-requesting' : 'Requesting';
 
-    if (dcEmail) {
-        let emailSuccess = false;
-        try {
-            const emailResult = await sendStatusChangeNotification({
-                caseId,
-                clientName,
-                fileNumber: caseData.fileNumber,
-                statusCode: 'REQUEST_FILE_DC',
-                dcName: caseData.debtCounsellorName || 'Debt Counsellor',
-                dcEmail,
-                idNumber: caseData.client.idNumber,
-                isB2B: true
-            });
-            emailSuccess = emailResult.emailSuccess;
-        } catch (err) {
-            logger.error(`[CASE_AUTOMATION] Auto-email to DC failed:`, err);
-        }
+    // Step 6a: Wait 30 seconds then verify the DHS portal actually shows PENDING
+    // This prevents marking a case as REQUESTED_VIA_DHS when the portal didn't register the request.
+    logger.info(`[CASE_AUTOMATION] Documents confirmed for ${caseData.fileNumber}. Waiting 30s before verifying DHS portal...`);
 
+    await saveAIComment(caseId, adminId, {
+        service: serviceLabels,
+        triggeredBy,
+        assessment: 'Required documents confirmed (POA + ID). Waiting 30 seconds to verify the DHS portal shows a PENDING request before updating status or emailing the DC.',
+        action: 'DHS portal verification in progress — do not manually change the status yet.'
+    });
+
+    await delay(30000);
+
+    // Step 6b: Check DHS portal to confirm the request registered
+    logger.info(`[CASE_AUTOMATION] Running DHS status verification for ${caseData.fileNumber} (ID: ${idNumber})...`);
+    let dhsVerification: Awaited<ReturnType<typeof checkTransferStatus>> | null = null;
+    try {
+        dhsVerification = await checkTransferStatus(idNumber);
+        logger.info(`[CASE_AUTOMATION] DHS verification result for ${caseData.fileNumber}: status=${dhsVerification?.status}`);
+    } catch (verifyErr) {
+        logger.error(`[CASE_AUTOMATION] DHS verification check failed for ${caseData.fileNumber}:`, verifyErr);
+    }
+
+    const dhsPortalStatus = dhsVerification?.status;
+
+    // Step 6c: NOT_REQUESTED — the request did not register on the DHS portal
+    if (!dhsVerification || dhsPortalStatus === 'NOT_REQUESTED') {
+        await prisma.case.update({
+            where: { id: caseId },
+            data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS' }
+        });
+
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: 'DHS portal verification: the transfer request did NOT register on the NCR Debt Help System (status returned NOT_REQUESTED).',
+            action: 'Status reverted to "Not Requested via DHS". No email sent to DC. Please submit the transfer request manually via the DHS portal and re-check status.'
+        });
+
+        logger.info(`[CASE_AUTOMATION] ⚠️  ${caseData.fileNumber}: DHS verification returned NOT_REQUESTED — status reverted to NOT_REQUESTED_VIA_DHS.`);
+
+        return {
+            action: 'DHS_NOT_CONFIRMED',
+            message: 'DHS portal returned NOT_REQUESTED after 30s verification — status reverted to NOT_REQUESTED_VIA_DHS'
+        };
+    }
+
+    // Step 6d: PENDING — DHS portal confirms the request is live. Now update status and send email.
+    if (dhsPortalStatus === 'PENDING') {
         await prisma.case.update({
             where: { id: caseId },
             data: {
                 status: 'REQUESTED_VIA_DHS',
                 dhsStatus: dhsStatusLabel,
-                nextUpdate: addWorkingDays(new Date(), 5)
+                nextUpdate: addWorkingDays(new Date(), 3)
             }
         });
 
@@ -527,55 +561,60 @@ async function performAutoDhsTransferRequest(
                 fromStatus: caseData.status,
                 toStatus: 'REQUESTED_VIA_DHS',
                 timestamp: new Date(),
-                notes: `[AI] Auto case automation trigger: ${dhsStatusLabel} — triggered by ${triggeredBy}`,
+                notes: `[AI] DHS portal confirmed PENDING. ${dhsStatusLabel} — triggered by ${triggeredBy}`,
                 userId: adminId || null
             }
         });
 
+        // Send email to DC only after DHS confirms PENDING, and only if email is known
+        let emailSuccess = false;
+        if (dcEmail) {
+            try {
+                const emailResult = await sendStatusChangeNotification({
+                    caseId,
+                    clientName,
+                    fileNumber: caseData.fileNumber,
+                    statusCode: 'REQUEST_FILE_DC',
+                    dcName: caseData.debtCounsellorName || 'Debt Counsellor',
+                    dcEmail,
+                    idNumber,
+                    isB2B: true
+                });
+                emailSuccess = emailResult.emailSuccess;
+            } catch (err) {
+                logger.error(`[CASE_AUTOMATION] Auto-email to DC failed:`, err);
+            }
+        }
+
         await saveAIComment(caseId, adminId, {
             service: serviceLabels,
             triggeredBy,
-            assessment: 'Auto-transfer request initiated. Required documents are present.',
-            action: `${actionVerb} file from DC (${dcEmail}). Status updated to "${dhsStatusLabel}".`
+            assessment: `DHS portal verified: transfer request is showing as PENDING (${dhsVerification.daysCounter || 'New'}). Request confirmed on NCR Debt Help System.`,
+            action: `${actionVerb} file from DC${dcEmail ? ` (${dcEmail}) — email ${emailSuccess ? 'sent ✓' : 'failed ✗'}` : ' — no DC email on record, portal lookup required'}. Status updated to "${dhsStatusLabel}". Next update: 3 working days.`
         });
 
         await notifyManagers(caseId, caseData.fileNumber, dhsStatusLabel, adminId);
- 
-        // GHL Sync
-        GhlService.applyTags(caseId, ['dhs_file_requested']).catch(err => {
+
+        GhlService.applyTags(caseId, ['dhs_file_requested', ...(dcEmail ? [] : ['dhs_portal_lookup_needed'])]).catch(err => {
             logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
         });
 
         return {
             action: wasPreviouslyRequested ? 'DHS_REQUESTED_AGAIN' : 'DHS_REQUESTED',
-            message: `${dhsStatusLabel}: auto-email ${emailSuccess ? 'sent' : 'failed'} to ${dcEmail}`
+            message: `${dhsStatusLabel}: DHS portal PENDING confirmed — email ${dcEmail ? (emailSuccess ? 'sent' : 'failed') : 'not applicable (no DC email)'} to ${dcEmail || 'N/A'}`
         };
     }
 
-    // No email case
-    await prisma.case.update({
-        where: { id: caseId },
-        data: {
-            status: 'REQUESTED_VIA_DHS',
-            dhsStatus: dhsStatusLabel,
-            nextUpdate: addWorkingDays(new Date(), 5)
-        }
-    });
-
+    // Step 6e: Any other DHS status (ACCEPTED, DECLINED, etc.) — log and stop
     await saveAIComment(caseId, adminId, {
         service: serviceLabels,
         triggeredBy,
-        assessment: 'Auto-transfer request initiated. No DC email on record.',
-        action: `${actionVerb} file via portal. Status updated to "${dhsStatusLabel}".`
+        assessment: `DHS portal verification returned an unexpected status: ${dhsPortalStatus}.`,
+        action: 'Please check the DHS portal manually and update the case status accordingly.'
     });
 
-    await notifyManagers(caseId, caseData.fileNumber, dhsStatusLabel, adminId);
-    GhlService.applyTags(caseId, ['dhs_file_requested', 'dhs_portal_lookup_needed']).catch(e => logger.warn(e));
-
-    return {
-        action: 'NO_DC_EMAIL',
-        message: `${dhsStatusLabel}: portal lookup required (no DC email)`
-    };
+    logger.info(`[CASE_AUTOMATION] ${caseData.fileNumber}: DHS verification returned unexpected status=${dhsPortalStatus}. Stopping.`);
+    return { action: 'SKIPPED', message: `DHS verification returned unexpected status: ${dhsPortalStatus}` };
 }
 
 // ---------------------------------------------------------------------------
