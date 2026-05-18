@@ -8,9 +8,12 @@ import fs from 'fs/promises'
 import path from 'path'
 
 const LineItemSchema = z.object({
-  description: z.string(),
+  description: z.string().optional(),
+  creditor: z.string().optional(),
+  serviceLabel: z.string().optional(),
   quantity: z.number(),
-  unitPrice: z.number() })
+  unitPrice: z.number(),
+  discount: z.number().optional() })
 
 export async function GET(
   _request: Request,

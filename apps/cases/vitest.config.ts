@@ -10,6 +10,7 @@ export default defineConfig({
       '**/*.spec.ts', // Playwright uses .spec.ts
       '**/playwright-report/**',
       '**/test-results/**',
+      '**/.next/**',
     ],
     // Include only unit/integration tests
     include: [

@@ -238,26 +238,30 @@ export async function POST(request: Request) {
                         notifyManager = true;
                     }
 
-                    // Rule 10: Declined
+                    // Rule 10: Declined — map reason to the appropriate DETOUR status
                     else if (result.status === 'DECLINED') {
                         logger.info('=== DECLINED STATUS DETECTED ===');
                         logger.info('Decline reason value:', result.declineReason);
-                        logger.info('Decline reason type:', typeof result.declineReason);
 
                         updateData.dhsStatus = 'Declined Via DHS';
-                        // Map specific decline reasons if possible, otherwise default to generic rejection
-                        // For now we don't auto-update main status to avoid closing cases prematurely, 
-                        // but we log it heavily.
-                        // Future: Map `result.declineReason` to specific rejection statuses
-                        if (result.declineReason) {
-                            const comment = `DHS Check: Declined. Reason: ${result.declineReason}`;
-                            logger.info('Adding comment WITH reason:', comment);
-                            comments.push(comment);
+                        updateData.declineReason = result.declineReason || null;
+
+                        const reason = (result.declineReason || '').toUpperCase();
+                        if (reason.includes('FEE') || reason.includes('OUTSTANDING') || reason.includes('OWES')) {
+                            updateData.status = 'REJECTED_OWES_FEES';
+                        } else if (reason.includes('CONSENT') || reason.includes('NOT YET')) {
+                            updateData.status = 'REJECTED_NOT_CONSENT';
+                        } else if (reason.includes('EMAIL') || reason.includes('DOCUMENT')) {
+                            updateData.status = 'REJECTED_EMAIL_DOCS';
                         } else {
-                            const comment = 'DHS Check: Declined. Could not retrieve reason.';
-                            logger.info('Adding comment WITHOUT reason:', comment);
-                            comments.push(comment);
+                            updateData.status = 'DECLINED_VIA_DHS';
                         }
+                        updateData.nextUpdate = addWorkingDays(new Date(), 3);
+
+                        const reasonText = result.declineReason
+                            ? `DHS Check: Declined. Reason: ${result.declineReason}`
+                            : 'DHS Check: Declined. Could not retrieve reason.';
+                        comments.push(reasonText);
                         logger.info('Comments array now has', comments.length, 'items');
                     }
                 }
@@ -400,11 +404,22 @@ export async function POST(request: Request) {
                                 dcMobile:          data.dcMobile,
                                 dcEmail:           data.dcEmail,
                                 lastKnownEmail:    lastUsedEmail,
+                                declineReason:     data.declineReason || null,
                                 status:            'NOT_REQUESTED_VIA_DHS',
                                 dhsStatus:         'Not Requested via DHS',
                                 updatedBy:         attribution
                             },
                         });
+
+                        if (data.declineReason) {
+                            await prisma.caseComment.create({
+                                data: {
+                                    caseId,
+                                    userId: actingUserId || '',
+                                    content: `[SYSTEM] DHS Auto-fill: Consumer is Declined. Reason: ${data.declineReason}`
+                                }
+                            });
+                        }
                     }
 
                     result = {
@@ -443,12 +458,23 @@ export async function POST(request: Request) {
                         lastUsedMobile: dc?.mobile || null,
                         lastUsedTel: dc?.tel || null,
                         lastKnownEmail: dc?.email || null,
+                        declineReason: result.declineReason || null,
                         // Request status is separate from consumer status
                         status: 'NOT_REQUESTED_VIA_DHS',
                         dhsStatus: 'Not Requested via DHS',
                         updatedBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined
                     }
                 });
+
+                if (result.declineReason) {
+                    await prisma.caseComment.create({
+                        data: {
+                            caseId,
+                            userId: actingUserId || '',
+                            content: `[SYSTEM] DHS Search: Consumer is Declined. Reason: ${result.declineReason}`
+                        }
+                    });
+                }
                 logger.info(`[DHS API] Updated case ${caseId} with DHS info`);
             } else if (!result.found && caseId) {
                 // Automation: If search returns no records, set status to NOT_LINKED
@@ -785,6 +811,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             success: true,
+            declineReason: result.declineReason,
             ...result
         });
     } catch (error) {

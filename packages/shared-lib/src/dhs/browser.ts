@@ -46,7 +46,7 @@ export async function closeBrowser(): Promise<void> {
 export async function loginToDHS(page: Page, credentials: { username: string; password: string }): Promise<boolean> {
     try {
         logger.info('Navigating to DHS login page:', DHS_CONFIG.loginUrl);
-        await page.goto(DHS_CONFIG.loginUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
+        await page.goto(DHS_CONFIG.loginUrl, { waitUntil: 'load', timeout: DHS_CONFIG.timeout });
 
         // Wait for login form - try multiple possible selectors
         const usernameSelectors = [
@@ -142,7 +142,7 @@ export async function loginToDHS(page: Page, credentials: { username: string; pa
         await loginButton.click();
 
         // Wait for navigation after login
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
+        await page.waitForNavigation({ waitUntil: 'load', timeout: DHS_CONFIG.timeout });
 
         // Verify login success by checking URL or page content
         const currentUrl = page.url();

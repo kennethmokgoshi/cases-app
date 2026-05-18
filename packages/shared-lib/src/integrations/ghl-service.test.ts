@@ -171,7 +171,7 @@ describe('GhlService.handleWebhook', () => {
             message: 'Hello',
         });
 
-        expect(result).toEqual({ success: false, error: 'Incomplete payload' });
+        expect(result).toEqual({ success: false, error: 'No phone or email' });
     });
 
     it('returns error when no matching case is found', async () => {

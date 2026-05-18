@@ -13,6 +13,7 @@ type AccountLine = {
   caseNumber?:   string
   quantity:     number
   unitPrice:    number
+  discount:     number
   inclPrice:    number // Transient for UI calculation
 }
 
@@ -46,6 +47,7 @@ function emptyLine(serviceKey?: string, serviceLabel?: string): AccountLine {
     description:  SERVICE_DESCRIPTIONS[key] ?? '',
     quantity:     1,
     unitPrice:    0,
+    discount:     0,
     inclPrice:    0,
   }
 }
@@ -200,7 +202,8 @@ export default function SendQuoteModal({
   const addLine    = () => setLines(prev => [...prev, emptyLine()])
   const removeLine = (i: number) => setLines(prev => prev.filter((_, idx) => idx !== i))
 
-  const subtotal  = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0)
+  const subtotal  = lines.reduce((s, l) => s + (l.quantity * l.unitPrice) - (l.discount || 0), 0)
+  const totalDiscount = lines.reduce((s, l) => s + (l.discount || 0), 0)
   const vatAmount = subtotal * vatRate
   const total     = subtotal + vatAmount
 
@@ -236,6 +239,7 @@ export default function SendQuoteModal({
             description:  l.description.trim() || undefined,
             quantity:     l.quantity,
             unitPrice:    l.unitPrice,
+            discount:     l.discount,
           })),
           dueAt:     new Date(dueAt).toISOString(),
           vatRate,
@@ -398,7 +402,7 @@ export default function SendQuoteModal({
 
           {/* Form */}
           {step === 'form' && (
-            <>
+            <div className="space-y-5">
               {error && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg px-4 py-2.5 text-sm">{error}</div>
               )}
@@ -429,19 +433,14 @@ export default function SendQuoteModal({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Services Requested</label>
-                  <button onClick={addLine} className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Add row
-                  </button>
                 </div>
 
                 <div className="grid grid-cols-12 gap-2 text-xs text-gray-600 uppercase tracking-wider mb-1.5 px-1">
                   <span className="col-span-3">Creditor / Account</span>
-                  <span className="col-span-3">Service</span>
+                  <span className="col-span-2">Service</span>
                   <span className="col-span-2 text-right">Unit (Excl)</span>
-                  <span className="col-span-3 text-right">Total (Incl)</span>
+                  <span className="col-span-2 text-right">Disc (R)</span>
+                  <span className="col-span-2 text-right">Total (Incl)</span>
                   <span className="col-span-1" />
                 </div>
 
@@ -449,7 +448,7 @@ export default function SendQuoteModal({
                   {lines.map((line, i) => (
                     <div key={i} className="space-y-3 p-4 rounded-2xl bg-white/5 border border-white/10 group relative">
                       <div className="grid grid-cols-12 gap-3 items-center">
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block ml-1">Service Required</label>
                           <select
                             className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50 appearance-none"
@@ -461,7 +460,7 @@ export default function SendQuoteModal({
                             ))}
                           </select>
                         </div>
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           {line.serviceKey !== 'debt_review_flag_removal' && (
                             <div className="animate-in fade-in zoom-in-95 duration-200">
                               <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block ml-1">Creditor / Account Name</label>
@@ -483,13 +482,23 @@ export default function SendQuoteModal({
                             onChange={e => updateLine(i, 'unitPrice', e.target.value)}
                           />
                         </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-amber-500/70 uppercase font-bold mb-1 block text-right mr-1">Discount</label>
+                          <input
+                            className="w-full bg-amber-500/5 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-amber-400 text-right focus:outline-none"
+                            type="number"
+                            placeholder="0.00"
+                            value={line.discount || ''}
+                            onChange={e => updateLine(i, 'discount', parseFloat(e.target.value) || 0)}
+                          />
+                        </div>
                         <div className="col-span-2 relative">
                           <label className="text-[10px] text-emerald-500 uppercase font-bold mb-1 block text-right mr-1">Total (Incl)</label>
                           <input
                             className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2 text-sm text-emerald-400 font-bold text-right focus:outline-none"
                             type="number"
                             placeholder="0.00"
-                            value={line.inclPrice || (line.unitPrice * (1 + vatRate)).toFixed(2)}
+                            value={line.inclPrice || ((line.unitPrice * (1 + vatRate)) - (line.discount * (1 + vatRate))).toFixed(2)}
                             onChange={e => updateLine(i, 'inclPrice', e.target.value)}
                           />
                         </div>
@@ -561,11 +570,35 @@ export default function SendQuoteModal({
                   ))}
                 </div>
 
-                {/* Totals */}
-                <div className="mt-4 pt-3 border-t border-white/5 space-y-1.5">
+                <div className="mt-4 flex justify-center">
+                  <button onClick={addLine} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm font-semibold flex items-center gap-2 transition-all group/add">
+                    <div className="w-5 h-5 bg-emerald-500/20 rounded-lg flex items-center justify-center group-hover/add:scale-110 transition-transform">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </div>
+                    Add another account / service
+                  </button>
+                </div>
+              </div>
+
+              {/* Totals */}
+                <div className="mt-6 pt-4 border-t border-white/10 space-y-2">
                   <div className="flex justify-between text-sm text-gray-400">
-                    <span>Subtotal</span><span>{formatZAR(subtotal)}</span>
+                    <span>Subtotal (Before Discount)</span>
+                    <span className="font-mono">{formatZAR(subtotal + totalDiscount)}</span>
                   </div>
+                  {totalDiscount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-400 bg-emerald-400/5 px-3 py-1 rounded-lg border border-emerald-400/10 animate-in fade-in slide-in-from-right-1">
+                      <span className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                        </svg>
+                        Total Savings / Discount
+                      </span>
+                      <span className="font-bold font-mono">- {formatZAR(totalDiscount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center text-sm text-gray-400">
                     <span className="flex items-center gap-2">
                       VAT
@@ -586,7 +619,6 @@ export default function SendQuoteModal({
                     <span className="text-emerald-400">{formatZAR(total)}</span>
                   </div>
                 </div>
-              </div>
 
               {/* Date + Reference */}
               <div className="grid grid-cols-2 gap-3">
@@ -691,7 +723,7 @@ export default function SendQuoteModal({
                   />
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
 

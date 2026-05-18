@@ -12,6 +12,7 @@ const LineItemSchema = z.object({
   description:  z.string().max(500).optional(),
   quantity:     z.number().positive(),
   unitPrice:    z.number().nonnegative(),
+  discount:     z.number().nonnegative().optional(),
 }).refine(d => d.creditor || d.description, {
   message: 'Each line item must have either a creditor or a description',
 })
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
   if (input.type === 'INVOICE' && !finalBankAccountId) {
     return NextResponse.json({ error: 'Banking details are required for Invoices.' }, { status: 422 })
   }
-  const subtotal  = input.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
+  const subtotal  = input.lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice) - (item.discount || 0), 0)
   const vatAmount = subtotal * input.vatRate
   const total     = subtotal + vatAmount
   const year      = new Date().getFullYear()

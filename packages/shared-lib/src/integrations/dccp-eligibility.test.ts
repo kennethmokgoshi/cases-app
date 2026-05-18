@@ -163,7 +163,7 @@ describe('checkAipEligibility', () => {
       employmentType: 'PERMANENT',
     })
     expect(result.eligible).toBe(true)
-    expect(result.warnings.some(w => w.includes('cessation'))).toBe(true)
+    expect(result.warnings.some(w => w.includes('ceases'))).toBe(true)
   })
 
   it('is ineligible when employment type is missing', () => {

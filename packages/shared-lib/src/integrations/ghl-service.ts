@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
 import { prisma } from '@zenowethu/database';
 import { getGHLCredentials } from './ghl-config';
 import { logger } from '../logger';
@@ -6,6 +8,9 @@ import {
     GhlEmailProvider,
     GhlWhatsAppProvider,
 } from '../notifications/providers';
+import {
+    sendManualMessage
+} from '../notifications/service';
 
 export interface GhlSendResult {
     success: boolean;
@@ -74,7 +79,10 @@ export class GhlService {
         }
 
         // Persist contactId on the Client if we now know it and didn't before
-        if (contactId && !caseRecord.client.ghlContactId && email === caseRecord.client.email) {
+        const isClient = 
+            (email && email === caseRecord.client.email) ||
+            (phone && (phone === caseRecord.client.phone || (caseRecord.client.phone && phone.endsWith(caseRecord.client.phone.slice(-9)))));
+        if (contactId && !caseRecord.client.ghlContactId && isClient) {
             await prisma.client.update({
                 where: { id: caseRecord.client.id },
                 data: { ghlContactId: contactId },
@@ -114,11 +122,14 @@ export class GhlService {
             });
         }
 
-        // Handle Inbound Attachments (PoP, etc.)
+        // Download inbound attachments, persist as Document records, and forward PoP to DC
         if (attachments.length > 0) {
-            // In a real implementation, we would download the files from a.url and save to our storage
-            // and then create Document records. For now, we log them.
-            logger.info(`[GHL Webhook] Received ${attachments.length} attachments for case ${caseRecord.id}`);
+            this.processInboundAttachments(
+                caseRecord.id,
+                attachments,
+                isPoP,
+                caseRecord.dcEmail ?? undefined,
+            ).catch(err => logger.error('[GHL Webhook] Attachment processing failed:', err));
         }
 
         // Notify AI Plan Engine of inbound event
@@ -139,6 +150,75 @@ export class GhlService {
         }
 
         return { success: true, caseId: caseRecord.id };
+    }
+
+    private static async processInboundAttachments(
+        caseId: string,
+        attachments: Array<{ url: string; name?: string; contentType?: string }>,
+        isPoP: boolean,
+        dcEmail?: string,
+    ): Promise<void> {
+        const uploadDir = join(process.cwd(), 'storage', 'uploads', caseId);
+        await mkdir(uploadDir, { recursive: true });
+
+        const systemUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+        const savedUrls: string[] = [];
+
+        for (const att of attachments) {
+            try {
+                const res = await fetch(att.url);
+                if (!res.ok) {
+                    logger.warn(`[GHL Service] Failed to download attachment (${res.status}): ${att.url}`);
+                    continue;
+                }
+
+                const buffer = Buffer.from(await res.arrayBuffer());
+                const mimeType = res.headers.get('content-type') || att.contentType || 'application/octet-stream';
+                const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'bin';
+                const safeName = (att.name ?? `attachment.${ext}`).replace(/[^a-zA-Z0-9.-]/g, '_');
+                const fileName = `${Date.now()}-${safeName}`;
+
+                await writeFile(join(uploadDir, fileName), buffer);
+
+                const fileUrl = `/uploads/${caseId}/${fileName}`;
+
+                await prisma.document.create({
+                    data: {
+                        caseId,
+                        type: isPoP ? 'PROOF_OF_PAYMENT' : 'OTHER',
+                        fileName: att.name ?? fileName,
+                        fileUrl,
+                        fileSize: buffer.length,
+                        mimeType,
+                        uploadedById: systemUser?.id,
+                    },
+                });
+
+                savedUrls.push(fileUrl);
+                logger.info(`[GHL Service] Saved inbound attachment: ${fileUrl}`);
+            } catch (err) {
+                logger.error(`[GHL Service] Error processing attachment ${att.url}:`, err);
+            }
+        }
+
+        // Forward PoP to the DC automatically
+        if (isPoP && savedUrls.length > 0 && dcEmail) {
+            const caseRecord = await prisma.case.findUnique({
+                where: { id: caseId },
+                include: { client: true },
+            });
+            if (caseRecord) {
+                await this.sendMessage(
+                    caseId,
+                    'EMAIL',
+                    `Please find the attached proof of payment from ${caseRecord.client.firstName} ${caseRecord.client.lastName} regarding case ${caseRecord.fileNumber}.`,
+                    `Proof of Payment — ${caseRecord.fileNumber}`,
+                    dcEmail,
+                    savedUrls,
+                );
+                logger.info(`[GHL Service] PoP forwarded to DC at ${dcEmail} for case ${caseId}`);
+            }
+        }
     }
 
     private static async handleContactCreate(payload: Record<string, unknown>) {
@@ -305,26 +385,30 @@ export class GhlService {
         let result: GhlSendResult;
  
         try {
-            if (channel === 'SMS') {
-                const provider = new GhlSmsProvider(ghl.apiKey, ghl.locationId);
-                const res = await provider.send(formattedTo, message);
-                result = { ...res, channel, recipient: formattedTo };
-            } else if (channel === 'EMAIL') {
-                const provider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
-                const res = await provider.send(
-                    formattedTo, 
-                    subject ?? 'Message from Zenowethu Debt Counsellors', 
-                    message, 
-                    undefined, 
-                    { attachments: attachments?.map(url => ({ filename: url.split('/').pop() || 'attachment', content: url })) }
-                );
-                result = { ...res, channel, recipient: formattedTo };
-            } else {
-                const provider = new GhlWhatsAppProvider(ghl.apiKey, ghl.locationId);
-                const res = await provider.send(formattedTo, message);
-                result = { ...res, channel, recipient: formattedTo };
-            }
- 
+            // Use the unified manual message sending logic from the notification service.
+            // This ensures we respect WHATSAPP_ENABLED, GHL_WEBHOOK_URL, and other config flags.
+            const notificationRes = await sendManualMessage(
+                caseId,
+                channel,
+                formattedTo,
+                message,
+                subject
+            );
+
+            result = {
+                success: channel === 'SMS' ? notificationRes.smsSuccess : 
+                         channel === 'EMAIL' ? notificationRes.emailSuccess : 
+                         notificationRes.whatsappSuccess,
+                messageId: channel === 'SMS' ? notificationRes.smsMessageId : 
+                           channel === 'EMAIL' ? notificationRes.emailMessageId : 
+                           notificationRes.whatsappMessageId,
+                contactId: notificationRes.contactId,
+                error: notificationRes.errors[0],
+                channel,
+                recipient: formattedTo,
+                provider: 'GoHighLevel' // Simplified for result
+            };
+
             // Persist the GHL contactId on the Client so future sends skip the lookup
             // Only do this if we were sending to the client directly
             if (!recipient && result.contactId && !client.ghlContactId) {
@@ -572,7 +656,15 @@ export class GhlService {
         const subject = `File Request: ${caseRecord.client.firstName} ${caseRecord.client.lastName} (${caseRecord.client.idNumber})`;
         const body = `Dear Debt Counsellor,\n\nPlease find attached the signed Power of Attorney and ID copy for our client, ${caseRecord.client.firstName} ${caseRecord.client.lastName}.\n\nWe kindly request that you provide us with the latest 17.W and any relevant court orders or certificates for this client.\n\nRegards,\nZenowethu Debt Management`;
 
-        // Send both ID and POA (and ZENOWETHU_POA if it exists)
-        return this.sendDocuments(caseId, ['ID', 'POA', 'ZENOWETHU_POA'], undefined, subject, body);
+        const result = await this.sendDocuments(caseId, ['ID', 'POA', 'ZENOWETHU_POA'], undefined, subject, body);
+
+        // Start GHL follow-up chase sequence — tags trigger the automation in GHL
+        if (result.success) {
+            this.applyTags(caseId, ['dc_file_requested']).catch(err =>
+                logger.warn('[GHL Service] Follow-up tag failed (non-critical):', err)
+            );
+        }
+
+        return result;
     }
 }

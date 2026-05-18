@@ -13,6 +13,7 @@ export interface EmailAttachment {
     filename: string;
     content:  Buffer | string; // Use Buffer for SMTP, base64 string for Resend
     contentType?: string;
+    url?: string; // Public URL for providers that send by reference (GHL, Resend external)
 }
 
 export interface EmailOptions {
@@ -313,14 +314,22 @@ class GhlBaseProvider {
 
     protected async getContactId(to: string, type: 'phone' | 'email'): Promise<string | null> {
         try {
-            const param = type === 'phone' ? `phone=${encodeURIComponent(to)}` : `email=${encodeURIComponent(to)}`;
+            // GHL v2 GET /contacts/ doesn't support direct phone/email params; use 'query' instead
             const response = await fetch(
-                `${GHL_BASE_URL}/contacts/?locationId=${this.locationId}&${param}`,
+                `${GHL_BASE_URL}/contacts/?locationId=${this.locationId}&query=${encodeURIComponent(to)}`,
                 { headers: this.headers }
             );
             if (!response.ok) return null;
             const data = await response.json();
-            return data.contacts?.[0]?.id ?? null;
+            
+            // The query might return multiple contacts (fuzzy match), so we find the exact one
+            if (!data.contacts || data.contacts.length === 0) return null;
+            
+            const exactMatch = data.contacts.find((c: any) => 
+                type === 'phone' ? c.phone === to : c.email === to
+            );
+            
+            return exactMatch?.id ?? data.contacts[0].id;
         } catch (error) {
             logger.error('[GHL] Contact lookup error:', error);
             return null;
@@ -338,12 +347,19 @@ class GhlBaseProvider {
                 headers: this.headers,
                 body: JSON.stringify(body),
             });
+
+            const data = await response.json();
+
             if (!response.ok) {
-                const err = await response.json();
-                logger.error('[GHL] Create contact error:', err);
+                // If contact already exists, GHL returns 400 with the existing contactId in meta
+                if (response.status === 400 && data.message?.includes('duplicated') && data.meta?.contactId) {
+                    logger.info(`[GHL] Duplicate contact found for ${value}, using existing ID: ${data.meta.contactId}`);
+                    return data.meta.contactId;
+                }
+                logger.error('[GHL] Create contact error:', data);
                 return null;
             }
-            const data = await response.json();
+            
             return data.contact?.id ?? null;
         } catch (error) {
             logger.error('[GHL] Create contact exception:', error);
@@ -398,9 +414,10 @@ export class GhlEmailProvider extends GhlBaseProvider implements EmailProvider {
         const contactId = await this.ensureContactId(to, 'email');
         if (!contactId) return { success: false, error: 'Contact could not be found or created', provider: this.name };
         
-        // GHL Email API expects attachment URLs. If we have local buffers, we'd need to upload them first.
-        // For now, we assume the attachments passed are already URLs or we handle URL extraction.
-        const attachmentUrls = options?.attachments?.map(a => typeof a.content === 'string' ? a.content : '').filter(url => url.startsWith('http') || url.startsWith('/'));
+        // GHL Email API expects attachment URLs — use the explicit url field, falling back to content if it's a URL string.
+        const attachmentUrls = options?.attachments
+            ?.map(a => a.url ?? (typeof a.content === 'string' && (a.content.startsWith('http') || a.content.startsWith('/')) ? a.content : null))
+            .filter((u): u is string => u !== null);
 
         const res = await this.sendMessage(contactId, htmlBody, 'Email', subject, attachmentUrls);
         return { ...res, contactId, provider: this.name };
@@ -447,6 +464,10 @@ export class GhlWebhookEmailProvider implements EmailProvider {
 
     async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         try {
+            const attachmentUrls = options?.attachments
+                ?.map(a => a.url ?? (typeof a.content === 'string' && a.content.startsWith('http') ? a.content : null))
+                .filter((u): u is string => u !== null);
+
             await fetch(this.webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -456,7 +477,8 @@ export class GhlWebhookEmailProvider implements EmailProvider {
                     subject: subject,
                     message: htmlBody,
                     from_name: options?.fromName,
-                    from_email: options?.fromEmail
+                    from_email: options?.fromEmail,
+                    attachments: attachmentUrls?.length ? attachmentUrls : undefined,
                 })
             });
             return { success: true, messageId: `wh-${Date.now()}`, provider: this.name };

@@ -74,7 +74,7 @@ describe('GET /api/admin/settings/xds', () => {
         const body = await res.json();
         expect(res.status).toBe(200);
         expect(body.settings.xds_username).toBe('');
-        expect(body.settings.xds_portal_url).toBe('https://portal.xds.co.za');
+        expect(body.settings.xds_portal_url).toBe('https://www.online.xds.co.za');
     });
 
     it('returns stored settings with masked password', async () => {

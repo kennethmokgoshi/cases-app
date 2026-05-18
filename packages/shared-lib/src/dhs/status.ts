@@ -36,7 +36,7 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
 
         // Navigate to Manage Transfers page
         logger.info('Navigating to:', DHS_CONFIG.manageTransfersUrl);
-        await page.goto(DHS_CONFIG.manageTransfersUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
+        await page.goto(DHS_CONFIG.manageTransfersUrl, { waitUntil: 'load', timeout: DHS_CONFIG.timeout });
 
         // Wait for page to be fully loaded
         await delay(2000);
@@ -480,7 +480,7 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
 
                     // Store RAW COLUMN VALUES for comment display (CORRECTED indices)
                     const rawIdentityNo = dataRow[3]?.trim() || '';    // Column 3, not 1!
-                    const rawCurrentDC = dataRow[7]?.trim() || '';     // Column 7, not 5!
+
                     const rawRequestStatus = dataRow[9]?.trim() || ''; // Column 9, not 7!
 
                     logger.info('✅ DIRECT COLUMN READ (NO ASSUMPTIONS):');
@@ -694,14 +694,14 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
         let declineReason: string | undefined;
         if (status === 'DECLINED') {
             try {
-                logger.info('Attempting to get decline reason with 15s timeout...');
+                logger.info('Attempting to get decline reason with 25s timeout...');
                 declineReason = await Promise.race([
                     getDeclineReason(page),
                     new Promise<undefined>((resolve) =>
                         setTimeout(() => {
-                            logger.info('Decline reason extraction timed out after 15s');
+                            logger.info('Decline reason extraction timed out after 25s');
                             resolve(undefined);
-                        }, 15000)
+                        }, 25000)
                     )
                 ]);
                 logger.info('Decline reason extraction completed:', declineReason ? 'success' : 'failed/timeout');

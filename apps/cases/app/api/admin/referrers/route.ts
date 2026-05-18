@@ -13,7 +13,7 @@ export const ACCOUNT_TYPES = ['CHEQUE', 'SAVINGS', 'CURRENT'] as const;
 const CreateSchema = z.object({
     firstName: z.string().min(1).max(100),
     lastName: z.string().min(1).max(100),
-    idNumber: z.string().min(13).max(13).nullable().optional(),
+    idNumber: z.string().trim().length(13).or(z.literal('')).transform(val => val === '' ? null : val).nullable().optional(),
     email: z.string().email().nullable().optional(),
     cellNumber: z.string().max(20).nullable().optional(),
     // Employment
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
             data: {
                 name: `${data.firstName} ${data.lastName}`,
                 type: 'REFERRER',
-                description: `Referral sub-project for ${data.firstName} ${data.lastName} (ID: ${data.idNumber})`,
+                description: `Referral sub-project for ${data.firstName} ${data.lastName}${data.idNumber ? ` (ID: ${data.idNumber})` : ''}`,
                 parentId: referralsRoot.id,
             },
         });

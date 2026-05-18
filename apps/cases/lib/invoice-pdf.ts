@@ -11,6 +11,7 @@ export interface InvoiceLineItem {
   serviceLabel?: string
   quantity: number
   unitPrice: number
+  discount?: number
 }
 
 export interface InvoiceData {
@@ -275,7 +276,7 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     const verticalPadding = (rowHeight - textBlockHeight) / 2
     const textTopY = cursor - verticalPadding - 8
     
-    const lineAmt = item.quantity * item.unitPrice
+    const lineAmt = (item.quantity * item.unitPrice) - (item.discount || 0)
     
     // Draw Main Title Lines
     let lineCursor = textTopY
@@ -299,7 +300,12 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     drawRightAlignedText(page, formatZAR(item.unitPrice), MARGIN + COL_DESC + COL_QTY + COL_PRICE - 10, numberY + 4, regular, 9, DARK_TEXT)
     drawRightAlignedText(page, '(excl. VAT)', MARGIN + COL_DESC + COL_QTY + COL_PRICE - 10, numberY - 5, regular, 6.5, GRAY_TEXT)
     
-    drawRightAlignedText(page, formatZAR(lineAmt), RIGHT - 10, numberY, bold, 9, DARK_TEXT)
+    if (item.discount && item.discount > 0) {
+      drawRightAlignedText(page, `- ${formatZAR(item.discount)}`, RIGHT - 10, numberY - 8, italic, 7, ACCENT_EMERALD)
+      drawRightAlignedText(page, formatZAR(lineAmt), RIGHT - 10, numberY + 4, bold, 9, DARK_TEXT)
+    } else {
+      drawRightAlignedText(page, formatZAR(lineAmt), RIGHT - 10, numberY, bold, 9, DARK_TEXT)
+    }
 
     cursor -= rowHeight
   }
@@ -309,14 +315,16 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
 
   // 4. TOTALS
   const TOTALS_X = W - MARGIN - 220
-  const totalsRows = [
-    ['Subtotal (Excl)', formatZAR(data.subtotal), false],
-    [`VAT (${Math.round(data.vatRate * 100)}%)`, formatZAR(data.vatAmount), false],
+  const totalDiscount = data.lineItems.reduce((s, l) => s + (l.discount || 0), 0)
+  const totalsRows: [string, string, boolean, ReturnType<typeof rgb> | undefined][] = [
+    ['Subtotal (Excl)', formatZAR(data.subtotal + totalDiscount), false, GRAY_TEXT],
+    ...(totalDiscount > 0 ? [['Discount', `- ${formatZAR(totalDiscount)}`, false, ACCENT_EMERALD] as [string, string, boolean, ReturnType<typeof rgb>]] : []),
+    [`VAT (${Math.round(data.vatRate * 100)}%)`, formatZAR(data.vatAmount), false, GRAY_TEXT],
   ]
 
-  for (const [label, value, isBold] of totalsRows) {
-    drawText(page, label, TOTALS_X, cursor, isBold ? bold : regular, 9, GRAY_TEXT)
-    drawRightAlignedText(page, value, RIGHT - 10, cursor, isBold ? bold : regular, 9, DARK_TEXT)
+  for (const [label, value, isBold, color] of totalsRows) {
+    drawText(page, label, TOTALS_X, cursor, isBold ? bold : regular, 9, color || GRAY_TEXT)
+    drawRightAlignedText(page, value, RIGHT - 10, cursor, isBold ? bold : regular, 9, color === ACCENT_EMERALD ? color : DARK_TEXT)
     cursor -= 16
   }
  

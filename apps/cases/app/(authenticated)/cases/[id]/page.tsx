@@ -1036,10 +1036,10 @@ export default function CaseDetailPage() {
                 if (missing.length > 0) {
                     setAutoFillMessage({
                         type: 'info',
-                        text: `Partial fill — populated: ${filled.join(', ')}. Not found in DHS: ${missing.join(', ')}.`,
+                        text: `Partial fill — populated: ${filled.join(', ')}. Not found in DHS: ${missing.join(', ')}.${result.data?.declineReason ? ` Reason: ${result.data.declineReason}` : ''}`,
                     });
                 } else {
-                    setAutoFillMessage({ type: 'success', text: `Auto-filled successfully — ${filled.length} fields populated.` });
+                    setAutoFillMessage({ type: 'success', text: `Auto-filled successfully — ${filled.length} fields populated.${result.data?.declineReason ? ` Reason: ${result.data.declineReason}` : ''}` });
                 }
                 setIsEditingDhs(true);
             } else {
@@ -1426,6 +1426,10 @@ export default function CaseDetailPage() {
                     ? `Linked to DHS. DC: ${result.debtCounsellor?.fullName || 'Unknown'}`
                     : 'Not linked to DHS.';
                 
+                if (result.declineReason) {
+                    text += ` Reason: ${result.declineReason}`;
+                }
+                
                 setDhsMessage({
                     type: result.found ? 'success' : 'error',
                     text: text
@@ -1474,6 +1478,10 @@ export default function CaseDetailPage() {
                         statusText += ` (${result.daysCounter})`;
                     }
                     statusText += '. DC info updated.';
+                    
+                    if (result.status === 'DECLINED' && result.declineReason) {
+                        statusText += ` Reason: ${result.declineReason}`;
+                    }
                 } else {
                     statusText = result.message || 'No transfer request found in DHS';
                 }

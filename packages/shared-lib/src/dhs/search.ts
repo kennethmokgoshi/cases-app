@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { getDHSCredentials } from '../integrations';
 import { getBrowser, loginToDHS, delay, DHS_CONFIG } from './browser';
-import { extractConsumerInfo } from './extraction';
+import { extractConsumerInfo, getDeclineReason } from './extraction';
 import { getDebtCounsellorInfo } from './counsellor';
 import type { DHSConsumerInfo, DHSDebtCounsellorInfo, DHSDetailedInfo } from './types';
 import { logger } from '../logger';
@@ -37,7 +37,7 @@ export async function searchConsumer(idNumber: string): Promise<{
 
         // Navigate to Request New Transfer page
         logger.info(`[DHS search] Navigating to ${DHS_CONFIG.requestTransferUrl}`);
-        await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
+        await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'load', timeout: DHS_CONFIG.timeout });
         
         // Debug Screenshot Helper
         const screenshotDir = path.join(process.cwd(), 'public', 'uploads', 'dhs_debug', idNumber);
@@ -191,13 +191,18 @@ export async function searchConsumer(idNumber: string): Promise<{
 
         logger.info('[DHS search] Consumer extracted:', JSON.stringify(consumer));
 
-        // Get debt counsellor info
-        logger.info('[DHS search] Fetching DC info...');
-        await takeScreenshot('Clicking DC Info'); // STEP 4
-        const debtCounsellor = await getDebtCounsellorInfo(target);
-        await takeScreenshot('After DC Info Popup'); // STEP 5
+        const result: any = { found: true, consumer, debtCounsellor: undefined };
+        
+        // If status is Declined, try to get reason
+        if (consumer.status && (consumer.status.toLowerCase().includes('declined') || consumer.status.toLowerCase().includes('rejected'))) {
+            logger.info('[DHS search] Status is Declined, attempting to get reason...');
+            const declineReason = await getDeclineReason(target);
+            if (declineReason) {
+                result.declineReason = declineReason;
+                logger.info('[DHS search] Decline reason extracted:', declineReason);
+            }
+        }
 
-        const result = { found: true, consumer, debtCounsellor };
         logger.info('[DHS search] Final result:', JSON.stringify(result));
         return result;
     } catch (error) {
@@ -242,7 +247,7 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
         }
 
         // Navigate to Request New Transfer page (SPECIFIC USER REQUIREMENT)
-        await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
+        await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'load', timeout: DHS_CONFIG.timeout });
         await delay(1000);
         await takeDebugScreenshot('2_request_page_loaded');
 
@@ -447,6 +452,16 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
             logger.info('[DHS auto-fill] DC info extracted successfully');
         } else {
             logger.warn('[DHS auto-fill] Failed to extract DC info from popup');
+        }
+
+        // If status is Declined, try to get reason
+        if (detailedInfo.status && (detailedInfo.status.toLowerCase().includes('declined') || detailedInfo.status.toLowerCase().includes('rejected'))) {
+            logger.info('[DHS auto-fill] Status is Declined, attempting to get reason...');
+            const declineReason = await getDeclineReason(page);
+            if (declineReason) {
+                detailedInfo.declineReason = declineReason;
+                logger.info('[DHS auto-fill] Decline reason extracted:', declineReason);
+            }
         }
 
         await page.close();

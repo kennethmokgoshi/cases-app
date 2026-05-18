@@ -11,6 +11,7 @@ type AccountLine = {
   serviceLabel: string
   quantity:     number
   unitPrice:    number
+  discount:     number
 }
 
 type ClientResult = {
@@ -42,7 +43,7 @@ function today()    { return new Date().toISOString().split('T')[0] }
 function in30days() { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().split('T')[0] }
 
 function emptyLine(): AccountLine {
-  return { creditor: '', serviceKey: SERVICES_LIST[0]?.key ?? '', serviceLabel: SERVICES_LIST[0]?.label ?? '', quantity: 1, unitPrice: 0 }
+  return { creditor: '', serviceKey: SERVICES_LIST[0]?.key ?? '', serviceLabel: SERVICES_LIST[0]?.label ?? '', quantity: 1, unitPrice: 0, discount: 0 }
 }
 
 export default function NewInvoicePage() {
@@ -79,7 +80,8 @@ export default function NewInvoicePage() {
   // Account lines
   const [lines, setLines] = useState<AccountLine[]>([emptyLine()])
 
-  const subtotal  = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0)
+  const subtotal  = lines.reduce((s, l) => s + (l.quantity * l.unitPrice) - (l.discount || 0), 0)
+  const totalDiscount = lines.reduce((s, l) => s + (l.discount || 0), 0)
   const vatAmount = subtotal * vatRate
   const total     = subtotal + vatAmount
 
@@ -154,6 +156,7 @@ export default function NewInvoicePage() {
             serviceLabel: l.serviceLabel,
             quantity:     l.quantity,
             unitPrice:    l.unitPrice,
+            discount:     l.discount,
           })),
           dueAt:     new Date(dueAt).toISOString(),
           vatRate,
@@ -383,41 +386,31 @@ export default function NewInvoicePage() {
         {/* RIGHT — Account lines + Totals */}
         <div className="space-y-5">
           <div className="bg-[var(--color-bg-secondary)] rounded-xl border border-white/5 p-5">
-            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-semibold text-white">Services Requested</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Add each credit account and the service applied to it</p>
               </div>
-              <button
-                onClick={addLine}
-                className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add row
-              </button>
-            </div>
 
             {/* Column headers */}
             <div className="grid grid-cols-12 gap-2 text-xs text-gray-500 uppercase tracking-wider mb-2 px-1">
-              <span className="col-span-4">Creditor / Account</span>
-              <span className="col-span-4">Service</span>
-              <span className="col-span-3 text-right">Amount (ZAR)</span>
-              <span className="col-span-1" />
+              <span className="col-span-3">Creditor / Account</span>
+              <span className="col-span-3">Service</span>
+              <span className="col-span-2 text-right">Unit (Excl)</span>
+              <span className="col-span-2 text-right">Disc (R)</span>
+              <span className="col-span-2 text-right">Total</span>
             </div>
 
             <div className="space-y-2">
               {lines.map((line, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center group">
                   <input
-                    className="col-span-4 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
+                    className="col-span-3 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
                     placeholder="e.g. Nedbank"
                     value={line.creditor}
                     onChange={e => updateLine(i, 'creditor', e.target.value)}
                   />
                   <select
-                    className="col-span-4 bg-[var(--color-bg-primary)] border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                    className="col-span-3 bg-[var(--color-bg-primary)] border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
                     value={line.serviceKey}
                     onChange={e => updateLine(i, 'serviceKey', e.target.value)}
                   >
@@ -426,14 +419,26 @@ export default function NewInvoicePage() {
                     ))}
                   </select>
                   <input
-                    className="col-span-3 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white text-right focus:outline-none focus:border-emerald-500/50"
+                    className="col-span-2 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white text-right focus:outline-none focus:border-emerald-500/50"
                     type="number"
                     min={0}
                     step={0.01}
                     value={line.unitPrice}
                     onChange={e => updateLine(i, 'unitPrice', parseFloat(e.target.value) || 0)}
                   />
-                  <div className="col-span-1 flex justify-end">
+                  <input
+                    className="col-span-2 bg-amber-500/5 border border-amber-500/20 rounded px-2 py-1.5 text-sm text-amber-400 text-right focus:outline-none focus:border-amber-500/50"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={line.discount || ''}
+                    placeholder="0.00"
+                    onChange={e => updateLine(i, 'discount', parseFloat(e.target.value) || 0)}
+                  />
+                  <div className="col-span-2 flex items-center justify-end gap-2">
+                    <span className="text-sm font-mono text-white">
+                      {formatZAR((line.quantity * line.unitPrice) - line.discount)}
+                    </span>
                     {lines.length > 1 && (
                       <button
                         onClick={() => removeLine(i)}
@@ -449,12 +454,32 @@ export default function NewInvoicePage() {
               ))}
             </div>
 
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={addLine}
+                className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm font-semibold flex items-center gap-2 transition-all group/add"
+              >
+                <div className="w-5 h-5 bg-emerald-500/20 rounded-lg flex items-center justify-center group-hover/add:scale-110 transition-transform">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                Add another service
+              </button>
+            </div>
+
             {/* Totals */}
-            <div className="mt-5 pt-4 border-t border-white/5 space-y-2">
+            <div className="mt-5 pt-4 border-t border-white/10 space-y-2">
               <div className="flex justify-between text-sm text-gray-400">
-                <span>Subtotal</span>
-                <span>{formatZAR(subtotal)}</span>
+                <span>Subtotal (Before Discount)</span>
+                <span>{formatZAR(subtotal + totalDiscount)}</span>
               </div>
+              {totalDiscount > 0 && (
+                <div className="flex justify-between text-sm text-emerald-400 bg-emerald-400/5 px-3 py-1 rounded-lg border border-emerald-400/10">
+                  <span>Total Savings</span>
+                  <span className="font-bold font-mono">- {formatZAR(totalDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-sm text-gray-400">
                 <span className="flex items-center gap-2">
                   VAT

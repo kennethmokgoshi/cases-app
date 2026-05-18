@@ -28,6 +28,7 @@ type LineItem = {
   serviceLabel?: string
   quantity: number
   unitPrice: number
+  discount?: number
 }
 
 function lineItemLabel(item: LineItem): string {
@@ -213,6 +214,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <th className="px-5 py-3 text-left">Service / Description</th>
                 <th className="px-5 py-3 text-right">Qty</th>
                 <th className="px-5 py-3 text-right">Unit Price</th>
+                <th className="px-5 py-3 text-right">Discount</th>
                 <th className="px-5 py-3 text-right">Amount</th>
               </tr>
             </thead>
@@ -222,7 +224,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   <td className="px-5 py-3 text-gray-300">{lineItemLabel(item)}</td>
                   <td className="px-5 py-3 text-right text-gray-400">{item.quantity}</td>
                   <td className="px-5 py-3 text-right text-gray-400">{formatZAR(item.unitPrice)}</td>
-                  <td className="px-5 py-3 text-right text-white font-medium">{formatZAR(item.quantity * item.unitPrice)}</td>
+                  <td className="px-5 py-3 text-right text-emerald-400">{item.discount ? `- ${formatZAR(item.discount)}` : '—'}</td>
+                  <td className="px-5 py-3 text-right text-white font-medium">{formatZAR((item.quantity * item.unitPrice) - (item.discount || 0))}</td>
                 </tr>
               ))}
             </tbody>
@@ -231,6 +234,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
         <div className="border-t border-white/5 px-5 py-4">
           <div className="max-w-xs ml-auto space-y-2 text-sm">
+            {lineItems.some(l => l.discount) && (
+              <div className="flex justify-between text-emerald-400 font-medium">
+                <span>Total Savings</span>
+                <span>- {formatZAR(lineItems.reduce((s, l) => s + (l.discount || 0), 0))}</span>
+              </div>
+            )}
             <div className="flex justify-between text-gray-400">
               <span>Subtotal</span>
               <span>{formatZAR(invoice.subtotal.toNumber())}</span>

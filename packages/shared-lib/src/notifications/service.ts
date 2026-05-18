@@ -158,6 +158,7 @@ export interface NotificationResult {
     whatsappMessageId?: string;
     telegramMessageId?: string;
     errors: string[];
+    contactId?: string;
 }
 
 export async function sendStatusChangeNotification(
@@ -230,6 +231,7 @@ export async function sendManualMessage(
             const res = await provider.send(recipient, message);
             result.smsSuccess = res.success;
             result.smsMessageId = res.messageId;
+            result.contactId = (res as any).contactId;
             if (res.error) result.errors.push(res.error);
             await logNotification({
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message,
@@ -240,6 +242,7 @@ export async function sendManualMessage(
             const res = await provider.send(recipient, subject || 'Message from Zeno', message.replace(/\n/g, '<br>'), message);
             result.emailSuccess = res.success;
             result.emailMessageId = res.messageId;
+            result.contactId = (res as any).contactId;
             if (res.error) result.errors.push(res.error);
             await logNotification({
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message: subject || message,
@@ -250,6 +253,7 @@ export async function sendManualMessage(
             const res = await provider.send(recipient, message);
             result.whatsappSuccess = res.success;
             result.whatsappMessageId = res.messageId;
+            result.contactId = (res as any).contactId;
             if (res.error) result.errors.push(res.error);
             await logNotification({
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message,

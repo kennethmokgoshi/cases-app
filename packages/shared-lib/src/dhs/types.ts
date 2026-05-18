@@ -56,6 +56,7 @@ export interface DHSDetailedInfo {
     // Other Logic Fields
     requestStatus?: string; // From Manage Requests page (optional logic)
     daysCounter?: string; // From Manage Requests page (optional logic)
+    declineReason?: string;
 }
 
 export interface DHSTransferCheckResult {

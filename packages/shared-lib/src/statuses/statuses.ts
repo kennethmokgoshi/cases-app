@@ -221,6 +221,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         slaEnabled: true,
         slaDays: 3,
         isOverdueState: false },
+    {
+        code: 'DECLINED_VIA_DHS',
+        name: 'Declined via DHS',
+        category: 'DETOUR',
+        description: 'Transfer request declined by current debt counsellor via DHS',
+        slaEnabled: true,
+        slaDays: 3,
+        isOverdueState: false },
 
     // 5. ADVANCED STAGE
     {

@@ -14,6 +14,7 @@ const LineItemSchema = z.object({
   description:  z.string().optional(),
   quantity:     z.number(),
   unitPrice:    z.number(),
+  discount:     z.number().optional(),
 })
 
 export async function GET(

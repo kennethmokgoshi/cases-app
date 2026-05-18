@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@zenowethu/shared-lib', () => ({
     auth:         vi.fn(),
     createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+    renderBrandedEmail: (content: string) => content,
 }));
 
 vi.mock('@zenowethu/database', () => ({

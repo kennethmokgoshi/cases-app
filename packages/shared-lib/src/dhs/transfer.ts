@@ -34,7 +34,7 @@ export async function requestTransfer(
 
         // Navigate to Request New Transfer page
         logger.info('Navigating to Request New Transfer page:', DHS_CONFIG.requestTransferUrl);
-        await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'networkidle2', timeout: DHS_CONFIG.timeout });
+        await page.goto(DHS_CONFIG.requestTransferUrl, { waitUntil: 'load', timeout: DHS_CONFIG.timeout });
 
         // Detect DHS server error page before proceeding
         if (page.url().includes('dhs_Error.aspx')) {

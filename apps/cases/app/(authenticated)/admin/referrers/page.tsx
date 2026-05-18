@@ -150,7 +150,7 @@ export default function ReferrersPage() {
             const payload: Record<string, unknown> = {
                 firstName: form.firstName.trim(),
                 lastName: form.lastName.trim(),
-                idNumber: form.idNumber.trim(),
+                idNumber: form.idNumber.trim() || null,
                 email: form.email.trim() || null,
                 cellNumber: form.cellNumber.trim() || null,
                 employerName: form.employerName.trim() || null,
@@ -363,7 +363,7 @@ export default function ReferrersPage() {
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field label="First Name *" value={form.firstName} onChange={(v) => setForm((f) => ({ ...f, firstName: v }))} />
                                     <Field label="Last Name *" value={form.lastName} onChange={(v) => setForm((f) => ({ ...f, lastName: v }))} />
-                                    <Field label="SA ID Number *" value={form.idNumber} onChange={(v) => setForm((f) => ({ ...f, idNumber: v }))} disabled={!!editTarget} placeholder="13-digit SA ID" />
+                                    <Field label="SA ID Number" value={form.idNumber} onChange={(v) => setForm((f) => ({ ...f, idNumber: v }))} disabled={!!editTarget} placeholder="13-digit SA ID (Optional)" />
                                     <Field label="Email Address" value={form.email} onChange={(v) => setForm((f) => ({ ...f, email: v }))} type="email" />
                                     <Field label="Cell Number" value={form.cellNumber} onChange={(v) => setForm((f) => ({ ...f, cellNumber: v }))} placeholder="e.g. 082 000 0000" />
                                 </div>
@@ -428,7 +428,7 @@ export default function ReferrersPage() {
 
                         <div className="sticky bottom-0 bg-zeno-dark border-t border-zeno-blue/40 px-6 py-4 flex justify-end gap-3">
                             <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
-                            <button onClick={handleSave} disabled={saving || !form.firstName || !form.lastName || !form.idNumber} className="bg-zeno-cyan text-zeno-dark font-semibold px-5 py-2 rounded-lg hover:bg-zeno-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm">
+                            <button onClick={handleSave} disabled={saving || !form.firstName || !form.lastName} className="bg-zeno-cyan text-zeno-dark font-semibold px-5 py-2 rounded-lg hover:bg-zeno-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm">
                                 {saving ? 'Saving…' : editTarget ? 'Save Changes' : 'Create Referrer'}
                             </button>
                         </div>
