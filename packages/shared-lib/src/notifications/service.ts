@@ -209,14 +209,19 @@ export async function sendStatusChangeNotification(
 }
 
 /**
- * Send a custom manual message (not from a template)
+ * Send a custom manual message (not from a template).
+ * For EMAIL: supports `options.attachments` (public URLs) and `options.cc` (copied recipients).
  */
 export async function sendManualMessage(
     caseId: string,
     channel: 'SMS' | 'EMAIL' | 'WHATSAPP',
     recipient: string,
     message: string,
-    subject?: string
+    subject?: string,
+    options?: {
+        cc?: string[];
+        attachments?: string[];  // public URLs — each provider resolves them appropriately
+    }
 ): Promise<NotificationResult> {
     const result: NotificationResult = {
         smsSuccess: false,
@@ -239,7 +244,22 @@ export async function sendManualMessage(
             });
         } else if (channel === 'EMAIL') {
             const provider = await getEmailProvider();
-            const res = await provider.send(recipient, subject || 'Message from Zeno', message.replace(/\n/g, '<br>'), message);
+
+            const emailAttachments = options?.attachments?.length
+                ? options.attachments.map(url => ({
+                    filename: url.split('/').pop()?.split('?')[0] || 'document',
+                    content:  '' as string,
+                    url,
+                  }))
+                : undefined;
+
+            const res = await provider.send(
+                recipient,
+                subject || 'Message from Zeno',
+                message.replace(/\n/g, '<br>'),
+                message,
+                { attachments: emailAttachments, cc: options?.cc }
+            );
             result.emailSuccess = res.success;
             result.emailMessageId = res.messageId;
             result.contactId = (res as any).contactId;
@@ -248,6 +268,14 @@ export async function sendManualMessage(
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message: subject || message,
                 success: res.success, messageId: res.messageId, error: res.error, provider: res.provider
             });
+            // Log each CC recipient so they appear in notification history
+            for (const ccAddr of (options?.cc ?? [])) {
+                await logNotification({
+                    caseId, channel, recipient: ccAddr, recipientType: 'CLIENT', statusCode: 'MANUAL_CC',
+                    message: subject || message, success: res.success, messageId: res.messageId,
+                    error: res.error, provider: res.provider
+                });
+            }
         } else if (channel === 'WHATSAPP') {
             const provider = await getWhatsAppProvider();
             const res = await provider.send(recipient, message);

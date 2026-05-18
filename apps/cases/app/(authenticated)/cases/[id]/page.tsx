@@ -108,6 +108,7 @@ type CaseDetail = {
 
     debtReviewDate: string | null;
     lastKnownEmail: string | null;
+    preferredDcEmail: string | null;
 
     createdAt: string;
     updatedAt: string;
@@ -228,6 +229,8 @@ type EditFormData = {
     debtCounsellorName: string;
     dcTradingName: string;
     dcEmail: string;
+    lastKnownEmail: string;
+    preferredDcEmail: string;
     dcOperatingStatus: string;
     dcMobile: string;
     consumerDhsStatus: string;
@@ -314,6 +317,8 @@ export default function CaseDetailPage() {
         debtCounsellorName: '',
         dcTradingName: '',
         dcEmail: '',
+        lastKnownEmail: '',
+        preferredDcEmail: '',
         dcOperatingStatus: '',
         dcMobile: '',
         consumerDhsStatus: '',
@@ -853,6 +858,8 @@ export default function CaseDetailPage() {
             debtCounsellorName: caseData.debtCounsellorName || '',
             dcTradingName: caseData.dcTradingName || '',
             dcEmail: caseData.dcEmail || '',
+            lastKnownEmail: caseData.lastKnownEmail || '',
+            preferredDcEmail: caseData.preferredDcEmail || '',
             dcOperatingStatus: caseData.dcOperatingStatus || '',
             dcMobile: caseData.dcMobile || '',
             consumerDhsStatus: caseData.consumerDhsStatus || '',
@@ -898,6 +905,8 @@ export default function CaseDetailPage() {
             debtCounsellorName: caseData.debtCounsellorName || '',
             dcTradingName: caseData.dcTradingName || '',
             dcEmail: caseData.dcEmail || '',
+            lastKnownEmail: caseData.lastKnownEmail || '',
+            preferredDcEmail: caseData.preferredDcEmail || '',
             dcOperatingStatus: caseData.dcOperatingStatus || '',
             dcMobile: caseData.dcMobile || '',
             consumerDhsStatus: caseData.consumerDhsStatus || '',
@@ -927,6 +936,8 @@ export default function CaseDetailPage() {
                     debtCounsellorName: editForm.debtCounsellorName || null,
                     dcTradingName: editForm.dcTradingName || null,
                     dcEmail: editForm.dcEmail || null,
+                    lastKnownEmail: editForm.lastKnownEmail || null,
+                    preferredDcEmail: editForm.preferredDcEmail || null,
                     dcOperatingStatus: editForm.dcOperatingStatus || null,
                     dcMobile: editForm.dcMobile || null,
                     consumerDhsStatus: editForm.consumerDhsStatus || null,
@@ -1268,6 +1279,8 @@ export default function CaseDetailPage() {
                     debtCounsellorName: editForm.debtCounsellorName || null,
                     dcTradingName: editForm.dcTradingName || null,
                     dcEmail: editForm.dcEmail || null,
+                    lastKnownEmail: editForm.lastKnownEmail || null,
+                    preferredDcEmail: editForm.preferredDcEmail || null,
                     dcOperatingStatus: editForm.dcOperatingStatus || null,
                     dcMobile: editForm.dcMobile || null,
                     consumerDhsStatus: editForm.consumerDhsStatus || null,
@@ -3033,11 +3046,47 @@ export default function CaseDetailPage() {
                                             <div>
                                                 <label className="block text-xs text-gray-400 mb-1">DC EMAIL</label>
                                                 <input
-                                                    type="text"
+                                                    type="email"
                                                     value={editForm.dcEmail}
                                                     onChange={(e) => setEditForm(prev => ({ ...prev, dcEmail: e.target.value }))}
                                                     className="w-full bg-black/50 border border-white/10 rounded px-2 py-1 text-sm text-white focus:border-cyan-500 focus:outline-none"
                                                 />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-400 mb-1">DC LAST USED EMAIL</label>
+                                                <input
+                                                    type="email"
+                                                    value={editForm.lastKnownEmail}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, lastKnownEmail: e.target.value }))}
+                                                    className="w-full bg-black/50 border border-white/10 rounded px-2 py-1 text-sm text-white focus:border-cyan-500 focus:outline-none"
+                                                />
+                                            </div>
+                                            <div className="col-span-2">
+                                                <label className="block text-xs text-green-400 mb-1 font-semibold">★ PREFERRED EMAIL <span className="text-gray-500 font-normal">(used when sending to DC)</span></label>
+                                                <input
+                                                    type="email"
+                                                    value={editForm.preferredDcEmail}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, preferredDcEmail: e.target.value }))}
+                                                    placeholder="Set a preferred email to override DC Email and Last Used Email"
+                                                    className="w-full bg-black/50 border border-green-500/40 rounded px-2 py-1 text-sm text-white focus:border-green-400 focus:outline-none placeholder:text-gray-600"
+                                                />
+                                                <div className="flex gap-2 mt-1 flex-wrap">
+                                                    {editForm.dcEmail && (
+                                                        <button type="button" onClick={() => setEditForm(prev => ({ ...prev, preferredDcEmail: prev.dcEmail }))} className="text-xs text-cyan-400 hover:text-cyan-300">
+                                                            Use DC Email
+                                                        </button>
+                                                    )}
+                                                    {editForm.lastKnownEmail && (
+                                                        <button type="button" onClick={() => setEditForm(prev => ({ ...prev, preferredDcEmail: prev.lastKnownEmail }))} className="text-xs text-cyan-400 hover:text-cyan-300">
+                                                            Use Last Used Email
+                                                        </button>
+                                                    )}
+                                                    {editForm.preferredDcEmail && (
+                                                        <button type="button" onClick={() => setEditForm(prev => ({ ...prev, preferredDcEmail: '' }))} className="text-xs text-red-400 hover:text-red-300">
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -3094,12 +3143,34 @@ export default function CaseDetailPage() {
                                             </div>
                                             <div>
                                                 <div className="text-xs text-gray-400 mb-1">DC EMAIL</div>
-                                                <div className="text-sm text-white font-medium">{caseData.dcEmail || 'Not set'}</div>
+                                                <div className="text-sm text-white font-medium font-mono">{caseData.dcEmail || 'Not set'}</div>
                                             </div>
                                             <div>
                                                 <div className="text-xs text-gray-400 mb-1">DC LAST USED EMAIL</div>
-                                                <div className="text-sm text-white font-medium">{caseData.lastKnownEmail || 'Not set'}</div>
+                                                <div className="text-sm text-white font-medium font-mono">{caseData.lastKnownEmail || 'Not set'}</div>
                                             </div>
+                                            {(() => {
+                                                const preferred = caseData.preferredDcEmail;
+                                                const fallback = caseData.lastKnownEmail || caseData.dcEmail;
+                                                const activeEmail = preferred || fallback;
+                                                const activeSource = preferred ? 'Preferred' : caseData.lastKnownEmail ? 'Last Used' : 'DC Email';
+                                                return (
+                                                    <div className="col-span-2 p-2 rounded-lg border border-green-500/30 bg-green-500/5">
+                                                        <div className="flex items-center gap-1.5 mb-1">
+                                                            <span className="text-green-400 text-xs">★</span>
+                                                            <div className="text-xs text-green-400 font-semibold">PREFERRED EMAIL</div>
+                                                            <span className="text-xs text-gray-500 ml-auto">{activeEmail ? `Active: ${activeSource}` : 'No email set'}</span>
+                                                        </div>
+                                                        {preferred ? (
+                                                            <div className="text-sm text-green-300 font-mono">{preferred}</div>
+                                                        ) : (
+                                                            <div className="text-sm text-gray-500 italic">
+                                                                Not set — will use {activeEmail ? <span className="text-white/70 font-mono not-italic">{activeEmail}</span> : 'no email found'}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                             <div className="col-span-2">
                                                 <div className="flex gap-2 flex-wrap pt-2">
                                                     <button

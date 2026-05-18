@@ -1,7 +1,23 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-18 (Unit Test Harmonization & Test Suite Fixes)
+> Last updated: 2026-05-18 (DHS Email Attachments & Preferred DC Email)
+
+---
+
+### DHS Email Attachments, Client CCs & Preferred DC Email (2026-05-18)
+- [x] **`packages/database/prisma/schema.prisma` & `apps/cases/prisma/schema.prisma`** — Added `preferredDcEmail` to the `Case` model, giving operators the ability to set a preferred/override email for any debt counsellor.
+- [x] **`apps/cases/app/api/cases/[id]/route.ts`** — Enabled PATCH route support for `preferredDcEmail`.
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — Integrated a new UI field on the Case detail page to view and edit the `preferredDcEmail`, displaying the active override or fallback email dynamically.
+- [x] **`packages/shared-lib/src/notifications/providers.ts`** — Upgraded SMTP and Resend providers to support CC'ing recipients (`options.cc`) and fetch URL-only attachments dynamically before dispatching via SMTP.
+- [x] **`packages/shared-lib/src/notifications/service.ts`** — Upgraded `sendManualMessage` to accept email CC addresses and dynamically resolve/pass document attachment URLs.
+- [x] **`packages/shared-lib/src/integrations/ghl-service.ts`** — Updated the GHL file request process to automatically CC the client, notify them via SMS/WhatsApp, and apply the `dc_file_requested` tag.
+- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — Completely modernized the DHS transfer request notification.
+  - Automatically fetches actual signed PDF documents (ID/POA) and attaches them to the outbound email.
+  - CC's the client so they are kept in the loop on DHS transfer requests.
+  - Renders the custom `REQUEST_FILE_DC` email template dynamically.
+  - Sends a client SMS/WhatsApp notification about the transfer request.
+  - Applies the `dc_file_requested` GHL tag to initiate the 5-day chase sequence automatically.
 
 ---
 

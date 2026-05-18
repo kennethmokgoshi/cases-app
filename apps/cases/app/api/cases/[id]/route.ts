@@ -230,6 +230,8 @@ export async function PATCH(
             debtCounsellorName,
             dcTradingName,
             dcEmail,
+            lastKnownEmail,
+            preferredDcEmail,
             dcOperatingStatus,
             dcMobile,
             consumerDhsStatus,
@@ -624,6 +626,8 @@ export async function PATCH(
         if (debtCounsellorName !== undefined) caseUpdateData.debtCounsellorName = debtCounsellorName;
         if (dcTradingName !== undefined) caseUpdateData.dcTradingName = dcTradingName;
         if (dcEmail !== undefined) caseUpdateData.dcEmail = dcEmail;
+        if (lastKnownEmail !== undefined) caseUpdateData.lastKnownEmail = lastKnownEmail;
+        if (preferredDcEmail !== undefined) caseUpdateData.preferredDcEmail = preferredDcEmail;
         if (dcOperatingStatus !== undefined) caseUpdateData.dcOperatingStatus = dcOperatingStatus;
         if (dcMobile !== undefined) caseUpdateData.dcMobile = dcMobile;
         if (consumerDhsStatus !== undefined) caseUpdateData.consumerDhsStatus = consumerDhsStatus;

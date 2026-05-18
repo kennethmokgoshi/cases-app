@@ -20,6 +20,7 @@ export interface EmailOptions {
     fromName?:    string;
     fromEmail?:   string;
     attachments?: EmailAttachment[];
+    cc?:          string[];
 }
 
 export interface EmailProvider {
@@ -142,6 +143,8 @@ export class ResendEmailProvider implements EmailProvider {
                 text:    textBody || htmlBody.replace(/<[^>]*>/g, ''),
             };
 
+            if (options?.cc?.length) body.cc = options.cc;
+
             if (options?.attachments?.length) {
                 body.attachments = options.attachments.map(a => ({
                     filename: a.filename,
@@ -206,15 +209,40 @@ export class SmtpEmailProvider implements EmailProvider {
 
     async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         try {
+            // For URL-only attachments (content is empty), fetch the file so SMTP can attach it.
+            const resolvedAttachments: { filename: string; content: Buffer | string; contentType?: string }[] = [];
+            for (const a of (options?.attachments ?? [])) {
+                if (a.url && (!a.content || a.content === '')) {
+                    try {
+                        const res = await fetch(a.url);
+                        if (res.ok) {
+                            resolvedAttachments.push({
+                                filename:    a.filename,
+                                content:     Buffer.from(await res.arrayBuffer()),
+                                contentType: a.contentType,
+                            });
+                        } else {
+                            logger.warn(`[SMTP] Could not fetch attachment (${res.status}): ${a.url}`);
+                        }
+                    } catch (fetchErr) {
+                        logger.warn(`[SMTP] Fetch error for attachment ${a.url}:`, fetchErr);
+                    }
+                } else {
+                    resolvedAttachments.push({ filename: a.filename, content: a.content, contentType: a.contentType });
+                }
+            }
+
             const info = await this.transporter.sendMail({
                 from:        options?.fromEmail || this.fromEmail,
                 to:          to,
+                cc:          options?.cc?.join(', '),
                 subject:     subject,
                 html:        htmlBody,
                 text:        textBody || htmlBody.replace(/<[^>]*>/g, ''),
-                attachments: options?.attachments?.map(a => ({
-                    filename: a.filename,
-                    content:  a.content,
+                attachments: resolvedAttachments.map(a => ({
+                    filename:    a.filename,
+                    content:     a.content,
+                    contentType: a.contentType,
                 })),
             });
 

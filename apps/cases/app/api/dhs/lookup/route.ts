@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createLogger, sendStatusChangeNotification, auth } from '@zenowethu/shared-lib';
+import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, renderTemplate, auth } from '@zenowethu/shared-lib';
 import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
@@ -701,7 +701,10 @@ export async function POST(request: Request) {
             let resolvedEmail: string | null = null;
             let emailSource = '';
 
-            if (isGoodEmail(caseData.lastKnownEmail)) {
+            if (isGoodEmail(caseData.preferredDcEmail)) {
+                resolvedEmail = caseData.preferredDcEmail;
+                emailSource = 'preferred email';
+            } else if (isGoodEmail(caseData.lastKnownEmail)) {
                 resolvedEmail = caseData.lastKnownEmail;
                 emailSource = 'last known email';
             } else if (caseData.ncrdcNo) {
@@ -762,37 +765,81 @@ export async function POST(request: Request) {
                 logger.info(`Sending email to DC (${emailSource}):`, resolvedEmail);
 
                 const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`;
-                const emailResult = await sendStatusChangeNotification({
-                    caseId,
+
+                // Render the REQUEST_FILE_DC template
+                const dcTemplate = getTemplateByStatus('REQUEST_FILE_DC');
+                const templateVars = {
+                    dcName:      caseData.debtCounsellorName || 'Debt Counsellor',
                     clientName,
-                    fileNumber: caseData.fileNumber,
-                    statusCode: 'REQUEST_FILE_DC',
-                    dcName: caseData.debtCounsellorName || 'Debt Counsellor',
-                    dcEmail: resolvedEmail,
-                    idNumber: caseData.client.idNumber,
-                    isB2B: caseData.acquisitionType === 'B2B'
-                });
+                    idNumber:    caseData.client.idNumber,
+                    fileNumber:  caseData.fileNumber,
+                    companyName: process.env.COMPANY_NAME || 'Zenowethu Debt Management',
+                    phone:       process.env.COMPANY_PHONE || '012 035 1824',
+                };
+                const emailSubject = dcTemplate
+                    ? renderTemplate(dcTemplate.emailSubject, templateVars)
+                    : `File Transfer Request: ${clientName} (ID: ${caseData.client.idNumber}) — Documents Required`;
+                const emailBody = dcTemplate
+                    ? renderTemplate(dcTemplate.emailTemplate, templateVars)
+                    : `Dear Debt Counsellor,\n\nWe request the consumer file for ${clientName} (ID: ${caseData.client.idNumber}).\n\nRegards,\nZenowethu Debt Management`;
+
+                // Collect ID/POA document URLs to attach — DC sees the actual signed documents
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://cases.zenowethu.co.za';
+                const attachmentUrls = (caseData.documents ?? [])
+                    .filter(d => ['ID', 'POA', 'ZENOWETHU_POA'].includes(d.type))
+                    .map(d => `${baseUrl}${d.fileUrl}`);
+
+                // CC the client so they know we acted on their behalf
+                const ccEmails: string[] = caseData.client.email ? [caseData.client.email] : [];
+
+                const emailResult = await sendManualMessage(
+                    caseId,
+                    'EMAIL',
+                    resolvedEmail,
+                    emailBody,
+                    emailSubject,
+                    { attachments: attachmentUrls, cc: ccEmails }
+                );
 
                 if (emailResult.emailSuccess) {
                     await prisma.case.update({
                         where: { id: caseId },
-                        data: { 
+                        data: {
                             nextUpdate: addWorkingDays(new Date(), 5),
                             updatedBy: attribution
                         }
                     });
+                    const attachNote = attachmentUrls.length > 0 ? ` (${attachmentUrls.length} document(s) attached)` : '';
+                    const ccNote = ccEmails.length > 0 ? `, client CC'd` : '';
                     await prisma.caseComment.create({
                         data: {
                             caseId,
                             userId: actingUserId || '',
-                            content: `[SYSTEM] Requested via DHS. Email sent to DC (${resolvedEmail}) [source: ${emailSource}] requesting: Form 16, Form 17.1, Form 17.2, Form 17.7, complete consumer file, court/consent orders, account schedules, and all supporting documentation. Next update: +5 working days.`
+                            content: `[SYSTEM] Requested via DHS. Email sent to DC (${resolvedEmail}) [source: ${emailSource}]${attachNote}${ccNote} requesting: Form 16, Form 17.1, Form 17.2, Form 17.7, complete consumer file, court/consent orders, account schedules, and all supporting documentation. Next update: +5 working days.`
                         }
                     });
+
+                    // Notify the client via WhatsApp or SMS (non-critical)
+                    const clientMsg = `Hi ${caseData.client.firstName}, your file transfer request has been submitted to DHS and we have formally notified your Debt Counsellor. We will update you as soon as we receive a response. — Zenowethu Debt Management`;
+                    const notifChannel: 'WHATSAPP' | 'SMS' | null =
+                        caseData.client.whatsappNumber ? 'WHATSAPP' :
+                        caseData.client.phone ? 'SMS' : null;
+                    if (notifChannel) {
+                        GhlService.sendMessage(caseId, notifChannel, clientMsg).catch(err =>
+                            logger.warn('[DHS Route] Client notification failed (non-critical):', err)
+                        );
+                    }
+
+                    // Apply GHL tag to trigger 5-day follow-up chase automation
+                    GhlService.applyTags(caseId, ['dc_file_requested']).catch(err =>
+                        logger.warn('[DHS Route] GHL tag failed (non-critical):', err)
+                    );
+
                     result = {
                         success: true,
                         dhsRequested: true,
                         emailSent: true,
-                        message: `Requested via DHS successfully. Email also sent to debt counsellor (${resolvedEmail}) requesting complete file. Source: ${emailSource}.`
+                        message: `Requested via DHS successfully. Email sent to debt counsellor (${resolvedEmail})${attachNote}${ccNote}. Source: ${emailSource}.`
                     };
                 } else {
                     result = {

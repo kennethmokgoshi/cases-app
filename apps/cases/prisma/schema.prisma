@@ -102,6 +102,7 @@ model Case {
   dcTradingName           String?
   dcEmail                 String?
   lastKnownEmail          String?
+  preferredDcEmail        String?
   dcOperatingStatus       String?
   dcMobile                String?
   consumerDhsStatus       String?

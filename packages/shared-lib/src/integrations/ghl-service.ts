@@ -349,6 +349,7 @@ export class GhlService {
         subject?: string,
         recipient?: string,
         attachments?: string[],
+        cc?: string[],
     ): Promise<GhlSendResult> {
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
@@ -392,7 +393,8 @@ export class GhlService {
                 channel,
                 formattedTo,
                 message,
-                subject
+                subject,
+                { attachments, cc }
             );
 
             result = {
@@ -538,6 +540,7 @@ export class GhlService {
         recipient?: string,
         subject?: string,
         body?: string,
+        cc?: string[],
     ): Promise<GhlSendResult> {
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
@@ -558,15 +561,13 @@ export class GhlService {
             return { success: false, error: `No documents of type [${types.join(', ')}] found for case ${caseId}`, channel: 'EMAIL', recipient: to };
         }
 
-        // Generate public URLs (assuming BASE_URL is configured or using relative paths if GHL supports it)
-        // Note: GHL needs absolute URLs.
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://cases.zenowethu.co.za';
         const attachmentUrls = docs.map(d => `${baseUrl}${d.fileUrl}`);
 
         const messageBody = body || `Please find the requested documents (${types.join(', ')}) attached for case ${caseRecord.fileNumber}.`;
         const emailSubject = subject || `Documents for ${caseRecord.fileNumber}`;
 
-        return this.sendMessage(caseId, 'EMAIL', messageBody, emailSubject, to, attachmentUrls);
+        return this.sendMessage(caseId, 'EMAIL', messageBody, emailSubject, to, attachmentUrls, cc);
     }
 
     /**
@@ -643,7 +644,8 @@ export class GhlService {
     }
 
     /**
-     * Specifically handles the request for a file from a Debt Counsellor by sending the signed POA and ID.
+     * Sends a formal file request to the Debt Counsellor with the signed POA and ID attached.
+     * CCs the client on the email and sends them a WhatsApp/SMS to keep them informed.
      */
     static async requestFileFromDC(caseId: string) {
         const caseRecord = await prisma.case.findUnique({
@@ -653,13 +655,37 @@ export class GhlService {
 
         if (!caseRecord) throw new Error(`Case not found: ${caseId}`);
 
-        const subject = `File Request: ${caseRecord.client.firstName} ${caseRecord.client.lastName} (${caseRecord.client.idNumber})`;
-        const body = `Dear Debt Counsellor,\n\nPlease find attached the signed Power of Attorney and ID copy for our client, ${caseRecord.client.firstName} ${caseRecord.client.lastName}.\n\nWe kindly request that you provide us with the latest 17.W and any relevant court orders or certificates for this client.\n\nRegards,\nZenowethu Debt Management`;
+        const { client } = caseRecord;
 
-        const result = await this.sendDocuments(caseId, ['ID', 'POA', 'ZENOWETHU_POA'], undefined, subject, body);
+        const subject = `File Request: ${client.firstName} ${client.lastName} (${client.idNumber})`;
+        const body = `Dear Debt Counsellor,\n\nPlease find attached the signed Power of Attorney and ID copy for our client, ${client.firstName} ${client.lastName}.\n\nWe kindly request that you provide us with the latest 17.W and any relevant court orders or certificates for this client.\n\nRegards,\nZenowethu Debt Management`;
 
-        // Start GHL follow-up chase sequence — tags trigger the automation in GHL
+        // CC the client on the email to keep them in the loop
+        const ccEmails: string[] = client.email ? [client.email] : [];
+
+        const result = await this.sendDocuments(
+            caseId,
+            ['ID', 'POA', 'ZENOWETHU_POA'],
+            undefined,   // recipient defaults to dcEmail
+            subject,
+            body,
+            ccEmails,
+        );
+
         if (result.success) {
+            // Notify the client via WhatsApp or SMS
+            const clientMsg = `Hi ${client.firstName}, we have submitted a file transfer request to your Debt Counsellor on your behalf. We will update you as soon as we receive your file. — Zenowethu Debt Management`;
+            const notifChannel: 'WHATSAPP' | 'SMS' | null =
+                client.whatsappNumber ? 'WHATSAPP' :
+                client.phone ? 'SMS' : null;
+
+            if (notifChannel) {
+                this.sendMessage(caseId, notifChannel, clientMsg).catch(err =>
+                    logger.warn('[GHL Service] Client file-request notification failed (non-critical):', err)
+                );
+            }
+
+            // Apply GHL follow-up tag to trigger chase automation
             this.applyTags(caseId, ['dc_file_requested']).catch(err =>
                 logger.warn('[GHL Service] Follow-up tag failed (non-critical):', err)
             );
