@@ -15,7 +15,7 @@
 ---
 
 ### Finance App: Open Access to All Staff (2026-05-17)
-- [x] **`apps/finance/middleware.ts`** — Created middleware (previously missing). All authenticated staff can now access Finance (port 3004). Unauthenticated users are redirected to `/login`. The `/admin` sub-routes remain restricted to admins only. CORS handling and preflight support included.
+- [x] **`apps/finance/proxy.ts`** — Migrated and merged authorization logic into proxy.ts (the Next.js 16+ convention replacing middleware.ts). All authenticated staff can now access Finance (port 3004). Unauthenticated users are redirected to `/login`. The `/admin` sub-routes remain restricted to admins only. CORS handling and preflight support included.
 
 ---
 
