@@ -200,11 +200,7 @@ export async function POST(request: Request) {
                         else if (dayNum === 2) daysToAdd = 3;
                         else if (dayNum === 3) daysToAdd = 2;
                         else if (dayNum === 4) daysToAdd = 1;
-                        else if (dayNum >= 5) {
-                            // "On the look out" for files pending up to 30 days
-                            // Check every 2 days instead of waiting a full week
-                            daysToAdd = 2; 
-                        }
+                        else if (dayNum >= 5) daysToAdd = 5;
 
                         updateData.nextUpdate = addWorkingDays(new Date(), daysToAdd);
                         // Sync workflow status
@@ -335,9 +331,10 @@ export async function POST(request: Request) {
                 if (caseId) {
                     await prisma.case.update({
                         where: { id: caseId },
-                        data: { 
+                        data: {
                             status: 'NOT_LINKED',
                             dhsStatus: 'NOT_LINKED',
+                            nextUpdate: addWorkingDays(new Date(), 1),
                             updatedBy: attribution
                         }
                     });
@@ -407,6 +404,7 @@ export async function POST(request: Request) {
                                 declineReason:     data.declineReason || null,
                                 status:            'NOT_REQUESTED_VIA_DHS',
                                 dhsStatus:         'Not Requested via DHS',
+                                nextUpdate:        addWorkingDays(new Date(), 2),
                                 updatedBy:         attribution
                             },
                         });

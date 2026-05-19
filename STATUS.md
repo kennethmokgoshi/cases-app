@@ -1,7 +1,16 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-18 (AI Auto-Reply & Soft-Delete Trash Management)
+> Last updated: 2026-05-19 (GHL as Primary Email Channel + Unanswered Emails Dashboard)
+
+---
+
+### GHL as Primary Email Channel + Unanswered Emails API (2026-05-19)
+- [x] **`packages/shared-lib/src/notifications/providers.ts`** — Added `FallbackEmailProvider` wrapper class: tries the primary provider (GHL), and if it returns `success: false` retries with the fallback (SMTP). Ensures professional emails to DCs/bureaus still deliver when GHL can't find or create a contact.
+- [x] **`packages/shared-lib/src/notifications/service.ts`** — Flipped `getEmailProvider()` priority so GHL API is tried first. All client emails now route through GHL, meaning client replies come back through the GHL webhook → `handleInboundMessage()` → AI auto-reply + CaseComment log. SMTP is retained as a transparent fallback wrapped via `FallbackEmailProvider`. New chain: `GHL API (+ SMTP fallback) → GHL Webhook → SMTP → Resend → Mock`.
+- [x] **`apps/cases/app/api/dashboard/unanswered-emails/route.ts`** — New `GET /api/dashboard/unanswered-emails` endpoint. Returns cases where an inbound message received no auto-reply within a configurable threshold (default 2h). Used by staff to manually intervene when the AI declined to reply or a complex query needs human attention. Params: `threshold` (hours, default 2), `lookbackHours` (default 48). Response sorted most urgent first.
+- [x] **`packages/shared-lib/src/notifications/providers.test.ts`** — 5 tests for `FallbackEmailProvider` (primary success, fallback triggered, both fail, argument passthrough, provider name). All passing.
+- [x] **`apps/cases/app/api/dashboard/unanswered-emails/unanswered-emails.test.ts`** — 6 tests covering all filter edge cases (no-reply flag, replied case skipped, threshold window, new message after reply, no inbound, sort order). All passing.
 
 ---
 

@@ -994,15 +994,28 @@ export async function DELETE(
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
-        await prisma.case.update({
-            where: { id },
-            data: {
-                deletedAt: new Date(),
-                deletedById: session.user.id
-            }
-        });
+        const now = new Date();
+        const deletedByName = session.user.name || session.user.id;
+        const deletedOn = now.toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' });
 
-        logger.info(`Case ${existingCase.fileNumber} soft-deleted by user ${session.user.id}`);
+        await prisma.$transaction([
+            prisma.case.update({
+                where: { id },
+                data: { deletedAt: now, deletedById: session.user.id },
+            }),
+            prisma.caseComment.create({
+                data: {
+                    caseId: id,
+                    userId: session.user.id,
+                    content: `Case moved to trash by ${deletedByName} on ${deletedOn}.`,
+                    activityType: 'SYSTEM',
+                    type: 'NOTE',
+                    isInternal: true,
+                },
+            }),
+        ]);
+
+        logger.info(`Case ${existingCase.fileNumber} soft-deleted by ${deletedByName} (${session.user.id})`);
 
         return NextResponse.json({
             success: true,

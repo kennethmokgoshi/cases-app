@@ -140,6 +140,7 @@ export async function GET(request: Request) {
         const payingCodes = WORKFLOW_STATUSES.filter(s => s.category === 'PAYING').map(s => s.code);
 
         if (filter === 'overdue') {
+            // Cases whose nextUpdate deadline has passed and are not completed/lost
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             where.nextUpdate = { lt: today };
@@ -147,10 +148,30 @@ export async function GET(request: Request) {
         } else if (filter === 'my-cases') {
             where.OR = [
                 { createdById: session.user.id },
-                { assignedToId: session.user.id }
+                { assignedToId: session.user.id },
             ];
-        } else if (filter === 'new-leads') {
-            where.status = 'NEW_LEAD';
+        } else if (filter === 'begin') {
+            where.status = { in: beginningCodes };
+        } else if (filter === 'progress') {
+            const progressCodes = WORKFLOW_STATUSES.filter(s => s.category === 'IN_PROGRESS').map(s => s.code);
+            where.status = { in: progressCodes };
+        } else if (filter === 'detour') {
+            // Detour + Advanced Detour (cleared, parked, CL handed over, etc.)
+            const detourCodes = WORKFLOW_STATUSES.filter(s => s.category === 'DETOUR' || s.category === 'ADVANCED_DETOUR').map(s => s.code);
+            where.status = { in: detourCodes };
+        } else if (filter === 'advanced') {
+            // Advanced + Advanced Progress (followed up, positive outcome, ready for clearance)
+            const advancedCodes = WORKFLOW_STATUSES.filter(s => s.category === 'ADVANCED' || s.category === 'ADVANCED_PROGRESS').map(s => s.code);
+            where.status = { in: advancedCodes };
+        } else if (filter === 'completed') {
+            const justCompletedCodes = WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED').map(s => s.code);
+            where.status = { in: justCompletedCodes };
+        } else if (filter === 'finance') {
+            // Paying + Settled
+            const financeCodes = WORKFLOW_STATUSES.filter(s => s.category === 'PAYING' || s.category === 'SETTLED').map(s => s.code);
+            where.status = { in: financeCodes };
+        } else if (filter === 'lost') {
+            where.status = { in: lostCodes };
         }
 
         if (status && status !== 'ALL') {

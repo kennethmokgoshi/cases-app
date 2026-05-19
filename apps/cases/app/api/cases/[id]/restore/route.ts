@@ -35,12 +35,27 @@ export async function POST(
             return NextResponse.json({ error: 'Restore window has expired. This case can no longer be restored.' }, { status: 410 });
         }
 
-        await prisma.case.update({
-            where: { id },
-            data: { deletedAt: null, deletedById: null }
-        });
+        const restoredByName = session.user.name || session.user.id;
+        const restoredOn = new Date().toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' });
 
-        logger.info(`Case ${trashed.fileNumber} restored by user ${session.user.id}`);
+        await prisma.$transaction([
+            prisma.case.update({
+                where: { id },
+                data: { deletedAt: null, deletedById: null },
+            }),
+            prisma.caseComment.create({
+                data: {
+                    caseId: id,
+                    userId: session.user.id,
+                    content: `Case restored from trash by ${restoredByName} on ${restoredOn}.`,
+                    activityType: 'SYSTEM',
+                    type: 'NOTE',
+                    isInternal: true,
+                },
+            }),
+        ]);
+
+        logger.info(`Case ${trashed.fileNumber} restored by ${restoredByName} (${session.user.id})`);
 
         return NextResponse.json({
             success: true,

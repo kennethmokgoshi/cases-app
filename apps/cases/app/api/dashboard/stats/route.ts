@@ -169,7 +169,7 @@ export async function GET(request: Request) {
                 });
             }, 'pendingInvoices'),
             prisma.case.findMany({
-                where: projectFilter,
+                where: { ...projectFilter, deletedAt: null },
                 select: { createdAt: true }
             })
         ]);

@@ -537,3 +537,24 @@ export class GhlWebhookWhatsAppProvider implements WhatsAppProvider {
         }
     }
 }
+
+// ===== FALLBACK EMAIL PROVIDER =====
+// Tries the primary provider; if it returns success:false, retries with the fallback.
+// Used to wrap GHL (primary) with SMTP (fallback) so professional emails to DCs/bureaus
+// still deliver even when GHL can't find or create a contact.
+export class FallbackEmailProvider implements EmailProvider {
+    name: string;
+
+    constructor(private primary: EmailProvider, private fallback: EmailProvider) {
+        this.name = `${primary.name}→${fallback.name}`;
+    }
+
+    async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
+        const result = await this.primary.send(to, subject, htmlBody, textBody, options);
+        if (result.success) return result;
+
+        logger.warn(`[Email] ${this.primary.name} failed for ${to} — retrying via ${this.fallback.name}. Error: ${result.error}`);
+        const fallbackResult = await this.fallback.send(to, subject, htmlBody, textBody, options);
+        return { ...fallbackResult, provider: this.name };
+    }
+}

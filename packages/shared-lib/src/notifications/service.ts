@@ -19,7 +19,8 @@ import {
     GhlWhatsAppProvider,
     GhlWebhookSmsProvider,
     GhlWebhookEmailProvider,
-    GhlWebhookWhatsAppProvider } from './providers';
+    GhlWebhookWhatsAppProvider,
+    FallbackEmailProvider } from './providers';
 import {
     getTemplateByStatus,
     renderTemplate,
@@ -57,37 +58,48 @@ async function getSmsProvider(): Promise<SmsProvider> {
 }
 
 async function getEmailProvider(): Promise<EmailProvider> {
-    // Priority 1: SMTP — direct, reliable, proven. Always prefer over webhooks.
+    // Priority 1: GHL API — primary channel so all replies route back through the GHL webhook,
+    // giving the app full two-way conversation history and enabling AI auto-replies.
+    // Wrapped with SMTP fallback so professional emails to DCs/bureaus still deliver when
+    // GHL cannot find or create a contact for the recipient.
+    const ghl = await getGHLCredentials();
+    if (ghl.apiKey && ghl.locationId) {
+        const ghlProvider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
+        if (process.env.SMTP_HOST) {
+            const smtpFallback = new SmtpEmailProvider({
+                host:      process.env.SMTP_HOST,
+                port:      parseInt(process.env.SMTP_PORT || '587'),
+                secure:    process.env.SMTP_SECURE === 'true',
+                auth:      { user: process.env.SMTP_USER || '', pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '' },
+                fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM,
+            });
+            return new FallbackEmailProvider(ghlProvider, smtpFallback);
+        }
+        return ghlProvider;
+    }
+
+    // Priority 2: GHL webhook (fire-and-forget; depends on GHL workflow being configured for email)
+    if (process.env.GHL_EMAIL_WEBHOOK_URL) {
+        return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL);
+    }
+
+    // Priority 3: SMTP — direct delivery for environments without GHL
     if (process.env.SMTP_HOST) {
         return new SmtpEmailProvider({
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: process.env.SMTP_SECURE === 'true',
-            auth: {
-                user: process.env.SMTP_USER || '',
-                pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || ''
-            },
-            fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM
+            host:      process.env.SMTP_HOST,
+            port:      parseInt(process.env.SMTP_PORT || '587'),
+            secure:    process.env.SMTP_SECURE === 'true',
+            auth:      { user: process.env.SMTP_USER || '', pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '' },
+            fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM,
         });
     }
 
-    // Priority 2: Resend
+    // Priority 4: Resend
     if (process.env.RESEND_API_KEY) {
         return new ResendEmailProvider(
             process.env.RESEND_API_KEY,
             process.env.EMAIL_FROM || process.env.SMTP_FROM || 'notifications@zenowethu.co.za'
         );
-    }
-
-    // Priority 3: GHL webhook (fire-and-forget; depends on GHL workflow being configured for email)
-    if (process.env.GHL_EMAIL_WEBHOOK_URL) {
-        return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL);
-    }
-
-    // Priority 4: GHL API (fallback — shares creds with SMS/WhatsApp)
-    const ghl = await getGHLCredentials();
-    if (ghl.apiKey && ghl.locationId) {
-        return new GhlEmailProvider(ghl.apiKey, ghl.locationId);
     }
 
     return new MockEmailProvider();
