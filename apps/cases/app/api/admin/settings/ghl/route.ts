@@ -49,9 +49,16 @@ export async function GET() {
             settings.ghl_password = '';
         }
 
+        // Also report whether env vars are set (without exposing values)
+        const envVars = {
+            GHL_API_KEY:      process.env.GHL_API_KEY      ? `set (${process.env.GHL_API_KEY.substring(0, 8)}...)` : 'not set',
+            GHL_LOCATION_ID:  process.env.GHL_LOCATION_ID  ? process.env.GHL_LOCATION_ID : 'not set',
+        };
+
         return NextResponse.json({
             settings,
-            lastUpdated });
+            lastUpdated,
+            envVars });
     } catch (error) {
         logger.error('Error fetching GHL settings:', error);
         return NextResponse.json(
