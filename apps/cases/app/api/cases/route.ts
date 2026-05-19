@@ -333,6 +333,35 @@ export async function POST(request: Request) {
 
         logger.info('Case created successfully:', newCase.id);
 
+        // Send welcome notification if the client has contact details
+        if (client.email || client.phone) {
+            const isB2B = data.acquisitionType === 'B2B';
+            const isCreatedByPartner = session?.user?.userType === 'B2B_PARTNER';
+            const servicesText = data.services
+                ? (Array.isArray(data.services) ? data.services : JSON.parse(data.services as string)).join(', ')
+                : '';
+
+            sendStatusChangeNotification({
+                caseId:            newCase.id,
+                clientName:        `${client.firstName} ${client.lastName}`,
+                clientPhone:       client.phone ?? null,
+                clientEmail:       client.email ?? null,
+                clientWhatsApp:    client.phone ?? null,
+                fileNumber:        newCase.fileNumber,
+                statusCode:        'NEW_LEAD',
+                partnerName:       data.partnerName ?? null,
+                isB2B,
+                isCreatedByPartner,
+                services:          servicesText,
+                senderName:        session?.user?.name || 'Zenowethu Debt Management',
+                senderEmail:       'updates@zenowethu.co.za',
+            }).then(result => {
+                logger.info(`Welcome notification sent for ${newCase.fileNumber}: Email=${result.emailSuccess}, SMS=${result.smsSuccess}, WA=${result.whatsappSuccess}`);
+            }).catch(err => {
+                logger.error(`Failed to send welcome notification for ${newCase.id}:`, err);
+            });
+        }
+
         // Fire Case Automation trigger (async, non-blocking)
         import('@zenowethu/shared-lib/src/ai/case-automation-trigger').then(({ runCaseAutomationTrigger }) => {
             runCaseAutomationTrigger(newCase.id, 'CASE_CREATED').catch(err => {
