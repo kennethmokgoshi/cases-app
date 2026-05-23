@@ -307,6 +307,19 @@ export async function POST(request: Request) {
             jointClientId = joint.id;
         }
 
+        // Resolve referrer's sub-project so the case appears in their project folder
+        let referrerSubProjectId: string | null = null;
+        if (data.referrerId) {
+            const referrerRecord = await prisma.referrer.findUnique({
+                where: { id: data.referrerId },
+                select: { projectId: true },
+            });
+            const secondaryIds = data.secondaryProjectIds || [];
+            if (referrerRecord?.projectId && referrerRecord.projectId !== data.projectId && !secondaryIds.includes(referrerRecord.projectId)) {
+                referrerSubProjectId = referrerRecord.projectId;
+            }
+        }
+
         // 3. Create Case
         const newCase = await prisma.case.create({
             data: {
@@ -325,7 +338,8 @@ export async function POST(request: Request) {
                 projects: {
                     create: [
                         { projectId: data.projectId, isPrimary: true },
-                        ...(data.secondaryProjectIds || []).map(id => ({ projectId: id, isPrimary: false }))
+                        ...(data.secondaryProjectIds || []).map(id => ({ projectId: id, isPrimary: false })),
+                        ...(referrerSubProjectId ? [{ projectId: referrerSubProjectId, isPrimary: false }] : [])
                     ]
                 }
             }

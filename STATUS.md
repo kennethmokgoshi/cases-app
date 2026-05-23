@@ -1,7 +1,12 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-19 (GHL as Primary Email Channel + Unanswered Emails Dashboard)
+> Last updated: 2026-05-23 (Fix: Referral case not linked to referrer sub-project)
+
+---
+
+### Fix: Referral Case Not Added to Referrer Sub-Project (2026-05-23)
+- [x] **`apps/cases/app/api/cases/route.ts`** — After client upsert, now fetches the referrer's `projectId` and includes it as a secondary `CaseProject` entry during case creation. Previously the case was linked to the `Referrer` record but never appeared in their project folder.
 
 ---
 
