@@ -44,8 +44,14 @@ export async function sendEmailWithAttachments(opts: SendEmailOptions): Promise<
         });
 
         try {
+            const configuredFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER;
+            const senderAddress  = opts.fromEmail || configuredFrom;
+            const fromHeader     = opts.fromName
+                ? `"${opts.fromName}" <${configuredFrom}>`
+                : senderAddress;
+
             const info = await transporter.sendMail({
-                from:        opts.fromEmail || process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER,
+                from:        fromHeader,
                 to:          Array.isArray(opts.to) ? opts.to.join(', ') : opts.to,
                 subject:     opts.subject,
                 html:        opts.html,

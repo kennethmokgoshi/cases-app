@@ -705,7 +705,7 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                         <td class="footer">
                             <p style="margin: 0 0 10px 0; font-weight: bold; color: ${BRAND_NAVY}; font-size: 14px;">${companyName}</p>
                             <p style="margin: 0 0 5px 0;">Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199</p>
-                            <p style="margin: 0 0 5px 0;">Tel: 012 035 1824 | Email: <a href="mailto:info@zenowethu.co.za">info@zenowethu.co.za</a></p>
+                            <p style="margin: 0 0 5px 0;">Tel: 012 035 1824 | Email: <a href="mailto:notifications@zenowethu.co.za">notifications@zenowethu.co.za</a></p>
                             <p style="margin: 0 0 20px 0;">Web: <a href="https://www.zenowethu.co.za">www.zenowethu.co.za</a></p>
                             
                             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eeeeee; font-size: 10px; line-height: 1.4; text-align: justify;">

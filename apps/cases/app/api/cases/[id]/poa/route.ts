@@ -159,7 +159,6 @@ export async function POST(
             const emailResult = await sendEmailWithAttachments({
                 to: client.email!,
                 fromName:    session.user.name || undefined,
-                fromEmail:   session.user.email || undefined,
                 subject: type === 'WESBANK'
                     ? `Wesbank Power of Attorney — Please Sign and Return | ${clientFullName}`
                     : `Power of Attorney — Please Sign and Return | Zenowethu Debt Management`,
@@ -239,7 +238,7 @@ function buildEmailHtml(clientName: string, type: string, downloadUrl: string): 
                 <li style="margin-bottom: 8px;">Download and open the attached PDF.</li>
                 <li style="margin-bottom: 8px;">Print it or use a PDF signing app (like Adobe Fill & Sign).</li>
                 <li style="margin-bottom: 8px;">Sign where indicated and fill in the date.</li>
-                <li style="margin-bottom: 0;">Scan or photograph the signed document and send it back to us at <a href="mailto:info@zenowethu.co.za" style="color: #d9701a; text-decoration: none; font-weight: bold;">info@zenowethu.co.za</a>.</li>
+                <li style="margin-bottom: 0;">Scan or photograph the signed document and send it back to us at <a href="mailto:notifications@zenowethu.co.za" style="color: #d9701a; text-decoration: none; font-weight: bold;">notifications@zenowethu.co.za</a>.</li>
             </ol>
         </div>
         
@@ -269,7 +268,7 @@ ${downloadUrl}
 *Steps:*
 1. Open the link and download the PDF.
 2. Sign where indicated and fill in today's date.
-3. Send the signed copy back to us on WhatsApp or email info@zenowethu.co.za
+3. Send the signed copy back to us on WhatsApp or email notifications@zenowethu.co.za
 
 Questions? Call us: 012 035 1824
 

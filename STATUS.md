@@ -1,7 +1,14 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-23 (Fix: Referral case not linked to referrer sub-project)
+> Last updated: 2026-05-23 (Fix: SMTP 550 error — session user email was overriding authorised sender)
+
+---
+
+### Fix: SMTP 550 "cannot send from" Error on POA and Invoice Emails (2026-05-23)
+- [x] **`apps/cases/app/api/cases/[id]/poa/route.ts`** — Removed `fromEmail: session.user.email` override. The logged-in user's email was being set as the SMTP `From:` address but the mail server (`mail.zenowethu.co.za`) only allows sending from the authenticated account (`transfer@zenowethu.co.za`), causing a 550 rejection.
+- [x] **`apps/cases/app/api/finance/invoices/[id]/send/route.ts`** — Same fix applied to the invoice send route.
+- [x] **`apps/cases/lib/email-with-attachments.ts`** — Updated `from` header construction: when `fromName` is supplied, formats the header as `"Name" <configured-from-address>` so the sender's name still appears in the client's inbox without violating SMTP relay rules.
 
 ---
 

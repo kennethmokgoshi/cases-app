@@ -78,7 +78,7 @@ export async function GET(request: Request) {
         const isStaff = session.user.userType === 'STAFF';
         const isRestricted = !isAdmin && !isStaff;
 
-        const where: any = { deletedAt: null };
+        const where: any = {};
         if (!isAdmin) where.isAdminOnly = false;
 
         // 1. Scoping for B2B/Restricted
@@ -193,7 +193,7 @@ export async function GET(request: Request) {
         const [cases, totalCount] = await Promise.all([
             prisma.case.findMany({
                 where,
-                include: { client: true, jointClient: true, projects: { include: { project: true } } },
+                include: { client: true, projects: { include: { project: true } } },
                 take: isNaN(take) ? 10000 : take,
                 skip: isNaN(skip) ? 0 : skip,
                 orderBy: { createdAt: 'desc' }

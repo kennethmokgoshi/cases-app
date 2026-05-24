@@ -1,6 +1,4 @@
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib'
-import fs, { existsSync, readFileSync } from 'fs'
-import path, { join } from 'path'
 
 // ---- Types ----
 
@@ -13,7 +11,6 @@ export interface InvoiceLineItem {
   serviceLabel?: string
   quantity: number
   unitPrice: number
-  discount?: number
 }
 
 export interface InvoiceData {
@@ -32,51 +29,24 @@ export interface InvoiceData {
   total: number
   notes?: string
   reference?: string
-  bankingDetails?: {
-    bankName: string
-    accountHolder: string
-    accountNumber: string
-    branchCode?: string
-  } | null
 }
 
 function lineItemDescription(item: InvoiceLineItem): string {
-  const label = item.serviceLabel || ''
-  const cred  = item.creditor || ''
-  
-  // If creditor is empty or same as service name, just return the service label
-  if (!cred || cred.toLowerCase().trim() === label.toLowerCase().trim()) {
-    return label || item.description || ''
-  }
-  
-  if (cred && label) return `${cred} — ${label}`
-  return cred || label || item.description || ''
+  if (item.creditor && item.serviceLabel) return `${item.creditor} — ${item.serviceLabel}`
+  if (item.creditor) return item.creditor
+  return item.description ?? ''
 }
 
-// ---- Colours (Premium Executive Palette) ----
-const PRIMARY_NAVY = rgb(0.05, 0.1, 0.25)    // #0d1a40
-const ACCENT_EMERALD = rgb(0.06, 0.65, 0.45) // #10a673
-const DARK_TEXT = rgb(0.1, 0.1, 0.1)
-const GRAY_TEXT = rgb(0.4, 0.4, 0.4)
-const LIGHT_GRAY = rgb(0.96, 0.96, 0.97)
-const BORDER_COLOR = rgb(0.85, 0.85, 0.87)
-const WHITE = rgb(1, 1, 1)
-const LIGHT_ROW = rgb(0.97, 0.97, 0.98)
+// ---- Colours ----
+
+const EMERALD   = rgb(0.039, 0.722, 0.510)  // #0AB882
+const DARK_BG   = rgb(0.118, 0.118, 0.118)  // #1E1E1E
+const DARK_TEXT = rgb(0.15, 0.15, 0.15)
+const GRAY_TEXT = rgb(0.45, 0.45, 0.45)
+const WHITE     = rgb(1, 1, 1)
+const LIGHT_ROW = rgb(0.96, 0.96, 0.96)
 
 // ---- Helpers ----
-
-async function loadLetterhead(): Promise<Uint8Array> {
-  const candidates = [
-    join(process.cwd(), '..', '..', 'letterhead', 'Letter head Clean.pdf'),
-    join(process.cwd(), '..', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
-    'C:\\Visual Studio Code\\06 March 2026\\letterhead\\Letter head Clean.pdf',
-    '/app/letterhead/Letter head Clean.pdf',
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) return readFileSync(p);
-  }
-  throw new Error(`Letterhead not found. Searched:\n${candidates.join('\n')}`);
-}
 
 function formatZAR(amount: number): string {
   return new Intl.NumberFormat('en-ZA', {
@@ -94,25 +64,6 @@ function formatDate(date: Date): string {
 
 function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max - 1) + '…' : str
-}
-
-function wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] {
-  const words = text.split(' ')
-  const lines: string[] = []
-  let currentLine = ''
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word
-    const width = font.widthOfTextAtSize(testLine, fontSize)
-    if (width <= maxWidth) {
-      currentLine = testLine
-    } else {
-      if (currentLine) lines.push(currentLine)
-      currentLine = word
-    }
-  }
-  if (currentLine) lines.push(currentLine)
-  return lines
 }
 
 function drawText(
@@ -156,56 +107,32 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
 
   const bold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const italic  = await pdfDoc.embedFont(StandardFonts.HelveticaOblique)
 
-  // 0. EMBED LETTERHEAD
-  let letterheadPage;
-  try {
-    const lhBytes = await loadLetterhead()
-    const lhDoc = await PDFDocument.load(lhBytes, { ignoreEncryption: true })
-    const [embeddedPage] = await pdfDoc.embedPdf(lhDoc)
-    letterheadPage = embeddedPage
-  } catch (e) {
-    console.error('Letterhead load failed:', e)
-  }
+  let cursor = H  // tracks current Y, drawing top-down
 
-  let cursor = H 
+  // ─────────────────────────────────────────────
+  // 1. HEADER BAND
+  // ─────────────────────────────────────────────
+  const HEADER_H = 90
+  cursor -= HEADER_H
 
-  if (letterheadPage) {
-    page.drawPage(letterheadPage, {
-      x: 0,
-      y: 0,
-      width: W,
-      height: H
-    })
-    // Move cursor down to avoid overlapping standard letterhead top content
-    cursor -= 140
-  } else {
-    // 1. HEADER BRANDING (Fallback)
-    const HEADER_H = 100
-    cursor -= HEADER_H
-   
-    page.drawRectangle({
-      x: 0, y: cursor,
-      width: W, height: HEADER_H,
-      color: PRIMARY_NAVY })
-   
-    drawText(page, 'ZENOWETHU', MARGIN, cursor + 62, bold, 22, WHITE)
-    drawText(page, 'PROFESSIONAL DEBT MANAGEMENT', MARGIN, cursor + 45, regular, 9, rgb(0.8, 0.8, 0.8))
-    drawText(page, 'www.zenowethu.co.za', MARGIN, cursor + 30, regular, 8, rgb(0.6, 0.6, 0.6))
-  }
- 
-  const docLabel = data.documentType === 'QUOTE' ? 'QUOTATION' : 'TAX INVOICE'
-  
-  // Adjusted positioning for branded feel
-  const labelY = letterheadPage ? cursor + 40 : cursor + 62
-  const refY = letterheadPage ? cursor + 23 : cursor + 45
-  const statusY = letterheadPage ? cursor + 4 : cursor + 30
+  page.drawRectangle({
+    x: 0, y: cursor,
+    width: W, height: HEADER_H,
+    color: DARK_BG })
 
-  drawRightAlignedText(page, docLabel, RIGHT, labelY, bold, 24, ACCENT_EMERALD)
-  drawRightAlignedText(page, `REF: ${data.invoiceNumber}`, RIGHT, refY, regular, 10, letterheadPage ? DARK_TEXT : WHITE)
-  
-  cursor -= 40 
+  // Company name
+  drawText(page, 'ZENOWETHU', MARGIN, cursor + 58, bold, 20, WHITE)
+  drawText(page, 'DEBT MANAGEMENT', MARGIN, cursor + 40, regular, 10, rgb(0.7, 0.7, 0.7))
+  drawText(page, 'notifications@zenowethu.co.za', MARGIN, cursor + 24, regular, 8, rgb(0.6, 0.6, 0.6))
+
+  // INVOICE / QUOTE label
+  const docLabel = data.documentType === 'QUOTE' ? 'QUOTATION' : 'INVOICE'
+  drawRightAlignedText(page, docLabel, RIGHT, cursor + 58, bold, 26, EMERALD)
+  drawRightAlignedText(page, data.invoiceNumber, RIGHT, cursor + 40, regular, 10, WHITE)
+  drawRightAlignedText(page, `Status: ${data.status}`, RIGHT, cursor + 24, regular, 8, rgb(0.7, 0.7, 0.7))
+
+  cursor -= 24  // gap below header
 
   // ─────────────────────────────────────────────
   // 2. META BLOCK — Bill To (left) | Dates (right)
@@ -268,24 +195,24 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // ─────────────────────────────────────────────
   // 3. LINE ITEMS TABLE
   // ─────────────────────────────────────────────
-  const COL_QTY   = 40
-  const COL_PRICE = 90
-  const COL_AMT   = 90
+  const COL_QTY   = 70
+  const COL_PRICE = 100
+  const COL_AMT   = 100
   const COL_DESC  = CONTENT_W - COL_QTY - COL_PRICE - COL_AMT
 
   const TABLE_ROW_H = 22
 
-  // Table header (Premium Navy)
+  // Table header
   page.drawRectangle({
     x: MARGIN, y: cursor - TABLE_ROW_H,
     width: CONTENT_W, height: TABLE_ROW_H,
-    color: PRIMARY_NAVY })
- 
-  const headerY = cursor - TABLE_ROW_H + 9
-  drawText(page, 'DESCRIPTION OF SERVICES RENDERED', MARGIN + 10, headerY, bold, 8, WHITE)
-  drawRightAlignedText(page, 'QTY', MARGIN + COL_DESC + COL_QTY - 10, headerY, bold, 8, WHITE)
-  drawRightAlignedText(page, 'UNIT PRICE', MARGIN + COL_DESC + COL_QTY + COL_PRICE - 10, headerY, bold, 8, WHITE)
-  drawRightAlignedText(page, 'TOTAL', RIGHT - 10, headerY, bold, 8, WHITE)
+    color: EMERALD })
+
+  const headerY = cursor - TABLE_ROW_H + 7
+  drawText(page, 'DESCRIPTION', MARGIN + 6, headerY, bold, 8, WHITE)
+  drawRightAlignedText(page, 'QTY', MARGIN + COL_DESC - 4, headerY, bold, 8, WHITE)
+  drawRightAlignedText(page, 'UNIT PRICE', MARGIN + COL_DESC + COL_QTY + COL_PRICE - 4, headerY, bold, 8, WHITE)
+  drawRightAlignedText(page, 'AMOUNT', RIGHT - 4, headerY, bold, 8, WHITE)
 
   cursor -= TABLE_ROW_H
 
@@ -293,56 +220,25 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const displayItems = data.lineItems.slice(0, 20)
   for (let i = 0; i < displayItems.length; i++) {
     const item = displayItems[i]
-    
-    // Prepare wrapped text
-    const descWidth = COL_DESC - 20
-    const mainTitleLines = wrapText(lineItemDescription(item), descWidth, bold, 9)
-    const subTextLines = item.description ? wrapText(item.description, descWidth, regular, 7.5) : []
-    
-    // Calculate required height for this row
-    const totalLines = mainTitleLines.length + subTextLines.length
-    const rowHeight = Math.max(TABLE_ROW_H, (totalLines * 12) + 15)
-    
-    const rowY = cursor - rowHeight
-    if (i % 2 === 1) page.drawRectangle({ x: MARGIN, y: rowY, width: CONTENT_W, height: rowHeight, color: LIGHT_ROW })
-    
-    // Vertically center the QTY and Price against the description block
-    const textBlockHeight = (mainTitleLines.length * 11) + (subTextLines.length * 9)
-    const verticalPadding = (rowHeight - textBlockHeight) / 2
-    const textTopY = cursor - verticalPadding - 8
-    
-    const lineAmt = (item.quantity * item.unitPrice) - (item.discount || 0)
-    
-    // Draw Main Title Lines
-    let lineCursor = textTopY
-    for (const line of mainTitleLines) {
-      drawText(page, line, MARGIN + 10, lineCursor, bold, 9, DARK_TEXT)
-      lineCursor -= 11
-    }
-    
-    // Draw Sub-text Lines
-    lineCursor -= 1 
-    for (const line of subTextLines) {
-      drawText(page, line, MARGIN + 10, lineCursor, regular, 7.5, GRAY_TEXT)
-      lineCursor -= 9
+    const rowY = cursor - TABLE_ROW_H
+
+    // Alternate row background
+    if (i % 2 === 1) {
+      page.drawRectangle({
+        x: MARGIN, y: rowY,
+        width: CONTENT_W, height: TABLE_ROW_H,
+        color: LIGHT_ROW })
     }
 
-    // Numbers (Vertically Centered)
-    const numberY = cursor - (rowHeight / 2) + 2
-    drawRightAlignedText(page, String(item.quantity), MARGIN + COL_DESC + COL_QTY - 10, numberY, regular, 9, DARK_TEXT)
-    
-    // Price with (excl. VAT) detail
-    drawRightAlignedText(page, formatZAR(item.unitPrice), MARGIN + COL_DESC + COL_QTY + COL_PRICE - 10, numberY + 4, regular, 9, DARK_TEXT)
-    drawRightAlignedText(page, '(excl. VAT)', MARGIN + COL_DESC + COL_QTY + COL_PRICE - 10, numberY - 5, regular, 6.5, GRAY_TEXT)
-    
-    if (item.discount && item.discount > 0) {
-      drawRightAlignedText(page, `- ${formatZAR(item.discount)}`, RIGHT - 10, numberY - 8, italic, 7, ACCENT_EMERALD)
-      drawRightAlignedText(page, formatZAR(lineAmt), RIGHT - 10, numberY + 4, bold, 9, DARK_TEXT)
-    } else {
-      drawRightAlignedText(page, formatZAR(lineAmt), RIGHT - 10, numberY, bold, 9, DARK_TEXT)
-    }
+    const textY = rowY + 7
+    const lineAmt = item.quantity * item.unitPrice
 
-    cursor -= rowHeight
+    drawText(page, truncate(lineItemDescription(item), 55), MARGIN + 6, textY, regular, 9, DARK_TEXT)
+    drawRightAlignedText(page, String(item.quantity), MARGIN + COL_DESC - 4, textY, regular, 9, DARK_TEXT)
+    drawRightAlignedText(page, formatZAR(item.unitPrice), MARGIN + COL_DESC + COL_QTY + COL_PRICE - 4, textY, regular, 9, DARK_TEXT)
+    drawRightAlignedText(page, formatZAR(lineAmt), RIGHT - 4, textY, regular, 9, DARK_TEXT)
+
+    cursor -= TABLE_ROW_H
   }
 
   if (data.lineItems.length > 20) {
@@ -364,17 +260,15 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // 4. TOTALS BLOCK
   // ─────────────────────────────────────────────
   const TOTALS_X = W - MARGIN - 220
-  const totalDiscount = data.lineItems.reduce((s, l) => s + (l.discount || 0), 0)
 
-  const totalsRows: [string, string, boolean, ReturnType<typeof rgb> | undefined][] = [
-    ['Subtotal',                   formatZAR(data.subtotal + totalDiscount),  false, GRAY_TEXT],
-    ...(totalDiscount > 0 ? [['Discount', `- ${formatZAR(totalDiscount)}`, false, ACCENT_EMERALD] as [string, string, boolean, ReturnType<typeof rgb>]] : []),
-    [`VAT (${Math.round(data.vatRate * 100)}%)`, formatZAR(data.vatAmount), false, GRAY_TEXT],
+  const totalsRows: [string, string, boolean][] = [
+    ['Subtotal',                   formatZAR(data.subtotal),  false],
+    [`VAT (${Math.round(data.vatRate * 100)}%)`, formatZAR(data.vatAmount), false],
   ]
 
-  for (const [label, value, isBold, color] of totalsRows) {
-    drawText(page, label, TOTALS_X, cursor, isBold ? bold : regular, 9, color || GRAY_TEXT)
-    drawRightAlignedText(page, value, RIGHT - 10, cursor, isBold ? bold : regular, 9, color === ACCENT_EMERALD ? color : DARK_TEXT)
+  for (const [label, value, isBold] of totalsRows) {
+    drawText(page, label, TOTALS_X, cursor, isBold ? bold : regular, 9, GRAY_TEXT)
+    drawRightAlignedText(page, value, RIGHT, cursor, isBold ? bold : regular, 9, DARK_TEXT)
     cursor -= 16
   }
 
@@ -386,53 +280,44 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     color: rgb(0.75, 0.75, 0.75) })
   cursor -= 12
 
-  // Total (Premium Card Style)
-  page.drawRectangle({
-    x: TOTALS_X - 10, y: cursor - 8,
-    width: RIGHT - TOTALS_X + 10, height: 32,
-    color: PRIMARY_NAVY })
- 
-  const finalTotalY = cursor + 5
-  drawText(page, 'TOTAL DUE (INCL)', TOTALS_X, finalTotalY, bold, 11, WHITE)
-  drawRightAlignedText(page, formatZAR(data.total), RIGHT - 10, finalTotalY, bold, 18, ACCENT_EMERALD)
+  // Total (larger, emerald)
+  drawText(page, 'TOTAL DUE', TOTALS_X, cursor, bold, 11, DARK_TEXT)
+  drawRightAlignedText(page, formatZAR(data.total), RIGHT, cursor, bold, 13, EMERALD)
 
-  cursor -= 50
+  cursor -= 40
 
   // ─────────────────────────────────────────────
   // 5. PAYMENT INSTRUCTIONS
   // ─────────────────────────────────────────────
-  if (data.bankingDetails !== null) {
-    page.drawRectangle({
-      x: MARGIN, y: cursor - 110,
-      width: CONTENT_W, height: 110,
-      color: rgb(0.97, 0.97, 0.97),
-      borderColor: rgb(0.88, 0.88, 0.88),
-      borderWidth: 0.5 })
+  page.drawRectangle({
+    x: MARGIN, y: cursor - 82,
+    width: CONTENT_W, height: 82,
+    color: rgb(0.97, 0.97, 0.97),
+    borderColor: rgb(0.88, 0.88, 0.88),
+    borderWidth: 0.5 })
 
-    drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, cursor - 18, bold, 11, ACCENT_EMERALD)
+  drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, cursor - 14, bold, 8, GRAY_TEXT)
 
-    const bankName    = data.bankingDetails?.bankName    || process.env.COMPANY_BANK_NAME    || 'First National Bank'
-    const accountName = data.bankingDetails?.accountHolder || 'Zenowethu Debt Management (Pty) Ltd'
-    const bankAccount = data.bankingDetails?.accountNumber || process.env.COMPANY_BANK_ACCOUNT || '— contact us for banking details —'
-    const branchCode  = data.bankingDetails?.branchCode   || process.env.COMPANY_BRANCH_CODE  || ''
+  const bankName    = process.env.COMPANY_BANK_NAME    || 'First National Bank'
+  const bankAccount = process.env.COMPANY_BANK_ACCOUNT || '— contact us for banking details —'
+  const branchCode  = process.env.COMPANY_BRANCH_CODE  || ''
 
-    const bankRows = [
-      ['Bank',            bankName],
-      ['Account Name',    accountName],
-      ['Account Number',  bankAccount],
-      ...(branchCode ? [['Branch Code', branchCode]] : []),
-      ['Reference',       data.invoiceNumber],
-    ]
+  const bankRows = [
+    ['Bank',            bankName],
+    ['Account Name',    'Zenowethu Debt Management (Pty) Ltd'],
+    ['Account Number',  bankAccount],
+    ...(branchCode ? [['Branch Code', branchCode]] : []),
+    ['Reference',       data.invoiceNumber],
+  ]
 
-    let bankY = cursor - 38
-    for (const [label, value] of bankRows) {
-      drawText(page, `${label}:`, MARGIN + 10, bankY, bold, 10, GRAY_TEXT)
-      drawText(page, value, MARGIN + 110, bankY, (label === 'Account Number' || label === 'Bank') ? bold : regular, 11, DARK_TEXT)
-      bankY -= 15
-    }
-
-    cursor -= 120
+  let bankY = cursor - 28
+  for (const [label, value] of bankRows) {
+    drawText(page, `${label}:`, MARGIN + 10, bankY, bold, 8, GRAY_TEXT)
+    drawText(page, value, MARGIN + 90, bankY, regular, 8, DARK_TEXT)
+    bankY -= 13
   }
+
+  cursor -= 90
 
   // ─────────────────────────────────────────────
   // 6. NOTES (if present)
@@ -463,6 +348,15 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   // 7. FOOTER
   // ─────────────────────────────────────────────
   const FOOTER_Y = 28
+
+  page.drawLine({
+    start: { x: MARGIN, y: FOOTER_Y + 12 },
+    end:   { x: RIGHT,  y: FOOTER_Y + 12 },
+    thickness: 0.5,
+    color: rgb(0.85, 0.85, 0.85) })
+
+  drawText(page, 'Zenowethu Debt Management (Pty) Ltd', MARGIN, FOOTER_Y, regular, 7, GRAY_TEXT)
+  drawRightAlignedText(page, 'Page 1 of 1', RIGHT, FOOTER_Y, regular, 7, GRAY_TEXT)
 
   return pdfDoc.save()
 }

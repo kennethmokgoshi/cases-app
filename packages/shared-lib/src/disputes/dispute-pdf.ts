@@ -12,7 +12,7 @@ const ZENOWETHU = {
     dcasa: '0863',
     address: 'Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199',
     phone: '012 035 1824',
-    email: 'info@zenowethu.co.za',
+    email: 'notifications@zenowethu.co.za',
 };
 
 // ---------------------------------------------------------------------------

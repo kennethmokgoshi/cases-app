@@ -105,12 +105,10 @@ export async function POST(
       total:             Number(invoice.total),
       notes:             invoice.notes     ?? undefined,
       reference:         invoice.reference ?? undefined,
-      bankAccount: invoice.bankAccount ? {
-        bankName:      invoice.bankAccount.bankName,
-        accountName:   invoice.bankAccount.accountName,
-        accountNumber: invoice.bankAccount.accountNumber,
-        branchCode:    invoice.bankAccount.branchCode ?? undefined,
-      } : undefined
+      bankName:          invoice.bankAccount?.bankName,
+      bankAccountName:   invoice.bankAccount?.accountName,
+      bankAccountNumber: invoice.bankAccount?.accountNumber,
+      branchCode:        invoice.bankAccount?.branchCode ?? undefined,
     }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)
@@ -118,7 +116,6 @@ export async function POST(
     const emailResult = await sendEmailWithAttachments({
       to:          input.to,
       fromName:    session.user.name || undefined,
-      fromEmail:   session.user.email || undefined,
       subject:     input.subject ?? `${invoice.type === 'QUOTE' ? 'Quotation' : 'Invoice'} ${invoice.invoiceNumber} from Zenowethu`,
       html:        buildEmailHtml(
         { invoiceNumber: invoice.invoiceNumber, total: invoice.total, type: invoice.type, publicToken: invoice.publicToken },
