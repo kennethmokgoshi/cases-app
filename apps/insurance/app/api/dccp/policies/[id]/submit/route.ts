@@ -6,16 +6,17 @@ import { dccpService } from '@zenowethu/shared-lib/src/integrations/dccp'
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const policy = await prisma.dCCPPolicy.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         creditAccounts: true,
         funeralDependants: true,
@@ -69,17 +70,17 @@ export async function POST(
 
     if (result.success && result.policyNumber) {
       await prisma.dCCPPolicy.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           status: 'SUBMITTED',
           policyNumber: result.policyNumber,
         },
       })
-      
-      logger.info(`[DCCP] Policy ${params.id} submitted successfully. Policy Number: ${result.policyNumber}`)
+
+      logger.info(`[DCCP] Policy ${id} submitted successfully. Policy Number: ${result.policyNumber}`)
       return NextResponse.json({ success: true, policyNumber: result.policyNumber })
     } else {
-      logger.error(`[DCCP] Policy ${params.id} submission failed.`, { error: result.errorMessage })
+      logger.error(`[DCCP] Policy ${id} submission failed.`, { error: result.errorMessage })
       return NextResponse.json({ error: result.errorMessage || 'Submission failed' }, { status: 422 })
     }
   } catch (error) {

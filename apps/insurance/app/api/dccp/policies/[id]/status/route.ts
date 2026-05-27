@@ -6,16 +6,17 @@ import { dccpService } from '@zenowethu/shared-lib/src/integrations/dccp'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const policy = await prisma.dCCPPolicy.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: { id: true, policyNumber: true, status: true },
     })
 
@@ -31,10 +32,10 @@ export async function GET(
 
     if (result.status && result.status !== policy.status) {
       await prisma.dCCPPolicy.update({
-        where: { id: params.id },
+        where: { id },
         data: { status: result.status },
       })
-      logger.info(`[DCCP] Policy ${params.id} status synced: ${policy.status} -> ${result.status}`)
+      logger.info(`[DCCP] Policy ${id} status synced: ${policy.status} -> ${result.status}`)
     }
 
     return NextResponse.json({ status: result.status, policyNumber: policy.policyNumber })
