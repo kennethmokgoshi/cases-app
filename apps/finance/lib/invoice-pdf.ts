@@ -13,6 +13,13 @@ export interface InvoiceLineItem {
   unitPrice: number
 }
 
+export interface BankingDetails {
+  bankName: string
+  accountHolder: string
+  accountNumber: string
+  branchCode?: string
+}
+
 export interface InvoiceData {
   documentType?: 'INVOICE' | 'QUOTE'
   invoiceNumber: string
@@ -29,6 +36,8 @@ export interface InvoiceData {
   total: number
   notes?: string
   reference?: string
+  /** Override default banking details (from env vars) with invoice-specific details */
+  bankingDetails?: BankingDetails | null
 }
 
 function lineItemDescription(item: InvoiceLineItem): string {
@@ -298,13 +307,15 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
 
   drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, cursor - 14, bold, 8, GRAY_TEXT)
 
-  const bankName    = process.env.COMPANY_BANK_NAME    || 'First National Bank'
-  const bankAccount = process.env.COMPANY_BANK_ACCOUNT || '— contact us for banking details —'
-  const branchCode  = process.env.COMPANY_BRANCH_CODE  || ''
+  const bd = data.bankingDetails
+  const bankName    = bd?.bankName      ?? process.env.COMPANY_BANK_NAME    ?? 'First National Bank'
+  const bankAccount = bd?.accountNumber ?? process.env.COMPANY_BANK_ACCOUNT ?? '— contact us for banking details —'
+  const branchCode  = bd?.branchCode    ?? process.env.COMPANY_BRANCH_CODE  ?? ''
+  const accountHolder = bd?.accountHolder ?? 'Zenowethu Debt Management (Pty) Ltd'
 
   const bankRows = [
     ['Bank',            bankName],
-    ['Account Name',    'Zenowethu Debt Management (Pty) Ltd'],
+    ['Account Name',    accountHolder],
     ['Account Number',  bankAccount],
     ...(branchCode ? [['Branch Code', branchCode]] : []),
     ['Reference',       data.invoiceNumber],
