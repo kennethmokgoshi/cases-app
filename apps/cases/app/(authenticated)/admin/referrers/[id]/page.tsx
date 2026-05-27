@@ -207,11 +207,23 @@ export default function ReferrerDetailPage() {
                     </h1>
                     <p className="text-gray-400 text-sm mt-1">Commission & Client Progress Tracker</p>
                 </div>
-                {referrer && (
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${referrer.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                        {referrer.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                )}
+                <div className="flex items-center gap-3">
+                    {referrer && (
+                        <>
+                            <a
+                                href={`/api/admin/referrers/${referrer.id}/statement`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="bg-white/5 border border-white/10 text-white font-medium px-4 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm flex items-center gap-2"
+                            >
+                                Download Statement
+                            </a>
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${referrer.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                {referrer.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Referrer quick-info */}

@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -44,11 +46,11 @@ export default function DisputeTracker() {
                 a.click();
                 a.remove();
             } else {
-                alert('Failed to generate PDF');
+                toast.error('Failed to generate PDF');
             }
         } catch (error) {
             console.error('Error generating PDF:', error);
-            alert('Error generating PDF');
+            toast.error('Error generating PDF');
         }
     }
 

@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from '@zenowethu/ui';
+
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
@@ -175,7 +177,7 @@ export default function SettingsPage() {
     };
 
     const handleReset = async () => {
-        if (!confirm('Are you sure you want to reset DHS credentials to default values?')) {
+        if (!await confirm('Are you sure you want to reset DHS credentials to default values?')) {
             return;
         }
 
@@ -201,7 +203,7 @@ export default function SettingsPage() {
     };
 
     const handleResetGHL = async () => {
-        if (!confirm('Are you sure you want to reset GHL credentials?')) {
+        if (!await confirm('Are you sure you want to reset GHL credentials?')) {
             return;
         }
 

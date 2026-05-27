@@ -85,8 +85,21 @@ export default function B2BPortalPage() {
                 <Link href="/" className="text-zeno-cyan hover:text-cyan-300 text-sm mb-4 inline-block">
                     ← Back to Dashboard
                 </Link>
-                <h1 className="text-3xl font-bold text-white mb-2">B2B Partner Portal</h1>
-                <p className="text-gray-400">Manage and track cases from your B2B partners</p>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-white mb-2">B2B Partner Portal</h1>
+                        <p className="text-gray-400">Manage and track cases from your B2B partners</p>
+                    </div>
+                    <Link
+                        href="/b2b-portal/import"
+                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Import Partner Report
+                    </Link>
+                </div>
             </div>
 
             {loading ? (

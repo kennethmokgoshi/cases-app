@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from '@zenowethu/ui';
+
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -65,7 +67,7 @@ export default function TrashPage() {
     }
 
     async function handlePurgeExpired() {
-        if (!confirm('Permanently delete all cases that have been in trash for 30+ days? This cannot be undone.')) return;
+        if (!await confirm('Permanently delete all cases that have been in trash for 30+ days? This cannot be undone.')) return;
         setPurging(true);
         setMessage(null);
         try {

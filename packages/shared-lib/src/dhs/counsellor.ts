@@ -120,21 +120,21 @@ export async function getDebtCounsellorInfo(page: any): Promise<DHSDebtCounsello
             logger.info('[DHS DC Popup] Extracted Map:', JSON.stringify(rawResults));
 
             return {
+                ncrRegistrationNo: rawResults['NCR Registration No'] || '',
                 fullName: rawResults['Full Name'] || '',
-                registrationNo: rawResults['NCR Registration No'] || '',
                 tradingName: rawResults['Trading Name'] || '',
                 operatingStatus: rawResults['Operating Status'] || '',
                 tel: rawResults['Tel'] || '',
                 fax: rawResults['Fax'] || '',
                 mobile: rawResults['Mobile'] || '',
                 email: rawResults['Email'] || '',
-                raw: rawResults
+                province: rawResults['Province'] || '',
             };
         };
 
         let info = await extractFromContext(frame);
         
-        if (!info || !info.registrationNo) {
+        if (!info || !info.ncrRegistrationNo) {
             logger.info('[DHS counsellor] Not found in main frame, searching child frames...');
             const childFrames = frame.childFrames();
             logger.info(`[DHS counsellor] Found ${childFrames.length} child frames`);

@@ -1,4 +1,4 @@
-import type { ReferrerCommissionStage } from '@prisma/client';
+import type { ReferrerCommissionStage } from '@zenowethu/database';
 
 // Case statuses that advance the commission stage
 const STATUS_TO_COMMISSION_STAGE: Record<string, ReferrerCommissionStage> = {

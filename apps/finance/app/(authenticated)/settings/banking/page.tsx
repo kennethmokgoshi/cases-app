@@ -1,4 +1,6 @@
 'use client'
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -52,7 +54,7 @@ export default function BankingSettingsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to deactivate this bank account? It will no longer appear on new quotes.')) return
+    if (!await confirm('Are you sure you want to deactivate this bank account? It will no longer appear on new quotes.')) return
     try {
       await fetch(`/api/finance/bank-accounts/${id}`, { method: 'DELETE' })
       fetchAccounts()

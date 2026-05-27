@@ -254,6 +254,9 @@ export async function sendManualMessage(
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message,
                 success: res.success, messageId: res.messageId, error: res.error, provider: res.provider
             });
+            if (!res.success) {
+                await enqueueFailedNotification({ caseId, channel, recipient, body: message, error: res.error });
+            }
         } else if (channel === 'EMAIL') {
             const provider = await getEmailProvider();
 
@@ -280,6 +283,12 @@ export async function sendManualMessage(
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message: subject || message,
                 success: res.success, messageId: res.messageId, error: res.error, provider: res.provider
             });
+            if (!res.success) {
+                await enqueueFailedNotification({
+                    caseId, channel, recipient, subject, body: message, htmlBody: message.replace(/\n/g, '<br>'),
+                    optionsJson: options ? JSON.stringify(options) : undefined, error: res.error
+                });
+            }
             // Log each CC recipient so they appear in notification history
             for (const ccAddr of (options?.cc ?? [])) {
                 await logNotification({
@@ -299,6 +308,9 @@ export async function sendManualMessage(
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message,
                 success: res.success, messageId: res.messageId, error: res.error, provider: res.provider
             });
+            if (!res.success) {
+                await enqueueFailedNotification({ caseId, channel, recipient, body: message, error: res.error });
+            }
         }
     } catch (error: any) {
         result.errors.push(error.message);
@@ -343,6 +355,9 @@ async function sendNotificationByTemplate(
                 messageId: smsResult.messageId,
                 error: smsResult.error,
                 provider: smsResult.provider });
+            if (!smsResult.success) {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'SMS', recipient: payload.clientPhone, body: smsMessage, error: smsResult.error });
+            }
         }
     }
 
@@ -388,6 +403,9 @@ async function sendNotificationByTemplate(
                 messageId: emailResult.messageId,
                 error: emailResult.error,
                 provider: emailResult.provider });
+            if (!emailResult.success) {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: payload.clientEmail, subject: emailSubject, body: emailBody, htmlBody: brandedHtml, error: emailResult.error });
+            }
         }
     }
 
@@ -417,6 +435,9 @@ async function sendNotificationByTemplate(
                 messageId: waResult.messageId,
                 error: waResult.error,
                 provider: waResult.provider });
+            if (!waResult.success) {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'WHATSAPP', recipient: payload.clientWhatsApp, body: waMessage, error: waResult.error });
+            }
         }
     }
 
@@ -453,6 +474,8 @@ async function sendNotificationByTemplate(
                     success: true,
                     messageId: emailResult.messageId,
                     provider: emailResult.provider });
+            } else {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: payload.dcEmail, subject: emailSubject, body: emailBody, htmlBody: brandedHtml, error: emailResult.error });
             }
         }
     }
@@ -594,7 +617,10 @@ export async function sendFileRequestEmails(payload: {
                 provider:      res.provider,
             });
 
-            if (!res.success) logger.error(`[FileRequest] Failed to email bureau ${bureauEmail}: ${res.error}`);
+            if (!res.success) {
+                logger.error(`[FileRequest] Failed to email bureau ${bureauEmail}: ${res.error}`);
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: bureauEmail, subject: bureauSubject, body: bureauBody, htmlBody: brandedHtml, error: res.error });
+            }
         }
     }
 
@@ -667,7 +693,10 @@ export async function sendFileRequestEmails(payload: {
             provider:      res.provider,
         });
 
-        if (!res.success) logger.error(`[FileRequest] Failed to email provider ${cp.name} (${cp.email}): ${res.error}`);
+        if (!res.success) {
+            logger.error(`[FileRequest] Failed to email provider ${cp.name} (${cp.email}): ${res.error}`);
+            await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: cp.email, subject: subject, body: body, htmlBody: brandedHtml, error: res.error });
+        }
     }
 
     logger.info(`[FileRequest] Sent ${bureauResults.filter(r => r.success).length}/${payload.creditBureauEmails.length} bureau emails, ${providerResults.filter(r => r.success).length}/${payload.creditProviderContacts.length} provider emails (aiDraft=${payload.useAiDraft ?? false})`);
@@ -734,6 +763,9 @@ export async function sendDrrRequestEmails(payload: {
                 error: res.error,
                 provider: res.provider,
             });
+            if (!res.success) {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: payload.dcEmail, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), error: res.error });
+            }
         } catch (err) {
             logger.error(`[DRRRequest] Failed to draft or send DC letter for case ${payload.caseId}:`, err);
         }
@@ -768,6 +800,9 @@ export async function sendDrrRequestEmails(payload: {
                 error: res.error,
                 provider: res.provider,
             });
+            if (!res.success) {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: bureauEmail, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), error: res.error });
+            }
         } catch (err) {
             bureauResults.push({ email: bureauEmail, success: false, error: 'Drafting failed' });
         }
@@ -808,6 +843,9 @@ export async function sendDrrRequestEmails(payload: {
                 error: res.error,
                 provider: res.provider,
             });
+            if (!res.success) {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: cp.email, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), error: res.error });
+            }
         } catch (err) {
             providerResults.push({ name: cp.name, email: cp.email, success: false, error: 'Drafting failed' });
         }
@@ -977,3 +1015,118 @@ export async function findManagersForCase(caseId: string): Promise<string[]> {
 
     return Array.from(managerIds);
 }
+
+export async function enqueueFailedNotification(data: {
+    caseId: string;
+    channel: string;
+    recipient: string;
+    subject?: string;
+    body: string;
+    htmlBody?: string;
+    optionsJson?: string;
+    error?: string;
+}) {
+    if (data.caseId === 'SYSTEM') return; // Don't queue pure system alerts
+    const errText = data.error?.toLowerCase() || '';
+    const isPermanent = errText.includes('invalid') || 
+                        errText.includes('not found') || 
+                        errText.includes('unsubscribed') ||
+                        errText.includes('missing') ||
+                        errText.includes('bounce');
+    
+    try {
+        await prisma.notificationQueue.create({
+            data: {
+                caseId: data.caseId,
+                channel: data.channel,
+                recipient: data.recipient,
+                subject: data.subject,
+                body: data.body,
+                htmlBody: data.htmlBody,
+                optionsJson: data.optionsJson,
+                lastError: data.error,
+                status: isPermanent ? 'HUMAN_REVIEW' : 'PENDING_RETRY',
+                nextRetryAt: isPermanent ? null : new Date(Date.now() + 5 * 60 * 1000)
+            }
+        });
+    } catch (err) {
+        logger.error('Failed to enqueue notification', err);
+    }
+}
+
+export async function executeNotificationRetry(queueId: string): Promise<NotificationResult> {
+    const queueItem = await prisma.notificationQueue.findUnique({ where: { id: queueId } });
+    if (!queueItem) throw new Error('Queue item not found');
+
+    const result: NotificationResult = {
+        smsSuccess: false, emailSuccess: false, whatsappSuccess: false, telegramSuccess: false, errors: []
+    };
+
+    const options = queueItem.optionsJson ? JSON.parse(queueItem.optionsJson) : undefined;
+
+    try {
+        if (queueItem.channel === 'SMS') {
+            const provider = await getSmsProvider();
+            const res = await provider.send(queueItem.recipient, queueItem.body);
+            result.smsSuccess = res.success;
+            if (res.error) result.errors.push(res.error);
+        } else if (queueItem.channel === 'EMAIL') {
+            const provider = await getEmailProvider();
+            const emailAttachments = options?.attachments?.length ? options.attachments.map((url: string) => ({
+                filename: url.split('/').pop()?.split('?')[0] || 'document',
+                content: '',
+                url
+            })) : undefined;
+            const res = await provider.send(
+                queueItem.recipient,
+                queueItem.subject || 'Message from Zeno',
+                queueItem.htmlBody || queueItem.body.replace(/\n/g, '<br>'),
+                queueItem.body,
+                { attachments: emailAttachments, cc: options?.cc }
+            );
+            result.emailSuccess = res.success;
+            if (res.error) result.errors.push(res.error);
+        } else if (queueItem.channel === 'WHATSAPP') {
+            const provider = await getWhatsAppProvider();
+            const res = await provider.send(queueItem.recipient, queueItem.body);
+            result.whatsappSuccess = res.success;
+            if (res.error) result.errors.push(res.error);
+        }
+    } catch (error: any) {
+        result.errors.push(error.message);
+    }
+
+    const success = result.smsSuccess || result.emailSuccess || result.whatsappSuccess;
+    
+    if (success) {
+        await prisma.notificationQueue.update({
+            where: { id: queueId },
+            data: { status: 'SUCCESS', retryCount: { increment: 1 }, lastError: null }
+        });
+        await logNotification({
+            caseId: queueItem.caseId,
+            channel: queueItem.channel,
+            recipient: queueItem.recipient,
+            recipientType: 'CLIENT', // Simplified
+            statusCode: 'RETRY',
+            message: queueItem.subject || queueItem.body,
+            success: true,
+            provider: 'RETRY'
+        });
+    } else {
+        const newCount = queueItem.retryCount + 1;
+        await prisma.notificationQueue.update({
+            where: { id: queueId },
+            data: {
+                status: newCount >= 3 ? 'HUMAN_REVIEW' : 'PENDING_RETRY',
+                retryCount: newCount,
+                lastError: result.errors.join(', '),
+                nextRetryAt: newCount >= 3 ? null : new Date(Date.now() + 5 * 60 * 1000)
+            }
+        });
+    }
+
+    return result;
+}
+
+

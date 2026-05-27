@@ -36,3 +36,9 @@ export * from './plan/PlanStepCard'
 export * from './plan/ConfidenceReport'
 export * from './plan/InfoUpdatePanel'
 export * from './plan/PlanDiffView'
+
+// Tier 1 Step 3 Additions
+export * from './ui/Toaster'
+export * from './ui/ConfirmDialog'
+export * from './providers/ConfirmProvider'
+export * from './ui/GlobalErrorBoundary'

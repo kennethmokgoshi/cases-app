@@ -1,4 +1,6 @@
 'use client'
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState } from 'react'
 
@@ -6,7 +8,7 @@ export default function MarkPaidButton({ invoiceId }: { invoiceId: string }) {
   const [loading, setLoading] = useState(false)
 
   const handle = async () => {
-    if (!confirm('Mark this invoice as paid?')) return
+    if (!await confirm('Mark this invoice as paid?')) return
     setLoading(true)
     await fetch(`/api/finance/invoices/${invoiceId}`, {
       method: 'PATCH',

@@ -20,6 +20,7 @@ export async function GET(
       select: {
         id: true,
         acquisitionType: true,
+        services: true,
         planReadyToStart: true,
         plan: {
           include: {
@@ -35,7 +36,13 @@ export async function GET(
       return NextResponse.json({ error: 'Case not found' }, { status: 404 });
     }
 
-    const confidence = await checkConfidence(caseId);
+    let isFlagRemoval = false;
+    try {
+      const services = caseRecord.services ? JSON.parse(caseRecord.services as string) : [];
+      isFlagRemoval = services.includes('debt_review_flag_removal');
+    } catch {}
+
+    const confidence = await checkConfidence(caseId, isFlagRemoval);
 
     return NextResponse.json({
       plan: caseRecord.plan,

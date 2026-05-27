@@ -1,4 +1,6 @@
 "use client";
+import { toast, confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from "react";
 
@@ -41,7 +43,7 @@ export default function CredoRequestsPage() {
   };
 
   const handleConvert = async (id: string) => {
-    if (!confirm("Are you sure you want to convert this request into a Case?")) return;
+    if (!await confirm("Are you sure you want to convert this request into a Case?")) return;
     
     setConverting(id);
     try {
@@ -49,13 +51,13 @@ export default function CredoRequestsPage() {
       const data = await res.json();
       
       if (res.ok) {
-        alert(`Successfully converted! File Number: ${data.fileNumber}`);
+        toast.success(`Successfully converted! File Number: ${data.fileNumber}`);
         fetchRequests(); // Refresh list
       } else {
-        alert(data.error || "Conversion failed");
+        toast.error(data.error || "Conversion failed");
       }
     } catch (err) {
-      alert("Error during conversion");
+      toast.error("Error during conversion");
     } finally {
       setConverting(null);
     }

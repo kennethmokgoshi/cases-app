@@ -1,10 +1,9 @@
 'use client';
-
+import { toast, confirm } from '@zenowethu/ui';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
-import { PDFDocument } from 'pdf-lib';
 import { 
     STATUS_CATEGORIES, 
     WORKFLOW_STATUSES, 
@@ -189,11 +188,11 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                 setNewComment('');
                 fetchComments();
             } else {
-                alert('Failed to post comment');
+                toast.error('Failed to post comment');
             }
         } catch (err) {
             logger.error('Error posting comment:', err);
-            alert('Error posting comment');
+            toast.error('Error posting comment');
         } finally {
             setPostingComment(false);
         }
@@ -201,7 +200,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
 
     const handleFileUpload = async () => {
         if (!selectedFile) {
-            alert('Please select a file');
+            toast.error('Please select a file');
             return;
         }
 
@@ -216,7 +215,6 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
             const response = await fetch(`/api/cases/${caseId}/documents`, {
                 method: 'POST',
                 body: formData,
-                // Removed keepalive: true as it limits payload size to 64KB in browsers
             });
 
             if (response.ok) {
@@ -226,10 +224,10 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                 if (pendingPart2) {
                     setSelectedFile(pendingPart2);
                     setPendingPart2(null);
-                    alert('Part 1 uploaded! I have automatically selected PART 2 for you. Click Upload again.');
+                    toast.error('Part 1 uploaded! I have automatically selected PART 2 for you. Click Upload again.');
                 } else {
                     setSelectedFile(null);
-                    alert('Document uploaded successfully');
+                    toast.success('Document uploaded successfully');
                 }
 
                 setDocType('OTHER');
@@ -237,19 +235,19 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 const errorMessage = errorData.details || errorData.error || 'Failed to upload document';
-                alert(`Upload failed: ${errorMessage}`);
+                toast.error(`Upload failed: ${errorMessage}`);
             }
         } catch (err: any) {
             logger.error('Error uploading document:', err);
             const msg = err.message || String(err);
-            alert(`Error uploading document: ${msg}\n\nTechnical details: ${msg.includes('fetch') ? 'The connection was dropped or blocked. Try a smaller file or splitting it.' : msg}`);
+            toast.error(`Error uploading document: ${msg}\n\nTechnical details: ${msg.includes('fetch') ? 'The connection was dropped or blocked. Try a smaller file or splitting it.' : msg}`);
         } finally {
             setUploadingDoc(false);
         }
     };
 
     const handleDeleteDocument = async (documentId: string, fileName: string) => {
-        if (!confirm(`Are you sure you want to delete "${fileName}"? This action cannot be undone.`)) {
+        if (!await confirm(`Are you sure you want to delete "${fileName}"? This action cannot be undone.`)) {
             return;
         }
 
@@ -259,15 +257,15 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
 
             if (response.ok) {
                 fetchDocuments();
-                alert('Document deleted successfully');
+                toast.success('Document deleted successfully');
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 const errorMessage = errorData.details || errorData.error || 'Failed to delete document';
-                alert(`Delete failed: ${errorMessage}`);
+                toast.error(`Delete failed: ${errorMessage}`);
             }
         } catch (err) {
             logger.error('Error deleting document:', err);
-            alert('Error deleting document');
+            toast.error('Error deleting document');
         }
     };
 
@@ -278,6 +276,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
         try {
             logger.info(`[SHRINK] Starting compression for ${selectedFile.name}...`);
             const arrayBuffer = await selectedFile.arrayBuffer();
+            const { PDFDocument } = await import('pdf-lib');
             const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
 
             // Re-saving with useObjectStreams often significantly reduces size
@@ -292,10 +291,10 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
             logger.info(`[SHRINK] Success! New size: ${shrunkFile.size} bytes (Saved ${savedPct}%)`);
 
             setSelectedFile(shrunkFile);
-            alert(`PDF Shrunk! Saved ${savedPct}% (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB -> ${(shrunkFile.size / 1024 / 1024).toFixed(1)}MB)`);
+            toast.success(`PDF Shrunk! Saved ${savedPct}% (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB -> ${(shrunkFile.size / 1024 / 1024).toFixed(1)}MB)`);
         } catch (err) {
             logger.error('Error shrinking PDF:', err);
-            alert('Failed to shrink PDF. This file might be protected or too complex.');
+            toast.error('Failed to shrink PDF. This file might be protected or too complex.');
         } finally {
             setIsShrinking(false);
         }
@@ -308,11 +307,12 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
         try {
             logger.info(`[SPLIT] Starting split for ${selectedFile.name}...`);
             const arrayBuffer = await selectedFile.arrayBuffer();
+            const { PDFDocument } = await import('pdf-lib');
             const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
             const pageCount = pdfDoc.getPageCount();
 
             if (pageCount < 2) {
-                alert("This PDF only has 1 page and cannot be split.");
+                toast.error("This PDF only has 1 page and cannot be split.");
                 return;
             }
 
@@ -337,11 +337,11 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
 
             setSelectedFile(file1);
             setPendingPart2(file2);
-            alert(`PDF Split in half! I've loaded PART 1 for you. Once you upload it, I will automatically load PART 2.`);
+            toast.error(`PDF Split in half! I've loaded PART 1 for you. Once you upload it, I will automatically load PART 2.`);
 
         } catch (err) {
             logger.error('Error splitting PDF:', err);
-            alert('Failed to split PDF. The file might be protected.');
+            toast.error('Failed to split PDF. The file might be protected.');
         } finally {
             setIsShrinking(false);
         }
@@ -780,7 +780,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                                                         </p>
                                                         <span className="text-sm text-gray-400">
                                                             {new Date(comment.createdAt).toLocaleString()}
-                                                        </span>
+                                                        </p>
                                                     </div>
                                                     <p className="text-gray-300">{comment.content}</p>
                                                 </div>

@@ -1,4 +1,6 @@
 "use client";
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
@@ -137,7 +139,7 @@ export default function DocumentsPage() {
   }
 
   async function deleteDoc(id: string) {
-    if (!confirm("Delete this document? This cannot be undone.")) return;
+    if (!await confirm("Delete this document? This cannot be undone.")) return;
     await fetch(`/api/consumer/documents?id=${id}`, { method: "DELETE" });
     setDocs(prev => prev.filter(d => d.id !== id));
   }

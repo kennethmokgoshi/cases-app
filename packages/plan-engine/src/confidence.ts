@@ -2,7 +2,7 @@ import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
 import type { ConfidenceReport, MissingInfoItem } from './types';
 
-const REQUIRED_DOCS = [
+const STANDARD_REQUIRED_DOCS = [
   {
     type: 'CREDIT_REPORT' as const,
     description: 'Credit report required to analyse accounts and determine workflow',
@@ -29,6 +29,33 @@ const REQUIRED_DOCS = [
   },
 ];
 
+const REMOVAL_REQUIRED_DOCS = [
+  {
+    type: 'ID_DOCUMENT' as const,
+    description: 'Identity document required for legal correspondence and DHS actions',
+    isRequired: true,
+    weight: 30,
+    impactIfMissing: 'Cannot send legal letters or initiate DHS transfer without verified identity.',
+    docTypes: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'],
+  },
+  {
+    type: 'FORM_17W' as const,
+    description: 'Form 17.W is required to prove withdrawal or clearance of debt review',
+    isRequired: true,
+    weight: 40,
+    impactIfMissing: 'Cannot remove debt review flag without the 17.W withdrawal form or Clearance Certificate.',
+    docTypes: ['FORM_17W', '17W'],
+  },
+  {
+    type: 'COURT_ORDER' as const,
+    description: 'Court Order required to legally instruct bureaus',
+    isRequired: true,
+    weight: 20,
+    impactIfMissing: 'Many bureaus require the rescission court order alongside the 17.W.',
+    docTypes: ['COURT_ORDER'],
+  },
+];
+
 const OPTIONAL_DOCS = [
   {
     type: 'PAYSLIP' as const,
@@ -48,7 +75,7 @@ const OPTIONAL_DOCS = [
   },
 ];
 
-export async function checkConfidence(caseId: string): Promise<ConfidenceReport> {
+export async function checkConfidence(caseId: string, isFlagRemoval: boolean = false): Promise<ConfidenceReport> {
   const documents = await prisma.document.findMany({ where: { caseId }, select: { type: true } });
   const docTypes = documents.map((d) => d.type.toUpperCase());
   const presentItems: string[] = [];
@@ -56,7 +83,9 @@ export async function checkConfidence(caseId: string): Promise<ConfidenceReport>
   const missingOptional: MissingInfoItem[] = [];
   let scoreDeducted = 0;
 
-  for (const req of REQUIRED_DOCS) {
+  const requiredDocsList = isFlagRemoval ? REMOVAL_REQUIRED_DOCS : STANDARD_REQUIRED_DOCS;
+
+  for (const req of requiredDocsList) {
     if (req.docTypes.some((t) => docTypes.includes(t))) {
       presentItems.push(req.type);
     } else {

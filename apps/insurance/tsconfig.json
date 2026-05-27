@@ -32,11 +32,11 @@
   "include": [
     "next-env.d.ts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
     "**/*.mts",
     "**/*.ts",
     "**/*.tsx",
-    "../../packages/shared-lib/src/types/**/*.d.ts"
+    "../../packages/shared-lib/src/types/**/*.d.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

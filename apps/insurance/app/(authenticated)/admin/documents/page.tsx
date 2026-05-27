@@ -1,4 +1,6 @@
 'use client';
+import { toast, confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -69,14 +71,14 @@ export default function AdminDocumentsPage() {
     }
 
     async function handleDelete(id: string) {
-        if (!confirm('Are you sure you want to delete this document?')) return;
+        if (!await confirm('Are you sure you want to delete this document?')) return;
 
         try {
             const res = await fetch(`/api/admin/documents/${id}`, { method: 'DELETE' });
             if (res.ok) {
                 setDocuments(docs => docs.filter(d => d.id !== id));
             } else {
-                alert('Failed to delete document');
+                toast.error('Failed to delete document');
             }
         } catch (error) {
             logger.error('Delete error', error);
@@ -86,7 +88,7 @@ export default function AdminDocumentsPage() {
     async function handleUpload(e: React.FormEvent) {
         e.preventDefault();
         if (!formData.file || !formData.name) {
-            alert('Please provide a name and select a file.');
+            toast.error('Please provide a name and select a file.');
             return;
         }
 
@@ -139,7 +141,7 @@ export default function AdminDocumentsPage() {
 
         } catch (error) {
             logger.error('Upload Error', error);
-            alert('Failed to upload document');
+            toast.error('Failed to upload document');
         } finally {
             setIsUploading(false);
         }

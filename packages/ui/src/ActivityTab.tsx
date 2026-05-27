@@ -1,4 +1,6 @@
 'use client';
+import { toast } from './ui/Toaster';
+
 
 import { useState, useEffect, useRef } from 'react';
 
@@ -172,11 +174,11 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
                 const data = await res.json();
                 setPendingAttachments(prev => [...prev, ...data.files]);
             } else {
-                alert('Failed to upload files');
+                toast.error('Failed to upload files');
             }
         } catch (error) {
             logger.error('Upload failed', error);
-            alert('Upload failed');
+            toast.error('Upload failed');
         } finally {
             setIsUploading(false);
         }
@@ -225,11 +227,11 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
                 setNewComment('');
                 setPendingAttachments([]);
             } else {
-                alert('Failed to post comment');
+                toast.error('Failed to post comment');
             }
         } catch (error) {
             logger.error('Failed to submit comment', error);
-            alert('Failed to post comment');
+            toast.error('Failed to post comment');
         } finally {
             setSubmitting(false);
         }

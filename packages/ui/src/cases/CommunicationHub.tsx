@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '../ui/Toaster';
+
 
 import { useState, useEffect } from 'react';
 
@@ -95,13 +97,13 @@ export function CommunicationHub({ caseId, clientEmail, clientPhone }: Communica
                 setLogs([newLog, ...logs]);
                 setCustomMessage('');
                 setSelectedTemplate('');
-                alert('Message sent successfully!');
+                toast.success('Message sent successfully!');
             } else {
                 throw new Error('Failed to send message');
             }
         } catch (error) {
             logger.error('Send error:', error);
-            alert('Failed to send message. Please check logs.');
+            toast.error('Failed to send message. Please check logs.');
         } finally {
             setSending(false);
         }

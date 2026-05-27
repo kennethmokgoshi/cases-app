@@ -1,4 +1,6 @@
 'use client';
+import { toast } from './Toaster';
+
 
 import React, { useRef, useState } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
@@ -26,7 +28,7 @@ export function SignaturePad({
 
     const save = () => {
         if (sigCanvas.current?.isEmpty()) {
-            alert("Please provide a signature first.");
+            toast.error("Please provide a signature first.");
             return;
         }
         

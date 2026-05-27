@@ -23,6 +23,7 @@ model Project {
   logoUrl         String?
   primaryColor    String?            @default("#0B1D35")
   termsUrl        String?
+  billingEmail    String?
   apiKeys         ApiKey[]
   cases           CaseProject[]
   consumers       ConsumerAccount[]
@@ -136,6 +137,44 @@ model Client {
   invoices          Invoice[]
   LegalMatter       LegalMatter[]
   payments          Payment[]
+  automationRuns    AutomationRun[]
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  resource    String
+  resourceId  String?
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([action])
+}
+
+model NotificationQueue {
+  id               String   @id @default(cuid())
+  caseId           String
+  channel          String   // SMS, EMAIL, WHATSAPP
+  recipient        String
+  subject          String?
+  body             String
+  htmlBody         String?
+  optionsJson      String?  // For CCs and attachments
+  status           String   @default("PENDING_RETRY") // PENDING_RETRY, SUCCESS, FAILED_FINAL, HUMAN_REVIEW, CANCELLED
+  retryCount       Int      @default(0)
+  nextRetryAt      DateTime?
+  lastError        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  case             Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([status])
+  @@index([nextRetryAt])
 }
 
 model Case {
@@ -251,6 +290,8 @@ model Case {
   payments                Payment[]
   referrerCommission      ReferrerCommission?
   workflowLogs            WorkflowLog[]
+  automationRuns          AutomationRun[]
+  notificationQueue       NotificationQueue[]
 
   @@index([status])
   @@index([isOverdue])
@@ -372,6 +413,9 @@ model User {
   b2bPartner                Project?              @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
   groupMemberships          UserGroupMember[]
   workflowLogs              WorkflowLog[]
+  assignedLeads             Lead[]            @relation("LeadAssignment")
+  automationRuns            AutomationRun[]
+  triggeredAutomations      AutomationRun[]   @relation("AutomationTrigger")
 }
 
 model CaseAssignment {
@@ -703,16 +747,35 @@ model ConsumerAccount {
   updatedAt       DateTime         @updatedAt
   linkedClientId  String?          @unique
   isAdmin         Boolean          @default(false)
-  projectId       String?
-  role            String           @default("CONSUMER")
-  linkedClient    Client?          @relation(fields: [linkedClientId], references: [id])
-  project         Project?         @relation(fields: [projectId], references: [id])
-  tenant          CredoTenant?     @relation(fields: [tenantId], references: [id])
-  documents       CredoDocument[]
-  serviceRequests ServiceRequest[]
+  projectId            String?
+  role                 String              @default("CONSUMER")
+  activeSubscriptionId String?             @unique
+  linkedClient         Client?             @relation(fields: [linkedClientId], references: [id])
+  project              Project?            @relation(fields: [projectId], references: [id])
+  tenant               CredoTenant?        @relation(fields: [tenantId], references: [id])
+  documents            CredoDocument[]
+  serviceRequests      ServiceRequest[]
+  subscriptions        CredoSubscription[]
+  activeSubscription   CredoSubscription?  @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
 
   @@index([email])
   @@index([tenantId])
+}
+
+model CredoSubscription {
+  id               String           @id @default(cuid())
+  consumerId       String
+  planId           String           // e.g., 'credo-premium', 'credo-free'
+  status           String           @default("TRIALING") // TRIALING, ACTIVE, PAST_DUE, CANCELLED
+  providerRef      String?          // Peach Payments/PayFast reference or token
+  currentPeriodEnd DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  consumer         ConsumerAccount  @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+  activeFor        ConsumerAccount? @relation("ActiveSubscription")
+
+  @@index([consumerId])
+  @@index([status])
 }
 
 model CredoDocument {
@@ -1400,4 +1463,62 @@ enum DCCPPolicyStatus {
 enum DCCPFuneralCoverType {
   INDIVIDUAL
   FAMILY
+}
+
+model Lead {
+  id              String   @id @default(cuid())
+  firstName       String
+  lastName        String
+  idNumber        String?
+  phone           String
+  email           String?
+  /// One of: debt-review-removal | court-rescission | credit-repair | insurance
+  service         String
+  /// NEW | CONTACTED | CONVERTED | REJECTED | DUPLICATE | CLOSED
+  status          String   @default("NEW")
+  /// Where the lead originated (e.g. WEBSITE_ASSESSMENT)
+  source          String   @default("WEBSITE_ASSESSMENT")
+  popiaConsent    Boolean  @default(false)
+  notes           String?
+  convertedCaseId String?
+  assignedToId    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  assignedTo      User?    @relation("LeadAssignment", fields: [assignedToId], references: [id])
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([assignedToId])
+}
+
+model AutomationRun {
+  id              String    @id @default(cuid())
+  type            String    // DHS_SYNC, XDS_SYNC, GHL_WEBHOOK, AI_DOC_ANALYSIS, AI_PLAN_GEN, POPIA_CHECK
+  status          String    @default("QUEUED") // QUEUED, RUNNING, SUCCESS, FAILED, RETRYING, CANCELLED, NEEDS_REVIEW
+  caseId          String?
+  clientId        String?
+  userId          String?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  durationMs      Int?
+  errorMessage    String?
+  retryCount      Int       @default(0)
+  nextRetryAt     DateTime?
+  logs            Json?
+  screenshotPath  String?
+  triggeredById   String?
+  environment     String    @default("PRODUCTION") // PRODUCTION, STAGING, DEVELOPMENT
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  case            Case?     @relation(fields: [caseId], references: [id])
+  client          Client?   @relation(fields: [clientId], references: [id])
+  user            User?     @relation(fields: [userId], references: [id])
+  triggeredBy     User?     @relation("AutomationTrigger", fields: [triggeredById], references: [id])
+
+  @@index([type])
+  @@index([status])
+  @@index([caseId])
+  @@index([clientId])
 }

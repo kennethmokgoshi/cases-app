@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { generateForm16, type Form16Data } from '@/lib/form16-pdf';
 import { generateForm17, type Form17Data } from '@/lib/form17-pdf';
+import { generateForm17W, type Form17WData } from '@/lib/form17w-pdf';
 import { generateSection86Notice, type Section86Data } from '@/lib/section86-pdf';
 import { generateDebtRestructuringProposal, type DebtRestructuringData } from '@/lib/debt-restructuring-pdf';
 
@@ -19,6 +20,7 @@ const GenerateSchema = z.object({
     documentType: z.enum([
         'FORM_16',
         'FORM_17_1',
+        'FORM_17_W',
         'SECTION_86_NOTICE',
         'DEBT_RESTRUCTURING_PROPOSAL',
     ]),
@@ -27,6 +29,7 @@ const GenerateSchema = z.object({
 const DOC_FILENAMES: Record<string, string> = {
     FORM_16:                      'Form16',
     FORM_17_1:                    'Form17-1',
+    FORM_17_W:                    'Form17-W',
     SECTION_86_NOTICE:            'Section86Notice',
     DEBT_RESTRUCTURING_PROPOSAL:  'DebtRestructuringProposal',
 };
@@ -138,6 +141,20 @@ export async function POST(request: Request, { params }: RouteContext) {
                 dcNcrdcNo: dc.ncrdc, dcName: dc.name, dcAddress: dc.address, dcPhone: dc.phone, dcEmail: dc.email,
             };
             pdfBytes = await generateForm17(data);
+        } else if (documentType === 'FORM_17_W') {
+            const data: Form17WData = {
+                fileNumber:             caseRecord.fileNumber,
+                withdrawalDate:         now,
+                firstName:              client.firstName,
+                lastName:               client.lastName,
+                idNumber:               client.idNumber,
+                email:                  client.email,
+                phone:                  client.phone,
+                address:                client.address,
+                dcNcrdcNo: dc.ncrdc, dcName: dc.name, dcAddress: dc.address, dcPhone: dc.phone, dcEmail: dc.email,
+                reasonForWithdrawal:    'Settled in full / Clearance Certificate Issued',
+            };
+            pdfBytes = await generateForm17W(data);
         } else if (documentType === 'SECTION_86_NOTICE') {
             const data: Section86Data = {
                 fileNumber:      caseRecord.fileNumber,

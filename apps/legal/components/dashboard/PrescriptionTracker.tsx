@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -45,11 +47,11 @@ export default function PrescriptionTracker() {
                 a.click();
                 a.remove();
             } else {
-                alert('Failed to generate Section 126B Notice');
+                toast.error('Failed to generate Section 126B Notice');
             }
         } catch (error) {
             console.error('Error generating PDF:', error);
-            alert('Error generating PDF');
+            toast.error('Error generating PDF');
         }
     }
 
@@ -69,14 +71,14 @@ export default function PrescriptionTracker() {
 
             if (res.ok) {
                 const data = await res.json();
-                alert(data.message);
+                toast.error(data.message);
                 fetchPrescriptionMatters();
             } else {
-                alert('Batch check failed');
+                toast.error('Batch check failed');
             }
         } catch (error) {
             console.error('Error running check:', error);
-            alert('Error running check');
+            toast.error('Error running check');
         } finally {
             setLoading(false);
         }

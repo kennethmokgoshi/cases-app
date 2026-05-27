@@ -1,4 +1,6 @@
 'use client';
+import { toast, confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -78,7 +80,7 @@ export default function ApiKeysPage() {
 
     const createApiKey = async () => {
         if (!formName.trim()) {
-            alert('Please enter a name for the API key');
+            toast.error('Please enter a name for the API key');
             return;
         }
         setCreating(true);
@@ -101,11 +103,11 @@ export default function ApiKeysPage() {
                 resetForm();
             } else {
                 const error = await res.json();
-                alert(error.error || 'Failed to create API key');
+                toast.error(error.error || 'Failed to create API key');
             }
         } catch (error) {
             logger.error('Failed to create API key:', error);
-            alert('Failed to create API key');
+            toast.error('Failed to create API key');
         } finally {
             setCreating(false);
         }
@@ -124,7 +126,7 @@ export default function ApiKeysPage() {
     };
 
     const deleteApiKey = async (id: string, name: string) => {
-        if (!confirm(`Are you sure you want to delete the API key "${name}"?`)) return;
+        if (!await confirm(`Are you sure you want to delete the API key "${name}"?`)) return;
         try {
             await fetch(`/api/admin/api-keys/${id}`, { method: 'DELETE' });
             fetchApiKeys();
@@ -145,7 +147,7 @@ export default function ApiKeysPage() {
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
-        alert('API key copied to clipboard!');
+        toast.success('API key copied to clipboard!');
     };
 
     return (

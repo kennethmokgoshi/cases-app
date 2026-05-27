@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '../ui/Toaster';
+
 
 import { useState, useEffect } from 'react';
 
@@ -115,7 +117,7 @@ export function ProjectMembersModal({
             onClose();
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Failed to save members';
-            alert(msg);
+            toast.error(msg);
             logger.error(error);
         } finally {
             setSaving(false);

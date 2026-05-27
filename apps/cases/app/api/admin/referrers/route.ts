@@ -81,12 +81,38 @@ export async function GET(request: Request) {
             prisma.referrer.count({ where: { isActive: true } }),
         ]);
 
+        const referrerIds = referrers.map(r => r.id);
+        const [pageCommissions, globalCommissions] = await Promise.all([
+            prisma.referrerCommission.groupBy({
+                by: ['referrerId', 'isPaid'],
+                where: { referrerId: { in: referrerIds }, isEligible: true },
+                _sum: { commissionAmount: true },
+            }),
+            prisma.referrerCommission.groupBy({
+                by: ['isPaid'],
+                where: { isEligible: true },
+                _sum: { commissionAmount: true },
+            })
+        ]);
+
+        const enrichedReferrers = referrers.map(r => {
+            const outstanding = pageCommissions.find(c => c.referrerId === r.id && !c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
+            const paid = pageCommissions.find(c => c.referrerId === r.id && c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
+            return { ...r, outstandingCommission: outstanding, paidCommission: paid };
+        });
+
+        const totalOutstanding = globalCommissions.find(c => !c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
+        const totalPaid = globalCommissions.find(c => c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
+
         return NextResponse.json({
-            referrers,
+            referrers: enrichedReferrers,
             total,
             page,
             pages: Math.ceil(total / PAGE_SIZE),
-            meta: { total: totalCount, active: activeCount, inactive: totalCount - activeCount },
+            meta: { 
+                total: totalCount, active: activeCount, inactive: totalCount - activeCount,
+                totalOutstanding, totalPaid 
+            },
         });
     } catch (error) {
         logger.error('Error fetching referrers:', error);

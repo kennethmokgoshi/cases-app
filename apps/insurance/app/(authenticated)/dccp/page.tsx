@@ -211,6 +211,7 @@ export default function DCCPDashboard() {
                   <th className="text-right pb-3 pr-4">Premium</th>
                   <th className="text-right pb-3 pr-4">Our Fee</th>
                   <th className="text-left pb-3">Policy #</th>
+                  <th className="text-right pb-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -238,6 +239,39 @@ export default function DCCPDashboard() {
                     </td>
                     <td className="py-3 text-gray-400 text-xs">
                       {policy.policyNumber ?? <span className="text-yellow-400/60">Pending</span>}
+                    </td>
+                    <td className="py-3 text-right">
+                      {policy.status === 'DRAFT' && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/dccp/policies/${policy.id}/submit`, { method: 'POST' });
+                              if (res.ok) fetchData();
+                              else alert('Submission failed. Please verify your credentials.');
+                            } catch (e) {
+                              alert('Error submitting policy.');
+                            }
+                          }}
+                          className="px-3 py-1 bg-zeno-cyan text-zeno-navy text-xs font-bold rounded hover:bg-cyan-400 transition-colors"
+                        >
+                          Submit
+                        </button>
+                      )}
+                      {policy.status !== 'DRAFT' && policy.policyNumber && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/dccp/policies/${policy.id}/status`);
+                              if (res.ok) fetchData();
+                            } catch (e) {
+                              // Ignore errors
+                            }
+                          }}
+                          className="px-3 py-1 bg-white/10 text-white text-xs font-medium rounded hover:bg-white/20 transition-colors"
+                        >
+                          Sync
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

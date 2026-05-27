@@ -20,6 +20,7 @@ export interface GhlSendResult {
     error?: string;
     channel: string;
     recipient: string;
+    provider?: string;
 }
 
 export class GhlService {
@@ -381,7 +382,7 @@ export class GhlService {
             return { success: true, message: 'Opportunity not at target stage' };
         }
 
-        const client = await prisma.client.findUnique({
+        const client = await prisma.client.findFirst({
             where: { ghlContactId: contactId },
         });
 

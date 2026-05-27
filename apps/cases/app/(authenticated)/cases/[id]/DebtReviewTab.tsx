@@ -49,6 +49,7 @@ interface DebtReviewTabProps {
 const DOC_LABELS: Record<string, string> = {
     FORM_16:                     'Form 16',
     FORM_17_1:                   'Form 17.1',
+    FORM_17_W:                   'Form 17.W',
     SECTION_86_NOTICE:           'Section 86(2) Notice',
     DEBT_RESTRUCTURING_PROPOSAL: 'Debt Restructuring Proposal',
 };
@@ -56,6 +57,7 @@ const DOC_LABELS: Record<string, string> = {
 const DOC_DESCRIPTIONS: Record<string, string> = {
     FORM_16:                     'Application for Debt Review — Section 86(1) NCA',
     FORM_17_1:                   'Notification to Credit Providers',
+    FORM_17_W:                   'Withdrawal from Debt Review',
     SECTION_86_NOTICE:           'Notice of Application — Section 86(2) NCA',
     DEBT_RESTRUCTURING_PROPOSAL: 'Proposed Repayment Schedule for Creditors',
 };
@@ -209,7 +211,7 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
 
     if (!data) return null;
 
-    const allDocTypes      = ['FORM_16', 'FORM_17_1', 'SECTION_86_NOTICE', 'DEBT_RESTRUCTURING_PROPOSAL'];
+    const allDocTypes      = ['FORM_16', 'FORM_17_1', 'SECTION_86_NOTICE', 'DEBT_RESTRUCTURING_PROPOSAL', 'FORM_17_W'];
     const hasApprovedDocs  = data.documents.some(d => d.status === 'APPROVED');
     const allSentToCreditors = data.documents.length > 0 && data.documents.every(d => d.sentToCreditors);
 

@@ -1,4 +1,6 @@
 'use client';
+import { toast, confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from 'react';
 import { useSession } from '@zenowethu/ui';
@@ -83,7 +85,7 @@ export default function AdminGroupsPage() {
 
             if (!res.ok) {
                 const err = await res.json();
-                alert(err.error || 'Failed to create group');
+                toast.error(err.error || 'Failed to create group');
                 return;
             }
 
@@ -97,7 +99,7 @@ export default function AdminGroupsPage() {
     };
 
     const handleDeleteGroup = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this group?')) return;
+        if (!await confirm('Are you sure you want to delete this group?')) return;
         try {
             const res = await fetch(`/api/groups/${id}`, { method: 'DELETE' });
             if (res.ok) fetchData();

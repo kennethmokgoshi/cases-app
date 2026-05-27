@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -240,12 +242,12 @@ function PartnerNewCaseComponent() {
 
     const handleContinueToForm = async () => {
         if (!selectedParentId || !selectedYear || !selectedMonth) {
-            alert('Please select Main Source, Year, and Month');
+            toast.error('Please select Main Source, Year, and Month');
             return;
         }
 
         if (selectedServices.length === 0) {
-            alert('Please select at least one service');
+            toast.error('Please select at least one service');
             return;
         }
 
@@ -282,7 +284,7 @@ function PartnerNewCaseComponent() {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } catch (error) {
             logger.error('Error creating project path:', error);
-            alert('Failed to create project structure. Please try again.');
+            toast.error('Failed to create project structure. Please try again.');
         } finally {
             setSubmitting(false);
         }
@@ -316,14 +318,14 @@ function PartnerNewCaseComponent() {
     const handleCreateCase = async () => {
         // Validate required fields (phone and email are now optional)
         if (!surname || !fullNames || !idNumber) {
-            alert('Please fill in Surname, Full Names, and ID Number');
+            toast.error('Please fill in Surname, Full Names, and ID Number');
             return;
         }
 
         // Validate ID Number: Must be exactly 13 digits
         const idNumberClean = idNumber.replace(/\D/g, ''); // Remove non-digits
         if (idNumberClean.length !== 13) {
-            alert('❌ Invalid ID Number\n\nSouth African ID numbers must be exactly 13 digits.\n\nYou entered: ' + idNumberClean.length + ' digits');
+            toast.error('❌ Invalid ID Number\n\nSouth African ID numbers must be exactly 13 digits.\n\nYou entered: ' + idNumberClean.length + ' digits');
             return;
         }
 
@@ -336,13 +338,13 @@ function PartnerNewCaseComponent() {
             if (isInternational) {
                 // International format: +27 followed by 9 digits = 12 characters total
                 if (cellNumberClean.length !== 12 || digitsOnly.length !== 11) {
-                    alert('❌ Invalid Cell Number\n\nInternational format must be: +27XXXXXXXXX (12 characters)\n\nExample: +27823456789');
+                    toast.error('❌ Invalid Cell Number\n\nInternational format must be: +27XXXXXXXXX (12 characters)\n\nExample: +27823456789');
                     return;
                 }
             } else {
                 // Local format: Must be exactly 10 digits
                 if (digitsOnly.length !== 10) {
-                    alert('❌ Invalid Cell Number\n\nLocal format must be 10 digits.\n\nExample: 0823456789\n\nYou entered: ' + digitsOnly.length + ' digits');
+                    toast.error('❌ Invalid Cell Number\n\nLocal format must be 10 digits.\n\nExample: 0823456789\n\nYou entered: ' + digitsOnly.length + ' digits');
                     return;
                 }
             }
@@ -352,7 +354,7 @@ function PartnerNewCaseComponent() {
         if (email && email.trim() !== '') {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email)) {
-                alert('❌ Invalid Email Address\n\nPlease enter a valid email address.\n\nExample: name@example.com');
+                toast.error('❌ Invalid Email Address\n\nPlease enter a valid email address.\n\nExample: name@example.com');
                 return;
             }
         }
@@ -399,9 +401,9 @@ function PartnerNewCaseComponent() {
                             : errorData.field === 'email' ? 'Email Address'
                                 : 'Field';
 
-                    alert(`❌ ${errorData.error}\n\n${errorData.message}\n\nPlease use a different ${fieldName}.`);
+                    toast.error(`❌ ${errorData.error}\n\n${errorData.message}\n\nPlease use a different ${fieldName}.`);
                 } else {
-                    alert(`Failed to create case: ${errorData.error || errorData.message || 'Unknown error'}`);
+                    toast.error(`Failed to create case: ${errorData.error || errorData.message || 'Unknown error'}`);
                 }
 
                 setSubmitting(false);
@@ -442,13 +444,13 @@ function PartnerNewCaseComponent() {
                         const err = await uploadRes.json();
                         logger.error('Document upload failed:', err);
                         // We still created the case, so we report the error but might still redirect
-                        alert('Case created successfully, but document upload failed: ' + (err.error || 'Unknown error'));
+                        toast.success('Case created successfully, but document upload failed: ' + (err.error || 'Unknown error'));
                     } else {
                         logger.info('✅ Documents uploaded successfully');
                     }
                 } catch (uploadError) {
                     logger.error('Upload Error:', uploadError);
-                    alert('Case created successfully, but an error occurred during document upload.');
+                    toast.success('Case created successfully, but an error occurred during document upload.');
                 }
             }
 
@@ -456,7 +458,7 @@ function PartnerNewCaseComponent() {
             router.push('/b2b-dashboard?success=lead_created');
         } catch (error) {
             logger.error('Case creation error:', error);
-            alert(`Failed to create lead: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast.error(`Failed to create lead: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
             setSubmitting(false);
         }
@@ -981,7 +983,7 @@ function PartnerNewCaseComponent() {
                                             // Re-submit with the new ID after a short delay
                                             setTimeout(() => handleCreateCase(), 100);
                                         } else {
-                                            alert('Please enter a valid prefixed ID number');
+                                            toast.error('Please enter a valid prefixed ID number');
                                         }
                                     }}
                                     disabled={!prefixedIdInput && !duplicateError.suggestedIdNumber}

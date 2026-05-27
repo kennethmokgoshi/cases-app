@@ -1,4 +1,7 @@
 'use client';
+import { toast } from '../ui/Toaster';
+import { confirm } from '../providers/ConfirmProvider';
+
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -8,7 +11,7 @@ export function BatchHeaderActions({ batchId, hasPending }: { batchId: string, h
     const router = useRouter();
 
     const handlePost = async () => {
-        if (!confirm('Are you sure you want to post these payments? This will update client balances for all matched records.')) return;
+        if (!await confirm('Are you sure you want to post these payments? This will update client balances for all matched records.')) return;
 
         setIsPosting(true);
         try {
@@ -19,10 +22,10 @@ export function BatchHeaderActions({ batchId, hasPending }: { batchId: string, h
             }
 
             const data = await res.json();
-            alert(data.message);
+            toast.error(data.message);
             router.refresh();
         } catch (e: any) {
-            alert('Error posting batch: ' + e.message);
+            toast.error('Error posting batch: ' + e.message);
         } finally {
             setIsPosting(false);
         }

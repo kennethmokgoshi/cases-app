@@ -1,4 +1,6 @@
 'use client'
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
@@ -208,7 +210,7 @@ function RateTablesContent() {
   }
 
   async function deleteRate(id: string) {
-    if (!confirm('Delete this rate entry? This cannot be undone.')) return
+    if (!await confirm('Delete this rate entry? This cannot be undone.')) return
     setDeleting(id)
     try {
       const res = await fetch(`/api/admin/rate-tables/${id}`, { method: 'DELETE' })

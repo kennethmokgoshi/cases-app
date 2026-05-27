@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { DisputeButton } from "./dispute-button";
 
 type Bureau = "transunion" | "experian" | "xds" | "lightstone";
 
@@ -293,13 +294,47 @@ export default function CreditReportPage() {
                 <p style={{ fontSize:"0.8125rem", color:"#047857", margin:"0 0 12px" }}>
                   The Edgars default (Sep 2020) may qualify under the 3-year Prescription Act.
                 </p>
-                <button style={{
-                  padding:"6px 14px", fontSize:"0.8125rem", fontWeight:600,
-                  background:"#059669", color:"white",
-                  border:"none", borderRadius:6, cursor:"pointer",
-                }}>
-                  Run full scanner
-                </button>
+                <DisputeButton 
+                  type="PRESCRIBED_DEBT_NOTICE"
+                  creditorName="Edgars"
+                  accountNumber="1234567890"
+                  disputeGrounds={['Account is older than 3 years with no payment or acknowledgment.']}
+                  label="Generate Dispute Letter"
+                  className="px-4 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Reckless Lending checker */}
+          <div style={{
+            background:"linear-gradient(135deg, #FEF2F2, #FEE2E2)",
+            border:"1px solid #FECACA",
+            borderRadius:12, padding:"18px 20px",
+          }}>
+            <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+              <div style={{ width:32, height:32, borderRadius:8, background:"rgba(220,38,38,0.1)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 2v5" stroke="#DC2626" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="8" cy="11" r="1" fill="#DC2626" />
+                  <path d="M14.5 13H1.5L8 1.5l6.5 11.5z" stroke="#DC2626" strokeWidth="1.5" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div>
+                <p style={{ fontSize:"0.875rem", fontWeight:700, color:"#991B1B", margin:"0 0 4px" }}>
+                  Possible Reckless Lending
+                </p>
+                <p style={{ fontSize:"0.8125rem", color:"#7F1D1D", margin:"0 0 12px" }}>
+                  Capitec Loan (Jan 2024) was issued when your DTI was &gt; 85%. You may be able to challenge this.
+                </p>
+                <DisputeButton 
+                  type="CREDIT_PROVIDER_DISPUTE"
+                  creditorName="Capitec"
+                  accountNumber="9876543210"
+                  disputeGrounds={['Reckless Lending Assessment Demand - Please provide original affordability assessment.']}
+                  label="Request NCA Assessment"
+                  className="px-4 py-2 text-xs font-semibold bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                />
               </div>
             </div>
           </div>

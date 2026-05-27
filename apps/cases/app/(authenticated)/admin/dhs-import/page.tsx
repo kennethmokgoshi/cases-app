@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState, useRef, useMemo, useEffect } from 'react';
 import Link from 'next/link';
@@ -230,9 +232,9 @@ export default function DhsImportPage() {
         if (creates.length > 0) {
             const names = creates.slice(0, 3).map((r) => `${r.surname}, ${r.first_name}`).join('; ');
             const more = creates.length > 3 ? ` and ${creates.length - 3} more` : '';
-            if (!confirm(`This will create ${creates.length} new case file(s):\n${names}${more}\n\nConfirm?`)) return;
+            if (!await confirm(`This will create ${creates.length} new case file(s):\n${names}${more}\n\nConfirm?`)) return;
         } else {
-            if (!confirm(`Apply actions to ${selected.size} selected record(s)?`)) return;
+            if (!await confirm(`Apply actions to ${selected.size} selected record(s)?`)) return;
         }
 
         setApplying(true);

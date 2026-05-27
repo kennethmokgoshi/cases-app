@@ -4,6 +4,7 @@ import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
 import { requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
 import { stepRegistry } from '../step-registry';
+import { sendManualMessage, getTemplateByStatus, renderTemplate } from '@zenowethu/shared-lib';
 import type { ActionContext } from '../step-registry';
 import type { StepExecutionResult } from '../types';
 
@@ -143,16 +144,98 @@ stepRegistry.register(
       const { caseId, caseRecord } = ctx;
       const caseWithDC = await prisma.case.findUnique({
         where: { id: caseId },
-        select: { dcEmail: true, debtCounsellorName: true },
+        include: { client: true },
       });
+      
+      if (!caseWithDC) {
+        return { success: false, error: 'Case not found' };
+      }
+
+      // Resolve DC Email
+      const badEmailSettings = await prisma.systemSettings.findMany({
+        where: { category: 'bad_dc_email' },
+        select: { value: true }
+      });
+      const badEmails = badEmailSettings.map(s => s.value.toLowerCase().trim());
+      const isGoodEmail = (e: string | null | undefined): e is string =>
+        !!e && e.trim().length > 0 && !badEmails.includes(e.toLowerCase().trim());
+
+      let resolvedEmail: string | null = null;
+      if (isGoodEmail(caseWithDC.preferredDcEmail)) {
+          resolvedEmail = caseWithDC.preferredDcEmail;
+      } else if (isGoodEmail(caseWithDC.lastKnownEmail)) {
+          resolvedEmail = caseWithDC.lastKnownEmail;
+      } else if (isGoodEmail(caseWithDC.dcEmail)) {
+          resolvedEmail = caseWithDC.dcEmail;
+      } else if (caseWithDC.ncrdcNo) {
+          const previousCase = await prisma.case.findFirst({
+              where: {
+                  ncrdcNo: caseWithDC.ncrdcNo,
+                  dcEmail: { not: null, gt: '' },
+                  id: { not: caseId },
+                  NOT: { dcEmail: { in: badEmails.length > 0 ? badEmails : ['__no_match__'] } }
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { dcEmail: true }
+          });
+          if (previousCase?.dcEmail && isGoodEmail(previousCase.dcEmail)) {
+              resolvedEmail = previousCase.dcEmail;
+          }
+      }
+
+      if (!resolvedEmail) {
+        // Escalate by leaving a note
+        await prisma.caseComment.create({
+          data: {
+            caseId,
+            userId: caseRecord.assignedToId || 'system',
+            content: `[AI Plan] Tried to request file from DC but NO VALID EMAIL was found for DC (${caseWithDC.debtCounsellorName} / ${caseWithDC.ncrdcNo}). Please locate the DC's email and manually request the file.`,
+            type: 'AI_PLAN',
+            isInternal: true,
+            activityType: 'REQUEST_FILE_FROM_DC_FAILED',
+          },
+        });
+        return { success: false, error: 'No valid DC email found' };
+      }
+
       logger.info(
-        `[REQUEST_FILE_FROM_DC] Case ${caseId}: requesting file from DC ${caseWithDC?.debtCounsellorName}`,
+        `[REQUEST_FILE_FROM_DC] Case ${caseId}: requesting file from DC ${caseWithDC.debtCounsellorName} (${resolvedEmail})`,
       );
+      
+      const clientName = `${caseWithDC.client.firstName} ${caseWithDC.client.lastName}`;
+      const dcTemplate = getTemplateByStatus('REQUEST_FILE_DC');
+      const templateVars = {
+          dcName:      caseWithDC.debtCounsellorName || 'Debt Counsellor',
+          clientName,
+          idNumber:    caseWithDC.client.idNumber,
+          fileNumber:  caseWithDC.fileNumber,
+          companyName: process.env.COMPANY_NAME || 'Zenowethu Debt Management',
+          phone:       process.env.COMPANY_PHONE || '012 035 1824',
+      };
+      const emailSubject = dcTemplate
+          ? renderTemplate(dcTemplate.emailSubject, templateVars)
+          : `File Transfer Request: ${clientName} (ID: ${caseWithDC.client.idNumber}) — Documents Required`;
+      const emailBody = dcTemplate
+          ? renderTemplate(dcTemplate.emailTemplate, templateVars)
+          : `Dear Debt Counsellor,\n\nWe request the consumer file for ${clientName} (ID: ${caseWithDC.client.idNumber}). We require the Form 17.W, Court Order (if applicable), and Paid Up Letters (if any).\n\nRegards,\nZenowethu Debt Management`;
+
+      // CC the client so they know we acted on their behalf
+      const ccEmails: string[] = caseWithDC.client.email ? [caseWithDC.client.email] : [];
+
+      await sendManualMessage(
+          caseId,
+          'EMAIL',
+          resolvedEmail,
+          emailBody,
+          emailSubject,
+          { cc: ccEmails }
+      );
+
       await prisma.caseComment.create({
         data: {
           caseId,
           userId: caseRecord.assignedToId || 'system',
-          content: `[AI Plan] File request sent to DC: ${caseWithDC?.debtCounsellorName || 'Unknown'} (${caseWithDC?.dcEmail || 'no email'})`,
+          content: `[AI Plan] File request email sent successfully to DC: ${caseWithDC.debtCounsellorName || 'Unknown'} (${resolvedEmail})`,
           type: 'AI_PLAN',
           isInternal: true,
           activityType: 'REQUEST_FILE_FROM_DC',
@@ -162,13 +245,14 @@ stepRegistry.register(
         success: true,
         result: {
           action: 'REQUEST_FILE_FROM_DC',
-          dcName: caseWithDC?.debtCounsellorName,
-          dcEmail: caseWithDC?.dcEmail,
+          dcName: caseWithDC.debtCounsellorName,
+          dcEmail: resolvedEmail,
           requestedAt: new Date().toISOString(),
         },
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error(`[REQUEST_FILE_FROM_DC] Failed for case ${ctx.caseId}: ${message}`);
       return { success: false, error: message };
     }
   },

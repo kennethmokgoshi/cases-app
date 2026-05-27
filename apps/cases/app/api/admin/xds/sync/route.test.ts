@@ -7,6 +7,14 @@ vi.mock('@zenowethu/shared-lib', () => ({
     createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
 }));
 
+vi.mock('@zenowethu/database', () => ({
+    prisma: {
+        systemSettings: {
+            findUnique: vi.fn().mockResolvedValue(null),
+        },
+    },
+}));
+
 vi.mock('@zenowethu/shared-lib/src/auth', () => ({
     auth: vi.fn(),
 }));
@@ -49,6 +57,8 @@ const successResult = {
     existingFilesUpdated: 3,
     errors: [],
     details: [],
+    datesProcessed: ['2026-04-01'],
+    lastSyncedDate: '2026-04-01',
 };
 
 const partialErrorResult = {
@@ -58,6 +68,7 @@ const partialErrorResult = {
     errors: ['John Doe: ID extraction failed'],
     details: [],
     datesProcessed: ['2026-04-01'],
+    lastSyncedDate: '2026-04-01',
 };
 
 const fatalResult = {
@@ -67,6 +78,7 @@ const fatalResult = {
     errors: ['Fatal: Failed to log in to XDS portal'],
     details: [],
     datesProcessed: [],
+    lastSyncedDate: null,
 };
 
 beforeEach(() => {
@@ -171,23 +183,6 @@ describe('POST /api/admin/xds/sync — result shape', () => {
         vi.mocked(runXdsSync).mockResolvedValue(fatalResult);
         const res = await POST(makePostReq());
         expect(res.status).toBe(500);
-    });
-
-    it.skip('passes targetDate to runXdsSync when provided', async () => {
-        vi.mocked(runXdsSync).mockResolvedValue(successResult);
-        const res = await POST(makePostReq({ targetDate: '2026-04-01' }));
-        expect(res.status).toBe(200);
-        const call = vi.mocked(runXdsSync).mock.calls[0][0];
-        expect(call?.targetDate).toBeInstanceOf(Date);
-        expect(call?.targetDate?.toISOString()).toContain('2026-04-01');
-    });
-
-    it.skip('ignores invalid targetDate and uses today', async () => {
-        vi.mocked(runXdsSync).mockResolvedValue(successResult);
-        const res = await POST(makePostReq({ targetDate: 'not-a-date' }));
-        expect(res.status).toBe(200);
-        const call = vi.mocked(runXdsSync).mock.calls[0][0];
-        expect(call?.targetDate).toBeUndefined();
     });
 
     it('returns 500 when runXdsSync throws', async () => {

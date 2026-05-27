@@ -129,25 +129,6 @@ IMPORTANT:
 - For string fields not found, use "NA". For number fields not found, use 0.
 - Return valid JSON only.`,
 
-    PROOF_OF_RESIDENCE: `You are analyzing a South African Proof of Residence document.
-
-This could be:
-- A municipal rates/utility bill (water, electricity, refuse)
-- A bank letter confirming the client's address
-- A signed lease agreement
-- A government letter addressed to the client
-
-Extract the following information in JSON format:
-{
-  "clientName": "string (full name on the document)",
-  "address": "string (full street address including suburb and city)",
-  "documentType": "string (e.g. 'Municipal Bill', 'Bank Letter', 'Lease Agreement', 'Government Letter')",
-  "issuer": "string (e.g. 'City of Johannesburg', 'ABSA Bank', landlord name)",
-  "documentDate": "string (YYYY-MM-DD — date on the document)",
-  "idNumber": "string (if present)"
-}
-IMPORTANT: For any field not found, use "NA" (never return null or empty string). Return valid JSON only.`,
-
     OTHER: `You are analyzing a document that may contain client information for a debt counselling case.
 Extract any identifiable information you can find:
 {
@@ -614,12 +595,28 @@ PRIORITY ORDER — classify documents in this strict order of priority:
    TEXT CLUES: Bank name (FNB, ABSA, Standard Bank, Capitec, Nedbank, African Bank, TymeBank, Discovery Bank), "Account Number", "Statement Period", "Opening Balance", "Closing Balance", "Available Balance", debit/credit transaction list
    IMAGE CLUES: Bank logo at top, table of transactions with dates/amounts/balances
 
-8. ** POA **
+8. ** FORM_17W **
+   Withdrawal from Debt Review form.
+   TEXT CLUES: "17.W", "Form 17.W", "Withdrawal from Debt Review", "Section 71", "Notification of Withdrawal"
+
+9. ** COURT_ORDER **
+   Legal court order or judgment.
+   TEXT CLUES: "Court Order", "High Court", "Magistrate's Court", "Case Number", "In the matter between"
+
+10. ** CLEARANCE_CERTIFICATE **
+    Certificate proving debt review is complete.
+    TEXT CLUES: "Clearance Certificate", "Form 19", "Paid Up", "Section 71"
+
+11. ** SETTLEMENT_LETTER **
+    Letter proving an account is paid up.
+    TEXT CLUES: "Paid up letter", "Settlement letter", "Zero Balance", "Settled in full"
+
+12. ** POA **
    Generic Power of Attorney NOT branded as Zenowethu.
    TEXT CLUES: "Power of Attorney", "I hereby authorise", signed POA without Zenowethu branding.
 
 For each document found, provide:
-- type: "ID", "ZENOWETHU_POA", "CREDIT_REPORT", "CREDIT_REPORT_OTHER", "PROOF_OF_RESIDENCE", "PAYSLIP", "BANK_STATEMENT", "POA", or "OTHER"
+- type: "ID", "ZENOWETHU_POA", "CREDIT_REPORT", "CREDIT_REPORT_OTHER", "PROOF_OF_RESIDENCE", "PAYSLIP", "BANK_STATEMENT", "FORM_17W", "COURT_ORDER", "CLEARANCE_CERTIFICATE", "SETTLEMENT_LETTER", "POA", or "OTHER"
 - startPage: page number where this document starts (1-based)
 - endPage: page number where this document ends (1-based)
 - confidence: confidence score (0.0 to 1.0)

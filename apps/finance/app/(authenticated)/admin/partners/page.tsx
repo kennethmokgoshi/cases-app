@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
@@ -161,7 +163,7 @@ export default function PartnersManagement() {
             fetchPartners();
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'An error occurred during deletion';
-            alert(msg);
+            toast.error(msg);
         }
     };
 

@@ -62,3 +62,9 @@ if (!proc.__prismaDisconnectRegistered) {
 }
 
 export { PrismaClient, Prisma }
+
+// Re-export Prisma-generated enum types so consumers can import from '@zenowethu/database'
+// instead of directly from '@prisma/client' (which may not be hoisted in all workspace packages).
+export type {
+    ReferrerCommissionStage,
+} from '@prisma/client'

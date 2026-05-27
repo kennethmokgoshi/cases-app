@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
@@ -282,7 +284,7 @@ export default function ProjectsManagement() {
     const handleDeleteCases = async (project: Project) => {
         const totalCases = calculateTotalCases(project);
         if (totalCases === 0) {
-            alert('No cases to delete in this project.');
+            toast.error('No cases to delete in this project.');
             return;
         }
         setDeleteModal({
@@ -334,9 +336,9 @@ export default function ProjectsManagement() {
                 const result = await res.json();
                 if (result.failedCount > 0) {
                     const failedNames = result.failed.map((f: any) => `${f.name} (${f.reason})`).join(', ');
-                    alert(`${result.message}\n\nFailed projects: ${failedNames}`);
+                    toast.error(`${result.message}\n\nFailed projects: ${failedNames}`);
                 } else {
-                    alert(result.message);
+                    toast.error(result.message);
                 }
                 setSelectedIds([]); // Clear selection on bulk success
             }
@@ -344,7 +346,7 @@ export default function ProjectsManagement() {
             fetchProjects();
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'An error occurred during deletion';
-            alert(msg); // Or use a toast notification
+            toast.error(msg); // Or use a toast notification
             logger.error(error);
         }
     };
@@ -386,7 +388,7 @@ export default function ProjectsManagement() {
             setViewingMembersProject(null); // Close modal on success
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Failed to save members';
-            alert(msg);
+            toast.error(msg);
             logger.error(error);
         } finally {
             setSaving(false);

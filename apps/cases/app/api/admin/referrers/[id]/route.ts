@@ -30,14 +30,15 @@ function isAdminLevel(session: { user: { isAdmin?: boolean; isExecutive?: boolea
 }
 
 // GET /api/admin/referrers/[id]
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (!isAdminLevel(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
         const referrer = await prisma.referrer.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 project: { select: { id: true, name: true } },
                 _count: { select: { cases: true } },
@@ -64,13 +65,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 // PATCH /api/admin/referrers/[id]
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (!isAdminLevel(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-        const existing = await prisma.referrer.findUnique({ where: { id: params.id } });
+        const existing = await prisma.referrer.findUnique({ where: { id } });
         if (!existing) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
 
         const body = await request.json();
@@ -84,10 +86,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         // Contact-field preservation: email and cellNumber are used for referrer notifications
         // throughout the case lifecycle. Log prominently if they are being explicitly cleared.
         if (data.email === null && existing.email) {
-            logger.warn(`Referrer ${params.id} email being cleared (was: ${existing.email}) by user ${session.user.id}`);
+            logger.warn(`Referrer ${id} email being cleared (was: ${existing.email}) by user ${session.user.id}`);
         }
         if (data.cellNumber === null && existing.cellNumber) {
-            logger.warn(`Referrer ${params.id} cellNumber being cleared (was: ${existing.cellNumber}) by user ${session.user.id}`);
+            logger.warn(`Referrer ${id} cellNumber being cleared (was: ${existing.cellNumber}) by user ${session.user.id}`);
         }
 
         // If name changed, rename the linked sub-project too
@@ -101,7 +103,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         }
 
         const updated = await prisma.referrer.update({
-            where: { id: params.id },
+            where: { id },
             data: {
                 ...data,
                 monthlyIncome: data.monthlyIncome !== undefined ? data.monthlyIncome : undefined,
@@ -120,8 +122,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 // DELETE /api/admin/referrers/[id] — soft-deactivate; only admin/executive can hard-delete
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (!session.user.isAdmin && !session.user.isExecutive) {
@@ -129,7 +132,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
         }
 
         const existing = await prisma.referrer.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: { _count: { select: { cases: true } } },
         });
         if (!existing) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
@@ -149,7 +152,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
             }
         }
 
-        await prisma.referrer.delete({ where: { id: params.id } });
+        await prisma.referrer.delete({ where: { id } });
         return NextResponse.json({ success: true });
     } catch (error) {
         logger.error('Error deleting referrer:', error);

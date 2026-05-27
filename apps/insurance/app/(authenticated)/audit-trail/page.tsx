@@ -11,7 +11,7 @@ const logger = {
 
 type LogEntry = {
   id: string
-  notes: string
+  notes: string | null
   createdAt: string
   case: { fileNumber: string } | null
   user: { name: string | null; email: string | null } | null
@@ -74,7 +74,8 @@ function AuditTrailContent() {
     URL.revokeObjectURL(url)
   }
 
-  function extractAction(notes: string) {
+  function extractAction(notes: string | null | undefined) {
+    if (!notes) return '—'
     const match = notes.match(/\[([A-Z_]+)\]/)
     return match ? match[1].replace(/_/g, ' ') : notes.slice(0, 40)
   }
@@ -168,7 +169,7 @@ function AuditTrailContent() {
                         </span>
                       </td>
                       <td className="px-5 py-3 text-gray-500 text-xs max-w-xs">
-                        <span className="line-clamp-2">{log.notes}</span>
+                        <span className="line-clamp-2">{log.notes ?? '—'}</span>
                       </td>
                     </tr>
                   ))}

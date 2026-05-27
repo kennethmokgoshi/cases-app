@@ -127,21 +127,31 @@ export async function generatePlan(caseId: string, userGuidance?: string): Promi
       : '';
 
   // ── Document status — explicit present/missing summary ───────────────────
-  const REQUIRED_DOC_TYPES = [
+  const STANDARD_REQUIRED_DOC_TYPES = [
     { label: 'Credit Report', types: ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT', 'CREDIT_REPORT_OTHER', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'EXPERIAN', 'TRANSUNION', 'XDS', 'CLEAR_SCORE', 'KUDOUGH'] },
     { label: 'Identity Document', types: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'] },
     { label: 'Power of Attorney', types: ['POA', 'ZENOWETHU_POA', 'ZDM_POA', 'ZDM', 'POWER_OF_ATTORNEY', 'AUTHORIZATION', 'APPLICATION_FORM'] },
   ];
+  
+  const REMOVAL_REQUIRED_DOC_TYPES = [
+    { label: 'Identity Document', types: ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'] },
+    { label: 'Form 17.W', types: ['FORM_17W', '17W'] },
+    { label: 'Court Order', types: ['COURT_ORDER'] },
+  ];
+
   const OPTIONAL_DOC_TYPES = [
     { label: 'Payslip', types: ['PAYSLIP', 'SALARY_SLIP'] },
     { label: 'Bank Statement', types: ['BANK_STATEMENT', 'BANK_CONFIRMATION', 'STATEMENT'] },
+    { label: 'Clearance Certificate', types: ['CLEARANCE_CERTIFICATE'] },
+    { label: 'Settlement Letter', types: ['SETTLEMENT_LETTER'] },
   ];
 
+  const activeRequiredDocs = isFlagRemoval ? REMOVAL_REQUIRED_DOC_TYPES : STANDARD_REQUIRED_DOC_TYPES;
   const uploadedDocTypes = caseRecord.documents.map((d) => d.type.toUpperCase());
 
   const docStatusLines: string[] = [];
   const missingRequiredDocs: string[] = [];
-  for (const req of REQUIRED_DOC_TYPES) {
+  for (const req of activeRequiredDocs) {
     const present = req.types.some((t) => uploadedDocTypes.includes(t));
     docStatusLines.push(present ? `✓ ${req.label} — PRESENT` : `✗ ${req.label} — MISSING`);
     if (!present) missingRequiredDocs.push(req.label);
@@ -242,6 +252,7 @@ TRIGGERS (only act on these if not already addressed above): ${
       (isFlagRemoval && prescribed.length > 0) ? `${prescribed.length} prescribed accounts → legal letters to bureaux` : '',
       (isFlagRemoval && caseRecord.dhsStatus) ? `DHS status ${caseRecord.dhsStatus} → DHS portal action needed` : '',
       (isFlagRemoval && !caseRecord.dcEmail) ? 'Flag removal: no DC email on file — REQUEST_FILE_FROM_DC to obtain the client file from the current debt counsellor' : '',
+      (isFlagRemoval && !allRequiredDocsPresent) ? `Missing removal documents: ${missingRequiredDocs.join(', ')} — request from client (DOCUMENT_REQUEST_CLIENT) or current DC (REQUEST_FILE_FROM_DC) if safe to do so` : '',
       (!isFlagRemoval && !allRequiredDocsPresent) ? `Missing documents: ${missingRequiredDocs.join(', ')} — request from client (DOCUMENT_REQUEST_CLIENT), NOT from a DC` : '',
       hasHighInsurance ? 'Insurance premiums found → assess for cheaper alternatives' : '',
       possibleReckless ? 'Instalments >50% of net salary → assess for reckless lending' : '',

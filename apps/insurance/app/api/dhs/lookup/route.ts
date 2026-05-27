@@ -225,7 +225,7 @@ export async function POST(request: Request) {
                 // Get a user ID for the comments
                 const userId = actingUserId;
 
-                logger.info('Admin user found:', !!admin);
+                logger.info('Admin user found:', !!actingUserId);
                 logger.info('User ID for comments:', userId);
                 logger.info('Comments to save:', comments.length);
 

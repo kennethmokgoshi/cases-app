@@ -21,6 +21,7 @@ type Project = {
     type: string;
     clientType: string | null;  // B2B or B2C
     parentId: string | null;
+    billingEmail: string | null;
     parent?: Project;
     children?: Project[];
     members?: { userId: string; role: string; user: { firstName: string; lastName: string; email: string } }[];
@@ -48,6 +49,7 @@ export default function PartnersManagement() {
     const [formName, setFormName] = useState('');
     const [formDescription, setFormDescription] = useState('');
     const [formClientType, setFormClientType] = useState<string>('B2B'); // Default B2B
+    const [formBillingEmail, setFormBillingEmail] = useState('');
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
 
@@ -80,6 +82,7 @@ export default function PartnersManagement() {
         setFormName('');
         setFormDescription('');
         setFormClientType('B2B');
+        setFormBillingEmail('');
         setFormError('');
         setEditingPartner(null);
     };
@@ -94,6 +97,7 @@ export default function PartnersManagement() {
         setFormName(partner.name);
         setFormDescription(partner.description || '');
         setFormClientType(partner.clientType || 'B2B');
+        setFormBillingEmail(partner.billingEmail || '');
         setShowModal(true);
     };
 
@@ -116,6 +120,7 @@ export default function PartnersManagement() {
                     description: formDescription || null,
                     type: 'ACQUISITION_SOURCE', // Hardcoded
                     clientType: formClientType,
+                    billingEmail: formBillingEmail || null,
                     // Parent ID: Usually null for main sources unless rooted? 
                     // Let's assume null (Independent). If hierarchy exists, they might need to select ROOT.
                     // But simplified view -> Top Level.
@@ -251,6 +256,15 @@ export default function PartnersManagement() {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                         </svg>
                                     </button>
+                                    <Link
+                                        href={`/admin/partners/${partner.id}/invoice`}
+                                        className="p-2 text-gray-400 hover:text-green-400 hover:bg-green-500/10 rounded-lg transition-colors"
+                                        title="Generate Invoice"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    </Link>
                                     <button
                                         onClick={() => handleDelete(partner)}
                                         className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -315,6 +329,17 @@ export default function PartnersManagement() {
                                     onChange={(e) => setFormDescription(e.target.value)}
                                     className="w-full px-4 py-2 bg-zeno-blue/50 border border-zeno-blue rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-zeno-cyan"
                                     rows={3}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Billing Email</label>
+                                <input
+                                    type="email"
+                                    value={formBillingEmail}
+                                    onChange={(e) => setFormBillingEmail(e.target.value)}
+                                    placeholder="accounts@partner.com"
+                                    className="w-full px-4 py-2 bg-zeno-blue/50 border border-zeno-blue rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-zeno-cyan"
                                 />
                             </div>
 

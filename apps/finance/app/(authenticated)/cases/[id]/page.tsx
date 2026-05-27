@@ -1,4 +1,6 @@
 'use client';
+import { toast, confirm } from '@zenowethu/ui';
+
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -344,7 +346,7 @@ export default function CaseDetailPage() {
             router.refresh();
         } catch (error) {
             logger.error('Error updating services:', error);
-            alert('Failed to update services');
+            toast.error('Failed to update services');
         }
     };
     useEffect(() => {
@@ -394,7 +396,7 @@ export default function CaseDetailPage() {
             setCaseData(updatedCase);
         } catch (error) {
             logger.error('Failed to update status', error);
-            alert('Failed to update status. Please try again.');
+            toast.error('Failed to update status. Please try again.');
         } finally {
             setUpdating(false);
         }
@@ -421,7 +423,7 @@ export default function CaseDetailPage() {
             setActivityUpdate(prev => prev + 1);
         } catch (error: any) {
             logger.error('Error saving description:', error);
-            alert(`Failed to save: ${error.message}`);
+            toast.error(`Failed to save: ${error.message}`);
         } finally {
             setIsSavingDescription(false);
         }
@@ -444,7 +446,7 @@ export default function CaseDetailPage() {
             const result = await res.json();
 
             if (result.success) {
-                alert('Notification sent successfully!');
+                toast.success('Notification sent successfully!');
                 // Refresh notifications
                 const notifRes = await fetch(`/api/cases/${params.id}/notifications`);
                 if (notifRes.ok) {
@@ -452,11 +454,11 @@ export default function CaseDetailPage() {
                     setNotifications(data);
                 }
             } else {
-                alert(`Failed to send notification: ${result.errors?.join(', ') || 'Unknown error'}`);
+                toast.error(`Failed to send notification: ${result.errors?.join(', ') || 'Unknown error'}`);
             }
         } catch (error) {
             logger.error('Failed to send notification', error);
-            alert('Failed to send notification. Please try again.');
+            toast.error('Failed to send notification. Please try again.');
         } finally {
             setSendingNotification(false);
         }
@@ -475,15 +477,15 @@ export default function CaseDetailPage() {
             const result = await res.json();
 
             if (res.ok) {
-                alert(result.message || 'Notification sent successfully!');
+                toast.success(result.message || 'Notification sent successfully!');
                 // Trigger activity refresh
                 setActivityUpdate(prev => prev + 1);
             } else {
-                alert(`Failed: ${result.error || 'Unknown error'}`);
+                toast.error(`Failed: ${result.error || 'Unknown error'}`);
             }
         } catch (error) {
             logger.error('Failed to send DC notification', error);
-            alert('Connection failed. Please try again.');
+            toast.error('Connection failed. Please try again.');
         } finally {
             setSendingDCNotification(null);
         }
@@ -882,10 +884,10 @@ export default function CaseDetailPage() {
             const updatedCase = await res.json();
             setCaseData(updatedCase);
             setIsEditing(false);
-            alert('Changes saved successfully!');
+            toast.success('Changes saved successfully!');
         } catch (error) {
             logger.error('Failed to save changes', error);
-            alert(error instanceof Error ? error.message : 'Failed to save changes. Please try again.');
+            toast.error(error instanceof Error ? error.message : 'Failed to save changes. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -908,7 +910,7 @@ export default function CaseDetailPage() {
             router.push('/cases');
         } catch (error) {
             logger.error('Failed to delete case', error);
-            alert(error instanceof Error ? error.message : 'Failed to delete case. Please try again.');
+            toast.error(error instanceof Error ? error.message : 'Failed to delete case. Please try again.');
             setShowDeleteConfirm(false);
         } finally {
             setDeleting(false);
@@ -975,7 +977,7 @@ export default function CaseDetailPage() {
             setDhsMessage({ type: 'error', text: 'Client ID number is required' });
             return;
         }
-        if (!confirm('This will submit a transfer request to DHS. Continue?')) return;
+        if (!await confirm('This will submit a transfer request to DHS. Continue?')) return;
 
         setDhsLoading(true);
         setDhsMessage(null);

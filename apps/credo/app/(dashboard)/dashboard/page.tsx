@@ -221,16 +221,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Credit score overview */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "auto 1fr",
-        gap: 24,
-        background: "#FFFFFF",
-        border: "1px solid #E2E8F0",
-        borderRadius: 16,
-        padding: "28px 28px",
-        alignItems: "center",
-      }}>
+      <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 bg-white border border-[#E2E8F0] rounded-[16px] p-7 items-center">
         {/* Composite ring */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
           <ScoreRing score={avgScore} size={120} />
@@ -261,7 +252,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {loading ? (
           [1, 2, 3, 4].map(i => (
             <div key={i} className="credo-card" style={{ height: 110, background: "#FAFAFA" }} />
@@ -290,7 +281,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Cases + Activity */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, alignItems: "start" }}>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 items-start">
         {/* Active Cases */}
         <div className="credo-card" style={{ padding: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>

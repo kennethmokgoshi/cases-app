@@ -8,6 +8,7 @@ export type ApiKeyData = {
     permissions: string[];
     projectId: string | null;
     rateLimit: number;
+    createdBy?: string | null;
 };
 
 export async function validateApiKey(request: Request): Promise<{
@@ -72,7 +73,8 @@ export async function validateApiKey(request: Request): Promise<{
             name: apiKeyRecord.name,
             permissions,
             projectId: apiKeyRecord.projectId,
-            rateLimit: apiKeyRecord.rateLimit
+            rateLimit: apiKeyRecord.rateLimit,
+            createdBy: apiKeyRecord.createdBy ?? null,
         },
         error: null as any,
         status: 200

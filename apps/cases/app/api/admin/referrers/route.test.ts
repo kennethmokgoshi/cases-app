@@ -24,6 +24,9 @@ vi.mock('@zenowethu/database', () => ({
         caseProject: {
             count: vi.fn(),
         },
+        referrerCommission: {
+            groupBy: vi.fn(),
+        },
     },
 }));
 
@@ -95,6 +98,7 @@ describe('GET /api/admin/referrers', () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([sampleReferrer] as never);
         vi.mocked(prisma.referrer.count).mockResolvedValueOnce(1).mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+        vi.mocked(prisma.referrerCommission.groupBy).mockResolvedValue([] as never);
         const res = await GET(makeReq('http://localhost/api/admin/referrers'));
         expect(res.status).toBe(200);
         const json = await res.json();
@@ -106,6 +110,7 @@ describe('GET /api/admin/referrers', () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([] as never);
         vi.mocked(prisma.referrer.count).mockResolvedValue(0);
+        vi.mocked(prisma.referrerCommission.groupBy).mockResolvedValue([] as never);
         const res = await GET(makeReq('http://localhost/api/admin/referrers?search=John'));
         expect(res.status).toBe(200);
         const [callArgs] = vi.mocked(prisma.referrer.findMany).mock.calls;
@@ -170,21 +175,21 @@ describe('GET /api/admin/referrers/[id]', () => {
 
     it('returns 401 when unauthenticated', async () => {
         vi.mocked(auth).mockResolvedValueOnce(null as never);
-        const res = await GET_ID(makeIdReq('ref-1'), { params: { id: 'ref-1' } });
+        const res = await GET_ID(makeIdReq('ref-1'), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(401);
     });
 
     it('returns 404 when not found', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
-        const res = await GET_ID(makeIdReq('ref-999'), { params: { id: 'ref-999' } });
+        const res = await GET_ID(makeIdReq('ref-999'), { params: Promise.resolve({ id: 'ref-999' }) });
         expect(res.status).toBe(404);
     });
 
     it('returns referrer with cases for admin', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({ ...sampleReferrer, cases: [] } as never);
-        const res = await GET_ID(makeIdReq('ref-1'), { params: { id: 'ref-1' } });
+        const res = await GET_ID(makeIdReq('ref-1'), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(200);
     });
 });
@@ -194,14 +199,14 @@ describe('PATCH /api/admin/referrers/[id]', () => {
 
     it('returns 403 for member', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
-        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: { id: 'ref-1' } });
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(403);
     });
 
     it('returns 404 when referrer not found', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
-        const res = await PATCH(makeIdReq('ref-999', 'PATCH', { notes: 'test' }), { params: { id: 'ref-999' } });
+        const res = await PATCH(makeIdReq('ref-999', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-999' }) });
         expect(res.status).toBe(404);
     });
 
@@ -210,7 +215,7 @@ describe('PATCH /api/admin/referrers/[id]', () => {
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
         vi.mocked(prisma.project.update).mockResolvedValueOnce({ id: 'proj-1', name: 'Jane Doe' } as never);
         vi.mocked(prisma.referrer.update).mockResolvedValueOnce({ ...sampleReferrer, lastName: 'Smith' } as never);
-        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { lastName: 'Smith' }), { params: { id: 'ref-1' } });
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { lastName: 'Smith' }), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(200);
         expect(vi.mocked(prisma.project.update)).toHaveBeenCalledOnce();
     });
@@ -221,21 +226,21 @@ describe('DELETE /api/admin/referrers/[id]', () => {
 
     it('returns 403 for manager (not admin/executive)', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockManager as never);
-        const res = await DELETE(makeIdReq('ref-1', 'DELETE'), { params: { id: 'ref-1' } });
+        const res = await DELETE(makeIdReq('ref-1', 'DELETE'), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(403);
     });
 
     it('returns 404 when not found', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
-        const res = await DELETE(makeIdReq('ref-999', 'DELETE'), { params: { id: 'ref-999' } });
+        const res = await DELETE(makeIdReq('ref-999', 'DELETE'), { params: Promise.resolve({ id: 'ref-999' }) });
         expect(res.status).toBe(404);
     });
 
     it('returns 422 when referrer has linked cases', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({ ...sampleReferrer, _count: { cases: 3 } } as never);
-        const res = await DELETE(makeIdReq('ref-1', 'DELETE'), { params: { id: 'ref-1' } });
+        const res = await DELETE(makeIdReq('ref-1', 'DELETE'), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(422);
     });
 
@@ -245,7 +250,7 @@ describe('DELETE /api/admin/referrers/[id]', () => {
         vi.mocked(prisma.caseProject.count).mockResolvedValueOnce(0);
         vi.mocked(prisma.project.delete).mockResolvedValueOnce({} as never);
         vi.mocked(prisma.referrer.delete).mockResolvedValueOnce({} as never);
-        const res = await DELETE(makeIdReq('ref-1', 'DELETE'), { params: { id: 'ref-1' } });
+        const res = await DELETE(makeIdReq('ref-1', 'DELETE'), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(200);
         expect(vi.mocked(prisma.project.delete)).toHaveBeenCalledOnce();
         expect(vi.mocked(prisma.referrer.delete)).toHaveBeenCalledOnce();

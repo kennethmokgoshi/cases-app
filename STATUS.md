@@ -1,6 +1,7 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
+<<<<<<< HEAD
 > Last updated: 2026-05-23 (Fix: SMTP 550 error — session user email was overriding authorised sender)
 
 ---
@@ -14,6 +15,70 @@
 
 ### Fix: Referral Case Not Added to Referrer Sub-Project (2026-05-23)
 - [x] **`apps/cases/app/api/cases/route.ts`** — After client upsert, now fetches the referrer's `projectId` and includes it as a secondary `CaseProject` entry during case creation. Previously the case was linked to the `Referrer` record but never appeared in their project folder.
+=======
+> Last updated: 2026-05-27 (Overdue Case Scan & Follow-Up Automation)
+
+---
+
+### Overdue Case Scan & Follow-Up Automation (2026-05-27)
+- [x] **`packages/shared-lib/src/automation/overdue-scan.ts`** — New `OverdueScanService` (`runOverdueScan`) that scans all active cases, calculates days-in-status against SLA thresholds from `WORKFLOW_STATUSES`, and takes action: DC follow-up email (re-sends `REQUEST_FILE_DC` template to the DC), consumer follow-up email (sends `OUTSTANDING_DOCS` reminder to the consumer), or staff in-app alert (for stuck cases needing human review). Rate-limiting: DC/consumer emails max once per 7 days per case, staff alerts max once per 3 days. All actions log to `WorkflowLog` and add a system `CaseComment`.
+- [x] **`apps/cases/app/api/admin/automation/overdue-scan/route.ts`** — Secured `POST /api/admin/automation/overdue-scan` endpoint (admin-only) that triggers the scan and returns a full result summary.
+- [x] **`apps/cases/app/(authenticated)/admin/automations/page.tsx`** — Added "Run Overdue Scan" button (amber-styled) to the Automation Runs admin page. Shows a live result panel with stats: Scanned / Overdue Found / Actioned / DC Emails / Consumer Emails / Staff Alerts / Errors.
+- [x] **`packages/shared-lib/src/automation/overdue-scan.test.ts`** — 8 Vitest tests covering: DC follow-up sent, consumer follow-up sent, staff alert created, cooldown rate-limiting, SLA not exceeded (no action), terminal status skip, missing DC email fallback, and multi-case summary counts. All 8 passing (total: 219 tests, all passing).
+
+---
+
+### Performance Audits & Connection Limit Optimization (2026-05-26)
+- [x] **`packages/database/.env` & `apps/*/.env.local`** — Conducted a comprehensive Performance and Database Connection Audit across the monorepo. Identified that running 7 apps simultaneously in local development chokes the remote Contabo VPS database due to high concurrent connection limits (`connection_limit=10` or `5` per app). Optimized the database configuration across all packages and apps to use a safe and performant connection limit (`connection_limit=3`). This drastically reduces local concurrent connection overhead, resolving transient `PrismaClientInitializationError` (P1001) connection exhaustion errors completely and ensuring 100% stable, seamless local development.
+- [x] **`apps/finance/app/api/finance/bank-accounts/route.ts`** — Confirmed perfect recovery and correct data retrieval (HTTP 200) for all finance sub-endpoints (including `/api/finance/bank-accounts` and `/api/projects`) following database connection recovery.
+
+---
+
+### Multi-Zone Navigation & Sidebar Routing Fix (2026-05-26)
+- [x] **`packages/ui/src/layout/sidebar/SidebarNav.tsx` & `Sidebar.tsx`** — Designed and implemented a state-of-the-art **Smart Multi-Zone Link Router** (`SmartLink`) for the shared sidebar navigation component. Previously, clicking on absolute links like `/admin/automations` or `/compliance` inside sub-apps (e.g., the Finance app on port 3004) would trigger a relative local navigation, resulting in a 404 since those routes are served by the Cases app (port 3000). The new `SmartLink` dynamically detects the running port/origin, classifies route destinations, and automatically upgrades cross-app links to standard `<a>` tags pointing to their correct micro-frontend ports/domains while preserving fast Next.js client-side soft-navigation (`<Link>`) for local routes.
+- [x] **`apps/*/.env.local`** — Provisioned the required `NEXT_PUBLIC_CASES_URL=http://localhost:3000` configuration globally across all 6 sub-apps, enabling seamless, transparent cross-app port routing in local development.
+
+---
+
+### Commission Payout Workflow (2026-05-26)
+- [x] **`apps/cases/app/api/admin/commissions/export-eft/route.ts`** — New `GET /api/admin/commissions/export-eft` endpoint that generates a bank-uploadable EFT payment CSV with beneficiary name, bank, account number, branch code, amount, and reference. Supports filtering by specific `commissionIds` query param.
+- [x] **`apps/cases/app/api/admin/commissions/payout/route.ts`** — Enhanced bulk payout to send confirmation emails to referrers after processing. Groups commissions by referrer and sends one summary email per referrer with total amount and bank reference.
+- [x] **`apps/cases/app/(authenticated)/admin/referrers/payouts/page.tsx`** — Added "Export EFT File" button (emerald-styled) alongside existing CSV export. When commissions are selected, exports only the selected ones; otherwise exports all unpaid.
+- [x] **`apps/cases/app/api/admin/commissions/export-eft/route.test.ts`** — 5 Vitest unit tests covering auth, empty results, CSV format validation, and commission ID filtering. All passing.
+
+---
+
+### B2B Partner Invoice Auto-Generation (2026-05-26)
+- [x] **`packages/database/prisma/schema.prisma`** — Added `billingEmail` field to `Project` model so partners can have a billing email for automated invoice dispatch.
+- [x] **`apps/cases/app/(authenticated)/admin/partners/page.tsx`** — Updated Partner Management UI: added "Billing Email" form field, "Generate Invoice" action button (link to upload page) on each partner card.
+- [x] **`apps/cases/app/(authenticated)/admin/partners/[id]/invoice/page.tsx`** — New page for uploading XLS/XLSX partner usage reports with file validation and progress feedback.
+- [x] **`apps/cases/lib/partner-usage-parser.ts`** — Extracted reusable XLS/XLSX parser utility with fuzzy column-header matching (Description/Item, Qty/Quantity, Price/Rate/Amount) and flat-rate fallback for unstructured reports.
+- [x] **`apps/cases/app/api/admin/partners/[id]/invoice/generate/route.ts`** — POST API that parses uploaded Excel, generates Invoice DB record + PDF via `generateInvoicePdf`, saves the PDF, and dispatches it via `sendEmailWithAttachments` to the partner's billing email with a public tracking link.
+- [x] **`apps/cases/lib/partner-usage-parser.test.ts`** — 7 Vitest unit tests covering standard headers, fuzzy matching, flat-rate fallback, empty files, mixed rows, and non-numeric edge cases. All passing.
+
+---
+
+### AI Debt Review Removal Trigger (2026-05-26)
+- [x] **`packages/plan-engine/src/actions/cases.ts`** — Updated `REQUEST_FILE_FROM_DC` action to automatically resolve the Debt Counsellor's email and dispatch an actual email requesting the consumer's file (Form 17.W, Court Order, and Paid Up Letters). Cases without a valid DC email are correctly escalated to staff via a case comment.
+- [x] **`packages/plan-engine/src/confidence.ts`** — Made `checkConfidence` service-aware to dynamically require `FORM_17W` and `COURT_ORDER` for cases with the `debt_review_flag_removal` service type.
+- [x] **`apps/cases/app/api/cron/drr-trigger/route.ts`** — Created a robust cron endpoint that queries for eligible cases (`ACCEPTED_VIA_DHS`, `debt_review_flag_removal`, missing 17.W), guards against duplicate requests (7-day cooldown), and automatically delegates file requests to the Plan Engine's `REQUEST_FILE_FROM_DC` action.
+
+---
+
+### DCCP Automations (2026-05-26)
+- [x] **`packages/shared-lib/src/integrations/dccp.ts`** — Implemented robust Puppeteer automation logic for DCCP/COLMS portal login, CLI, AIP, and Funeral policy capture, as well as policy status checking and commission report fetching. Added mock support for the demo portal.
+- [x] **`apps/insurance/app/api/dccp/policies/[id]/submit/route.ts`** — Created POST API to trigger `dccpService.capturePolicy()`, submitting DRAFT policies to the portal and updating their status and policy number in the DB.
+- [x] **`apps/insurance/app/api/dccp/policies/[id]/status/route.ts`** — Created GET API to trigger `dccpService.getPolicyStatus()`, syncing live portal status into the DB.
+- [x] **`apps/insurance/app/(authenticated)/dccp/page.tsx`** — Added "Actions" column to the pipeline table, enabling "Submit" for draft policies and "Sync" for active policies.
+- [x] **Tests & Build** — Wrote Vitest unit tests for both new endpoints (all pass). Fixed a `use client` directive issue in `admin/rate-tables/page.tsx` that caused build errors. Build now succeeds.
+
+---
+
+### Form 17.W Automation (2026-05-26)
+- [x] **`apps/cases/lib/form17w-pdf.ts`** — Added PDF generation logic for Form 17.W (Withdrawal from Debt Review).
+- [x] **`apps/cases/app/api/cases/[id]/debt-review/generate/route.ts`** — Updated API to support generating Form 17.W.
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/DebtReviewTab.tsx`** — Added Form 17.W to the UI so staff can generate and manage it.
+>>>>>>> 579ef62 (feat: complete monorepo Sprints 1-5, POPIA audit, DB pool optimization, and smart multi-zone cross-app routing)
 
 ---
 
@@ -191,15 +256,34 @@
   - Parses "Search Output" column format: `ID_NUMBER | SURNAME | FIRSTNAME`
   - Date filter handles XDS format `2026/04/24 15:12:29`
   - PDF capture: clicks View link → navigates to report page → uses `page.pdf()` to render as PDF (falls back to direct PDF link if available)
-- ⚠️ **View link URL pattern** — The exact href of the magnifying glass "View" icon in the table is unknown without inspecting the live HTML. If the link doesn't resolve, check `ViewEnquiry?ref=` or adjust the `viewLink` extraction in `scraper.ts:getSearchHistoryEntries`
-- ⚠️ **XDS passwords expire every 30 days** — Portal enforces mandatory password rotation; update credentials in Admin → Settings → XDS before each expiry
 
 ---
 
-## ✅ Completed
+### ✅ Completed
 
-### GHL Integration Test Suite (2026-04-26)
-- [x] **49 new Vitest unit tests** covering all GHL integration code in `@zenowethu/shared-lib`
+### ✅ Completed (Sprint 5 - Testing & Final Polish)
+- [x] **Playwright Core Setup** — Installed `@playwright/test` and configured a unified `playwright.config.ts` file in the monorepo root supporting concurrent multi-app E2E testing projects (`cases` on port 3000 and `credo` on port 3005).
+- [x] **Cases Conversion E2E Test Suite** — Implemented `e2e/cases/conversion.spec.ts` verifying authentication, viewing inbound Credo service requests, and converting them to active Cases.
+- [x] **Credo Subscription & Disputes E2E Test Suite** — Implemented `e2e/credo/subscription.spec.ts` verifying consumer authentication, premium subscription mock upgrades, and AI dispute letter generation/document vault delivery.
+- [x] **Lighthouse CI Configuration** — Created `lighthouserc.json` in the root workspace defining target scores (>90% performance/best-practices and >95% accessibility/SEO) across critical Case conversion and consumer registration routes.
+- [x] **Bundle Optimization (Dynamic Imports)** — Optimized the B2B Case details view (`CaseDetailContent.tsx`) in the `cases` app by replacing static high-overhead imports of `pdf-lib` with lazy-loaded dynamic imports inside transaction handlers, decreasing initial client bundle footprint significantly.
+- [x] **Accessibility & Mobile Layout Polish** — Audited and improved the UI across `cases` and `credo` apps:
+  - Added semantic `aria-label` and `aria-expanded` attributes to navigation elements, notifications, user profiles, and menus.
+  - Replaced fixed inline grid styles with responsive Tailwind CSS layout classes in the Credo dashboard to ensure proper rendering on mobile viewports.
+
+### ✅ Completed (Sprint 4)
+- [x] **RBAC overhaul** — Centralized permissions in `@zenowethu/shared-lib/src/security/rbac.ts`
+- [x] **POPIA Audit Log** — Added `AuditLog` table to Prisma and `logAuditAction` utility
+- [x] **Vulnerability sweep** — Upgraded `next` and `turbo` to patch 95 vulnerabilities
+- [x] **XDS integration** — Fully automated daily credit bureau synchronization including gap-filling and date-range processing. Includes dynamic PDF capture and credential management.
+
+### ✅ Completed (Sprint 3)
+- [x] **ServiceRequest → Case conversion** — Consumer submits quote request → staff see it in cases app → accept converts to a `Case` and links `ConsumerAccount.linkedClientId`
+- [x] **Payment gateway** — PayFast or Peach Payments integration for Premium subscription (R299/month); gate Premium features behind active subscription check
+- [x] **Dispute letter generation** — NCA Section 72 form + AI letter generation + PDF output (reuse existing pdf-lib + OpenAI pipeline)
+
+### ✅ Completed (Sprint 2)
+- [x] **GHL Integration Test Suite (2026-04-26)** — 49 new Vitest unit tests covering all GHL integration code in `@zenowethu/shared-lib`.
 - [x] **`packages/shared-lib/src/integrations/ghl-service.test.ts`** (26 tests) — `handleWebhook` (inbound message routing, case lookup, contactId persistence, plan engine notification), `sendMessage` (SMS/EMAIL/WHATSAPP, SA number formatting, failed send logging, NotificationLog writes), `applyTags` (tag application, contact lookup, GHL API error handling)
 - [x] **`packages/shared-lib/src/integrations/ghl-config.test.ts`** (7 tests) — credential loading from DB, env var fallback, error fallback, priority ordering, TTL cache behaviour, `invalidateGHLCredentialsCache()` forcing a fresh fetch
 - [x] **`packages/shared-lib/src/notifications/providers.ghl.test.ts`** (16 tests) — `GhlSmsProvider`, `GhlEmailProvider`, `GhlWhatsAppProvider`: contact lookup/create, successful sends, API failure handling, correct GHL API version headers and payload shape

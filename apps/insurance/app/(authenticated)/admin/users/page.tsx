@@ -1,4 +1,6 @@
 'use client';
+import { toast, confirm } from '@zenowethu/ui';
+
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
@@ -203,7 +205,7 @@ export default function UsersManagement() {
     };
 
     const handleDeleteUser = async (userId: string, userName: string) => {
-        if (!confirm(`Are you sure you want to delete user "${userName}"? This action cannot be undone.`)) {
+        if (!await confirm(`Are you sure you want to delete user "${userName}"? This action cannot be undone.`)) {
             return;
         }
 
@@ -217,10 +219,10 @@ export default function UsersManagement() {
                 throw new Error(data.error || 'Failed to delete user');
             }
 
-            alert(data.message || 'User deleted successfully');
+            toast.success(data.message || 'User deleted successfully');
             await fetchUsers();
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Failed to delete user');
+            toast.error(err instanceof Error ? err.message : 'Failed to delete user');
         }
     };
 

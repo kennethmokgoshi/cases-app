@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import React, { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -304,7 +306,7 @@ function CasesContent() {
 
         const selected = filteredCases.filter(c => selectedCaseIds.has(c.id));
         if (selected.length === 0) {
-            alert('Select at least one case first using the checkboxes.');
+            toast.error('Select at least one case first using the checkboxes.');
             return;
         }
 
@@ -391,7 +393,7 @@ function CasesContent() {
             setFilteredCases(prev => prev.filter(c => !data.succeeded.includes(c.fileNumber)));
             setSelectedCaseIds(new Set());
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Bulk delete failed');
+            toast.error(err instanceof Error ? err.message : 'Bulk delete failed');
             setShowBulkDeleteModal(false);
         } finally {
             setBulkDeleting(false);
@@ -455,7 +457,7 @@ function CasesContent() {
                                                 setShowDhsMenu(false);
                                                 if (label === 'Delete') {
                                                     if (selectedCaseIds.size === 0) {
-                                                        alert('Select at least one case first using the checkboxes.');
+                                                        toast.error('Select at least one case first using the checkboxes.');
                                                         return;
                                                     }
                                                     setBulkDeleteConfirmText('');

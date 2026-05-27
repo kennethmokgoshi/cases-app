@@ -1,4 +1,6 @@
 "use client";
+import { toast } from '@zenowethu/ui';
+
 
 import { useState } from "react";
 
@@ -96,10 +98,10 @@ export default function QuotePage() {
         }, 2000);
       } else {
         const error = await res.json();
-        alert(error.error || "Failed to submit request. Please try again.");
+        toast.error(error.error || "Failed to submit request. Please try again.");
       }
     } catch (err) {
-      alert("Connection error. Please try again.");
+      toast.error("Connection error. Please try again.");
     } finally {
       setSubmitting(false);
     }

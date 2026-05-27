@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from './providers/ConfirmProvider';
+
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
@@ -363,7 +365,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
 
                 payload.documentIds = [idDoc?.id, poaDoc?.id, creditDoc?.id, payslipDoc?.id, bankDoc?.id].filter(Boolean);
 
-                if (!confirm(`Re-analyse ${payload.documentIds.length} documents together? This will overwrite existing data.`)) {
+                if (!await confirm(`Re-analyse ${payload.documentIds.length} documents together? This will overwrite existing data.`)) {
                     setReanalyzing(null);
                     return;
                 }
@@ -375,7 +377,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                 payload.documentId = combinedDoc.id;
                 payload.extractOnly = true; // DO NOT SPLIT
 
-                if (!confirm(`Re-analyse Combined PDF? This will re-extract data without splitting/creating new files.`)) {
+                if (!await confirm(`Re-analyse Combined PDF? This will re-extract data without splitting/creating new files.`)) {
                     setReanalyzing(null);
                     return;
                 }
@@ -418,7 +420,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     };
 
     const handleDelete = async (docId: string) => {
-        if (!confirm('Are you sure you want to delete this document?')) return;
+        if (!await confirm('Are you sure you want to delete this document?')) return;
 
         try {
             const res = await fetch(`/api/cases/${caseId}/documents?documentId=${docId}`, {

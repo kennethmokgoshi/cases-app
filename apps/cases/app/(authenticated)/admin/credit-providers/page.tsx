@@ -1,4 +1,6 @@
 'use client'
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
@@ -287,7 +289,7 @@ function CreditProvidersContent() {
   useEffect(() => { fetchProviders(1) }, [fetchProviders])
 
   async function deleteProvider(p: CreditProvider) {
-    if (!confirm(`Delete "${p.name}"? This cannot be undone. Linked credit accounts will be unlinked.`)) return
+    if (!await confirm(`Delete "${p.name}"? This cannot be undone. Linked credit accounts will be unlinked.`)) return
     setDeleting(p.id)
     try {
       const res = await fetch(`/api/admin/credit-providers/${p.id}`, { method: 'DELETE' })

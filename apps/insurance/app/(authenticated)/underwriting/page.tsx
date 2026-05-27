@@ -1,4 +1,6 @@
 'use client';
+import { toast, confirm } from '@zenowethu/ui';
+
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -89,12 +91,12 @@ export default function UnderwritingQueuePage() {
             });
             if (!res.ok) {
                 const err = await res.json();
-                alert(`Underwriting failed: ${err.error}`);
+                toast.error(`Underwriting failed: ${err.error}`);
                 return;
             }
             await fetchAssessments();
         } catch (e: any) {
-            alert(`Error: ${e.message}`);
+            toast.error(`Error: ${e.message}`);
         } finally {
             setRunningId(null);
         }
@@ -110,20 +112,20 @@ export default function UnderwritingQueuePage() {
             });
             if (!res.ok) {
                 const err = await res.json();
-                alert(`Letter generation failed: ${err.error}`);
+                toast.error(`Letter generation failed: ${err.error}`);
                 return;
             }
             const data = await res.json();
-            alert(`${data.results?.filter((r: any) => r.status === 'created').length ?? 0} letter(s) generated.`);
+            toast.error(`${data.results?.filter((r: any) => r.status === 'created').length ?? 0} letter(s) generated.`);
             await fetchAssessments();
         } catch (e: any) {
-            alert(`Error: ${e.message}`);
+            toast.error(`Error: ${e.message}`);
         } finally {
             setRunningId(null);
         }
     }
     async function issuePolicy(assessmentId: string) {
-        if (!confirm('Are you sure you want to issue a formal policy for this assessment? This will update the case status and generate a policy schedule.')) return;
+        if (!await confirm('Are you sure you want to issue a formal policy for this assessment? This will update the case status and generate a policy schedule.')) return;
 
         setRunningId(assessmentId);
         try {
@@ -132,15 +134,15 @@ export default function UnderwritingQueuePage() {
             });
             if (!res.ok) {
                 const err = await res.json();
-                alert(`Policy issuance failed: ${err.error}`);
+                toast.error(`Policy issuance failed: ${err.error}`);
                 return;
             }
             const data = await res.json();
-            alert(`Policy ${data.policyNumber} issued successfully!`);
+            toast.success(`Policy ${data.policyNumber} issued successfully!`);
             window.open(`data:application/pdf;base64,${data.pdf}`, '_blank');
             await fetchAssessments();
         } catch (e: any) {
-            alert(`Error: ${e.message}`);
+            toast.error(`Error: ${e.message}`);
         } finally {
             setRunningId(null);
         }

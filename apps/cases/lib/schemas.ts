@@ -374,3 +374,21 @@ export function parseBody<T>(
         )
     };
 }
+
+// ─── Lead schemas ─────────────────────────────────────────────────────────────
+
+export const LEAD_STATUSES = ['NEW', 'CONTACTED', 'CONVERTED', 'REJECTED', 'DUPLICATE', 'CLOSED'] as const;
+export type LeadStatus = typeof LEAD_STATUSES[number];
+
+export const LeadPatchSchema = z.object({
+    status:      z.enum(LEAD_STATUSES).optional(),
+    notes:       z.string().max(2000).optional().nullable(),
+    assignedToId: z.string().optional().nullable(),
+});
+
+export const LeadConvertSchema = z.object({
+    projectId:           z.string().min(1, 'Project is required'),
+    secondaryProjectIds: z.array(z.string()).optional().default([]),
+    services:            z.array(z.string()).optional().nullable(),
+    acquisitionType:     z.enum(['B2C', 'B2B']).optional().default('B2C'),
+});

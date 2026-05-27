@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
@@ -29,6 +31,8 @@ type Referrer = {
     project: { id: string; name: string } | null;
     _count: { cases: number };
     createdAt: string;
+    outstandingCommission: number;
+    paidCommission: number;
 };
 
 const EMPLOYMENT_TYPES = ['EMPLOYED', 'SELF_EMPLOYED', 'CONTRACT', 'UNEMPLOYED', 'RETIRED'];
@@ -65,7 +69,7 @@ export default function ReferrersPage() {
     const [total, setTotal] = useState(0);
     const [pages, setPages] = useState(1);
     const [page, setPage] = useState(1);
-    const [meta, setMeta] = useState({ total: 0, active: 0, inactive: 0 });
+    const [meta, setMeta] = useState({ total: 0, active: 0, inactive: 0, totalOutstanding: 0, totalPaid: 0 });
     const [search, setSearch] = useState('');
     const [isActiveFilter, setIsActiveFilter] = useState('');
     const [loading, setLoading] = useState(true);
@@ -191,11 +195,11 @@ export default function ReferrersPage() {
         try {
             const res = await fetch(`/api/admin/referrers/${deleteTarget.id}`, { method: 'DELETE' });
             const json = await res.json();
-            if (!res.ok) { alert(json.error ?? 'Delete failed'); return; }
+            if (!res.ok) { toast.error(json.error ?? 'Delete failed'); return; }
             setDeleteTarget(null);
             fetchReferrers();
         } catch {
-            alert('Network error');
+            toast.error('Network error');
         } finally {
             setDeleting(false);
         }
@@ -222,21 +226,28 @@ export default function ReferrersPage() {
                     <h1 className="text-2xl font-bold text-white">Referrer Registry</h1>
                     <p className="text-gray-400 text-sm mt-1">Capture referrers and manage their sub-projects</p>
                 </div>
-                <button onClick={openAdd} className="bg-zeno-cyan text-zeno-dark font-semibold px-4 py-2 rounded-lg hover:bg-zeno-cyan/90 transition-colors text-sm">
-                    + Add Referrer
-                </button>
+                <div className="flex gap-3">
+                    <Link href="/admin/referrers/payouts" className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold px-4 py-2 rounded-lg hover:bg-emerald-500/20 transition-colors text-sm">
+                        Commission Payouts
+                    </Link>
+                    <button onClick={openAdd} className="bg-zeno-cyan text-zeno-dark font-semibold px-4 py-2 rounded-lg hover:bg-zeno-cyan/90 transition-colors text-sm">
+                        + Add Referrer
+                    </button>
+                </div>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-5 gap-4 mb-6">
                 {[
                     { label: 'Total Referrers', value: meta.total, color: 'text-white' },
                     { label: 'Active', value: meta.active, color: 'text-emerald-400' },
                     { label: 'Inactive', value: meta.inactive, color: 'text-gray-400' },
+                    { label: 'Outstanding Pay', value: `R ${meta.totalOutstanding.toLocaleString()}`, color: 'text-amber-400' },
+                    { label: 'Total Paid', value: `R ${meta.totalPaid.toLocaleString()}`, color: 'text-emerald-400' },
                 ].map((s) => (
                     <div key={s.label} className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-4">
                         <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                        <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
+                        <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                     </div>
                 ))}
             </div>
@@ -272,7 +283,8 @@ export default function ReferrersPage() {
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Employer</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Sub-Project</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Cases</th>
-                            <th className="text-left py-3 px-4 text-gray-400 font-medium">Status</th>
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">Outstanding</th>
+                            <th className="text-left py-3 px-4 text-gray-400 font-medium pl-6">Status</th>
                             <th className="py-3 px-4"></th>
                         </tr>
                     </thead>
@@ -311,7 +323,15 @@ export default function ReferrersPage() {
                                 <td className="py-3 px-4">
                                     <span className="text-white font-medium">{r._count.cases}</span>
                                 </td>
-                                <td className="py-3 px-4">
+                                <td className="py-3 px-4 text-right">
+                                    <div className="text-amber-400 font-medium text-xs whitespace-nowrap">
+                                        R {r.outstandingCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                                    </div>
+                                    <div className="text-gray-500 text-xs whitespace-nowrap mt-1">
+                                        Paid: R {r.paidCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                                    </div>
+                                </td>
+                                <td className="py-3 px-4 pl-6">
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${r.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
                                         {r.isActive ? 'Active' : 'Inactive'}
                                     </span>

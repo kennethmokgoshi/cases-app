@@ -557,6 +557,30 @@ Kind regards,
         sendToClient: true,
         sendToPartner: true,
         isUrgent: true },
+
+    // ===== WEBSITE LEAD =====
+    {
+        statusCode: 'WEBSITE_LEAD',
+        statusName: 'New Website Lead',
+        smsTemplate: `New website lead: {clientName} | {service} | {phone}`,
+        emailSubject: 'New Website Lead — {clientName} ({service})',
+        emailTemplate: `A new lead has been submitted via the Zenowethu website assessment form.
+
+Name:    {clientName}
+Service: {service}
+Phone:   {phone}
+Email:   {email}
+ID No:   {idNumber}
+POPIA:   {popiaConsent}
+
+View and action this lead in the Cases app:
+{leadsUrl}
+
+---
+{companyName} | Automated Lead Notification`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: true },
 ];
 
 export function getTemplateByStatus(statusCode: string): NotificationTemplate | undefined {

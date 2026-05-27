@@ -26,16 +26,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@zenowethu/shared-lib", "@zenowethu/database", "@zenowethu/config", "@zenowethu/ui", "@zenowethu/plan-engine"],
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
   experimental: {
-    turbopack: {
-      root: '../../',
-    },
     serverActions: {
       bodySizeLimit: "10mb",
     },

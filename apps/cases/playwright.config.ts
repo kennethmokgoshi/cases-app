@@ -41,7 +41,7 @@ export default defineConfig({
 
     // Automatically start the Next.js dev server when running locally
     webServer: {
-        command: 'npm run dev',
+        command: 'pnpm run dev',
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 300_000 } }); // 5 minutes for slow HDD + large monorepo

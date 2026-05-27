@@ -1,0 +1,49 @@
+'use client';
+
+import { useState } from 'react';
+
+interface Props {
+    type: string;
+    creditorName: string;
+    accountNumber: string;
+    disputeGrounds: string[];
+    label: string;
+    className?: string;
+}
+
+export function DisputeButton({ type, creditorName, accountNumber, disputeGrounds, label, className }: Props) {
+    const [loading, setLoading] = useState(false);
+
+    const handleGenerate = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/credo/disputes/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, creditorName, accountNumber, disputeGrounds }),
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                alert(data.message || 'Letter saved to vault');
+            } else {
+                alert(data.error || 'Failed to generate letter');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Network error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className={className}
+        >
+            {loading ? 'Generating...' : label}
+        </button>
+    );
+}

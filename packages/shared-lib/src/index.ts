@@ -14,6 +14,9 @@ export * from './statuses';
 
 export * from './notifications';
 export * from './schemas';
+export * from './security/rbac';
+export * from './security/audit';
+export * from './disputes/dispute-pdf';
 
 // AI Strategy Engine
 export * from './ai/strategy-engine';
@@ -31,3 +34,7 @@ export * from './demo-data';
 
 // Referrer Commission
 export * from './referrer-commission';
+
+// Automation
+// Note: Node-only (uses prisma) — import directly when needed in server contexts
+// export * from './automation/overdue-scan';

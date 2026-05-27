@@ -205,7 +205,7 @@ export async function identifyDhsDocumentPages(
  */
 export async function splitPdf(
     base64Pdf: string,
-    pageRanges: Array<{ startPage: number; endPage: number; type: string; pages?: number[] }>
+    pageRanges: Array<{ startPage?: number; endPage?: number; type: string; pages?: number[] }>
 ): Promise<Array<{ type: string; base64Pdf: string; pageCount: number }>> {
     try {
         const pdfBytes = Buffer.from(base64Pdf, 'base64');

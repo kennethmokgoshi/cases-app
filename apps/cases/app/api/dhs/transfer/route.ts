@@ -6,6 +6,8 @@
 
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
+import { requestTransfer } from '@zenowethu/shared-lib/src/dhs/transfer';
+import { closeBrowser } from '@zenowethu/shared-lib/src/dhs/browser';
 import { prisma } from '@zenowethu/database';
 import path from 'path';
 import fs from 'fs';

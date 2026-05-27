@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from '@zenowethu/ui';
+
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
@@ -185,7 +187,7 @@ export default function SettingsPage() {
     };
 
     const handleLetterheadRemove = async () => {
-        if (!confirm('Are you sure you want to remove the current letterhead?')) return;
+        if (!await confirm('Are you sure you want to remove the current letterhead?')) return;
         setLetterheadSaving(true);
         setMessage(null);
         try {
@@ -277,7 +279,7 @@ export default function SettingsPage() {
     };
 
     const handleResetXds = async () => {
-        if (!confirm('Are you sure you want to clear XDS credentials?')) return;
+        if (!await confirm('Are you sure you want to clear XDS credentials?')) return;
         setXdsSaving(true);
         setMessage(null);
         try {
@@ -310,7 +312,7 @@ export default function SettingsPage() {
                 : 'No previous sync found. All available history will be processed.';
         }
 
-        if (!confirm(`${msg}\n\nThis will log in to the XDS portal and may take several minutes.`)) return;
+        if (!await confirm(`${msg}\n\nThis will log in to the XDS portal and may take several minutes.`)) return;
         
         setXdsSyncing(true);
         setXdsSyncResult(null);
@@ -459,7 +461,7 @@ export default function SettingsPage() {
     };
 
     const handleResetMaxDc = async () => {
-        if (!confirm('Are you sure you want to clear MaxDC credentials?')) return;
+        if (!await confirm('Are you sure you want to clear MaxDC credentials?')) return;
         setMaxdcSaving(true);
         setMessage(null);
         try {
@@ -572,7 +574,7 @@ export default function SettingsPage() {
     };
 
     const handleResetBureaus = async () => {
-        if (!confirm('Reset to default SA credit bureau email addresses?')) return;
+        if (!await confirm('Reset to default SA credit bureau email addresses?')) return;
         setBureauSaving(true);
         setMessage(null);
         try {
@@ -609,7 +611,7 @@ export default function SettingsPage() {
     };
 
     const handleReset = async () => {
-        if (!confirm('Are you sure you want to reset DHS credentials to default values?')) {
+        if (!await confirm('Are you sure you want to reset DHS credentials to default values?')) {
             return;
         }
 
@@ -635,7 +637,7 @@ export default function SettingsPage() {
     };
 
     const handleResetGHL = async () => {
-        if (!confirm('Are you sure you want to reset OPSGENTY credentials?')) {
+        if (!await confirm('Are you sure you want to reset OPSGENTY credentials?')) {
             return;
         }
 

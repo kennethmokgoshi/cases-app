@@ -33,7 +33,7 @@ export type EventSource = 'GHL' | 'DHS' | 'MANUAL' | 'SYSTEM';
 export type EventType = 'DOCUMENT_RECEIVED' | 'REPLY_RECEIVED' | 'TIMEOUT' | 'USER_ACTION' | 'STATUS_CHANGE' | 'DHS_UPDATE';
 
 export interface MissingInfoItem {
-  type: 'CREDIT_REPORT' | 'ID_DOCUMENT' | 'POA' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER';
+  type: 'CREDIT_REPORT' | 'ID_DOCUMENT' | 'POA' | 'PAYSLIP' | 'BANK_STATEMENT' | 'OTHER' | 'FORM_17W' | 'COURT_ORDER';
   description: string;
   isRequired: boolean;
   weight: number;

@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
@@ -53,7 +55,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
     }, [id]);
 
     async function reconcile() {
-        if (!confirm('Mark this batch as Reconciled? This cannot be undone.')) return;
+        if (!await confirm('Mark this batch as Reconciled? This cannot be undone.')) return;
         setReconciling(true);
         try {
             const res = await fetch(`/api/finance/batches/${id}/reconcile`, { method: 'PATCH' });

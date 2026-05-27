@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger, isCommissionEligible } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
-import type { ReferrerCommissionStage } from '@prisma/client';
+import type { ReferrerCommissionStage } from '@zenowethu/database';
 
 const logger = createLogger('api/admin/referrers/[id]/commission/[commissionId]');
 
@@ -28,17 +28,18 @@ function isAdminLevel(session: { user: { isAdmin?: boolean; isExecutive?: boolea
 // PATCH /api/admin/referrers/[id]/commission/[commissionId]
 export async function PATCH(
     request: Request,
-    { params }: { params: { id: string; commissionId: string } }
+    { params }: { params: Promise<{ id: string; commissionId: string }> }
 ) {
     try {
+        const { id, commissionId } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (!isAdminLevel(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
         const existing = await prisma.referrerCommission.findUnique({
-            where: { id: params.commissionId },
+            where: { id: commissionId },
         });
-        if (!existing || existing.referrerId !== params.id) {
+        if (!existing || existing.referrerId !== id) {
             return NextResponse.json({ error: 'Commission record not found' }, { status: 404 });
         }
 
@@ -72,7 +73,7 @@ export async function PATCH(
         }
 
         const updated = await prisma.referrerCommission.update({
-            where: { id: params.commissionId },
+            where: { id: commissionId },
             data: updateData,
             include: {
                 case: {
@@ -86,7 +87,7 @@ export async function PATCH(
             },
         });
 
-        logger.info(`Commission ${params.commissionId} updated by ${session.user.id}`);
+        logger.info(`Commission ${commissionId} updated by ${session.user.id}`);
         return NextResponse.json(updated);
     } catch (error) {
         logger.error('Error updating commission:', error);

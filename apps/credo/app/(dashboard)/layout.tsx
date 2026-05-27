@@ -106,22 +106,22 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           </Link>
         )}
         {!collapsed && (
-          <button onClick={onToggle} style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8", padding: 4, borderRadius: 6 }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <button aria-label="Collapse sidebar" onClick={onToggle} style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8", padding: 4, borderRadius: 6 }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         )}
         {collapsed && (
           <div style={{ position: "absolute", top: 20, right: -1 }}>
-            <button onClick={onToggle} style={{
+            <button aria-label="Expand sidebar" onClick={onToggle} style={{
               background: "#FFFFFF", border: "1px solid #E2E8F0",
               borderRadius: "0 6px 6px 0",
               cursor: "pointer", color: "#94A3B8",
               padding: "4px 3px",
               display: "flex", alignItems: "center",
             }}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                 <path d="M4 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
@@ -257,6 +257,7 @@ function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
         <button
+          aria-label="Open mobile menu"
           onClick={onMobileMenuToggle}
           style={{ display: "none", background: "none", border: "none", cursor: "pointer", color: "#475569", padding: 4 }}
           className="md:hidden"
@@ -287,6 +288,8 @@ function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
         {/* Notifications */}
         <div style={{ position: "relative" }}>
           <button 
+            aria-label="Toggle notifications"
+            aria-expanded={showNotifications}
             onClick={() => setShowNotifications(!showNotifications)}
             style={{
               background: showNotifications ? "#F1F5F9" : "none", 
@@ -356,6 +359,8 @@ function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
         {/* Avatar */}
         <div style={{ position: "relative" }}>
           <button 
+            aria-label="Toggle user menu"
+            aria-expanded={showUserMenu}
             onClick={() => setShowUserMenu(!showUserMenu)}
             style={{
               width: 34, height: 34,

@@ -737,13 +737,13 @@ export async function PATCH(
         // Create log if description changed
         if (description !== undefined) {
             try {
-                const session = await auth();
                 await prisma.workflowLog.create({
                     data: {
+                        caseId: id,
                         toStatus: updatedCase.status,
                         // action: 'EDIT',
                         notes: `[EDIT] Updated description`, // Shortened to avoid huge logs
-                        userId: actingUserId
+                        userId: actingUserId ?? null
                     }
                 });
             } catch (logError) {

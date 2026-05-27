@@ -285,7 +285,9 @@ function SidebarInner() {
                     {/* Main Navigation */}
                     <SidebarNav
                         session={session}
+                        casesUrl={process.env.NEXT_PUBLIC_CASES_URL ?? ''}
                         insuranceUrl={process.env.NEXT_PUBLIC_INSURANCE_URL ?? ''}
+                        financeUrl={process.env.NEXT_PUBLIC_FINANCE_URL ?? ''}
                     />
 
                     {/* Projects Header with View Toggle */}

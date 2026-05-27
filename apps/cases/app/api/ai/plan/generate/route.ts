@@ -27,7 +27,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const caseRecord = await prisma.case.findUnique({
       where: { id: caseId },
-      select: { id: true, acquisitionType: true, planReadyToStart: true },
+      select: { id: true, acquisitionType: true, services: true, planReadyToStart: true },
     });
 
     if (!caseRecord) {
@@ -62,7 +62,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Check confidence (must have required docs)
-    const confidence = await checkConfidence(caseId);
+    let isFlagRemoval = false;
+    try {
+      const services = caseRecord.services ? JSON.parse(caseRecord.services as string) : [];
+      isFlagRemoval = services.includes('debt_review_flag_removal');
+    } catch {}
+
+    const confidence = await checkConfidence(caseId, isFlagRemoval);
     if (!confidence.canProceed) {
       return NextResponse.json(
         {

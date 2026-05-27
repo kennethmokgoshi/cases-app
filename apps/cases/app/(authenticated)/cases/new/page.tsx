@@ -1,4 +1,6 @@
 'use client';
+import { toast } from '@zenowethu/ui';
+
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -563,7 +565,7 @@ function NewCaseWithAIComponent() {
     // Create or find the final project based on selections
     const handleContinueToUpload = async () => {
         if (!selectedParentId || !selectedYear || !selectedMonth) {
-            alert('Please select a parent project, year, and month');
+            toast.error('Please select a parent project, year, and month');
             return;
         }
 
@@ -602,7 +604,7 @@ function NewCaseWithAIComponent() {
             window.scrollTo({ top: 0, behavior: 'instant' });
         } catch (error) {
             logger.error('Error creating project path:', error);
-            alert('Failed to create project structure. Please try again.');
+            toast.error('Failed to create project structure. Please try again.');
         } finally {
             setCreatingProject(false);
         }
@@ -610,7 +612,7 @@ function NewCaseWithAIComponent() {
 
     const handleAddFileManually = async () => {
         if (!selectedParentId || !selectedYear || !selectedMonth) {
-            alert('Please select a parent project, year, and month');
+            toast.error('Please select a parent project, year, and month');
             return;
         }
 
@@ -660,7 +662,7 @@ function NewCaseWithAIComponent() {
             window.scrollTo({ top: 0, behavior: 'instant' });
         } catch (error) {
             logger.error('Error initializing manual case from step 1:', error);
-            alert('Failed to initialize case. Please try again.');
+            toast.error('Failed to initialize case. Please try again.');
         } finally {
             setCreatingProject(false);
         }
@@ -668,7 +670,7 @@ function NewCaseWithAIComponent() {
 
     const handleCreateManualCase = async () => {
         if (!formData.surname || !formData.names || !formData.idNumber) {
-            alert('Please fill in Surname, Full Names, and ID Number');
+            toast.error('Please fill in Surname, Full Names, and ID Number');
             return;
         }
         setSubmitting(true);
@@ -771,13 +773,13 @@ function NewCaseWithAIComponent() {
         // Validate based on upload mode
         if (uploadMode === 'combined') {
             if (!uploadedFiles.allCombined) {
-                alert('Please upload the combined PDF document');
+                toast.error('Please upload the combined PDF document');
                 return;
             }
         } else {
             // Separate mode - require at least one file
             if (!uploadedFiles.id && !uploadedFiles.poa && (uploadedFiles.creditReports?.length || 0) === 0 && (uploadedFiles.optional?.length || 0) === 0) {
-                alert('Please upload at least one document to proceed.');
+                toast.error('Please upload at least one document to proceed.');
                 return;
             }
         }
@@ -1051,7 +1053,7 @@ function NewCaseWithAIComponent() {
 
         } catch (error) {
             logger.error('Upload error:', error);
-            alert(`Failed to upload and analyze documents: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast.error(`Failed to upload and analyze documents: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
             setUploading(false);
             setAnalyzing(false);
@@ -1130,7 +1132,7 @@ function NewCaseWithAIComponent() {
             window.scrollTo({ top: 0, behavior: 'instant' });
         } catch (error) {
             logger.error('Manual entry initialization failed:', error);
-            alert('Failed to initialize manual case. Please try again.');
+            toast.error('Failed to initialize manual case. Please try again.');
         } finally {
             setUploading(false);
         }
@@ -1139,7 +1141,7 @@ function NewCaseWithAIComponent() {
     // Re-analyze with additional documents
     const handleReanalyze = async () => {
         if (additionalFiles.length === 0) {
-            alert('Please select at least one additional document to upload.');
+            toast.error('Please select at least one additional document to upload.');
             return;
         }
 
@@ -1221,11 +1223,11 @@ function NewCaseWithAIComponent() {
             setAdditionalFiles([]);
             setMissingDocsWarning(null);
 
-            alert('Documents uploaded and analyzed successfully! Form data has been updated.');
+            toast.success('Documents uploaded and analyzed successfully! Form data has been updated.');
 
         } catch (error) {
             logger.error('Re-analyze error:', error);
-            alert(`Failed to upload and analyze: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast.error(`Failed to upload and analyze: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
             setReanalyzing(false);
         }
@@ -2984,7 +2986,7 @@ function NewCaseWithAIComponent() {
                                             // Re-submit with the new ID
                                             setTimeout(() => handleSubmit(false), 100);
                                         } else {
-                                            alert('Please enter a valid prefixed ID number');
+                                            toast.error('Please enter a valid prefixed ID number');
                                         }
                                     }}
                                     disabled={!(prefixedIdInput || duplicateError.suggestedIdNumber)}

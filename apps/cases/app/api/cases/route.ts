@@ -333,7 +333,7 @@ export async function POST(request: Request) {
                 createdBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined,
                 client: { connect: { id: client.id } },
                 jointClient: jointClientId ? { connect: { id: jointClientId } } : undefined,
-                referrerId: data.referrerId,
+                referrer: data.referrerId ? { connect: { id: data.referrerId } } : undefined,
                 services: data.services ? JSON.stringify(data.services) : null,
                 projects: {
                     create: [

@@ -169,6 +169,14 @@ export async function POST(
         });
 
         if (existingDoc) {
+            if (existingDoc.type !== docType) {
+                logger.info(`♻️  Duplicate detected for ${file.name} — updating type from ${existingDoc.type} to ${docType}.`);
+                const updated = await prisma.document.update({
+                    where: { id: existingDoc.id },
+                    data: { type: docType }
+                });
+                return NextResponse.json({ document: updated });
+            }
             logger.info(`♻️  Duplicate detected for ${file.name} (${fileSize} bytes). Skipping write/create.`);
             return NextResponse.json({ document: existingDoc });
         }
@@ -296,7 +304,11 @@ export async function PATCH(
         }
 
         // Verify valid type
-        const validTypes = ['ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA', 'COMBINED', 'OTHER'];
+        const validTypes = [
+            'ID', 'POA', 'CREDIT_REPORT', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_EXPERIAN',
+            'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'ZENOWETHU_POA',
+            'PAYSLIP', 'BANK_STATEMENT', 'PROOF_OF_RESIDENCE', 'COMBINED', 'OTHER'
+        ];
         if (!validTypes.includes(type)) {
             return NextResponse.json({ error: 'Invalid document type' }, { status: 400 });
         }

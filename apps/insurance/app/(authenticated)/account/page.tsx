@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from '@zenowethu/ui';
+
 
 import { useState, useEffect } from 'react';
 import { useSession } from '@zenowethu/ui';
@@ -86,7 +88,7 @@ function DCCPCredentialsSection() {
     }
 
     async function handleRemove() {
-        if (!confirm('Remove your DCCP portal credentials? You will need to re-enter them to use portal automation.')) return;
+        if (!await confirm('Remove your DCCP portal credentials? You will need to re-enter them to use portal automation.')) return;
         setRemoving(true);
         try {
             const res = await fetch('/api/dccp/credentials', { method: 'DELETE' });

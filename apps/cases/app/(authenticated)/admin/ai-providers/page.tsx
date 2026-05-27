@@ -1,4 +1,6 @@
 'use client';
+import { confirm } from '@zenowethu/ui';
+
 
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
@@ -125,7 +127,7 @@ export default function AiProvidersPage() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Remove AI provider "${name}"?`)) return;
+        if (!await confirm(`Remove AI provider "${name}"?`)) return;
         const res = await fetch(`/api/admin/ai-providers/${id}`, { method: 'DELETE' });
         if (res.ok) { setMessage({ type: 'success', text: 'Provider removed.' }); fetchProviders(); }
     };

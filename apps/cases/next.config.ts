@@ -19,9 +19,6 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ['@zenowethu/ui', '@zenowethu/shared-lib', '@zenowethu/plan-engine'],
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream', 'puppeteer', 'puppeteer-core', 'pdfjs-dist', 'googleapis', 'google-auth-library'],

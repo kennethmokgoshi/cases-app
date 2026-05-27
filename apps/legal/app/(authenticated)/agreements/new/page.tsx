@@ -1,4 +1,6 @@
 "use client";
+import { toast } from '@zenowethu/ui';
+
 
 import { useState } from "react";
 import { UploadCloud, FileText, CheckCircle, AlertTriangle, Play, ChevronRight, Loader2 } from "lucide-react";
@@ -50,7 +52,7 @@ export default function NewAgreementPage() {
             setResult(data.analysis);
         } catch (error) {
             logger.error(error);
-            alert("Failed to analyze agreement. Please try again.");
+            toast.error("Failed to analyze agreement. Please try again.");
         } finally {
             setAnalyzing(false);
         }

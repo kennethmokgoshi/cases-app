@@ -11,17 +11,18 @@ function isAdminLevel(session: { user: { isAdmin?: boolean; isExecutive?: boolea
 
 // GET /api/admin/referrers/[id]/commission
 // Returns all commission records for this referrer, including case + client info
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (!isAdminLevel(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-        const referrer = await prisma.referrer.findUnique({ where: { id: params.id } });
+        const referrer = await prisma.referrer.findUnique({ where: { id } });
         if (!referrer) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
 
         const commissions = await prisma.referrerCommission.findMany({
-            where: { referrerId: params.id },
+            where: { referrerId: id },
             include: {
                 case: {
                     select: {
