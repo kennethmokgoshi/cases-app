@@ -39,9 +39,8 @@ const logger = createLogger('ai/case-automation-trigger');
 /** Service IDs as stored in Case.services (JSON array) */
 const DEBT_REVIEW_REMOVAL_ID = 'debt_review_flag_removal';
 
-/** Services that require an automatic DHS check on case creation */
-const DHS_AUTO_CHECK_SERVICES = [
-    'credit_profile_enquiry',
+/** Services that trigger a DHS transfer request (not just a lookup) */
+const DHS_TRANSFER_SERVICES = [
     'debt_review_flag_removal',
     'debt_review_application',
 ];
@@ -114,24 +113,11 @@ export async function runCaseAutomationTrigger(
     const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
     const adminId = admin?.id ?? '';
 
-    const requiresDhsCheck = services.some(s => DHS_AUTO_CHECK_SERVICES.includes(s));
+    // All cases get a DHS consumer lookup regardless of service type.
+    // Transfer request (REQUESTED_VIA_DHS) is only submitted for debt review services.
+    const requiresDhsTransfer = services.some(s => DHS_TRANSFER_SERVICES.includes(s));
 
-    // ── 5a. Handle non-DHS services ───────────────────────────────────────────
-    if (!requiresDhsCheck) {
-        await saveAIComment(caseId, adminId, {
-            service: serviceLabels,
-            triggeredBy,
-            assessment: `Service "${serviceLabels}" does not require an automatic DHS check.`,
-            action: 'No automatic action taken — please process manually.'
-        });
-
-        return {
-            action: 'NOT_APPLICABLE',
-            message: `Service "${serviceLabels}" does not require automatic DHS action`
-        };
-    }
-
-    // ── 5b. Auto DHS check for Credit Profile Enquiry / Debt Review / DRR ────
+    // ── 5. Auto DHS lookup — runs for every new case ──────────────────────────
     const idNumber = caseData.client.idNumber;
     if (idNumber) {
         logger.info(`[CASE_AUTOMATION] Running auto DHS check for ${caseData.fileNumber} (ID: ${idNumber})`);
@@ -142,11 +128,17 @@ export async function runCaseAutomationTrigger(
                 const d = dhsScrape.data;
                 const dcName = d.dcFullName || d.debtCounsellorName || d.ncrdcNo || 'Unknown DC';
 
+                // Check if the consumer is already with Zenowethu (ZDM_CLIENT)
+                const dcSettings = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
+                const ownNcrdc = (dcSettings.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                const scrapedNcrdc = (d.ncrdcNo || '').trim().toUpperCase();
+                const isZdmClient = !!scrapedNcrdc && scrapedNcrdc === ownNcrdc;
+
                 await prisma.case.update({
                     where: { id: caseId },
                     data: {
-                        status:             'NOT_REQUESTED_VIA_DHS',
-                        dhsStatus:          'Not Requested via DHS',
+                        status:             isZdmClient ? 'ZDM_CLIENT' : 'NOT_REQUESTED_VIA_DHS',
+                        dhsStatus:          isZdmClient ? 'ZDM Client' : 'Not Requested via DHS',
                         ncrdcNo:            d.ncrdcNo,
                         debtCounsellorName: d.dcFullName || d.debtCounsellorName,
                         dcTradingName:      d.dcTradingName,
@@ -157,19 +149,29 @@ export async function runCaseAutomationTrigger(
                     },
                 });
 
-                await saveAIComment(caseId, adminId, {
-                    service: serviceLabels,
-                    triggeredBy,
-                    assessment: `DHS auto-check: consumer ID ${idNumber} is linked on DHS under ${dcName}.`,
-                    action: `Status set to "Not Requested via DHS". DC info saved (NCRDC: ${d.ncrdcNo || 'N/A'}). A transfer request has not been submitted yet — please proceed via the DHS portal.`
-                });
-
-                logger.info(`[CASE_AUTOMATION] ✅ ${caseData.fileNumber}: linked on DHS under ${dcName}`);
-                
-                // GHL Sync
-                GhlService.applyTags(caseId, ['dhs_linked', 'dhs_not_requested']).catch(err => {
-                    logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
-                });
+                if (isZdmClient) {
+                    await saveAIComment(caseId, adminId, {
+                        service: serviceLabels,
+                        triggeredBy,
+                        assessment: `DHS auto-check: consumer ID ${idNumber} is already registered under Zenowethu Debt Management (${ownNcrdc}) on DHS.`,
+                        action: `Status set to "ZDM Client" — this consumer is already our client. No transfer request needed.`
+                    });
+                    logger.info(`[CASE_AUTOMATION] ✅ ${caseData.fileNumber}: already our client (${ownNcrdc}) — ZDM_CLIENT`);
+                    GhlService.applyTags(caseId, ['zdm_client', 'dhs_linked']).catch(err => {
+                        logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
+                    });
+                } else {
+                    await saveAIComment(caseId, adminId, {
+                        service: serviceLabels,
+                        triggeredBy,
+                        assessment: `DHS auto-check: consumer ID ${idNumber} is linked on DHS under ${dcName}.`,
+                        action: `Status set to "Not Requested via DHS". DC info saved (NCRDC: ${d.ncrdcNo || 'N/A'}). A transfer request has not been submitted yet — please proceed via the DHS portal.`
+                    });
+                    logger.info(`[CASE_AUTOMATION] ✅ ${caseData.fileNumber}: linked on DHS under ${dcName}`);
+                    GhlService.applyTags(caseId, ['dhs_linked', 'dhs_not_requested']).catch(err => {
+                        logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
+                    });
+                }
             } else {
                 // Scenario 1: Consumer Not Linked on DHS
                 // TRIGGER: One-time Re-Analyse (GPT-4o) if not found, to catch extraction errors.
@@ -302,14 +304,31 @@ export async function runCaseAutomationTrigger(
 
     if (!currentCase) return { action: 'SKIPPED', message: 'Case not found after reload' };
 
-    //  Step 2: If status is NOT_LINKED -> STOP
+    //  Step 2a: Terminal statuses — stop here
     if (currentCase.status === 'NOT_LINKED') {
         return { action: 'SKIPPED', message: 'Consumer not linked on DHS - stopping automation.' };
     }
+    if (currentCase.status === 'ZDM_CLIENT') {
+        return { action: 'SKIPPED', message: 'Consumer is already a ZDM client — no transfer needed.' };
+    }
 
-    //  Step 2: If status is NOT_REQUESTED_VIA_DHS -> Check documents
+    //  Step 2b: Non-debt-review services stop here — DHS lookup info saved, no transfer needed
+    if (!requiresDhsTransfer) {
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: `DHS consumer lookup complete. Current DC info saved to case record.`,
+            action: `Service "${serviceLabels}" does not require a DHS transfer request — no further automated action taken.`
+        });
+        return {
+            action: 'NOT_APPLICABLE',
+            message: `DHS lookup complete — no transfer request needed for service "${serviceLabels}"`
+        };
+    }
+
+    //  Step 2c: If status is NOT_REQUESTED_VIA_DHS -> Check documents for transfer
     if (currentCase.status !== 'NOT_REQUESTED_VIA_DHS' && currentCase.status !== 'NEW_LEAD') {
-        // If it's already beyond these statuses, don't re-run the automation
+        // Already beyond these statuses — don't re-run
         return { action: 'SKIPPED', message: `Case status is ${currentCase.status} - skipping auto-request.` };
     }
 
