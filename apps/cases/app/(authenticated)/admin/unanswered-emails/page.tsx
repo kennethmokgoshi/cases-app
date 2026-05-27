@@ -29,7 +29,7 @@ export default function UnansweredEmails() {
     const [selectedItem, setSelectedItem] = useState<UnansweredCase | null>(null);
 
     useEffect(() => {
-        if (authStatus === 'authenticated' && session?.user?.role !== 'ADMIN') {
+        if (authStatus === 'authenticated' && !session?.user?.isAdmin) {
             router.push('/');
         } else if (authStatus === 'authenticated') {
             fetchItems();
@@ -64,7 +64,7 @@ export default function UnansweredEmails() {
         );
     }
 
-    if (session?.user?.role !== 'ADMIN') {
+    if (!session?.user?.isAdmin) {
         return null;
     }
 

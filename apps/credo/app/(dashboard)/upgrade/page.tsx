@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from '@zenowethu/ui';
 
 export default function UpgradePage() {
     const [loading, setLoading] = useState(false);
@@ -12,14 +13,15 @@ export default function UpgradePage() {
         try {
             const res = await fetch('/api/upgrade', { method: 'POST' });
             if (res.ok) {
+                toast.success('Upgrade successful! Welcome to Premium.');
                 router.refresh();
                 router.push('/dashboard');
             } else {
-                alert('Upgrade failed');
+                toast.error('Upgrade failed — please try again');
             }
         } catch (error) {
             console.error(error);
-            alert('Network error');
+            toast.error('Network error — please try again');
         } finally {
             setLoading(false);
         }

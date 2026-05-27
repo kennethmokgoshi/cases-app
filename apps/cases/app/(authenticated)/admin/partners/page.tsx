@@ -1,10 +1,9 @@
 'use client';
 
-import { useSession } from '@zenowethu/ui';
+import { useSession, toast, DeleteConfirmationModal } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { DeleteConfirmationModal } from '@zenowethu/ui';
 
 // Client-side logger
 const logger = {
@@ -168,7 +167,7 @@ export default function PartnersManagement() {
             fetchPartners();
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'An error occurred during deletion';
-            alert(msg);
+            toast.error(msg);
         }
     };
 

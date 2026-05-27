@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { toast } from '@zenowethu/ui'
 
 type DCCPStats = {
   totalPolicies: number
@@ -247,9 +248,9 @@ export default function DCCPDashboard() {
                             try {
                               const res = await fetch(`/api/dccp/policies/${policy.id}/submit`, { method: 'POST' });
                               if (res.ok) fetchData();
-                              else alert('Submission failed. Please verify your credentials.');
+                              else toast.error('Submission failed. Please verify your DCCP credentials.');
                             } catch (e) {
-                              alert('Error submitting policy.');
+                              toast.error('Error submitting policy — please try again.');
                             }
                           }}
                           className="px-3 py-1 bg-zeno-cyan text-zeno-navy text-xs font-bold rounded hover:bg-cyan-400 transition-colors"

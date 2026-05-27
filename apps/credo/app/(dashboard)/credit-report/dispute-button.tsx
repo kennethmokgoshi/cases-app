@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from '@zenowethu/ui';
 
 interface Props {
     type: string;
@@ -25,13 +26,13 @@ export function DisputeButton({ type, creditorName, accountNumber, disputeGround
             const data = await res.json();
             
             if (res.ok) {
-                alert(data.message || 'Letter saved to vault');
+                toast.success(data.message || 'Letter saved to vault');
             } else {
-                alert(data.error || 'Failed to generate letter');
+                toast.error(data.error || 'Failed to generate letter');
             }
         } catch (err) {
             console.error(err);
-            alert('Network error');
+            toast.error('Network error — please try again');
         } finally {
             setLoading(false);
         }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from '@zenowethu/ui';
 
 export default function ConvertServiceRequestButton({ requestId, consumerId }: { requestId: string; consumerId: string }) {
     const [loading, setLoading] = useState(false);
@@ -20,12 +21,12 @@ export default function ConvertServiceRequestButton({ requestId, consumerId }: {
             if (res.ok && data.caseId) {
                 router.push(`/admin/cases/${data.caseId}`);
             } else {
-                alert(data.error || 'Failed to convert');
+                toast.error(data.error || 'Failed to convert');
                 setLoading(false);
             }
         } catch (error) {
             console.error(error);
-            alert('Network error');
+            toast.error('Network error — please try again');
             setLoading(false);
         }
     };
