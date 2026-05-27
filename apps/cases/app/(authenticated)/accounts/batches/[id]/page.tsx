@@ -1,5 +1,7 @@
 
 import { prisma } from '@zenowethu/database';
+
+export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
 import { BatchPaymentTable } from '@zenowethu/ui';
 import { BatchHeaderActions } from '@zenowethu/ui';

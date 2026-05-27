@@ -1,5 +1,7 @@
 import { Metadata } from 'next';
 import { prisma } from '@zenowethu/database';
+
+export const dynamic = 'force-dynamic';
 import ConvertServiceRequestButton from './convert-button';
 
 export const metadata: Metadata = {

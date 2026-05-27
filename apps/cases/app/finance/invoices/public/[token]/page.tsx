@@ -1,6 +1,8 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { prisma } from '@zenowethu/database';
+
+export const dynamic = 'force-dynamic';
 import { format } from 'date-fns';
 
 interface PublicInvoicePageProps {

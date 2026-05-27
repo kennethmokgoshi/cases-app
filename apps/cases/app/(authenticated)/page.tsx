@@ -1,6 +1,8 @@
 import { auth } from '@zenowethu/shared-lib';
 import { redirect } from 'next/navigation';
 import { prisma } from '@zenowethu/database';
+
+export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { DashboardCasesTable } from '@/components/DashboardCasesTable';
 

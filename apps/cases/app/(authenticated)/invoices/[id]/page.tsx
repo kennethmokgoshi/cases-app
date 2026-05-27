@@ -1,5 +1,7 @@
 import { auth } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
+
+export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import SendInvoiceModal from './SendInvoiceModal'
