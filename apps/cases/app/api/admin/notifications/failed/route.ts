@@ -6,7 +6,7 @@ import { logger } from '@zenowethu/shared-lib';
 export async function GET(request: Request) {
     try {
         const session = await auth();
-        if (!session?.user || session.user.role !== 'ADMIN') {
+        if (!session?.user?.isAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
 

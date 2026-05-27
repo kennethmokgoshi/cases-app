@@ -166,6 +166,26 @@ export default function AdminDashboard() {
             ),
             href: '/admin/unanswered-emails',
             color: 'from-rose-500 to-red-500' },
+        {
+            title: 'Automation Runs',
+            description: 'Monitor DHS, XDS, GHL, AI document and plan background jobs — retry failed runs',
+            icon: (
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+                </svg>
+            ),
+            href: '/admin/automations',
+            color: 'from-sky-500 to-blue-600' },
+        {
+            title: 'Failed Notifications',
+            description: 'SMS, Email, and WhatsApp messages that failed to deliver — retry or mark as handled',
+            icon: (
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+            ),
+            href: '/admin/notifications',
+            color: 'from-orange-500 to-amber-500' },
     ];
 
     return (

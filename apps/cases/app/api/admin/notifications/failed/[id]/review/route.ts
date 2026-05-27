@@ -11,7 +11,7 @@ const ReviewSchema = z.object({
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
     try {
         const session = await auth();
-        if (!session?.user || session.user.role !== 'ADMIN') {
+        if (!session?.user?.isAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
 
