@@ -8,6 +8,7 @@ import {
     findManagersForCase,
     getCommissionStageForCaseStatus,
     isCommissionEligible,
+    calculateCommissionAmount,
 } from '@zenowethu/shared-lib';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { CaseStatusSchema, parseBody } from '@/lib/schemas';
@@ -98,6 +99,31 @@ export async function PATCH(
             const commissionStage = getCommissionStageForCaseStatus(newStatus);
             if (commissionStage) {
                 const eligible = isCommissionEligible(commissionStage);
+
+                // Auto-calculate commission amount when the referral becomes eligible
+                // and it has not already been paid out.
+                let autoAmount: number | undefined;
+                if (eligible) {
+                    const [referrer, existingCommission, totalReferralCount] = await Promise.all([
+                        prisma.referrer.findUnique({
+                            where: { id: currentCase.referrerId },
+                            select: { commissionType: true, fixedCommissionAmount: true },
+                        }),
+                        prisma.referrerCommission.findUnique({ where: { caseId: id }, select: { isPaid: true, commissionAmount: true } }),
+                        prisma.case.count({ where: { referrerId: currentCase.referrerId } }),
+                    ]);
+
+                    // Only (re-)calculate if not yet paid. If already paid, preserve the locked amount.
+                    const alreadyPaid = existingCommission?.isPaid ?? false;
+                    if (!alreadyPaid && referrer) {
+                        autoAmount = calculateCommissionAmount(
+                            referrer.commissionType,
+                            referrer.fixedCommissionAmount,
+                            totalReferralCount,
+                        );
+                    }
+                }
+
                 await prisma.referrerCommission.upsert({
                     where: { caseId: id },
                     create: {
@@ -105,10 +131,12 @@ export async function PATCH(
                         caseId: id,
                         stage: commissionStage,
                         isEligible: eligible,
+                        ...(autoAmount !== undefined && { commissionAmount: autoAmount }),
                     },
                     update: {
                         stage: commissionStage,
                         isEligible: eligible,
+                        ...(autoAmount !== undefined && { commissionAmount: autoAmount }),
                     },
                 });
             }

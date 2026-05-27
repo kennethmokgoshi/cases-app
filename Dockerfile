@@ -43,6 +43,7 @@ COPY apps/legal/package.json ./apps/legal/
 COPY apps/forensic-audit/package.json ./apps/forensic-audit/
 COPY apps/finance/package.json ./apps/finance/
 COPY apps/credo/package.json ./apps/credo/
+COPY apps/website/package.json ./apps/website/
 
 # pnpm v10 onlyBuiltDependencies is declared in package.json — no CLI override needed
 RUN pnpm install --frozen-lockfile

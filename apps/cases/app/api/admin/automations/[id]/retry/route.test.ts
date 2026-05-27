@@ -48,7 +48,7 @@ function makeReq(url: string, method = 'POST', body?: unknown) {
 function makeIdReq(id: string, method = 'POST', body?: unknown) {
     return {
         req: makeReq(`http://localhost/api/admin/automations/${id}/retry`, method, body),
-        ctx: { params: { id } },
+        ctx: { params: Promise.resolve({ id }) },
     };
 }
 

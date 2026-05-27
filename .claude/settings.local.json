@@ -80,12 +80,34 @@
       "Bash(pnpm --filter forensic-audit dev)",
       "Bash(pnpm --filter finance dev)",
       "Bash(pnpm install:*)",
-      "Bash(wc -l \"/c/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/docs/\"*.md)"
+      "Bash(wc -l \"/c/Visual Studio Code/06 March 2026/FromGIt/cases-app-main/docs/\"*.md)",
+      "Bash(git push *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git add *)",
+      "Bash(git pull *)",
+      "Bash(pnpm --filter cases typecheck)",
+      "Bash(pnpm --filter @zenowethu/shared-lib typecheck)",
+      "Bash(pnpm --filter insurance typecheck)",
+      "Bash(pnpm --filter legal typecheck)",
+      "Bash(pnpm --filter finance typecheck)",
+      "Bash(pnpm --filter forensic-audit typecheck)",
+      "Bash(pnpm --filter credo typecheck)",
+      "Bash(pnpm --filter cases test)",
+      "Bash(mkdir -p \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\cases\\\\app\\\\api\\\\leads\\\\[id]\")",
+      "Bash(pnpm --filter website typecheck)",
+      "Bash(cat vitest.config.ts)",
+      "Bash(cat vitest.config.js)",
+      "Bash(npx vitest *)",
+      "PowerShell(cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; Start-Process -FilePath \"powershell.exe\" -ArgumentList \"-NoExit\", \"-Command\", \"cd 'C:\\\\Visual Studio Code\\\\06 March 2026'; pnpm dev\" -WindowStyle Normal)",
+      "Bash(until [ -s \"C:/Users/Kenneth/AppData/Local/Temp/zenowethu-dev.log\" ]; do sleep 2; done && tail -40 \"C:/Users/Kenneth/AppData/Local/Temp/zenowethu-dev.log\")",
+      "Bash(pnpm --filter @zenowethu/shared-lib test --reporter=verbose)",
+      "Bash(mkdir -p \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\cases\\\\app\\\\api\\\\cases\\\\[id]\\\\r350\")"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",
       "C:\\Users\\Kenneth\\.claude\\projects\\c--Visual-Studio-Code-06-March-2026",
-      "c:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\ai\\plan\\[caseId]"
+      "c:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\ai\\plan\\[caseId]",
+      "C:\\Visual Studio Code\\06 March 2026\\packages\\database\\prisma\\migrations"
     ]
   }
 }

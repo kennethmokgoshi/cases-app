@@ -89,7 +89,7 @@ export async function POST(request: Request) {
           }
         };
 
-        const result = await stepRegistry.execute('REQUEST_FILE_FROM_DC', actionCtx);
+        const result = await stepRegistry.getAction('REQUEST_FILE_FROM_DC')(actionCtx);
 
         if (result.success) {
           processed.push({ id: caseData.id, fileNumber: caseData.fileNumber, email: result.result?.dcEmail });

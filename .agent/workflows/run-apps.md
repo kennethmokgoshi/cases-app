@@ -13,21 +13,21 @@ description: How to run all Zenowethu apps locally
 ### Cases App (Port 3000)
 ```bash
 cd apps/cases
-npm run dev
+pnpm run dev
 ```
 // turbo
 
 ### Insurance App (Port 3001)
 ```bash
 cd apps/insurance
-npm run dev
+pnpm run dev
 ```
 // turbo
 
 ### Legal App (Port 3002)
 ```bash
 cd apps/legal
-npm run dev
+pnpm run dev
 ```
 // turbo
 
@@ -35,7 +35,7 @@ npm run dev
 
 From the root directory:
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 This will start all apps concurrently using Turborepo.

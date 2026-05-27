@@ -6,15 +6,17 @@ const logger = createLogger('api/admin/automations/retry');
 
 export async function POST(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    let runId = 'unknown';
     try {
         const session = await auth();
         if (!session?.user?.isAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const runId = params.id;
+        const { id } = await params;
+        runId = id;
         if (!runId) {
             return NextResponse.json({ error: 'Missing run ID' }, { status: 400 });
         }
@@ -49,7 +51,7 @@ export async function POST(
 
         return NextResponse.json(updatedRun);
     } catch (error) {
-        logger.error(`Error retrying automation run ${params.id}:`, error);
+        logger.error(`Error retrying automation run ${runId}:`, error);
         return NextResponse.json({ error: 'Failed to retry automation run' }, { status: 500 });
     }
 }

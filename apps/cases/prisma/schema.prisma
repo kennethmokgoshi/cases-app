@@ -71,7 +71,14 @@ model Case {
   acquisitionType         String                @default("B2C")
   partnerName             String?
   partnerBranch           String?
-  r350Status              String                @default("NOT_APPLICABLE")
+  r350Status              String                @default("NOT_APPLICABLE") // NOT_APPLICABLE | PENDING | PAID_R350 | FILE_PAID | TOLD_R350 | WAITING_R350 | WAIVED
+  r350PaidDate            DateTime?
+  r350PaidRef             String?
+  r350PaidById            String?
+  r350Waived              Boolean               @default(false)
+  r350WaivedById          String?
+  r350WaivedAt            DateTime?
+  r350WaivedReason        String?
   serviceFeeCollectedBy   String                @default("ZENOWETHU")
   partnerSplitPercent     Int                   @default(0)
   status                  String

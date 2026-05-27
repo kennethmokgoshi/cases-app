@@ -33,10 +33,15 @@ type Referrer = {
     createdAt: string;
     outstandingCommission: number;
     paidCommission: number;
+    commissionType: string;
+    fixedCommissionAmount: number | null;
 };
 
 const EMPLOYMENT_TYPES = ['EMPLOYED', 'SELF_EMPLOYED', 'CONTRACT', 'UNEMPLOYED', 'RETIRED'];
 const ACCOUNT_TYPES = ['CHEQUE', 'SAVINGS', 'CURRENT'];
+
+/** Quick preset amounts shown as chips in the Fixed commission section */
+const FIXED_AMOUNT_PRESETS = [200, 300, 500];
 
 const emptyForm = {
     firstName: '',
@@ -57,6 +62,8 @@ const emptyForm = {
     accountHolderName: '',
     notes: '',
     isActive: true,
+    commissionType: 'FIXED' as 'FIXED' | 'VOLUME_BASED',
+    fixedCommissionAmount: '',
 };
 
 type FormState = typeof emptyForm;
@@ -142,6 +149,8 @@ export default function ReferrersPage() {
             accountHolderName: r.accountHolderName ?? '',
             notes: r.notes ?? '',
             isActive: r.isActive,
+            commissionType: (r.commissionType as 'FIXED' | 'VOLUME_BASED') ?? 'FIXED',
+            fixedCommissionAmount: r.fixedCommissionAmount != null ? String(r.fixedCommissionAmount) : '',
         });
         setFormError('');
         setModalOpen(true);
@@ -170,6 +179,10 @@ export default function ReferrersPage() {
                 accountHolderName: form.accountHolderName.trim() || null,
                 notes: form.notes.trim() || null,
                 isActive: form.isActive,
+                commissionType: form.commissionType,
+                fixedCommissionAmount: form.commissionType === 'FIXED' && form.fixedCommissionAmount
+                    ? parseFloat(form.fixedCommissionAmount)
+                    : null,
             };
 
             const url = editTarget ? `/api/admin/referrers/${editTarget.id}` : '/api/admin/referrers';
@@ -430,6 +443,71 @@ export default function ReferrersPage() {
                                 </div>
                             </section>
 
+                            {/* Commission Tier */}
+                            <section>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Commission Rate</h3>
+                                <div className="space-y-3">
+                                    <div className="flex gap-3">
+                                        {(['FIXED', 'VOLUME_BASED'] as const).map((type) => (
+                                            <button
+                                                key={type}
+                                                type="button"
+                                                onClick={() => setForm((f) => ({ ...f, commissionType: type }))}
+                                                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                                                    form.commissionType === type
+                                                        ? 'bg-zeno-cyan/10 border-zeno-cyan/50 text-zeno-cyan'
+                                                        : 'bg-zeno-blue/20 border-zeno-blue/40 text-gray-400 hover:border-gray-500'
+                                                }`}
+                                            >
+                                                {type === 'FIXED' ? 'Fixed Amount' : 'Volume-Based'}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {form.commissionType === 'FIXED' && (
+                                        <div>
+                                            <label className="block text-xs text-gray-400 mb-2">Commission Amount (ZAR)</label>
+                                            {/* Quick preset chips */}
+                                            <div className="flex gap-2 mb-2">
+                                                {FIXED_AMOUNT_PRESETS.map((amt) => (
+                                                    <button
+                                                        key={amt}
+                                                        type="button"
+                                                        onClick={() => setForm((f) => ({ ...f, fixedCommissionAmount: String(amt) }))}
+                                                        className={`px-3 py-1 rounded-full text-xs border font-medium transition-colors ${
+                                                            form.fixedCommissionAmount === String(amt)
+                                                                ? 'bg-zeno-cyan/20 border-zeno-cyan/50 text-zeno-cyan'
+                                                                : 'bg-zeno-blue/20 border-zeno-blue/40 text-gray-400 hover:border-gray-500'
+                                                        }`}
+                                                    >
+                                                        R{amt}
+                                                    </button>
+                                                ))}
+                                                <span className="text-xs text-gray-500 self-center">or enter custom →</span>
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                step={50}
+                                                value={form.fixedCommissionAmount}
+                                                onChange={(e) => setForm((f) => ({ ...f, fixedCommissionAmount: e.target.value }))}
+                                                placeholder="e.g. 200, 300, 500"
+                                                className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-zeno-cyan/50"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {form.commissionType === 'VOLUME_BASED' && (
+                                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-3 text-blue-300 text-xs space-y-1">
+                                            <p className="font-semibold">Auto-calculated per referral based on total cases brought:</p>
+                                            <p>• <strong>1 – 9 cases</strong> → <strong>R200</strong> per referral</p>
+                                            <p>• <strong>10 or more cases</strong> → <strong>R300</strong> per referral</p>
+                                            <p className="text-blue-400/70 mt-1">Amount is recalculated each time a referral reaches the eligible stage.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
                             {/* Status & Notes */}
                             <section>
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Status & Notes</h3>
@@ -513,6 +591,24 @@ export default function ReferrersPage() {
                                     <p className="text-gray-300 text-sm whitespace-pre-wrap">{detailTarget.notes}</p>
                                 </DetailSection>
                             )}
+                            <DetailSection title="Commission">
+                                <DetailRow
+                                    label="Type"
+                                    value={detailTarget.commissionType === 'VOLUME_BASED' ? 'Volume-Based' : 'Fixed'}
+                                />
+                                {detailTarget.commissionType === 'FIXED' && (
+                                    <DetailRow
+                                        label="Fixed Amount"
+                                        value={detailTarget.fixedCommissionAmount != null
+                                            ? `R ${Number(detailTarget.fixedCommissionAmount).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`
+                                            : 'Not set'}
+                                    />
+                                )}
+                                {detailTarget.commissionType === 'VOLUME_BASED' && (
+                                    <p className="text-gray-400 text-xs">R200 (1–9 cases) / R300 (10+ cases)</p>
+                                )}
+                            </DetailSection>
+
                             <DetailSection title="Sub-Project">
                                 {detailTarget.project ? (
                                     <Link href={`/projects?id=${detailTarget.project.id}`} className="text-zeno-cyan hover:underline text-sm">

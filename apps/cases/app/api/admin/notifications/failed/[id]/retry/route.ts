@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth } from '@zenowethu/shared-lib';
-import { logger } from '@zenowethu/shared-lib';
-import { executeNotificationRetry } from '@zenowethu/shared-lib/notifications/service';
+import { auth, logger, executeNotificationRetry } from '@zenowethu/shared-lib';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
     try {

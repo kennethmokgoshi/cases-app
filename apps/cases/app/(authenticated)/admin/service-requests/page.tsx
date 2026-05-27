@@ -1,7 +1,5 @@
 import { Metadata } from 'next';
 import { prisma } from '@zenowethu/database';
-import { Card, CardContent, CardHeader, CardTitle } from '@zenowethu/ui';
-import { Badge } from '@/components/ui/badge';
 import ConvertServiceRequestButton from './convert-button';
 
 export const metadata: Metadata = {
@@ -26,27 +24,25 @@ export default async function ServiceRequestsPage() {
             </div>
 
             {requests.length === 0 ? (
-                <Card>
-                    <CardContent className="py-12 text-center text-slate-500">
-                        No pending service requests.
-                    </CardContent>
-                </Card>
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 py-12 text-center text-slate-500">
+                    No pending service requests.
+                </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {requests.map((req) => (
-                        <Card key={req.id}>
-                            <CardHeader className="pb-2">
+                        <div key={req.id} className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="p-6 pb-2">
                                 <div className="flex justify-between items-start">
-                                    <CardTitle className="text-lg">
+                                    <h2 className="text-lg font-semibold text-slate-900">
                                         {req.consumer.firstName} {req.consumer.lastName}
-                                    </CardTitle>
-                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                                        Pending
-                                    </Badge>
+                                    </h2>
+                                     <span className="inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ring-amber-600/20 bg-amber-50 text-amber-700 border border-amber-200">
+                                         Pending
+                                     </span>
                                 </div>
                                 <p className="text-sm text-slate-500">{req.consumer.email}</p>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
+                            </div>
+                            <div className="p-6 pt-0 space-y-4">
                                 <div className="text-sm">
                                     <span className="font-semibold text-slate-700">Services Requested:</span>
                                     <p className="mt-1 text-slate-600 bg-slate-50 p-2 rounded border">{req.services}</p>
@@ -62,8 +58,8 @@ export default async function ServiceRequestsPage() {
                                         consumerId={req.consumerId} 
                                     />
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     ))}
                 </div>
             )}

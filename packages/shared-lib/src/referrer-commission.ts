@@ -1,5 +1,27 @@
 import type { ReferrerCommissionStage } from '@zenowethu/database';
 
+// ---------------------------------------------------------------------------
+// Commission Tier Types
+// ---------------------------------------------------------------------------
+
+/** FIXED: every referral pays a flat amount configured on the Referrer record.
+ *  VOLUME_BASED: amount auto-scales with how many total cases the referrer has
+ *  brought:  < 10 cases → R200 per referral,  ≥ 10 cases → R300 per referral.
+ */
+export type CommissionType = 'FIXED' | 'VOLUME_BASED';
+
+export const COMMISSION_TYPES: CommissionType[] = ['FIXED', 'VOLUME_BASED'];
+
+export const COMMISSION_TYPE_LABELS: Record<CommissionType, string> = {
+    FIXED:        'Fixed Amount',
+    VOLUME_BASED: 'Volume-Based (≥10 → R300, <10 → R200)',
+};
+
+/** Volume tier thresholds */
+export const VOLUME_TIER_LOW_AMOUNT  = 200;   // < 10 cases
+export const VOLUME_TIER_HIGH_AMOUNT = 300;   // ≥ 10 cases
+export const VOLUME_TIER_THRESHOLD   = 10;    // cases needed to reach high tier
+
 // Case statuses that advance the commission stage
 const STATUS_TO_COMMISSION_STAGE: Record<string, ReferrerCommissionStage> = {
     NEW_LEAD:        'NEW_LEAD',
@@ -52,6 +74,39 @@ export const COMMISSION_STAGE_LABELS: Record<ReferrerCommissionStage, string> = 
     HANDED_OVER:       'Handed Over',
     SETTLED:           'Settled',
 };
+
+/**
+ * Auto-calculate the commission amount for a referral.
+ *
+ * @param commissionType  - 'FIXED' | 'VOLUME_BASED' (default: 'FIXED')
+ * @param fixedAmount     - The configured fixed rand amount (used when FIXED)
+ * @param totalReferralCount - Total cases this referrer has brought so far
+ *                             (used when VOLUME_BASED to apply volume tier)
+ * @returns Calculated rand amount as a number
+ */
+export function calculateCommissionAmount(
+    commissionType: string | null | undefined,
+    fixedAmount: number | { toNumber: () => number } | null | undefined,
+    totalReferralCount: number,
+): number {
+    const type: CommissionType = (commissionType === 'VOLUME_BASED') ? 'VOLUME_BASED' : 'FIXED';
+
+    if (type === 'VOLUME_BASED') {
+        return totalReferralCount >= VOLUME_TIER_THRESHOLD
+            ? VOLUME_TIER_HIGH_AMOUNT
+            : VOLUME_TIER_LOW_AMOUNT;
+    }
+
+    // FIXED
+    if (fixedAmount != null) {
+        return typeof fixedAmount === 'number'
+            ? fixedAmount
+            : fixedAmount.toNumber();
+    }
+
+    // No fixed amount configured — safe default is the low-volume tier amount
+    return VOLUME_TIER_LOW_AMOUNT;
+}
 
 // Ordered list for display (progress tracking)
 export const COMMISSION_STAGE_ORDER: ReferrerCommissionStage[] = [

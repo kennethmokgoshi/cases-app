@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 
 export default function ConvertServiceRequestButton({ requestId, consumerId }: { requestId: string; consumerId: string }) {
     const [loading, setLoading] = useState(false);
@@ -32,12 +31,12 @@ export default function ConvertServiceRequestButton({ requestId, consumerId }: {
     };
 
     return (
-        <Button 
+        <button 
             onClick={handleConvert} 
             disabled={loading} 
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white"
+            className="w-full py-2 px-4 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-medium text-sm transition-colors"
         >
             {loading ? 'Converting...' : 'Convert to Case'}
-        </Button>
+        </button>
     );
 }

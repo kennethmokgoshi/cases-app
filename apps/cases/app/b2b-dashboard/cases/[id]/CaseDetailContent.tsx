@@ -780,7 +780,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                                                         </p>
                                                         <span className="text-sm text-gray-400">
                                                             {new Date(comment.createdAt).toLocaleString()}
-                                                        </p>
+                                                        </span>
                                                     </div>
                                                     <p className="text-gray-300">{comment.content}</p>
                                                 </div>

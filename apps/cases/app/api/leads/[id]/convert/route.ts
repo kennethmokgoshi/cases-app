@@ -71,7 +71,7 @@ export async function POST(request: Request, { params }: RouteCtx) {
         // ── Derive file number ─────────────────────────────────────────────
         const count = await prisma.case.count();
         const fileNumber = `ZEN-${String(count + 1).padStart(5, '0')}`;
-        const deadline   = new Date(calculateSlaDeadline('NEW_LEAD'));
+        const deadline = calculateSlaDeadline(new Date());
 
         // ── Create Client + Case in a transaction ──────────────────────────
         const { newCase, client } = await prisma.$transaction(async tx => {

@@ -71,6 +71,8 @@ type Referrer = {
     accountHolderName: string | null;
     isActive: boolean;
     notes: string | null;
+    commissionType: string;
+    fixedCommissionAmount: number | null;
 };
 
 type Summary = {
@@ -263,6 +265,29 @@ export default function ReferrerDetailPage() {
                             <p className="text-white">{referrer.accountHolderName}</p>
                         </div>
                     )}
+                    {/* Commission tier */}
+                    <div>
+                        <p className="text-xs text-gray-400 mb-0.5">Commission Type</p>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            referrer.commissionType === 'VOLUME_BASED'
+                                ? 'bg-indigo-500/20 text-indigo-400'
+                                : 'bg-emerald-500/20 text-emerald-400'
+                        }`}>
+                            {referrer.commissionType === 'VOLUME_BASED' ? 'Volume-Based' : 'Fixed'}
+                        </span>
+                    </div>
+                    <div>
+                        <p className="text-xs text-gray-400 mb-0.5">Commission Rate</p>
+                        {referrer.commissionType === 'VOLUME_BASED' ? (
+                            <p className="text-white text-xs">R200 / R300 (volume)</p>
+                        ) : referrer.fixedCommissionAmount != null ? (
+                            <p className="text-white font-semibold">
+                                {formatZAR(Number(referrer.fixedCommissionAmount))}
+                            </p>
+                        ) : (
+                            <p className="text-gray-500 text-xs">Not configured</p>
+                        )}
+                    </div>
                 </div>
             )}
 

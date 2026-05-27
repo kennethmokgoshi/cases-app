@@ -51,33 +51,36 @@ model ProjectMember {
 }
 
 model Referrer {
-  id                String               @id @default(cuid())
-  firstName         String
-  lastName          String
-  idNumber          String?              @unique
-  email             String?
-  cellNumber        String?
-  employerName      String?
-  employmentType    String?
-  employerAddress   String?
-  employerPhone     String?
-  occupation        String?
-  monthlyIncome     Decimal?
-  bankName          String?
-  accountNumber     String?
-  accountType       String?
-  branchCode        String?
-  accountHolderName String?
-  projectId         String?              @unique
-  isActive          Boolean              @default(true)
-  notes             String?
-  createdById       String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  cases             Case[]
-  createdBy         User?                @relation("ReferrerCreator", fields: [createdById], references: [id])
-  project           Project?             @relation(fields: [projectId], references: [id])
-  commissions       ReferrerCommission[]
+  id                    String               @id @default(cuid())
+  firstName             String
+  lastName              String
+  idNumber              String?              @unique
+  email                 String?
+  cellNumber            String?
+  employerName          String?
+  employmentType        String?
+  employerAddress       String?
+  employerPhone         String?
+  occupation            String?
+  monthlyIncome         Decimal?
+  bankName              String?
+  accountNumber         String?
+  accountType           String?
+  branchCode            String?
+  accountHolderName     String?
+  projectId             String?              @unique
+  isActive              Boolean              @default(true)
+  notes                 String?
+  createdById           String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  // Commission tier configuration
+  commissionType        String               @default("FIXED")  // FIXED | VOLUME_BASED
+  fixedCommissionAmount Decimal?                                 // Used when commissionType = FIXED
+  cases                 Case[]
+  createdBy             User?                @relation("ReferrerCreator", fields: [createdById], references: [id])
+  project               Project?             @relation(fields: [projectId], references: [id])
+  commissions           ReferrerCommission[]
 
   @@index([lastName])
   @@index([idNumber])
@@ -185,7 +188,14 @@ model Case {
   acquisitionType         String                @default("B2C")
   partnerName             String?
   partnerBranch           String?
-  r350Status              String                @default("NOT_APPLICABLE")
+  r350Status              String                @default("NOT_APPLICABLE") // NOT_APPLICABLE | PENDING | PAID_R350 | FILE_PAID | TOLD_R350 | WAITING_R350 | WAIVED
+  r350PaidDate            DateTime?
+  r350PaidRef             String?
+  r350PaidById            String?
+  r350Waived              Boolean               @default(false)
+  r350WaivedById          String?
+  r350WaivedAt            DateTime?
+  r350WaivedReason        String?
   serviceFeeCollectedBy   String                @default("ZENOWETHU")
   partnerSplitPercent     Int                   @default(0)
   status                  String
@@ -274,6 +284,8 @@ model Case {
   deletedBy               User?                 @relation("CaseDeleter", fields: [deletedById], references: [id])
   referrer                Referrer?             @relation(fields: [referrerId], references: [id])
   updatedBy               User?                 @relation("CaseUpdater", fields: [updatedById], references: [id])
+  r350PaidBy              User?                 @relation("CaseR350PaidBy", fields: [r350PaidById], references: [id])
+  r350WaivedBy            User?                 @relation("CaseR350WaivedBy", fields: [r350WaivedById], references: [id])
   assignments             CaseAssignment[]
   comments                CaseComment[]
   followers               CaseFollower[]
@@ -410,6 +422,8 @@ model User {
   projectMemberships        ProjectMember[]
   createdReferrers          Referrer[]            @relation("ReferrerCreator")
   commissionsPaid           ReferrerCommission[]  @relation("CommissionPaidBy")
+  r350PaymentsRecorded      Case[]                @relation("CaseR350PaidBy")
+  r350WaiversRecorded       Case[]                @relation("CaseR350WaivedBy")
   b2bPartner                Project?              @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
   groupMemberships          UserGroupMember[]
   workflowLogs              WorkflowLog[]

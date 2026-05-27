@@ -10,6 +10,8 @@ const PAGE_SIZE = 20;
 export const EMPLOYMENT_TYPES = ['EMPLOYED', 'SELF_EMPLOYED', 'CONTRACT', 'UNEMPLOYED', 'RETIRED'] as const;
 export const ACCOUNT_TYPES = ['CHEQUE', 'SAVINGS', 'CURRENT'] as const;
 
+export const COMMISSION_TYPES = ['FIXED', 'VOLUME_BASED'] as const;
+
 const CreateSchema = z.object({
     firstName: z.string().min(1).max(100),
     lastName: z.string().min(1).max(100),
@@ -31,6 +33,9 @@ const CreateSchema = z.object({
     accountHolderName: z.string().max(200).nullable().optional(),
     notes: z.string().max(1000).nullable().optional(),
     isActive: z.boolean().optional(),
+    // Commission
+    commissionType: z.enum(COMMISSION_TYPES).optional(),
+    fixedCommissionAmount: z.number().min(1).max(99999).nullable().optional(),
 });
 
 // GET /api/admin/referrers — paginated list with search and status filters

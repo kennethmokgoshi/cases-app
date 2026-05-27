@@ -10,7 +10,7 @@ import path from 'path';
 
 export async function POST(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await auth();
@@ -18,7 +18,7 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const projectId = params.id;
+        const { id: projectId } = await params;
         const project = await prisma.project.findUnique({
             where: { id: projectId }
         });

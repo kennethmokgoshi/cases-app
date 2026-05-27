@@ -5,6 +5,8 @@ import { z } from 'zod';
 
 const logger = createLogger('api/admin/referrers/[id]');
 
+const COMMISSION_TYPES = ['FIXED', 'VOLUME_BASED'] as const;
+
 const PatchSchema = z.object({
     firstName: z.string().min(1).max(100).optional(),
     lastName: z.string().min(1).max(100).optional(),
@@ -23,6 +25,9 @@ const PatchSchema = z.object({
     accountHolderName: z.string().max(200).nullable().optional(),
     notes: z.string().max(1000).nullable().optional(),
     isActive: z.boolean().optional(),
+    // Commission tier
+    commissionType: z.enum(COMMISSION_TYPES).optional(),
+    fixedCommissionAmount: z.number().min(1).max(99999).nullable().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'No fields to update' });
 
 function isAdminLevel(session: { user: { isAdmin?: boolean; isExecutive?: boolean; isSeniorManager?: boolean; role?: string } }) {

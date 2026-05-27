@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './route';
 import { prisma } from '@zenowethu/database';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, executeNotificationRetry } from '@zenowethu/shared-lib';
 import { NextRequest } from 'next/server';
-import { executeNotificationRetry } from '@zenowethu/shared-lib/notifications/service';
 
 vi.mock('@zenowethu/database', () => ({
     prisma: {
@@ -15,9 +14,10 @@ vi.mock('@zenowethu/database', () => ({
 
 vi.mock('@zenowethu/shared-lib', () => ({
     auth: vi.fn(),
-}));
-
-vi.mock('@zenowethu/shared-lib/notifications/service', () => ({
+    logger: {
+        error: vi.fn(),
+        info: vi.fn(),
+    },
     executeNotificationRetry: vi.fn(),
 }));
 

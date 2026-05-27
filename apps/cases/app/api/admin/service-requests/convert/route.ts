@@ -55,11 +55,9 @@ export async function POST(request: Request) {
                         firstName: consumer.firstName,
                         lastName: consumer.lastName,
                         email: consumer.email,
-                        idNumber: consumer.idNumber || undefined,
+                        idNumber: consumer.idNumber || `TEMP-${Date.now()}`,
                         phone: consumer.phone || '',
-                        province: consumer.province || '',
-                        tenantId: consumer.tenantId || session.user.tenantId,
-                        projectId: consumer.projectId || session.user.projectId,
+                        type: 'Credo Portal',
                     },
                 });
                 clientId = newClient.id;
@@ -70,17 +68,24 @@ export async function POST(request: Request) {
                 });
             }
 
+            // Generate file number (e.g. CRD-2026-XXXX)
+            const year = new Date().getFullYear();
+            const count = await tx.case.count({
+                where: { fileNumber: { startsWith: `CRD-${year}` } }
+            });
+            const fileNumber = `CRD-${year}-${String(count + 1).padStart(4, '0')}`;
+
             // 2. Create the Case
             const newCase = await tx.case.create({
                 data: {
-                    clientId,
-                    tenantId: consumer.tenantId || session.user.tenantId,
-                    projectId: consumer.projectId || session.user.projectId,
-                    assignedToId: session.user.id, // Assign to whoever converted it
-                    notes: `Auto-generated from Credo Service Request: ${serviceReq.services}`,
-                    dhsStatus: 'UNKNOWN',
-                    dCCPStatus: 'NOT_STARTED',
-                    systemStatus: 'LEAD',
+                    fileNumber,
+                    clientId: clientId!,
+                    status: 'NEW_LEAD',
+                    description: `Credo Request: ${serviceReq.services}`,
+                    services: serviceReq.services || '',
+                    totalDebtAmount: serviceReq.total,
+                    acquisitionType: 'Credo Portal',
+                    assignedToId: session.user.id,
                 },
             });
             newCaseId = newCase.id;

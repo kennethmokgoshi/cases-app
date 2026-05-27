@@ -76,6 +76,13 @@ type CaseDetail = {
     partnerName: string | null;
     partnerBranch: string | null;
     r350Status: string;
+    r350PaidDate: string | null;
+    r350PaidRef: string | null;
+    r350Waived: boolean;
+    r350WaivedAt: string | null;
+    r350WaivedReason: string | null;
+    r350PaidBy: { firstName: string; lastName: string } | null;
+    r350WaivedBy: { firstName: string; lastName: string } | null;
     serviceFeeCollectedBy: string;
     partnerSplitPercent: number;
     // DHS Information
@@ -400,7 +407,46 @@ export default function CaseDetailPage() {
     const [isEditingNextUpdate, setIsEditingNextUpdate] = useState(false);
     const [customNextUpdateDate, setCustomNextUpdateDate] = useState<string>('');
 
+    // --- R350 modal state ---
+    const [r350Modal, setR350Modal] = useState<'pay' | 'waive' | null>(null);
+    const [r350PaidRef, setR350PaidRef] = useState('');
+    const [r350PaidDate, setR350PaidDate] = useState('');
+    const [r350WaiveReason, setR350WaiveReason] = useState('');
+    const [r350Saving, setR350Saving] = useState(false);
 
+    async function handleR350Action(action: 'pay' | 'waive' | 'reset') {
+        if (!caseData) return;
+        setR350Saving(true);
+        try {
+            const body: Record<string, unknown> = { action };
+            if (action === 'pay') {
+                if (r350PaidDate) body.paidDate = new Date(r350PaidDate).toISOString();
+                if (r350PaidRef.trim()) body.paidRef = r350PaidRef.trim();
+            } else if (action === 'waive') {
+                body.reason = r350WaiveReason.trim();
+            }
+            const res = await fetch(`/api/cases/${caseData.id}/r350`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const json = await res.json();
+            if (!res.ok) { toast.error(json.error ?? 'Failed to update R350'); return; }
+            setCaseData((prev) => prev ? { ...prev, ...json } : prev);
+            setR350Modal(null);
+            setR350PaidRef('');
+            setR350PaidDate('');
+            setR350WaiveReason('');
+            toast.success(
+                action === 'pay' ? 'R350 marked as paid' :
+                action === 'waive' ? 'R350 waived' : 'R350 reset to Pending'
+            );
+        } catch {
+            toast.error('Network error — please try again');
+        } finally {
+            setR350Saving(false);
+        }
+    }
 
     // Track client-side hydration
     useEffect(() => {
@@ -1941,15 +1987,85 @@ export default function CaseDetailPage() {
                                 <div>
                                     <span className="text-xs text-gray-500 uppercase">R350 Status</span>
                                     <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Admin Fee</p>
-                                    <p className={`${caseData.r350Status === 'NOT_APPLICABLE' ? 'text-gray-400' :
-                                        caseData.r350Status === 'PAID' ? 'text-green-400' :
-                                            caseData.r350Status === 'PENDING' ? 'text-yellow-400' : 'text-white'
-                                        }`}>
-                                        {caseData.r350Status === 'NOT_APPLICABLE' ? 'N/A (B2B)' :
-                                            caseData.r350Status === 'PAID' ? '✅ Paid' :
-                                                caseData.r350Status === 'PENDING' ? '⏳ Pending' :
-                                                    caseData.r350Status === 'TOLD' ? '📞 Told' : caseData.r350Status}
-                                    </p>
+
+                                    {/* Status badge */}
+                                    {caseData.r350Status === 'NOT_APPLICABLE' ? (
+                                        <p className="text-gray-400 text-sm">N/A (B2B)</p>
+                                    ) : caseData.r350Waived ? (
+                                        <div>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400">
+                                                Waived
+                                            </span>
+                                            {caseData.r350WaivedReason && (
+                                                <p className="text-gray-400 text-xs mt-1 italic">{caseData.r350WaivedReason}</p>
+                                            )}
+                                            {caseData.r350WaivedAt && (
+                                                <p className="text-gray-500 text-xs">{new Date(caseData.r350WaivedAt).toLocaleDateString('en-ZA')}</p>
+                                            )}
+                                            {caseData.r350WaivedBy && (
+                                                <p className="text-gray-500 text-xs">by {caseData.r350WaivedBy.firstName} {caseData.r350WaivedBy.lastName}</p>
+                                            )}
+                                        </div>
+                                    ) : (caseData.r350Status === 'PAID_R350' || caseData.r350Status === 'FILE_PAID') ? (
+                                        <div>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400">
+                                                ✓ Paid
+                                            </span>
+                                            {caseData.r350PaidDate && (
+                                                <p className="text-gray-400 text-xs mt-1">{new Date(caseData.r350PaidDate).toLocaleDateString('en-ZA')}</p>
+                                            )}
+                                            {caseData.r350PaidRef && (
+                                                <p className="text-gray-500 text-xs font-mono">Ref: {caseData.r350PaidRef}</p>
+                                            )}
+                                            {caseData.r350PaidBy && (
+                                                <p className="text-gray-500 text-xs">by {caseData.r350PaidBy.firstName} {caseData.r350PaidBy.lastName}</p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                caseData.r350Status === 'WAITING_R350' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                caseData.r350Status === 'TOLD_R350' ? 'bg-blue-500/20 text-blue-400' :
+                                                'bg-amber-500/20 text-amber-400'
+                                            }`}>
+                                                {caseData.r350Status === 'WAITING_R350' ? '⏳ Waiting' :
+                                                 caseData.r350Status === 'TOLD_R350' ? '📞 Told' :
+                                                 '⏳ Pending'}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Action buttons — only for B2C, non-paid, non-waived */}
+                                    {caseData.acquisitionType !== 'B2B' && (
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {(caseData.r350Status !== 'PAID_R350' && caseData.r350Status !== 'FILE_PAID' && !caseData.r350Waived) && (
+                                                <>
+                                                    <button
+                                                        onClick={() => { setR350PaidDate(new Date().toISOString().slice(0, 10)); setR350Modal('pay'); }}
+                                                        className="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                                                    >
+                                                        Mark Paid
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setR350Modal('waive')}
+                                                        className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors"
+                                                    >
+                                                        Waive
+                                                    </button>
+                                                </>
+                                            )}
+                                            {(isAdmin || session?.user?.isExecutive) &&
+                                             (caseData.r350Status === 'PAID_R350' || caseData.r350Status === 'FILE_PAID' || caseData.r350Waived) && (
+                                                <button
+                                                    onClick={() => handleR350Action('reset')}
+                                                    disabled={r350Saving}
+                                                    className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400 hover:bg-gray-500/30 transition-colors disabled:opacity-50"
+                                                >
+                                                    Reset
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <span className="text-xs text-gray-500 uppercase">Service Fee</span>
@@ -4053,6 +4169,87 @@ export default function CaseDetailPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                 </svg>
                                 Confirm &amp; Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── R350 — Mark Paid Modal ─────────────────────────────────── */}
+            {r350Modal === 'pay' && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-zeno-dark border border-zeno-blue/50 rounded-xl w-full max-w-md">
+                        <div className="px-6 py-4 border-b border-zeno-blue/40 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-base font-bold text-white">Mark R350 as Paid</h2>
+                                <p className="text-xs text-gray-400 mt-0.5">Record the date and reference of the R350 admin fee payment</p>
+                            </div>
+                            <button onClick={() => setR350Modal(null)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Payment Date <span className="text-gray-500">(defaults to today)</span></label>
+                                <input
+                                    type="date"
+                                    value={r350PaidDate}
+                                    onChange={(e) => setR350PaidDate(e.target.value)}
+                                    className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zeno-cyan/50"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Payment Reference <span className="text-gray-500">(optional)</span></label>
+                                <input
+                                    type="text"
+                                    value={r350PaidRef}
+                                    onChange={(e) => setR350PaidRef(e.target.value)}
+                                    placeholder="e.g. Bank ref, receipt number"
+                                    className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-zeno-cyan/50"
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t border-zeno-blue/40 flex justify-end gap-3">
+                            <button onClick={() => setR350Modal(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                            <button
+                                onClick={() => handleR350Action('pay')}
+                                disabled={r350Saving}
+                                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg transition-colors text-sm"
+                            >
+                                {r350Saving ? 'Saving…' : 'Confirm Payment'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── R350 — Waive Modal ─────────────────────────────────────── */}
+            {r350Modal === 'waive' && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-zeno-dark border border-zeno-blue/50 rounded-xl w-full max-w-md">
+                        <div className="px-6 py-4 border-b border-zeno-blue/40 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-base font-bold text-white">Waive R350 Admin Fee</h2>
+                                <p className="text-xs text-gray-400 mt-0.5">The R350 requirement will be removed for this client. A reason is required.</p>
+                            </div>
+                            <button onClick={() => setR350Modal(null)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+                        </div>
+                        <div className="p-6">
+                            <label className="block text-xs text-gray-400 mb-1">Reason for waiving <span className="text-red-400">*</span></label>
+                            <textarea
+                                value={r350WaiveReason}
+                                onChange={(e) => setR350WaiveReason(e.target.value)}
+                                rows={3}
+                                placeholder="e.g. Long-standing client, management decision, hardship case…"
+                                className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-zeno-cyan/50 resize-none"
+                            />
+                        </div>
+                        <div className="px-6 py-4 border-t border-zeno-blue/40 flex justify-end gap-3">
+                            <button onClick={() => setR350Modal(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                            <button
+                                onClick={() => handleR350Action('waive')}
+                                disabled={r350Saving || !r350WaiveReason.trim()}
+                                className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg transition-colors text-sm"
+                            >
+                                {r350Saving ? 'Saving…' : 'Confirm Waiver'}
                             </button>
                         </div>
                     </div>

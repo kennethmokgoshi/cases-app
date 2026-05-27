@@ -1,22 +1,31 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-<<<<<<< HEAD
-> Last updated: 2026-05-23 (Fix: SMTP 550 error — session user email was overriding authorised sender)
+> Last updated: 2026-05-27 (R350 Tracking + Commission Tier System)
 
 ---
 
-### Fix: SMTP 550 "cannot send from" Error on POA and Invoice Emails (2026-05-23)
-- [x] **`apps/cases/app/api/cases/[id]/poa/route.ts`** — Removed `fromEmail: session.user.email` override. The logged-in user's email was being set as the SMTP `From:` address but the mail server (`mail.zenowethu.co.za`) only allows sending from the authenticated account (`transfer@zenowethu.co.za`), causing a 550 rejection.
-- [x] **`apps/cases/app/api/finance/invoices/[id]/send/route.ts`** — Same fix applied to the invoice send route.
-- [x] **`apps/cases/lib/email-with-attachments.ts`** — Updated `from` header construction: when `fromName` is supplied, formats the header as `"Name" <configured-from-address>` so the sender's name still appears in the client's inbox without violating SMTP relay rules.
+### R350 Tracking & Commission Tier System (2026-05-27)
 
----
+**R350 Payment & Waiver Tracking**
+- [x] **`packages/database/prisma/schema.prisma`** — Added 7 new fields to `Case` model: `r350PaidDate`, `r350PaidRef`, `r350PaidById`, `r350Waived`, `r350WaivedById`, `r350WaivedAt`, `r350WaivedReason` + User back-relations (`r350PaidBy`, `r350WaivedBy`, and corresponding User-side arrays).
+- [x] **`packages/database/prisma/migrations/20260527_add_r350_tracking_and_commission_tiers/migration.sql`** — New migration applied to production DB. Also resolved pre-existing failed migration `20260525_add_lead_model` (Lead table already existed).
+- [x] **`apps/cases/app/api/cases/[id]/r350/route.ts`** — New `PATCH /api/cases/[id]/r350` endpoint. Three actions: `pay` (records date, ref, who), `waive` (records reason, who, when), `reset` (admin/executive only — reverts to PENDING). `GET /api/cases/[id]/r350` returns current status detail. Zod-validated, auth-guarded, B2B cases blocked (r350 not applicable).
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — R350 section completely replaced: shows paid date + ref + who recorded it, waiver badge + reason + date + who waived. Action buttons: "Mark Paid" (opens modal with date + ref fields), "Waive" (opens modal requiring a reason), "Reset" (admin/executive only). Modals added for both pay and waive flows.
 
-### Fix: Referral Case Not Added to Referrer Sub-Project (2026-05-23)
-- [x] **`apps/cases/app/api/cases/route.ts`** — After client upsert, now fetches the referrer's `projectId` and includes it as a secondary `CaseProject` entry during case creation. Previously the case was linked to the `Referrer` record but never appeared in their project folder.
-=======
-> Last updated: 2026-05-27 (Overdue Case Scan & Follow-Up Automation)
+**Commission Tier Auto-Calculation**
+- [x] **`packages/shared-lib/src/referrer-commission.ts`** — Added `CommissionType` type, `COMMISSION_TYPES` array, `COMMISSION_TYPE_LABELS`, volume tier constants (`VOLUME_TIER_LOW_AMOUNT=200`, `VOLUME_TIER_HIGH_AMOUNT=300`, `VOLUME_TIER_THRESHOLD=10`), and `calculateCommissionAmount(commissionType, fixedAmount, totalReferralCount)` function. Rules: FIXED uses the configured amount (R200/R300/R500/custom); VOLUME_BASED auto-scales: <10 referrals=R200, ≥10=R300. Prisma Decimal-compatible.
+- [x] **`packages/database/prisma/schema.prisma`** — Added `commissionType String @default("FIXED")` and `fixedCommissionAmount Decimal?` to `Referrer` model.
+- [x] **`apps/cases/app/api/cases/[id]/status/route.ts`** — Commission amount now auto-calculated when stage becomes eligible. Fetches referrer's `commissionType` and `fixedCommissionAmount`, counts total referrals, calls `calculateCommissionAmount`. Never overwrites an already-paid commission amount.
+- [x] **`apps/cases/app/api/admin/referrers/route.ts`** — `CreateSchema` updated: added `commissionType` + `fixedCommissionAmount` fields.
+- [x] **`apps/cases/app/api/admin/referrers/[id]/route.ts`** — `PatchSchema` updated: same fields.
+- [x] **`apps/cases/app/(authenticated)/admin/referrers/page.tsx`** — Add/Edit Referrer modal: new "Commission Rate" section with Fixed/Volume-Based toggle, R200/R300/R500 quick-select chips, custom amount input. Detail drawer shows commission type and rate. Type updated to include `commissionType` + `fixedCommissionAmount`.
+- [x] **`apps/cases/app/(authenticated)/admin/referrers/[id]/page.tsx`** — Quick-info panel updated to show Commission Type badge and Rate. Type updated to include new fields.
+
+**Tests**
+- [x] **`packages/shared-lib/src/referrer-commission.test.ts`** — 14 new tests covering: fixed amount, Decimal-object compatibility, null fallback, null/undefined commissionType, volume low/high tier, volume at exact threshold, VOLUME_BASED ignores fixedAmount, status-to-stage mapping, eligibility checks. All passing.
+- [x] **`apps/cases/app/api/cases/[id]/r350/route.test.ts`** — 9 new tests covering: 401, 404, B2B block (422), pay defaults, pay with date+ref, waive with reason, empty reason (422), non-admin reset rejection (403), admin reset success. All passing.
+- **Total tests: 287 (cases app) + 233 (shared-lib) = 520 — all passing.**
 
 ---
 
@@ -78,7 +87,18 @@
 - [x] **`apps/cases/lib/form17w-pdf.ts`** — Added PDF generation logic for Form 17.W (Withdrawal from Debt Review).
 - [x] **`apps/cases/app/api/cases/[id]/debt-review/generate/route.ts`** — Updated API to support generating Form 17.W.
 - [x] **`apps/cases/app/(authenticated)/cases/[id]/DebtReviewTab.tsx`** — Added Form 17.W to the UI so staff can generate and manage it.
->>>>>>> 579ef62 (feat: complete monorepo Sprints 1-5, POPIA audit, DB pool optimization, and smart multi-zone cross-app routing)
+
+---
+
+### Fix: SMTP 550 "cannot send from" Error on POA and Invoice Emails (2026-05-23)
+- [x] **`apps/cases/app/api/cases/[id]/poa/route.ts`** — Removed `fromEmail: session.user.email` override. The logged-in user's email was being set as the SMTP `From:` address but the mail server (`mail.zenowethu.co.za`) only allows sending from the authenticated account (`transfer@zenowethu.co.za`), causing a 550 rejection.
+- [x] **`apps/cases/app/api/finance/invoices/[id]/send/route.ts`** — Same fix applied to the invoice send route.
+- [x] **`apps/cases/lib/email-with-attachments.ts`** — Updated `from` header construction: when `fromName` is supplied, formats the header as `"Name" <configured-from-address>` so the sender's name still appears in the client's inbox without violating SMTP relay rules.
+
+---
+
+### Fix: Referral Case Not Added to Referrer Sub-Project (2026-05-23)
+- [x] **`apps/cases/app/api/cases/route.ts`** — After client upsert, now fetches the referrer's `projectId` and includes it as a secondary `CaseProject` entry during case creation. Previously the case was linked to the `Referrer` record but never appeared in their project folder.
 
 ---
 
