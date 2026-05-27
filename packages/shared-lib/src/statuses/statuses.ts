@@ -232,6 +232,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
 
     // 5. ADVANCED STAGE
     {
+        code: 'ZDM_CLIENT',
+        name: 'ZDM Client',
+        category: 'ADVANCED',
+        description: 'Consumer is already registered with Zenowethu Debt Management (NCRDC3693) on DHS — no transfer needed',
+        slaEnabled: true,
+        slaDays: 3,
+        isOverdueState: false },
+    {
         code: 'FORM_177_SENT',
         name: 'Form 17.7 Sent',
         category: 'ADVANCED',

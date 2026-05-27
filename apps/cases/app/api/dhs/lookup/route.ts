@@ -387,7 +387,16 @@ export async function POST(request: Request) {
                         }
                     }
 
-                    // Persist to case — consumer IS linked on DHS → Not Requested via DHS
+                    // === ZDM Client check: if scraped DC is already our own NCRDC, consumer is with us ===
+                    const dcSettingsAf = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
+                    const ownNcrdcAf = (dcSettingsAf.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                    const isZdmClient = !!data.ncrdcNo && data.ncrdcNo.trim().toUpperCase() === ownNcrdcAf;
+
+                    if (isZdmClient) {
+                        logger.info(`✅ [DHS auto-fill] Scraped DC (${data.ncrdcNo}) matches own NCRDC — setting status to ZDM_CLIENT`);
+                    }
+
+                    // Persist to case — consumer IS linked on DHS
                     if (caseId) {
                         await prisma.case.update({
                             where: { id: caseId },
@@ -402,14 +411,23 @@ export async function POST(request: Request) {
                                 dcEmail:           data.dcEmail,
                                 lastKnownEmail:    lastUsedEmail,
                                 declineReason:     data.declineReason || null,
-                                status:            'NOT_REQUESTED_VIA_DHS',
-                                dhsStatus:         'Not Requested via DHS',
-                                nextUpdate:        addWorkingDays(new Date(), 2),
-                                updatedBy:         attribution
+                                // ZDM Client if already ours, otherwise Not Requested via DHS
+                                status:    isZdmClient ? 'ZDM_CLIENT' : 'NOT_REQUESTED_VIA_DHS',
+                                dhsStatus: isZdmClient ? 'ZDM Client'  : 'Not Requested via DHS',
+                                nextUpdate: addWorkingDays(new Date(), isZdmClient ? 3 : 2),
+                                updatedBy: attribution
                             },
                         });
 
-                        if (data.declineReason) {
+                        if (isZdmClient) {
+                            await prisma.caseComment.create({
+                                data: {
+                                    caseId,
+                                    userId: actingUserId || '',
+                                    content: `[SYSTEM] DHS Check: Consumer is already registered under Zenowethu Debt Management (${ownNcrdcAf}) on DHS. Status set to ZDM Client — no transfer request needed.`
+                                }
+                            });
+                        } else if (data.declineReason) {
                             await prisma.caseComment.create({
                                 data: {
                                     caseId,
@@ -422,12 +440,15 @@ export async function POST(request: Request) {
 
                     result = {
                         success: true,
+                        isZdmClient,
                         data: { ...data, lastUsedEmail },
                         filledFields,
                         emptyFields,
-                        message: emptyFields.length > 0
-                            ? `Partial auto-fill: ${filledFields.length} of ${filledFields.length + emptyFields.length} fields populated.`
-                            : 'DHS Information Auto-filled successfully.',
+                        message: isZdmClient
+                            ? `ZDM Client — this consumer is already registered under Zenowethu Debt Management (${ownNcrdcAf}) on DHS.`
+                            : emptyFields.length > 0
+                                ? `Partial auto-fill: ${filledFields.length} of ${filledFields.length + emptyFields.length} fields populated.`
+                                : 'DHS Information Auto-filled successfully.',
                     };
                 }
             }
@@ -439,11 +460,21 @@ export async function POST(request: Request) {
             if (result.found && result.consumer && caseId) {
                 const consumer = result.consumer;
                 const dc = result.debtCounsellor;
-                
+
+                // === ZDM Client check: if scraped DC is already our own NCRDC, consumer is with us ===
+                const dcSettingsSr = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
+                const ownNcrdcSr = (dcSettingsSr.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                const scrapedNcrdcSr = (dc?.ncrRegistrationNo || consumer.debtCounsellor || '').trim().toUpperCase();
+                const isZdmClientSr = !!scrapedNcrdcSr && scrapedNcrdcSr === ownNcrdcSr;
+
+                if (isZdmClientSr) {
+                    logger.info(`✅ [DHS search] Scraped DC (${scrapedNcrdcSr}) matches own NCRDC — setting status to ZDM_CLIENT`);
+                }
+
                 await prisma.case.update({
                     where: { id: caseId },
                     data: {
-                        ncrdcNo: dc?.registrationNo || null,
+                        ncrdcNo: dc?.ncrRegistrationNo || null,
                         debtCounsellorName: dc?.fullName || consumer.debtCounsellor,
                         dcTradingName: dc?.tradingName || null,
                         dcMobile: dc?.mobile || null,
@@ -457,14 +488,22 @@ export async function POST(request: Request) {
                         lastUsedTel: dc?.tel || null,
                         lastKnownEmail: dc?.email || null,
                         declineReason: result.declineReason || null,
-                        // Request status is separate from consumer status
-                        status: 'NOT_REQUESTED_VIA_DHS',
-                        dhsStatus: 'Not Requested via DHS',
+                        // ZDM Client if already ours, otherwise Not Requested via DHS
+                        status:    isZdmClientSr ? 'ZDM_CLIENT'   : 'NOT_REQUESTED_VIA_DHS',
+                        dhsStatus: isZdmClientSr ? 'ZDM Client'   : 'Not Requested via DHS',
                         updatedBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined
                     }
                 });
 
-                if (result.declineReason) {
+                if (isZdmClientSr) {
+                    await prisma.caseComment.create({
+                        data: {
+                            caseId,
+                            userId: actingUserId || '',
+                            content: `[SYSTEM] DHS Check: Consumer is already registered under Zenowethu Debt Management (${ownNcrdcSr}) on DHS. Status set to ZDM Client — no transfer request needed.`
+                        }
+                    });
+                } else if (result.declineReason) {
                     await prisma.caseComment.create({
                         data: {
                             caseId,
@@ -473,6 +512,13 @@ export async function POST(request: Request) {
                         }
                     });
                 }
+
+                // Attach isZdmClient to result so UI can react
+                result.isZdmClient = isZdmClientSr;
+                if (isZdmClientSr) {
+                    result.message = `ZDM Client — this consumer is already registered under Zenowethu Debt Management (${ownNcrdcSr}) on DHS.`;
+                }
+
                 logger.info(`[DHS API] Updated case ${caseId} with DHS info`);
             } else if (!result.found && caseId) {
                 // Automation: If search returns no records, set status to NOT_LINKED
