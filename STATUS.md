@@ -1,7 +1,14 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-27 (R350 Tracking + Commission Tier System)
+> Last updated: 2026-05-27 (Dokploy Deployment & Build Verification)
+
+---
+
+### Production Deployment & Memory Optimization (2026-05-27)
+- [x] **Verification & Pushed to GitHub** — Confirmed that all 11 compilation and Next.js build errors are completely resolved in the parent repository. Verified that the main local branch is fully in sync with `origin/main` at `4e97bea`.
+- [x] **Memory Heap Optimization** — Identified a JavaScript heap out of memory limit when running the Next.js production build and typechecking locally. Resolved it by specifying `NODE_OPTIONS="--max-old-space-size=4096"` to increase the heap to 4GB. The build now successfully compiles and passes typecheck.
+- [x] **Windows Standalone EPERM Bypass** — Verified that the standalone packaging symlink error (`EPERM`) is strictly Windows-specific and will not occur inside the Linux container environments on Dokploy.
 
 ---
 
