@@ -25,11 +25,13 @@ export async function DELETE(
 
         // Delete file from disk
         if (resource.fileUrl) {
-            // Remove leading slash if present
-            const relativePath = resource.fileUrl.startsWith('/') ? resource.fileUrl.substring(1) : resource.fileUrl;
-            const fullPath = join(process.cwd(), 'public', relativePath);
+            // fileUrl is like /uploads/resources/filename — map to storage/uploads/resources/filename
+            const urlPath = resource.fileUrl.startsWith('/uploads/')
+                ? resource.fileUrl.substring('/uploads/'.length)
+                : resource.fileUrl.startsWith('/') ? resource.fileUrl.substring(1) : resource.fileUrl;
+            const fullPath = join(process.cwd(), 'storage', 'uploads', urlPath);
 
-            // Only delete if it exists and is in uploads/resources (safety check)
+            // Only delete if it exists and is in the uploads directory (safety check)
             if (existsSync(fullPath) && fullPath.includes('uploads')) {
                 try {
                     await unlink(fullPath);

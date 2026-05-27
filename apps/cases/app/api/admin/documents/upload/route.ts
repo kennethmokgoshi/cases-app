@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         }
 
         const file = files[0];
-        const uploadsDir = join(process.cwd(), 'public', 'uploads', 'resources');
+        const uploadsDir = join(process.cwd(), 'storage', 'uploads', 'resources');
 
         if (!existsSync(uploadsDir)) {
             await mkdir(uploadsDir, { recursive: true });
