@@ -1,7 +1,35 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-27 (Dokploy Deployment & Build Verification)
+> Last updated: 2026-05-27 (UI Safety, ZDM Client Detection, Admin Dashboard)
+
+---
+
+### UI Safety, ZDM Client Detection & Admin Dashboard Completions (2026-05-27)
+
+**Fix: Insurance app DCCP route params (Next.js 16)**
+- [x] **`apps/insurance/app/api/dccp/policies/[id]/status/route.ts`** — Fixed async params signature (`params: Promise<{ id: string }>` + `await params`). Was causing Dokploy build failures.
+- [x] **`apps/insurance/app/api/dccp/policies/[id]/submit/route.ts`** — Same fix applied proactively.
+
+**ZDM Client Detection in "Check DHS" flow**
+- [x] **`packages/shared-lib/src/statuses/statuses.ts`** — Added new `ZDM_CLIENT` status at top of Stage 5 (ADVANCED) category. Description: "Consumer is already registered with Zenowethu Debt Management (NCRDC3693) on DHS — no transfer needed". SLA 3 days.
+- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — Added NCRDC3693 detection to both the `auto_fill` and `search` action branches. When the scraped current DC on DHS matches Zenowethu's own NCRDC (resolved via SystemSettings → env var → `NCRDC3693` fallback), the case is set to `ZDM_CLIENT` status instead of `NOT_REQUESTED_VIA_DHS`. A [SYSTEM] comment is added explaining what was detected. Latent bug fixed: `search` branch was referencing `dc?.registrationNo` which doesn't exist — corrected to `dc?.ncrRegistrationNo`.
+
+**Replace all `alert()` / `window.confirm()` with toast notifications**
+- [x] **`apps/cases/app/(authenticated)/admin/service-requests/convert-button.tsx`** — 2 `alert()` calls → `toast.error()`
+- [x] **`apps/credo/app/(dashboard)/credit-report/dispute-button.tsx`** — 3 `alert()` calls → `toast.success()` / `toast.error()`
+- [x] **`apps/cases/app/(authenticated)/admin/partners/page.tsx`** — 1 `alert()` → `toast.error()`; consolidated `@zenowethu/ui` imports
+- [x] **`apps/credo/app/(dashboard)/upgrade/page.tsx`** — 2 `alert()` → `toast.error()` / `toast.success()` with descriptive messages
+- [x] **`apps/insurance/app/(authenticated)/dccp/page.tsx`** — 2 `alert()` → `toast.error()`
+- ✅ Zero `alert()` or `window.confirm()` calls remain in any `.tsx` file across all apps.
+
+**Admin Dashboard — Unanswered Messages, Automation Runs, Failed Notifications**
+- [x] **`apps/cases/app/(authenticated)/admin/unanswered-emails/page.tsx`** — Fixed role guard from `role !== 'ADMIN'` to `!isAdmin` (platform convention). Page was already built but inaccessible due to wrong check.
+- [x] **`apps/cases/app/(authenticated)/admin/page.tsx`** — Added 3 new tiles: "Unanswered Messages" (→ `/admin/unanswered-emails`), "Automation Runs" (→ `/admin/automations`), "Failed Notifications" (→ `/admin/notifications`). Both automations and unanswered-emails pages were already built but not linked from the admin hub.
+- [x] **`apps/cases/app/(authenticated)/admin/notifications/page.tsx`** — New page built. Shows failed/pending/review notification queue table with channel icons (Email/SMS/WhatsApp), status badges, case/client links, retry count (red when ≥3). Actions: Retry Now, Mark as Handled (→ SUCCESS), Cancel. Detail modal shows full message body and last error.
+- [x] **`apps/cases/app/api/admin/notifications/failed/route.ts`** — Fixed auth: `role !== 'ADMIN'` → `!isAdmin`.
+- [x] **`apps/cases/app/api/admin/notifications/failed/[id]/retry/route.ts`** — Same auth fix.
+- [x] **`apps/cases/app/api/admin/notifications/failed/[id]/review/route.ts`** — Same auth fix.
 
 ---
 
@@ -749,12 +777,14 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 
 | Module | Status | Next Action |
 |--------|:------:|-------------|
-| Cases App | 97% | code dedup remaining; Referrer intake simplified |
+| Cases App | 98% | AI Debt Review Removal trigger still highest operational priority |
 | Auth & SSO | 92% | Role hierarchy complete; upgrade NextAuth stable (blocked upstream) |
-| B2B Portal | 90% | Analytics depth needs work |
-| Notifications | 80% | Multi-channel sending works; needs tests + retry logic |
+| B2B Portal | 91% | Analytics depth needs work |
+| Notifications | 92% | Retry queue wired; failed notifications dashboard built; notification tests remain |
+| Admin Dashboard | 96% | Unanswered Messages, Automation Runs, Failed Notifications all accessible |
+| DHS Automation | 96% | ZDM Client detection added; auto_fill + search branches now protected |
 | Legal App | 100% | E2E complete (2026-02-27) ✅ |
-| Insurance App | 100% | E2E complete (2026-02-27) ✅ |
+| Insurance App | 99% | DCCP route params fixed; toast notifications fixed |
 | Finance App | 100% | E2E complete (2026-02-27) ✅ |
 | Forensic Audit App | 100% | E2E complete (2026-02-27) ✅ |
 | Reporting | 95% | Advanced Analytics dashboard + SLA dashboard + Excel export completed (2026-02-27) |
