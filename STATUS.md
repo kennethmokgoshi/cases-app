@@ -1,7 +1,50 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-28 (DHS Decline Handler — automated response to DHS declines)
+> Last updated: 2026-05-28 (15-status Workflow Automation Engine + shared helpers + cron fixes)
+
+---
+
+### 15-Status Workflow Automation Engine (2026-05-28)
+
+- [x] **`packages/shared-lib/src/automation/workflow-engine.ts`** — New shared helper library for workflow automation. Exports: `getOverdueCases()`, `getOverdueLetsatsiCompleted()`, `hasDocument()`, `hasDocumentSince()`, `hasInboundKeyword()`, `updateCaseStatus()`, `setNextUpdate()`, `addSystemComment()`, `sendConsumerMessage()`, `sendDCEmail()`, `notifyManagers()`, `resolveDocPath()`, `getDHSDocuments()`. Exported from `packages/shared-lib/src/index.ts`.
+- [x] **`apps/cases/app/api/cron/workflow-automation/route.ts`** — New `POST /api/cron/workflow-automation` cron endpoint. Processes overdue cases (nextUpdate < now OR null) across all 15 workflow statuses. Every case gets `nextUpdate = +3 working days` after each run. Logs to `AutomationRun` as `WORKFLOW_AUTOMATION`.
+
+**15 statuses handled:**
+
+| # | Status | Automation |
+|---|--------|-----------|
+| 1 | `NEW_LEAD` | DHS check — classify result, update status |
+| 2 | `OUTSTANDING_DOCS` | Check GHL + Credo for received docs; re-request if missing |
+| 3 | `REQUESTED_VIA_DHS` | DHS Check Request Status |
+| 4 | `NOT_REQUESTED_VIA_DHS` | Verify ID + POA → Request via DHS |
+| 5 | `DOCUMENTS_EMAILED` | Check for Form 17.7 → Request via DHS; else re-email DC |
+| 6 | `CONSUMER_CONTACTED_DC` | Request via DHS |
+| 7 | `INVOICE_REQUESTED_DC` | Scan GHL for DC invoice attachment; re-request invoice if missing |
+| 8 | `INVOICE_SENT_CONSUMER` | Check for proof of payment; if found → request DHS; else follow-up reminder |
+| 9 | `REJECTED_EMAIL_DOCS` | Request via DHS |
+| 10 | `REJECTED_NOT_CONSENT` | WhatsApp/SMS/email consumer consent reminder |
+| 11 | `REJECTED_OWES_FEES` | Request invoice from DC |
+| 12 | `IRFDC_*` (1M–4M+) | Check for invoice; re-request with escalation per month |
+| 13 | `INVSNT_*` (1M–4M+) | Check for proof of payment; follow-up per month |
+| 14 | `ACCEPTED_VIA_DHS` | Notify managers in-app; check for Form 17.7 |
+| 15 | `COMPLETED` (Letsatsi, Fridays) | Email report to mmamy@letsatsifinance.co.za → status → SUBMITTED |
+
+**Dokploy: Add new cron job:**
+| Schedule | Endpoint |
+|---|---|
+| `0 7 * * *` (daily 7am) | `POST /api/cron/workflow-automation` with `X-Cron-Secret` header |
+
+---
+
+### R350 Cron + DHS Check-Not-Requested Fixes (2026-05-28)
+
+- [x] **`apps/cases/app/api/cron/r350-reminder/route.ts`** — Fixed: added `acquisitionType: { not: 'B2B' }` and exclusion of `NOT_LINKED`, `NEW_LEAD`, `DUPLICATE`, `COMPLETED`, `CASE_WON`, `CASE_LOST`, `WITHDRAWN` statuses. R350 is a B2C-only admin fee.
+- [x] **`apps/cases/app/api/cron/dhs-recheck/route.ts`** — Fixed: `isDeleted: false` → `deletedAt: null`.
+- [x] **`apps/cases/app/api/cron/stale-cases/route.ts`** — Fixed: `isDeleted: false` → `deletedAt: null`.
+- [x] **`apps/cases/app/api/cron/document-expiry/route.ts`** — Fixed: `isDeleted: false` → `deletedAt: null`; `createdAt` → `uploadedAt` on Document model.
+- [x] **`apps/cases/app/api/cron/check-not-requested/route.ts`** — New bulk DHS check for overdue `NOT_REQUESTED_VIA_DHS` cases. Calls `checkTransferStatus()` per case, sets nextUpdate +3 working days, logs to `AutomationRun` as `DHS_CHECK_NOT_REQUESTED`.
+- [x] **`apps/cases/middleware.ts`** — Added cron bypass: `/api/cron/*` routes pass through when `x-cron-secret` header matches `CRON_SECRET` env var (before auth check). Enables Dokploy external scheduling without session auth.
 
 ---
 
