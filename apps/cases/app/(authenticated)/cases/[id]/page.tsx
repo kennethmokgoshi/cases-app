@@ -398,6 +398,14 @@ export default function CaseDetailPage() {
     const [declineReasonAttended, setDeclineReasonAttended] = useState(false);
     const [isSavingDecline, setIsSavingDecline] = useState(false);
     const [isAddingDeclineReason, setIsAddingDeclineReason] = useState(false);
+    const [isHandlingDecline, setIsHandlingDecline] = useState(false);
+    const [declineHandleResult, setDeclineHandleResult] = useState<{
+        success: boolean;
+        category?: string;
+        actionsPerformed?: string[];
+        errors?: string[];
+        statusUpdatedTo?: string | null;
+    } | null>(null);
 
     const [description, setDescription] = useState('');
     const [originalDescription, setOriginalDescription] = useState(''); // Track original for cancel
@@ -3552,31 +3560,77 @@ export default function CaseDetailPage() {
 
                                     if (!isDeclined && !hasReason && !isEditingDhs) return null;
 
+                                    const handleDecline = async () => {
+                                        const reason = caseData.declineReason || declineReason;
+                                        if (!reason?.trim()) {
+                                            toast.error('No decline reason to handle. Please ensure the decline reason is saved first.');
+                                            return;
+                                        }
+                                        setIsHandlingDecline(true);
+                                        setDeclineHandleResult(null);
+                                        try {
+                                            const res = await fetch(`/api/cases/${caseData.id}/dhs-decline/handle`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ declineReason: reason }),
+                                            });
+                                            const data = await res.json();
+                                            setDeclineHandleResult(data);
+                                            if (data.success) {
+                                                toast.success(`Decline handled: ${data.actionsPerformed?.join(', ') || data.category}`);
+                                                // Refresh case data to show updated status
+                                                fetchCase();
+                                            } else {
+                                                toast.error(data.errors?.[0] || 'Decline handling failed');
+                                            }
+                                        } catch {
+                                            toast.error('Network error — please try again');
+                                        } finally {
+                                            setIsHandlingDecline(false);
+                                        }
+                                    };
+
                                     return (
                                         <div className="mt-6 pt-6 border-t border-white/10">
                                             <div className="flex items-center justify-between mb-3">
                                                 <h4 className="text-sm font-semibold text-red-400 flex items-center gap-2">
                                                     <span>🚩</span> Decline Reason
                                                 </h4>
-                                                {!showInput && (
-                                                    <button
-                                                        onClick={() => { setIsAddingDeclineReason(true); setIsEditingDhs(true); }}
-                                                        className="text-xs text-white bg-red-500/20 border border-red-500/50 px-2 py-1 rounded hover:bg-red-500/30 transition-colors"
-                                                    >
-                                                        + Add Reason
-                                                    </button>
-                                                )}
-                                                {(showInput || isEditingDhs) && isEditingDhs && (
-                                                    <label className="text-xs text-gray-400 flex items-center gap-1.5 cursor-pointer">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={editForm.declineReasonAttended}
-                                                            onChange={(e) => setEditForm(prev => ({ ...prev, declineReasonAttended: e.target.checked }))}
-                                                            className="rounded border-white/10 bg-zeno-navy text-zeno-cyan w-3 h-3"
-                                                        />
-                                                        Attended To
-                                                    </label>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    {!showInput && (
+                                                        <button
+                                                            onClick={() => { setIsAddingDeclineReason(true); setIsEditingDhs(true); }}
+                                                            className="text-xs text-white bg-red-500/20 border border-red-500/50 px-2 py-1 rounded hover:bg-red-500/30 transition-colors"
+                                                        >
+                                                            + Add Reason
+                                                        </button>
+                                                    )}
+                                                    {hasReason && !isEditingDhs && (
+                                                        <button
+                                                            onClick={handleDecline}
+                                                            disabled={isHandlingDecline}
+                                                            className="text-xs text-white bg-orange-600/80 border border-orange-500/50 px-2.5 py-1 rounded hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                                        >
+                                                            {isHandlingDecline ? (
+                                                                <>
+                                                                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                                    Handling…
+                                                                </>
+                                                            ) : '⚡ Handle Decline'}
+                                                        </button>
+                                                    )}
+                                                    {(showInput || isEditingDhs) && isEditingDhs && (
+                                                        <label className="text-xs text-gray-400 flex items-center gap-1.5 cursor-pointer">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={editForm.declineReasonAttended}
+                                                                onChange={(e) => setEditForm(prev => ({ ...prev, declineReasonAttended: e.target.checked }))}
+                                                                className="rounded border-white/10 bg-zeno-navy text-zeno-cyan w-3 h-3"
+                                                            />
+                                                            Attended To
+                                                        </label>
+                                                    )}
+                                                </div>
                                             </div>
                                             {showInput && (
                                                 isEditingDhs ? (
@@ -3592,6 +3646,38 @@ export default function CaseDetailPage() {
                                                         {caseData.declineReasonAttended && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded border border-green-500/30 uppercase font-bold">Attended</span>}
                                                     </div>
                                                 )
+                                            )}
+                                            {/* Decline handler result panel */}
+                                            {declineHandleResult && (
+                                                <div className={`mt-3 p-3 rounded-lg border text-xs ${
+                                                    declineHandleResult.success
+                                                        ? 'bg-green-900/10 border-green-500/20 text-green-300'
+                                                        : 'bg-red-900/10 border-red-500/20 text-red-300'
+                                                }`}>
+                                                    <div className="font-semibold mb-1">
+                                                        {declineHandleResult.success ? '✅ Decline handled' : '⚠️ Decline handling issues'}
+                                                        {declineHandleResult.category && (
+                                                            <span className="ml-2 font-normal opacity-70">({declineHandleResult.category.replace(/_/g, ' ')})</span>
+                                                        )}
+                                                    </div>
+                                                    {declineHandleResult.actionsPerformed && declineHandleResult.actionsPerformed.length > 0 && (
+                                                        <ul className="list-disc list-inside space-y-0.5 opacity-90">
+                                                            {declineHandleResult.actionsPerformed.map((a, i) => (
+                                                                <li key={i}>{a}</li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                    {declineHandleResult.errors && declineHandleResult.errors.length > 0 && (
+                                                        <ul className="list-disc list-inside space-y-0.5 mt-1 text-red-400">
+                                                            {declineHandleResult.errors.map((e, i) => (
+                                                                <li key={i}>{e}</li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                    {declineHandleResult.statusUpdatedTo && (
+                                                        <div className="mt-1 opacity-70">Status updated to: {declineHandleResult.statusUpdatedTo.replace(/_/g, ' ')}</div>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     );

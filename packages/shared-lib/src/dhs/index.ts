@@ -22,3 +22,5 @@ export { requestTransfer } from './transfer';
 export { searchConsumer, scrapeDetailedConsumerInfo } from './search';
 export { lookupDCFromNCR, resolveDCEmail } from './ncr-lookup';
 export type { NCRDCLookupResult, DCEmailResolution } from './ncr-lookup';
+export { handleDHSDecline, classifyDeclineReason, extractEmailFromReason } from './decline-handler';
+export type { DeclineCategory, DeclineHandlerResult } from './decline-handler';

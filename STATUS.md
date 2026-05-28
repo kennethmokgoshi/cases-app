@@ -1,7 +1,37 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-27 (UI Safety, ZDM Client Detection, Admin Dashboard)
+> Last updated: 2026-05-28 (DHS Decline Handler — automated response to DHS declines)
+
+---
+
+### DHS Decline Handler — Automated Response to DHS Declines (2026-05-28)
+
+**Core handler**
+- [x] **`packages/shared-lib/src/dhs/decline-handler.ts`** — New `handleDHSDecline()` service. Classifies any DHS decline reason into one of 7 actionable categories and auto-executes the correct response: emails POA+ID (±NCR cert) to the DC, notifies the consumer for consent via Email+WhatsApp/SMS, notifies the consumer of outstanding fees, emails an attorney when their address appears in the decline text, schedules a retry (+7 working days), or escalates to staff with an in-app alert when the reason cannot be classified. Extracts email addresses from decline text to route responses correctly. All actions log to `CaseComment` and update case status + `nextUpdate`.
+- [x] **`packages/shared-lib/src/dhs/decline-handler.test.ts`** — 23 Vitest tests covering all 7 categories, priority ordering (SEND_DOCS_WITH_NCR wins over SEND_DOCS when NCR cert is mentioned), email extraction (found/not found/first-of-many), and edge cases. All passing (256 shared-lib tests total).
+- [x] **`packages/shared-lib/src/dhs/index.ts`** — Exported `handleDHSDecline`, `classifyDeclineReason`, `extractEmailFromReason`, `DeclineCategory`, `DeclineHandlerResult`.
+
+**API endpoint**
+- [x] **`apps/cases/app/api/cases/[id]/dhs-decline/handle/route.ts`** — New `POST /api/cases/[id]/dhs-decline/handle` staff-triggered endpoint. Accepts `{ declineReason }`, verifies case exists, fires `handleDHSDecline()`. Supports `?preview=true` to classify and describe what *will* happen without executing — useful for staff to confirm before acting. Zod-validated, auth-guarded.
+
+**Auto-trigger on DHS check**
+- [x] **`apps/cases/app/api/dhs/lookup/route.ts`** — Replaced the old 5-line inline decline keyword mapping (`if reason includes 'FEE'...`) with a call to `handleDHSDecline()`. Every DHS check that returns `DECLINED` now automatically classifies the reason and sends the appropriate response in the same request. Handler errors are caught non-fatally; result metadata (`declineHandled`, `declineCategory`, `declineActions`) is surfaced back to the caller.
+
+**Staff UI button**
+- [x] **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — Added "⚡ Handle Decline" button in the DHS Decline Reason panel (visible when a reason is saved and not currently editing). Triggers the handle endpoint, shows a loading spinner, then renders a result panel: category label, list of actions performed, errors (if any), updated status. On success, refreshes the full case to reflect new status.
+
+**The 7 categories:**
+
+| Category | Trigger keywords | Automated action |
+|---|---|---|
+| `SEND_DOCS` | "no transfer documents", "please send", "signed and dated POA", "FORM 16", etc. | Email POA + ID to DC (extracted or on-file email) |
+| `SEND_DOCS_WITH_NCR` | "NCR certificate", "valid NCR", "NCR cert" | Email POA + ID + NCR Certificate from admin resources |
+| `CLIENT_CONSENT_NEEDED` | "unable to confirm transfer with client", "client has not consented", "consumer consent", etc. | Email + WhatsApp/SMS consumer to contact their DC |
+| `OUTSTANDING_FEES` | "client owes", "outstanding fees", "balance outstanding", "after-care fees", etc. | Email + WhatsApp/SMS consumer about outstanding fees |
+| `CONTACT_ATTORNEY` | "attorney", "court order", "legal action", etc. | Email attorney at address extracted from decline text |
+| `RESUBMIT_LATER` | "try again", "currently processing", "not yet finalised", etc. | Set nextUpdate +7 working days, no external action |
+| `UNKNOWN` | (none match) | In-app alert to all admins; case comment for manual review |
 
 ---
 
@@ -777,7 +807,7 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 
 | Module | Status | Next Action |
 |--------|:------:|-------------|
-| Cases App | 98% | AI Debt Review Removal trigger still highest operational priority |
+| Cases App | 99% | DHS Decline Handler complete; ignoreBuildErrors removal is next Tier 1 priority |
 | Auth & SSO | 92% | Role hierarchy complete; upgrade NextAuth stable (blocked upstream) |
 | B2B Portal | 91% | Analytics depth needs work |
 | Notifications | 92% | Retry queue wired; failed notifications dashboard built; notification tests remain |

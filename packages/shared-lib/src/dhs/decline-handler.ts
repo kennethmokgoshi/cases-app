@@ -1,0 +1,680 @@
+/**
+ * DHS Decline Reason Handler
+ *
+ * Classifies DHS decline reasons into actionable categories and executes
+ * the appropriate automated response:
+ *   SEND_DOCS            — Email POA + ID to DC (or email in decline text)
+ *   SEND_DOCS_WITH_NCR   — Same + NCR Certificate from admin resources
+ *   CLIENT_CONSENT_NEEDED — Notify consumer via Email + WhatsApp + SMS
+ *   OUTSTANDING_FEES     — Notify consumer of outstanding fees, request invoice
+ *   CONTACT_ATTORNEY     — Email attorney whose address is in the decline text
+ *   RESUBMIT_LATER       — Set next-update +7 working days, no external action
+ *   UNKNOWN              — Log and escalate to staff for manual review
+ */
+
+import { prisma } from '@zenowethu/database';
+import { sendManualMessage } from '../notifications/service';
+import { addWorkingDays } from '../statuses/workingDays';
+import { logger } from '../logger';
+
+export type DeclineCategory =
+    | 'SEND_DOCS'
+    | 'SEND_DOCS_WITH_NCR'
+    | 'CLIENT_CONSENT_NEEDED'
+    | 'OUTSTANDING_FEES'
+    | 'CONTACT_ATTORNEY'
+    | 'RESUBMIT_LATER'
+    | 'UNKNOWN';
+
+export interface DeclineHandlerResult {
+    category: DeclineCategory;
+    emailSent: boolean;
+    smsSent: boolean;
+    whatsappSent: boolean;
+    /** Workflow status the case was updated to, if any */
+    statusUpdatedTo: string | null;
+    actionsPerformed: string[];
+    errors: string[];
+    /** Email address extracted from the decline reason text, if found */
+    extractedEmail: string | null;
+}
+
+// ─── Classification ───────────────────────────────────────────────────────────
+
+/**
+ * Classify a raw DHS decline reason string into one of the 7 actionable categories.
+ * Rules are evaluated in priority order — more specific patterns first.
+ */
+export function classifyDeclineReason(reason: string): DeclineCategory {
+    const r = reason.toUpperCase();
+
+    // NCR Certificate required (check before SEND_DOCS to avoid falling through)
+    if (
+        r.includes('NCR CERTIFICATE') ||
+        r.includes('VALID NCR') ||
+        r.includes('NCR CERT')
+    ) {
+        return 'SEND_DOCS_WITH_NCR';
+    }
+
+    // Documents needed — DC is asking us to email POA and/or ID
+    if (
+        r.includes('NO TRANSFER DOCUMENTS') ||
+        r.includes('PLEASE SEND') ||
+        r.includes('SIGNED AND DATED POA') ||
+        (r.includes('COPY OF') && (r.includes(' ID') || r.includes('IDENTITY'))) ||
+        r.includes('DOCUMENTS HAVE NOT BEEN') ||
+        r.includes('DOCUMENTS NOT RECEIVED') ||
+        r.includes('DOCUMENTS REQUIRED') ||
+        r.includes('SEND POA') ||
+        r.includes('SEND DOCUMENTS') ||
+        r.includes('UPLOAD DOCUMENTS') ||
+        (r.includes('ATTACH') && r.includes('POA')) ||
+        r.includes('FORM 16') ||
+        r.includes('RECENT SIGNED') ||
+        r.includes('BARCODE ID') ||
+        r.includes('SIGNED CONSENT')
+    ) {
+        return 'SEND_DOCS';
+    }
+
+    // Client has not consented or needs to contact their DC directly
+    if (
+        r.includes('UNABLE TO CONFIRM TRANSFER WITH CLIENT') ||
+        r.includes('CLIENT HAS NOT CONSENTED') ||
+        r.includes('CLIENT MUST CONTACT') ||
+        r.includes('CLIENT TO CONTACT') ||
+        r.includes('CONFIRM WITH CLIENT') ||
+        r.includes('NOT YET CONSENTED') ||
+        r.includes('CONSUMER TO CONTACT') ||
+        r.includes('NOT CONSENT') ||
+        r.includes('CONTACT THE CLIENT') ||
+        r.includes('CLIENT CONTACT') ||
+        r.includes('CONSUMER CONSENT') ||
+        r.includes('KINDLY REQUEST THAT CLIENT CONTACTS') ||
+        r.includes('REQUEST THAT CLIENT CONTACT')
+    ) {
+        return 'CLIENT_CONSENT_NEEDED';
+    }
+
+    // Outstanding fees owed to current DC
+    if (
+        r.includes('CLIENT OWES') ||
+        r.includes('OUTSTANDING FEES') ||
+        r.includes('FEES OUTSTANDING') ||
+        r.includes('OWES FEES') ||
+        r.includes('AMOUNT OUTSTANDING') ||
+        r.includes('SETTLEMENT FEE') ||
+        r.includes('AFTER-CARE FEES') ||
+        r.includes('AFTERCARE FEES') ||
+        r.includes('OUTSTANDING AMOUNT') ||
+        r.includes('FEES DUE') ||
+        r.includes('BALANCE OUTSTANDING')
+    ) {
+        return 'OUTSTANDING_FEES';
+    }
+
+    // Legal / attorney involvement
+    if (
+        r.includes('ATTORNEY') ||
+        r.includes('LEGAL ACTION') ||
+        r.includes('COURT ORDER') ||
+        r.includes('SOLICITOR') ||
+        r.includes('LEGAL DEPARTMENT')
+    ) {
+        return 'CONTACT_ATTORNEY';
+    }
+
+    // Try again later — currently being processed
+    if (
+        r.includes('TRY AGAIN') ||
+        r.includes('RESUBMIT') ||
+        r.includes('CURRENTLY PROCESSING') ||
+        r.includes('PENDING FINALIZATION') ||
+        r.includes('NOT YET FINALISED') ||
+        r.includes('NOT YET FINALIZED') ||
+        r.includes('PLEASE TRY LATER')
+    ) {
+        return 'RESUBMIT_LATER';
+    }
+
+    return 'UNKNOWN';
+}
+
+/**
+ * Extract the first valid email address from a decline reason text.
+ * Useful when the DC embeds their email or an attorney's email in the decline text.
+ */
+export function extractEmailFromReason(reason: string): string | null {
+    const match = reason.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+    return match ? match[0] : null;
+}
+
+// ─── Main Handler ─────────────────────────────────────────────────────────────
+
+/**
+ * Handle a DHS decline by classifying the reason and automatically executing
+ * the appropriate response (email, SMS, WhatsApp, status update).
+ *
+ * This is called both automatically on DHS check completion (Rule 10 in
+ * apps/cases/app/api/dhs/lookup/route.ts) and from the manual staff trigger
+ * endpoint at /api/cases/[id]/dhs-decline/handle.
+ */
+export async function handleDHSDecline(params: {
+    caseId: string;
+    declineReason: string;
+    triggeredByUserId?: string;
+}): Promise<DeclineHandlerResult> {
+    const { caseId, declineReason, triggeredByUserId } = params;
+    const log = logger.child ? logger.child({ module: 'decline-handler', caseId }) : logger;
+
+    const result: DeclineHandlerResult = {
+        category: 'UNKNOWN',
+        emailSent: false,
+        smsSent: false,
+        whatsappSent: false,
+        statusUpdatedTo: null,
+        actionsPerformed: [],
+        errors: [],
+        extractedEmail: null,
+    };
+
+    try {
+        const caseData = await prisma.case.findUnique({
+            where: { id: caseId },
+            include: { client: true, documents: true },
+        });
+
+        if (!caseData) {
+            result.errors.push('Case not found');
+            return result;
+        }
+
+        const category = classifyDeclineReason(declineReason);
+        result.category = category;
+        log.info({ category }, `[DHS Decline Handler] Category: ${category}`);
+
+        const extractedEmail = extractEmailFromReason(declineReason);
+        result.extractedEmail = extractedEmail;
+
+        const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`;
+        const clientFirstName = caseData.client.firstName;
+        const idNumber = caseData.client.idNumber;
+        const fileNumber = caseData.fileNumber;
+        const baseUrl =
+            process.env.NEXT_PUBLIC_APP_URL ||
+            process.env.APP_URL ||
+            'https://cases.zenowethu.co.za';
+
+        // DC contact: prefer extracted email from decline text, then known DC emails
+        const dcEmail =
+            extractedEmail ||
+            caseData.preferredDcEmail ||
+            caseData.lastKnownEmail ||
+            caseData.dcEmail;
+        const dcName =
+            caseData.debtCounsellorName ||
+            caseData.dcTradingName ||
+            'Debt Counsellor';
+
+        // Attachment URLs for POA + ID documents
+        const docAttachments = caseData.documents
+            .filter(d => ['ID', 'POA', 'ZENOWETHU_POA'].includes(d.type))
+            .map(d => `${baseUrl}${d.fileUrl}`);
+
+        // ── Category handlers ────────────────────────────────────────────────
+
+        if (category === 'SEND_DOCS' || category === 'SEND_DOCS_WITH_NCR') {
+            await safeUpdateCase(caseId, { status: 'REJECTED_EMAIL_DOCS', nextUpdate: addWorkingDays(new Date(), 3) }, triggeredByUserId);
+            result.statusUpdatedTo = 'REJECTED_EMAIL_DOCS';
+
+            if (!dcEmail) {
+                result.errors.push(
+                    'No DC email address available. Please set the preferred DC email on this case and retry.'
+                );
+            } else {
+                let ncrCertUrl: string | null = null;
+                if (category === 'SEND_DOCS_WITH_NCR') {
+                    const ncrCert = await prisma.documentResource.findFirst({
+                        where: {
+                            OR: [
+                                { name: { contains: 'NCR', mode: 'insensitive' } },
+                                { fileUrl: { contains: 'NCR', mode: 'insensitive' } },
+                                { description: { contains: 'NCR certificate', mode: 'insensitive' } },
+                            ],
+                        },
+                        orderBy: { createdAt: 'desc' },
+                    });
+                    if (ncrCert) {
+                        ncrCertUrl = `${baseUrl}${ncrCert.fileUrl}`;
+                        log.info(`Found NCR certificate: ${ncrCert.name}`);
+                    } else {
+                        result.errors.push(
+                            'NCR Certificate not found in admin resources. Upload it on the Documents & Resources page, then retry.'
+                        );
+                    }
+                }
+
+                const allAttachments = ncrCertUrl
+                    ? [...docAttachments, ncrCertUrl]
+                    : docAttachments;
+                const ncrLine = ncrCertUrl
+                    ? '\n• NCR Certificate of Registration (NCRDC3693)'
+                    : '';
+                const subject = `Re: Transfer Request – ${clientName} (ID: ${idNumber})`;
+                const body = buildSendDocsEmail({
+                    clientName,
+                    idNumber,
+                    fileNumber,
+                    dcName,
+                    declineReason,
+                    ncrLine,
+                });
+
+                const emailResult = await sendManualMessage(
+                    caseId,
+                    'EMAIL',
+                    dcEmail,
+                    body,
+                    subject,
+                    { attachments: allAttachments }
+                );
+                result.emailSent = emailResult.emailSuccess;
+
+                if (emailResult.emailSuccess) {
+                    const withNCR = ncrCertUrl ? ' (including NCR Certificate)' : '';
+                    result.actionsPerformed.push(`Documents emailed to ${dcEmail}${withNCR}`);
+                    await safeUpdateCase(
+                        caseId,
+                        { status: 'DOCUMENTS_EMAILED', nextUpdate: addWorkingDays(new Date(), 5) },
+                        triggeredByUserId
+                    );
+                    result.statusUpdatedTo = 'DOCUMENTS_EMAILED';
+                    await addComment(
+                        caseId,
+                        triggeredByUserId,
+                        `[SYSTEM] DHS Decline Handler: Documents emailed to ${dcEmail}${withNCR}. Status → Documents Emailed. Decline reason: "${declineReason}"`
+                    );
+                } else {
+                    result.errors.push(...emailResult.errors);
+                }
+            }
+        }
+
+        else if (category === 'CLIENT_CONSENT_NEEDED') {
+            await safeUpdateCase(
+                caseId,
+                { status: 'REJECTED_NOT_CONSENT', nextUpdate: addWorkingDays(new Date(), 7) },
+                triggeredByUserId
+            );
+            result.statusUpdatedTo = 'REJECTED_NOT_CONSENT';
+
+            const dcContactLine = dcEmail
+                ? ` at ${dcEmail}`
+                : '';
+            const emailBody = buildConsumerConsentEmail({
+                clientFirstName,
+                dcName,
+                dcContactLine,
+                declineReason,
+            });
+            const smsBody = buildConsentSms({ clientFirstName, dcName, dcContactLine });
+            const subject = `Action Required: Please Contact Your Debt Counsellor – ${clientName}`;
+
+            if (caseData.client.email) {
+                const emailResult = await sendManualMessage(
+                    caseId, 'EMAIL', caseData.client.email, emailBody, subject
+                );
+                result.emailSent = emailResult.emailSuccess;
+                if (emailResult.emailSuccess)
+                    result.actionsPerformed.push(`Consent email sent to consumer (${caseData.client.email})`);
+                else result.errors.push(...emailResult.errors);
+            }
+
+            if (caseData.client.whatsappNumber) {
+                const waResult = await sendManualMessage(
+                    caseId, 'WHATSAPP', caseData.client.whatsappNumber, smsBody
+                );
+                result.whatsappSent = waResult.whatsappSuccess;
+                if (waResult.whatsappSuccess)
+                    result.actionsPerformed.push(`WhatsApp sent to consumer (${caseData.client.whatsappNumber})`);
+                else result.errors.push(...waResult.errors);
+            } else if (caseData.client.phone) {
+                const smsResult = await sendManualMessage(
+                    caseId, 'SMS', caseData.client.phone, smsBody
+                );
+                result.smsSent = smsResult.smsSuccess;
+                if (smsResult.smsSuccess)
+                    result.actionsPerformed.push(`SMS sent to consumer (${caseData.client.phone})`);
+                else result.errors.push(...smsResult.errors);
+            }
+
+            if (result.actionsPerformed.length > 0) {
+                await safeUpdateCase(
+                    caseId,
+                    { status: 'CONSUMER_CONTACTED_DC', nextUpdate: addWorkingDays(new Date(), 7) },
+                    triggeredByUserId
+                );
+                result.statusUpdatedTo = 'CONSUMER_CONTACTED_DC';
+            }
+
+            await addComment(
+                caseId,
+                triggeredByUserId,
+                `[SYSTEM] DHS Decline Handler: Consumer notified via ${result.actionsPerformed.join(' + ') || 'no channels available'}. Status → Consumer Contacted DC. Decline reason: "${declineReason}"`
+            );
+        }
+
+        else if (category === 'OUTSTANDING_FEES') {
+            await safeUpdateCase(
+                caseId,
+                { status: 'REJECTED_OWES_FEES', nextUpdate: addWorkingDays(new Date(), 5) },
+                triggeredByUserId
+            );
+            result.statusUpdatedTo = 'REJECTED_OWES_FEES';
+
+            const feesEmailBody = buildOutstandingFeesEmail({
+                clientFirstName,
+                dcName,
+                fileNumber,
+                declineReason,
+            });
+            const feesSmsBody = `Hi ${clientFirstName}, your current Debt Counsellor has indicated outstanding fees before your file can be transferred. We will send you an invoice shortly. — Zenowethu Debt Management`;
+            const feesSubject = `Outstanding Fees – Your Debt Review Case (File: ${fileNumber})`;
+
+            if (caseData.client.email) {
+                const emailResult = await sendManualMessage(
+                    caseId, 'EMAIL', caseData.client.email, feesEmailBody, feesSubject
+                );
+                result.emailSent = emailResult.emailSuccess;
+                if (emailResult.emailSuccess)
+                    result.actionsPerformed.push(`Outstanding fees email sent to consumer (${caseData.client.email})`);
+                else result.errors.push(...emailResult.errors);
+            }
+
+            if (caseData.client.whatsappNumber) {
+                const waResult = await sendManualMessage(
+                    caseId, 'WHATSAPP', caseData.client.whatsappNumber, feesSmsBody
+                );
+                if (waResult.whatsappSuccess)
+                    result.actionsPerformed.push(`WhatsApp sent to consumer about outstanding fees`);
+            } else if (caseData.client.phone) {
+                const smsResult = await sendManualMessage(
+                    caseId, 'SMS', caseData.client.phone, feesSmsBody
+                );
+                if (smsResult.smsSuccess)
+                    result.actionsPerformed.push(`SMS sent to consumer about outstanding fees`);
+            }
+
+            await addComment(
+                caseId,
+                triggeredByUserId,
+                `[SYSTEM] DHS Decline Handler: Outstanding fees. Consumer notified via ${result.actionsPerformed.join(' + ') || 'no channels available'}. Status → Rejected - Owes Fees. Decline reason: "${declineReason}"`
+            );
+        }
+
+        else if (category === 'CONTACT_ATTORNEY') {
+            const attorneyEmail = extractedEmail;
+            if (!attorneyEmail) {
+                result.errors.push(
+                    'Attorney contact required but no email address found in decline reason. Please contact them manually.'
+                );
+                await addComment(
+                    caseId,
+                    triggeredByUserId,
+                    `[SYSTEM] DHS Decline Handler: Attorney involvement required — no email found in decline text. Manual contact needed. Decline reason: "${declineReason}"`
+                );
+            } else {
+                const body = buildAttorneyEmail({
+                    clientName,
+                    idNumber,
+                    fileNumber,
+                    dcName,
+                    declineReason,
+                });
+                const subject = `Debt Review Transfer Request – ${clientName} (ID: ${idNumber})`;
+                const emailResult = await sendManualMessage(
+                    caseId,
+                    'EMAIL',
+                    attorneyEmail,
+                    body,
+                    subject,
+                    { attachments: docAttachments }
+                );
+                result.emailSent = emailResult.emailSuccess;
+                if (emailResult.emailSuccess) {
+                    result.actionsPerformed.push(`Attorney email sent to ${attorneyEmail}`);
+                    await addComment(
+                        caseId,
+                        triggeredByUserId,
+                        `[SYSTEM] DHS Decline Handler: Attorney at ${attorneyEmail} contacted. Decline reason: "${declineReason}"`
+                    );
+                } else {
+                    result.errors.push(...emailResult.errors);
+                }
+            }
+        }
+
+        else if (category === 'RESUBMIT_LATER') {
+            await safeUpdateCase(
+                caseId,
+                { nextUpdate: addWorkingDays(new Date(), 7) },
+                triggeredByUserId
+            );
+            result.actionsPerformed.push('Next update set to +7 working days — file will be re-checked');
+            await addComment(
+                caseId,
+                triggeredByUserId,
+                `[SYSTEM] DHS Decline Handler: Classified as resubmit later. Next update +7 working days. Decline reason: "${declineReason}"`
+            );
+        }
+
+        else {
+            // UNKNOWN — escalate to staff
+            result.errors.push(
+                'Decline reason could not be auto-classified. Please review and handle manually.'
+            );
+            await addComment(
+                caseId,
+                triggeredByUserId,
+                `[SYSTEM] DHS Decline Handler: Could not classify decline reason. Manual review required. Decline reason: "${declineReason}"`
+            );
+            // Notify admins via in-app notification
+            const admins = await prisma.user.findMany({
+                where: { isAdmin: true },
+                select: { id: true },
+            });
+            for (const admin of admins) {
+                await prisma.inAppNotification.create({
+                    data: {
+                        userId: admin.id,
+                        type: 'SYSTEM_ALERT',
+                        title: 'DHS Decline Needs Manual Review',
+                        message: `Case ${caseData.fileNumber}: Decline reason could not be auto-classified. Please review.`,
+                        caseId,
+                        linkUrl: `/cases/${caseId}`,
+                    },
+                });
+            }
+        }
+
+        log.info({ result }, '[DHS Decline Handler] Completed');
+        return result;
+    } catch (error) {
+        log.error({ error }, '[DHS Decline Handler] Unexpected error');
+        result.errors.push(
+            `Internal error: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return result;
+    }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function safeUpdateCase(
+    caseId: string,
+    data: Record<string, unknown>,
+    userId?: string
+): Promise<void> {
+    await prisma.case.update({
+        where: { id: caseId },
+        data: {
+            ...data,
+            ...(userId ? { updatedBy: { connect: { id: userId } } } : {}),
+        },
+    });
+}
+
+async function addComment(
+    caseId: string,
+    userId: string | undefined,
+    content: string
+): Promise<void> {
+    if (!userId) return;
+    await prisma.caseComment.create({
+        data: { caseId, userId, content },
+    });
+}
+
+// ─── Email Templates ──────────────────────────────────────────────────────────
+
+const SIGNATURE = `Aaron Nzotho | NCRDC3693
+Zenowethu Debt Management
+Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
+Tel: +27 12 035 1824 | Cell: 082 363 8207
+info@zenowethu.co.za | www.zenowethu.co.za
+Member of DCASA`;
+
+function buildSendDocsEmail(p: {
+    clientName: string;
+    idNumber: string;
+    fileNumber: string;
+    dcName: string;
+    declineReason: string;
+    ncrLine: string;
+}): string {
+    return `Dear ${p.dcName},
+
+Thank you for your response regarding the transfer request for the following consumer:
+
+  Client:       ${p.clientName}
+  ID Number:    ${p.idNumber}
+  File Number:  ${p.fileNumber}
+
+Your response indicated:
+"${p.declineReason}"
+
+As requested, please find the following documents attached to this email:
+  • Signed and dated Power of Attorney (POA)
+  • Copy of Consumer Identity Document (ID)${p.ncrLine}
+
+We trust these documents meet your requirements and kindly request that you proceed with processing the transfer at your earliest convenience.
+
+Should you require any additional documentation or information, please do not hesitate to contact us.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}
+
+function buildConsumerConsentEmail(p: {
+    clientFirstName: string;
+    dcName: string;
+    dcContactLine: string;
+    declineReason: string;
+}): string {
+    return `Dear ${p.clientFirstName},
+
+We trust this message finds you well.
+
+We are reaching out regarding the transfer of your debt review file to Zenowethu Debt Management.
+
+Your current Debt Counsellor (${p.dcName}) has advised us that they require your direct consent before the transfer can proceed. Their response reads:
+
+"${p.declineReason}"
+
+─────────────────────────────────────────
+ACTION REQUIRED
+─────────────────────────────────────────
+Please contact ${p.dcName}${p.dcContactLine} as soon as possible and confirm that you consent to your file being transferred to Zenowethu Debt Management.
+
+Once you have given your consent, please reply to this email or call us so we can proceed with the transfer on your behalf.
+
+If you are experiencing any difficulties contacting your Debt Counsellor, please let us know and we will assist you.
+
+Thank you for your prompt attention to this matter.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}
+
+function buildConsentSms(p: {
+    clientFirstName: string;
+    dcName: string;
+    dcContactLine: string;
+}): string {
+    return `Hi ${p.clientFirstName}, your Debt Counsellor (${p.dcName}) requires your consent to transfer your file to Zenowethu. Please contact them${p.dcContactLine} and confirm consent, then reply to this message. — Zenowethu Debt Management (012 035 1824)`;
+}
+
+function buildOutstandingFeesEmail(p: {
+    clientFirstName: string;
+    dcName: string;
+    fileNumber: string;
+    declineReason: string;
+}): string {
+    return `Dear ${p.clientFirstName},
+
+We trust this message finds you well.
+
+We are writing regarding your debt review file (File No: ${p.fileNumber}) and the transfer of your case to Zenowethu Debt Management.
+
+Your current Debt Counsellor (${p.dcName}) has advised us that there are outstanding fees that must be settled before the transfer can proceed. Their response reads:
+
+"${p.declineReason}"
+
+─────────────────────────────────────────
+NEXT STEPS
+─────────────────────────────────────────
+We are currently requesting an invoice from your Debt Counsellor for the outstanding amount. Once received, we will forward it to you with clear guidance on how to proceed.
+
+If you believe this is in error, or if you have already settled these fees, please contact us immediately and we will investigate on your behalf.
+
+We apologise for any inconvenience and thank you for your patience.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}
+
+function buildAttorneyEmail(p: {
+    clientName: string;
+    idNumber: string;
+    fileNumber: string;
+    dcName: string;
+    declineReason: string;
+}): string {
+    return `Dear Attorney,
+
+We trust this email finds you well.
+
+We are writing on behalf of our client regarding their debt review matter, and we understand the matter has been referred to your offices.
+
+  Client:       ${p.clientName}
+  ID Number:    ${p.idNumber}
+  File Number:  ${p.fileNumber}
+  Current DC:   ${p.dcName}
+
+The decline received from the Debt Help System states:
+"${p.declineReason}"
+
+We kindly request your assistance in clarifying the current status of this matter and advising on the steps required before the file transfer can proceed.
+
+Please find attached the consumer's supporting documentation (POA and ID) for your reference.
+
+We look forward to your response.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}

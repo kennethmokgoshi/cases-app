@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, renderTemplate, auth } from '@zenowethu/shared-lib';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR } from '@zenowethu/shared-lib/src/dhs';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
 import path, { join } from 'path';
@@ -234,25 +234,18 @@ export async function POST(request: Request) {
                         notifyManager = true;
                     }
 
-                    // Rule 10: Declined — map reason to the appropriate DETOUR status
+                    // Rule 10: Declined — classify reason, save, then auto-handle
                     else if (result.status === 'DECLINED') {
                         logger.info('=== DECLINED STATUS DETECTED ===');
                         logger.info('Decline reason value:', result.declineReason);
 
                         updateData.dhsStatus = 'Declined Via DHS';
                         updateData.declineReason = result.declineReason || null;
-
-                        const reason = (result.declineReason || '').toUpperCase();
-                        if (reason.includes('FEE') || reason.includes('OUTSTANDING') || reason.includes('OWES')) {
-                            updateData.status = 'REJECTED_OWES_FEES';
-                        } else if (reason.includes('CONSENT') || reason.includes('NOT YET')) {
-                            updateData.status = 'REJECTED_NOT_CONSENT';
-                        } else if (reason.includes('EMAIL') || reason.includes('DOCUMENT')) {
-                            updateData.status = 'REJECTED_EMAIL_DOCS';
-                        } else {
-                            updateData.status = 'DECLINED_VIA_DHS';
-                        }
                         updateData.nextUpdate = addWorkingDays(new Date(), 3);
+
+                        // Keep a simple initial status for the DB write below;
+                        // handleDHSDecline will refine it once it classifies the reason.
+                        updateData.status = 'DECLINED_VIA_DHS';
 
                         const reasonText = result.declineReason
                             ? `DHS Check: Declined. Reason: ${result.declineReason}`
@@ -313,6 +306,33 @@ export async function POST(request: Request) {
                         } catch (e) {
                             logger.error('Failed to create notification', e);
                         }
+                    }
+                }
+
+                // ── Auto-handle DHS decline reasons ─────────────────────────
+                // When the DHS check finds a DECLINED status, automatically
+                // classify the reason and send the appropriate response.
+                if (result.status === 'DECLINED' && result.declineReason) {
+                    logger.info('[DHS Lookup] Firing decline handler for reason:', result.declineReason.substring(0, 80));
+                    try {
+                        const declineResult = await handleDHSDecline({
+                            caseId,
+                            declineReason: result.declineReason,
+                            triggeredByUserId: actingUserId,
+                        });
+                        logger.info('[DHS Lookup] Decline handler result:', {
+                            category: declineResult.category,
+                            emailSent: declineResult.emailSent,
+                            statusUpdatedTo: declineResult.statusUpdatedTo,
+                            errors: declineResult.errors,
+                        });
+                        // Surface the handler result back to the caller
+                        (result as any).declineHandled = true;
+                        (result as any).declineCategory = declineResult.category;
+                        (result as any).declineActions = declineResult.actionsPerformed;
+                        (result as any).declineErrors = declineResult.errors;
+                    } catch (handlerErr) {
+                        logger.error('[DHS Lookup] Decline handler threw an error (non-fatal):', handlerErr);
                     }
                 }
             }
