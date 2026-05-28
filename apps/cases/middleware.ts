@@ -81,6 +81,14 @@ export default auth((req) => {
         return preflightResponse;
     }
 
+    // 1b. Allow cron routes with valid CRON_SECRET header (Dokploy / external schedulers)
+    if (pathname.startsWith('/api/cron/')) {
+        const incomingSecret = req.headers.get('x-cron-secret');
+        if (incomingSecret && incomingSecret === process.env.CRON_SECRET) {
+            return NextResponse.next();
+        }
+    }
+
     // 2. Auth Logic
     const isLoggedIn = !!req.auth
     const isOnLogin = pathname.startsWith('/login')

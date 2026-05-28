@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         const pendingCases = await prisma.case.findMany({
             where: {
                 status: 'PENDING_VIA_DHS',
-                isDeleted: false,
+                deletedAt: null,
                 nextUpdate: { lte: today },
             },
             select: { id: true, fileNumber: true, nextUpdate: true },

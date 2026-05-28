@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
         const staleCases = await prisma.case.findMany({
             where: {
-                isDeleted: false,
+                deletedAt: null,
                 updatedAt: { lt: threshold },
                 status: { notIn: excludeStatuses },
             },

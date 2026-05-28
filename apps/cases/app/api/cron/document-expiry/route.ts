@@ -32,12 +32,12 @@ export async function POST(request: Request) {
         // Find active cases that have at least one document older than threshold
         const casesWithOldDocs = await prisma.case.findMany({
             where: {
-                isDeleted: false,
+                deletedAt: null,
                 status: { notIn: excludeStatuses },
                 documents: {
                     some: {
                         type: { in: SENSITIVE_TYPES },
-                        createdAt: { lt: threshold },
+                        uploadedAt: { lt: threshold },
                     },
                 },
             },
@@ -46,9 +46,9 @@ export async function POST(request: Request) {
                 documents: {
                     where: {
                         type: { in: SENSITIVE_TYPES },
-                        createdAt: { lt: threshold },
+                        uploadedAt: { lt: threshold },
                     },
-                    select: { type: true, createdAt: true },
+                    select: { type: true, uploadedAt: true },
                 },
             },
             take: 100,

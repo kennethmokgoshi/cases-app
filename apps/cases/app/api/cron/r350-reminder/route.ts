@@ -26,11 +26,17 @@ export async function POST(request: Request) {
         const threshold = new Date();
         threshold.setDate(threshold.getDate() - PENDING_DAYS_THRESHOLD);
 
+        // R350 is Zenowethu's admin fee for direct (B2C) clients only.
+        // Exclude: B2B clients (partner did the intake), NOT_LINKED / incomplete / terminal statuses.
+        const EXCLUDE_STATUSES = ['NOT_LINKED', 'NEW_LEAD', 'DUPLICATE', 'COMPLETED', 'CASE_WON', 'CASE_LOST', 'WITHDRAWN'];
+
         const pendingR350Cases = await prisma.case.findMany({
             where: {
-                isDeleted: false,
+                deletedAt: null,
                 r350Status: 'PENDING',
+                acquisitionType: { not: 'B2B' },
                 createdAt: { lt: threshold },
+                status: { notIn: EXCLUDE_STATUSES },
             },
             include: { client: true },
             take: 100,
