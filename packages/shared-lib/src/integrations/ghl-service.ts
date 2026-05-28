@@ -12,6 +12,8 @@ import {
     sendManualMessage
 } from '../notifications/service';
 import { generateAutoReply } from '../ai/auto-reply';
+import { extractSaIdNumber } from '../utils/extract-id-number';
+import { logAutomationRun } from '../automation/run-logger';
 
 export interface GhlSendResult {
     success: boolean;
@@ -76,7 +78,82 @@ export class GhlService {
         });
 
         if (!caseRecord) {
-            logger.warn('[GHL Webhook] No case found for contact:', { phone, email });
+            // Fallback: extract SA ID number from message body or email subject
+            const subject = (payload.subject as string | undefined) || '';
+            const searchText = `${message} ${subject}`;
+            const extractedId = extractSaIdNumber(searchText);
+
+            if (extractedId) {
+                const clientByIdNumber = await prisma.client.findFirst({
+                    where: { idNumber: extractedId },
+                    include: {
+                        cases: {
+                            where: { isDeleted: false },
+                            orderBy: { createdAt: 'desc' },
+                            take: 1,
+                        },
+                    },
+                });
+
+                if (clientByIdNumber && clientByIdNumber.cases.length > 0) {
+                    const matchedCase = clientByIdNumber.cases[0];
+                    const systemUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+
+                    await prisma.caseComment.create({
+                        data: {
+                            caseId: matchedCase.id,
+                            userId: systemUser?.id ?? 'system',
+                            content: `[Inbound ${channel}] [MATCHED BY ID NUMBER: ${extractedId}] ${message}${attachments.length > 0 ? ` (+ ${attachments.length} attachments)` : ''}`,
+                            type: 'GHL',
+                            isInternal: false,
+                            activityType: 'INBOUND_MESSAGE',
+                            activityData: JSON.stringify({
+                                channel,
+                                contactId,
+                                provider: 'GoHighLevel',
+                                matchedByIdNumber: extractedId,
+                                attachments: attachments.map((a: any) => ({ url: a.url, name: a.name, type: a.contentType })),
+                                intent: 'GENERAL',
+                            }),
+                        },
+                    });
+
+                    // Notify the case manager so they can review
+                    const managers = await prisma.projectMember.findMany({
+                        where: {
+                            project: { cases: { some: { id: matchedCase.id } } },
+                            role: 'MANAGER',
+                        },
+                        select: { userId: true },
+                    });
+                    for (const m of managers) {
+                        await prisma.inAppNotification.create({
+                            data: {
+                                userId: m.userId,
+                                type: 'SYSTEM_ALERT',
+                                title: `Inbound Message Matched by ID Number`,
+                                message: `An inbound ${channel} message was matched to case ${matchedCase.fileNumber} using ID number ${extractedId}. Please review.`,
+                                caseId: matchedCase.id,
+                                linkUrl: `/cases/${matchedCase.id}`,
+                            },
+                        });
+                    }
+
+                    await logAutomationRun({
+                        type: 'GHL_ID_MATCH',
+                        caseId: matchedCase.id,
+                        clientId: clientByIdNumber.id,
+                        status: 'SUCCESS',
+                        startedAt: new Date(),
+                        logs: { extractedId, channel, matchedBy: 'ID_NUMBER' },
+                    });
+
+                    logger.info(`[GHL Webhook] Matched inbound message to case ${matchedCase.fileNumber} via ID number ${extractedId}`);
+                    return { success: true, caseId: matchedCase.id, matchedByIdNumber: true };
+                }
+            }
+
+            logger.warn('[GHL Webhook] No case found for contact:', { phone, email, extractedId });
             return { success: false, error: 'Case not found' };
         }
 

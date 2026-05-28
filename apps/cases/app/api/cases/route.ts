@@ -383,6 +383,26 @@ export async function POST(request: Request) {
             });
         });
 
+        // Notify assigned staff member (async, non-blocking)
+        if (data.assignedToId && data.assignedToId !== session?.user?.id) {
+            prisma.user.findUnique({ where: { id: data.assignedToId } }).then(async assignee => {
+                if (!assignee) return;
+                const servicesText = data.services
+                    ? (Array.isArray(data.services) ? data.services : JSON.parse(data.services as string)).join(', ')
+                    : 'Credit Repair';
+                await prisma.inAppNotification.create({
+                    data: {
+                        userId: assignee.id,
+                        type: 'CASE_ASSIGNED',
+                        title: `New Case Assigned: ${newCase.fileNumber}`,
+                        message: `Case ${newCase.fileNumber} for ${client.firstName} ${client.lastName} (${servicesText}) has been assigned to you.`,
+                        caseId: newCase.id,
+                        linkUrl: `/cases/${newCase.id}`,
+                    },
+                });
+            }).catch(err => logger.error(`Failed to send assignment notification for ${newCase.id}:`, err));
+        }
+
         return NextResponse.json(newCase);
     } catch (err: any) {
         logger.error('[API/POST] Critical Error creating case:', {

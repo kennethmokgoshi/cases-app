@@ -45,9 +45,26 @@ export async function POST(
             }
         });
 
-        // Normally here we would dispatch to an event bus or background worker
-        // For now, we will log the dispatch. Real implementation will hook into the specific service.
-        logger.info(`Dispatched retry for automation run ${runId} of type ${run.type}`);
+        // Map type to cron endpoint and fire it
+        const typeToEndpoint: Record<string, string> = {
+            OVERDUE_SCAN: '/api/cron/overdue-scan',
+            DHS_RECHECK: '/api/cron/dhs-recheck',
+            STALE_CASE_SCAN: '/api/cron/stale-cases',
+            DOCUMENT_EXPIRY_SCAN: '/api/cron/document-expiry',
+            R350_REMINDER: '/api/cron/r350-reminder',
+        };
+
+        const endpoint = typeToEndpoint[run.type];
+        if (endpoint) {
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+            fetch(`${appUrl}${endpoint}`, {
+                method: 'POST',
+                headers: { 'x-cron-secret': process.env.CRON_SECRET || '' },
+            }).catch(err => logger.error(`[Retry] Failed to fire ${endpoint}:`, err));
+            logger.info(`[Retry] Dispatched retry for run ${runId} → ${endpoint}`);
+        } else {
+            logger.info(`[Retry] No cron endpoint for type ${run.type} — status updated to RETRYING`);
+        }
 
         return NextResponse.json(updatedRun);
     } catch (error) {

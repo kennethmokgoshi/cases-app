@@ -217,7 +217,34 @@ export async function PATCH(
             }
         }
 
-        // 2. Alert Admin if Project has no Manager (Self-healing check)
+        // 2. Alert Manager when case is Accepted via DHS
+        if (newStatus === 'ACCEPTED_VIA_DHS' || newStatus === 'ACCEPTED_FORM_177') {
+            const acceptedManagers = await findManagersForCase(id);
+            for (const managerId of acceptedManagers) {
+                await sendInternalNotification({
+                    caseId: id,
+                    userId: managerId,
+                    statusCode: 'ACCEPTED_MANAGER',
+                    variables: {
+                        clientName: `${currentCase.client.firstName} ${currentCase.client.lastName}`,
+                        fileNumber: currentCase.fileNumber,
+                        caseUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/cases/${id}`,
+                    },
+                });
+                await prisma.inAppNotification.create({
+                    data: {
+                        userId: managerId,
+                        type: 'CASE_UPDATE',
+                        title: `File Accepted: ${currentCase.fileNumber}`,
+                        message: `${currentCase.client.firstName} ${currentCase.client.lastName}'s file has been accepted via DHS. Action may be required.`,
+                        caseId: id,
+                        linkUrl: `/cases/${id}`,
+                    },
+                });
+            }
+        }
+
+        // 4. Alert Admin if Project has no Manager (Self-healing check)
         const primaryProject = updatedCase.projects.find(p => p.isPrimary)?.project;
         if (primaryProject) {
             const managers = await prisma.projectMember.count({
@@ -238,7 +265,7 @@ export async function PATCH(
             }
         }
 
-        // 3. Automated DC Invoice Request (if status is REJECTED_OWES_FEES)
+        // 5. Automated DC Invoice Request (if status is REJECTED_OWES_FEES)
         if (newStatus === 'REJECTED_OWES_FEES' && currentCase.dcEmail) {
             await sendStatusChangeNotification({
                 caseId: id,

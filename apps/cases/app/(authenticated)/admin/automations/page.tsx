@@ -29,6 +29,7 @@ export default function AutomationsManagement() {
     const [filterType, setFilterType] = useState<string>('');
     const [selectedRun, setSelectedRun] = useState<AutomationRun | null>(null);
     const [scanRunning, setScanRunning] = useState(false);
+    const [cronRunning, setCronRunning] = useState<string | null>(null);
     const [scanResult, setScanResult] = useState<{
         scanned: number;
         overdueFound: number;
@@ -83,6 +84,21 @@ export default function AutomationsManagement() {
             toast.error(error instanceof Error ? error.message : 'Overdue scan failed');
         } finally {
             setScanRunning(false);
+        }
+    };
+
+    const runCron = async (type: string, endpoint: string) => {
+        setCronRunning(type);
+        try {
+            const res = await fetch(endpoint, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Cron failed');
+            toast.success(`${type.replace(/_/g, ' ')} complete`);
+            fetchRuns();
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : 'Cron failed');
+        } finally {
+            setCronRunning(null);
         }
     };
 
@@ -173,6 +189,27 @@ export default function AutomationsManagement() {
                         Refresh
                     </button>
                 </div>
+                {/* Manual cron triggers */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                    {[
+                        { type: 'DHS_RECHECK', label: 'DHS Re-check', endpoint: '/api/cron/dhs-recheck', color: 'blue' },
+                        { type: 'STALE_CASE_SCAN', label: 'Stale Cases', endpoint: '/api/cron/stale-cases', color: 'purple' },
+                        { type: 'DOCUMENT_EXPIRY_SCAN', label: 'Doc Expiry', endpoint: '/api/cron/document-expiry', color: 'cyan' },
+                        { type: 'R350_REMINDER', label: 'R350 Reminders', endpoint: '/api/cron/r350-reminder', color: 'pink' },
+                    ].map(({ type, label, endpoint, color }) => (
+                        <button
+                            key={type}
+                            onClick={() => runCron(type, endpoint)}
+                            disabled={cronRunning === type}
+                            className={`px-3 py-1.5 text-xs rounded-lg border flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-${color}-500/10 text-${color}-300 border-${color}-500/30 hover:bg-${color}-500/20`}
+                        >
+                            {cronRunning === type ? (
+                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            ) : '▶'}
+                            {label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Overdue Scan Results */}
@@ -235,6 +272,12 @@ export default function AutomationsManagement() {
                     className="px-4 py-2 bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg text-white focus:outline-none focus:border-zeno-cyan"
                 >
                     <option value="">All Types</option>
+                    <option value="OVERDUE_SCAN">Overdue Scan</option>
+                    <option value="DHS_RECHECK">DHS Re-check</option>
+                    <option value="STALE_CASE_SCAN">Stale Case Scan</option>
+                    <option value="DOCUMENT_EXPIRY_SCAN">Document Expiry</option>
+                    <option value="R350_REMINDER">R350 Reminder</option>
+                    <option value="GHL_ID_MATCH">GHL ID Match</option>
                     <option value="DHS_SYNC">DHS Sync</option>
                     <option value="XDS_SYNC">XDS Sync</option>
                     <option value="GHL_WEBHOOK">GHL Webhook</option>

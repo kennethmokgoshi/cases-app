@@ -581,6 +581,118 @@ View and action this lead in the Cases app:
         sendToClient: false,
         sendToPartner: false,
         isUrgent: true },
+
+    // ===== INTERNAL AUTOMATION ALERTS =====
+    {
+        statusCode: 'ACCEPTED_MANAGER',
+        statusName: 'File Accepted — Manager Alert',
+        smsTemplate: 'ALERT: Case {fileNumber} for {clientName} has been ACCEPTED via DHS. Please review next steps.',
+        emailSubject: 'File Accepted: {fileNumber} — {clientName}',
+        emailTemplate: `Dear Manager,
+
+Case {fileNumber} for {clientName} has been ACCEPTED via the NCR Debt Help System (DHS).
+
+This means the transfer request was approved and the file is now moving to the next stage.
+
+Please review the case and ensure all follow-up actions are taken promptly.
+
+Case Link: {caseUrl}
+
+Regards,
+Zenowethu System`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: true },
+    {
+        statusCode: 'CASE_ASSIGNED',
+        statusName: 'New Case Assigned',
+        smsTemplate: 'Hi {assigneeName}, case {fileNumber} for {clientName} has been assigned to you. Please review.',
+        emailSubject: 'New Case Assigned: {fileNumber} — {clientName}',
+        emailTemplate: `Hi {assigneeName},
+
+A new case has been assigned to you:
+
+  Client:      {clientName}
+  File Number: {fileNumber}
+  Service:     {services}
+
+Please log in and review the case at your earliest convenience.
+
+Case Link: {caseUrl}
+
+Regards,
+Zenowethu System`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: false },
+    {
+        statusCode: 'STALE_CASE',
+        statusName: 'Stale Case Alert',
+        smsTemplate: 'ALERT: Case {fileNumber} for {clientName} has had no activity for {daysStale} days. Please review.',
+        emailSubject: 'Stale Case Alert: {fileNumber} — No Activity for {daysStale} Days',
+        emailTemplate: `Dear Manager,
+
+The following case has had no activity for {daysStale} days and may require attention:
+
+  Client:      {clientName}
+  File Number: {fileNumber}
+  Last Update: {lastUpdate}
+  Status:      {status}
+
+Please review the case and take the appropriate action.
+
+Case Link: {caseUrl}
+
+Regards,
+Zenowethu System`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: false },
+    {
+        statusCode: 'DOCUMENT_EXPIRY',
+        statusName: 'Document Expiry Alert',
+        smsTemplate: 'ALERT: Case {fileNumber} — documents may be outdated (older than 3 months). Please request fresh documents.',
+        emailSubject: 'Document Expiry Alert: {fileNumber} — {clientName}',
+        emailTemplate: `Dear Staff,
+
+The following case has documents that are older than 3 months and may need to be refreshed:
+
+  Client:      {clientName}
+  File Number: {fileNumber}
+  Expired Documents: {expiredDocs}
+
+Please request fresh documents from the client.
+
+Case Link: {caseUrl}
+
+Regards,
+Zenowethu System`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: false },
+    {
+        statusCode: 'R350_REMINDER',
+        statusName: 'R350 Payment Reminder',
+        smsTemplate: 'REMINDER: Case {fileNumber} for {clientName} has a pending R350 payment that is overdue. Please follow up.',
+        emailSubject: 'R350 Payment Overdue: {fileNumber} — {clientName}',
+        emailTemplate: `Dear Manager,
+
+The following case has an R350 payment that has been pending for over 30 days:
+
+  Client:      {clientName}
+  File Number: {fileNumber}
+  R350 Status: {r350Status}
+  Days Pending: {daysPending}
+
+Please follow up with the client or update the payment status.
+
+Case Link: {caseUrl}
+
+Regards,
+Zenowethu System`,
+        sendToClient: false,
+        sendToPartner: false,
+        isUrgent: false },
 ];
 
 export function getTemplateByStatus(statusCode: string): NotificationTemplate | undefined {

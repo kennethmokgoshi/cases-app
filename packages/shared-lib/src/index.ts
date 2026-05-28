@@ -38,3 +38,7 @@ export * from './referrer-commission';
 // Automation
 // Note: Node-only (uses prisma) — import directly when needed in server contexts
 // export * from './automation/overdue-scan';
+export * from './automation/run-logger';
+
+// Utils
+export * from './utils/extract-id-number';

@@ -5,6 +5,51 @@
 
 ---
 
+### Automation Suite — 6 Automations Built (2026-05-28)
+
+**Foundation**
+- [x] **`packages/shared-lib/src/automation/run-logger.ts`** — New `logAutomationRun()` utility. Any automation can call this to write a record to the `AutomationRun` table so it appears on the Automation Runs admin page with status, duration, and logs.
+
+**Email ID Number Matching (GHL Fallback)**
+- [x] **`packages/shared-lib/src/utils/extract-id-number.ts`** — New `extractSaIdNumber()` / `extractAllSaIdNumbers()` using a date-validated regex + Luhn check for SA 13-digit ID numbers.
+- [x] **`packages/shared-lib/src/utils/extract-id-number.test.ts`** — 10 tests covering body text, subject line, multi-ID, invalid date prefix, empty string, Luhn pass/fail.
+- [x] **`packages/shared-lib/src/integrations/ghl-service.ts`** — When phone/email lookup fails in `handleInboundMessage()`, the system now extracts a SA ID from the message body + email subject, queries the `Client` table for a match, attaches the message as a `[MATCHED BY ID NUMBER]` CaseComment, notifies the case manager via `inAppNotification`, and logs to `AutomationRun` as type `GHL_ID_MATCH`.
+
+**Manager Notification on File Accepted**
+- [x] **`apps/cases/app/api/cases/[id]/status/route.ts`** — Added block #2: when status becomes `ACCEPTED_VIA_DHS` or `ACCEPTED_FORM_177`, sends email + in-app notification to all case managers via `sendInternalNotification()` and `prisma.inAppNotification.create()`.
+- [x] **`packages/shared-lib/src/notifications/templates.ts`** — Added 5 new internal notification templates: `ACCEPTED_MANAGER`, `CASE_ASSIGNED`, `STALE_CASE`, `DOCUMENT_EXPIRY`, `R350_REMINDER`.
+
+**New Case Assigned Notification**
+- [x] **`apps/cases/app/api/cases/route.ts`** — After case creation, if `assignedToId` is set and is different from the creator, sends an in-app notification to the assigned staff member.
+
+**Cron Endpoints (all protected by `X-Cron-Secret` or admin session)**
+- [x] **`apps/cases/app/api/cron/overdue-scan/route.ts`** — Calls `OverdueScanService`, logs result to `AutomationRun`.
+- [x] **`apps/cases/app/api/cron/dhs-recheck/route.ts`** — Queries all `PENDING_VIA_DHS` cases due for re-check (nextUpdate ≤ today), calls `/api/dhs/lookup` for each, reschedules +2 working days on failure. Logs to `AutomationRun`.
+- [x] **`apps/cases/app/api/cron/stale-cases/route.ts`** — Finds cases with no activity for 14+ days (excluding terminal statuses), sends `STALE_CASE` email + in-app notification to case managers. Logs to `AutomationRun`.
+- [x] **`apps/cases/app/api/cron/document-expiry/route.ts`** — Finds active cases with ID/payslip/bank statement/proof-of-residence older than 3 months, sends `DOCUMENT_EXPIRY` email + in-app notification to managers. Logs to `AutomationRun`.
+- [x] **`apps/cases/app/api/cron/r350-reminder/route.ts`** — Finds cases where `r350Status = PENDING` and case is 30+ days old, sends `R350_REMINDER` email + in-app notification to managers. Logs to `AutomationRun`.
+
+**Retry endpoint upgraded**
+- [x] **`apps/cases/app/api/admin/automations/[id]/retry/route.ts`** — Now actually fires the corresponding cron endpoint (not just marks RETRYING in DB). Supports: OVERDUE_SCAN, DHS_RECHECK, STALE_CASE_SCAN, DOCUMENT_EXPIRY_SCAN, R350_REMINDER.
+
+**Automations page**
+- [x] **`apps/cases/app/(authenticated)/admin/automations/page.tsx`** — Updated type filter dropdown with all new types. Added 4 manual trigger buttons (DHS Re-check, Stale Cases, Doc Expiry, R350 Reminders) below the header.
+
+**Tests: 266 shared-lib tests — all passing.**
+
+**Dokploy cron setup needed** — Add these HTTP POST cron jobs in Dokploy (Cron tab), hitting the cases app with header `X-Cron-Secret: <CRON_SECRET>`:
+| Schedule | Endpoint |
+|---|---|
+| `0 7 * * *` (daily 7am) | `POST /api/cron/overdue-scan` |
+| `0 6 * * *` (daily 6am) | `POST /api/cron/dhs-recheck` |
+| `0 8 * * 1` (Monday 8am) | `POST /api/cron/stale-cases` |
+| `0 8 * * 1` (Monday 8am) | `POST /api/cron/document-expiry` |
+| `0 9 * * *` (daily 9am) | `POST /api/cron/r350-reminder` |
+
+**Env var needed:** `CRON_SECRET` — set to any random string (e.g. `openssl rand -hex 32`). Add to `apps/cases/.env.local` and to Dokploy environment variables.
+
+---
+
 ### DHS Decline Handler — Automated Response to DHS Declines (2026-05-28)
 
 **Core handler**
