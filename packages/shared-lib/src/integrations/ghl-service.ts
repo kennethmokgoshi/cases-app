@@ -88,7 +88,7 @@ export class GhlService {
                     where: { idNumber: extractedId },
                     include: {
                         cases: {
-                            where: { isDeleted: false },
+                            where: { deletedAt: null },
                             orderBy: { createdAt: 'desc' },
                             take: 1,
                         },
