@@ -1,4 +1,4 @@
-import { prisma } from '@zenowethu/database';
+import { prisma, Prisma } from '@zenowethu/database';
 import { logger } from '../logger';
 
 export interface RunLoggerParams {
@@ -28,7 +28,7 @@ export async function logAutomationRun(params: RunLoggerParams): Promise<void> {
                 startedAt: params.startedAt,
                 completedAt: new Date(),
                 durationMs: Date.now() - params.startedAt.getTime(),
-                logs: params.logs ?? {},
+                logs: (params.logs ?? {}) as Prisma.InputJsonValue,
                 errorMessage: params.errorMessage ?? null,
             },
         });
