@@ -121,7 +121,7 @@ export class GhlService {
                     // Notify the case manager so they can review
                     const managers = await prisma.projectMember.findMany({
                         where: {
-                            project: { cases: { some: { id: matchedCase.id } } },
+                            project: { cases: { some: { caseId: matchedCase.id } } },
                             role: 'MANAGER',
                         },
                         select: { userId: true },
