@@ -407,12 +407,18 @@ export async function runDebtReviewRemovalTrigger(): Promise<RemovalTriggerResul
         assessments: [],
     };
 
-    // Find all eligible cases
+    // Find overdue eligible cases only (nextUpdate has passed or was never set)
+    // ACCEPTED_VIA_DHS SLA = 2 working days — we only act once the case is overdue
+    const now = new Date();
     const eligibleCases = await prisma.case.findMany({
         where: {
             status: { in: ['ACCEPTED_VIA_DHS', 'ACCEPTED_FORM_177', 'ZDM_CLIENT'] },
             consumerDhsStatus: { not: null },
             deletedAt: null,
+            OR: [
+                { nextUpdate: null },
+                { nextUpdate: { lte: now } },
+            ],
         },
         select: { id: true, fileNumber: true, consumerDhsStatus: true },
     });
