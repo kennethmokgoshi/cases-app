@@ -114,7 +114,12 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/api/health)",
       "PowerShell(Start-Sleep -Seconds 5; try { $response = Invoke-WebRequest -Uri \"http://localhost:3000/api/cron/check-not-requested\" -Method POST -Headers @{\"x-cron-secret\"=\"zdm-cron-2026-secure\";\"Content-Type\"=\"application/json\"} -UseBasicParsing; \"Status: $\\($response.StatusCode\\)\" } catch { \"Error: $\\($_.Exception.Message\\)\" })",
       "PowerShell(Get-Job)",
-      "Bash(grep -v \"//\")"
+      "Bash(grep -v \"//\")",
+      "Bash(mkdir -p \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\cases\\\\app\\\\api\\\\cases\\\\[id]\\\\debt-review-removal\")",
+      "Bash(npx tsx *)",
+      "Bash(pnpm --filter @zenowethu/database exec tsx ../../scripts/seed-legal-templates.ts)",
+      "Bash(pnpm --filter @zenowethu/database exec node -e \"const {PrismaClient} = require\\('@prisma/client'\\); console.log\\('prisma ok'\\);\")",
+      "Bash(node packages/database/prisma/seed-legal-templates.js)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

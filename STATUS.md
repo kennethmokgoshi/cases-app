@@ -1,7 +1,60 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-28 (15-status Workflow Automation Engine + shared helpers + cron fixes)
+> Last updated: 2026-05-30 (Build errors fixed, GHL new subaccount wired, app deployed)
+
+---
+
+### Build Fixes + GHL Subaccount Setup (2026-05-30)
+
+**TypeScript build errors fixed (all were blocking Dokploy deploy):**
+- [x] `apps/cases/app/api/cases/[id]/dhs-decline/handle/route.ts` — `parsed.error.errors` → `parsed.error.issues` (Zod v3 uses `.issues`)
+- [x] `apps/cases/lib/schemas.ts` — Added `assignedToId: z.string().optional().nullable()` to `CaseCreateSchema`
+- [x] `packages/shared-lib/src/automation/run-logger.ts` — Cast `logs` field as `Prisma.InputJsonValue`; imported `Prisma` from `@zenowethu/database`
+- [x] `packages/shared-lib/src/integrations/ghl-service.ts` — `isDeleted: false` → `deletedAt: null` (soft delete pattern)
+- [x] `packages/shared-lib/src/integrations/ghl-service.ts` — `id: matchedCase.id` → `caseId: matchedCase.id` in `CaseProjectWhereInput`
+- [x] **App successfully deployed to Dokploy** ✅
+
+**GHL New Subaccount — fully wired:**
+- [x] New sub-account created: **Zenowethu Debt Management** (Location ID: `ibEdPNZUfnsY0D7OhfVq`)
+- [x] Private Integration Token created with all scopes
+- [x] `GHL_API_KEY` + `GHL_LOCATION_ID` updated in Dokploy env vars and `apps/cases/.env`
+- [x] Workflow 1: **Zenowethu - Inbound Messages** — Trigger: Customer Replied → Webhook → `POST /api/webhooks/ghl` (Published)
+- [x] Workflow 2: **Zenowethu - New Contacts** — Trigger: Contact Created → Webhook → `POST /api/webhooks/ghl` (Published)
+
+**Cron jobs configured in Dokploy Schedules:**
+- [x] `overdue-scan` — daily 7am
+- [x] `workflow-automation` — daily 7am
+- [x] `dhs-recheck` — daily 6am
+- [x] `stale-cases` — Monday 9am
+- [ ] `debt-review-removal` — **needs adding in Dokploy** → weekdays 8am (`0 8 * * 1-5`)
+
+---
+
+### AI Debt Review Removal Trigger (2026-05-30)
+
+- [x] **`packages/shared-lib/src/debt-review-removal/removal-paths.ts`** — DHS status transition map. Defines all 5 exit paths (A→B, C→G, D4→F1, D4→F2, D4→G), required document types per path, alias-aware `matchesDocType()` function, and `getRemovalPaths()` lookup.
+- [x] **`packages/shared-lib/src/debt-review-removal/trigger.ts`** — Core trigger service. `assessCaseForRemoval()` evaluates a single case; `runDebtReviewRemovalTrigger()` scans all `ACCEPTED_VIA_DHS` / `ACCEPTED_FORM_177` / `ZDM_CLIENT` cases. D4 path auto-detected from uploaded documents (court order docs → G; Form 19/paid-up → F2; mortgage notes + 17.2(c) → F1; else → UNCERTAIN/ESCALATE). Notifies admins + staff managers only (not B2B). Creates case comments for full audit trail.
+- [x] **`apps/cases/app/api/cron/debt-review-removal/route.ts`** — `POST /api/cron/debt-review-removal` cron endpoint. Logs to AutomationRun as `DEBT_REVIEW_REMOVAL`.
+- [x] **`apps/cases/app/api/cases/[id]/debt-review-removal/route.ts`** — `GET /api/cases/[id]/debt-review-removal` per-case assessment endpoint for staff to check a single case manually.
+- [x] **22 new Vitest tests** — `trigger.test.ts` covering all status paths, document alias matching, edge cases. 288 total tests, all passing.
+
+**Document type matrix:**
+
+| DHS Path | Required Documents |
+|---|---|
+| A → B | FORM_16, FORM_17_2A, AFFORDABILITY_ASSESSMENT |
+| C → G | NOTICE_OF_MOTION, FOUNDING_AFFIDAVIT, COURT_ORDER_GRANTED |
+| D4 → F2 | CERTIFIED_FORM_19, PAID_UP_LETTERS |
+| D4 → F1 | CERTIFIED_FORM_19, PAID_UP_LETTERS, FORM_17_2C, COURT_ORDER_GRANTED |
+| D4 → G | NOTICE_OF_MOTION, FOUNDING_AFFIDAVIT, COURT_ORDER_GRANTED |
+| F1/F2/G | Already exitable — alert staff to proceed on DHS |
+
+**Add to Dokploy Schedules:**
+```
+Schedule: 0 8 * * 1-5  (weekdays 8am)
+Command:  curl -s -X POST https://app.zenowethu.co.za/api/cron/debt-review-removal -H "x-cron-secret: <CRON_SECRET>"
+```
 
 ---
 
