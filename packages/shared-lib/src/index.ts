@@ -40,6 +40,7 @@ export * from './referrer-commission';
 // export * from './automation/overdue-scan';
 export * from './automation/run-logger';
 export * from './automation/workflow-engine';
+export * from './debt-review-removal/removal-paths';
 
 // Utils
 export * from './utils/extract-id-number';
