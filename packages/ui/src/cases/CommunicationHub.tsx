@@ -78,6 +78,15 @@ export function CommunicationHub({ caseId, clientEmail, clientPhone }: Communica
         }
     };
 
+    const refreshLogs = async () => {
+        try {
+            const res = await fetch(`/api/cases/${caseId}/notifications`);
+            if (res.ok) setLogs(await res.json());
+        } catch (err) {
+            logger.error('Failed to refresh logs', err);
+        }
+    };
+
     const handleSendMessage = async () => {
         if (!customMessage.trim()) return;
         setSending(true);
@@ -92,14 +101,21 @@ export function CommunicationHub({ caseId, clientEmail, clientPhone }: Communica
                     recipientType: 'CLIENT'
                 }) });
 
-            if (res.ok) {
-                const newLog = await res.json();
-                setLogs([newLog, ...logs]);
+            const data = await res.json();
+
+            if (res.ok || res.status === 207) {
+                // Re-fetch to get the authoritative list from DB
+                await refreshLogs();
                 setCustomMessage('');
                 setSelectedTemplate('');
-                toast.success('Message sent successfully!');
+                if (data.success === false || res.status === 207) {
+                    toast.error('Message sent but delivery may have failed. Check the activity log below.');
+                } else {
+                    toast.success('Message sent successfully!');
+                }
             } else {
-                throw new Error('Failed to send message');
+                const errMsg = data?.error || 'Failed to send message';
+                toast.error(errMsg);
             }
         } catch (error) {
             logger.error('Send error:', error);

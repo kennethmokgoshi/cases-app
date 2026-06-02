@@ -28,6 +28,8 @@ const PatchSchema = z.object({
     // Commission tier
     commissionType: z.enum(COMMISSION_TYPES).optional(),
     fixedCommissionAmount: z.number().min(1).max(99999).nullable().optional(),
+    // Hierarchy
+    parentReferrerId: z.string().nullable().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'No fields to update' });
 
 function isAdminLevel(session: { user: { isAdmin?: boolean; isExecutive?: boolean; isSeniorManager?: boolean; role?: string } }) {
@@ -45,7 +47,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         const referrer = await prisma.referrer.findUnique({
             where: { id },
             include: {
-                project: { select: { id: true, name: true } },
+                project: { select: { id: true, name: true, parentId: true } },
+                parentReferrer: { select: { id: true, firstName: true, lastName: true } },
+                referredReferrers: { select: { id: true, firstName: true, lastName: true, isActive: true } },
                 _count: { select: { cases: true } },
                 cases: {
                     select: {
@@ -100,21 +104,64 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // If name changed, rename the linked sub-project too
         const newFirstName = data.firstName ?? existing.firstName;
         const newLastName = data.lastName ?? existing.lastName;
-        if (existing.projectId && (data.firstName || data.lastName)) {
-            await prisma.project.update({
-                where: { id: existing.projectId },
-                data: { name: `${newFirstName} ${newLastName}` },
-            });
+
+        if (existing.projectId) {
+            const projectUpdate: Record<string, unknown> = {};
+
+            if (data.firstName || data.lastName) {
+                projectUpdate.name = `${newFirstName} ${newLastName}`;
+            }
+
+            // Re-parent sub-project if parentReferrerId changed
+            if ('parentReferrerId' in data) {
+                if (data.parentReferrerId) {
+                    // Prevent circular reference
+                    if (data.parentReferrerId === id) {
+                        return NextResponse.json({ error: 'A referrer cannot refer themselves' }, { status: 422 });
+                    }
+                    const parent = await prisma.referrer.findUnique({
+                        where: { id: data.parentReferrerId },
+                        select: { id: true, projectId: true },
+                    });
+                    if (!parent) {
+                        return NextResponse.json({ error: 'Parent referrer not found' }, { status: 404 });
+                    }
+                    if (parent.projectId) {
+                        projectUpdate.parentId = parent.projectId;
+                    }
+                } else {
+                    // Cleared — move back under root "Referrals" project
+                    let referralsRoot = await prisma.project.findFirst({
+                        where: { name: 'Referrals', type: 'ACQUISITION_SOURCE', parentId: null },
+                    });
+                    if (!referralsRoot) {
+                        referralsRoot = await prisma.project.create({
+                            data: { name: 'Referrals', type: 'ACQUISITION_SOURCE', description: 'Cases referred by external referrers' },
+                        });
+                    }
+                    projectUpdate.parentId = referralsRoot.id;
+                }
+            }
+
+            if (Object.keys(projectUpdate).length > 0) {
+                await prisma.project.update({
+                    where: { id: existing.projectId },
+                    data: projectUpdate,
+                });
+            }
         }
 
+        const { parentReferrerId: newParentReferrerId, ...restData } = data;
         const updated = await prisma.referrer.update({
             where: { id },
             data: {
-                ...data,
-                monthlyIncome: data.monthlyIncome !== undefined ? data.monthlyIncome : undefined,
+                ...restData,
+                monthlyIncome: restData.monthlyIncome !== undefined ? restData.monthlyIncome : undefined,
+                ...('parentReferrerId' in data ? { parentReferrerId: newParentReferrerId ?? null } : {}),
             },
             include: {
-                project: { select: { id: true, name: true } },
+                project: { select: { id: true, name: true, parentId: true } },
+                parentReferrer: { select: { id: true, firstName: true, lastName: true } },
                 _count: { select: { cases: true } },
             },
         });

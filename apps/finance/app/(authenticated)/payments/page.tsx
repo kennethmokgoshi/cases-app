@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AllocatePaymentModal } from '@/components/payments/AllocatePaymentModal';
+import SendRefundFormModal, { type RefundFormRecipient } from './SendRefundFormModal';
 
 const logger = {
     info: (...args: any[]) => console.log('[INFO]', ...args),
@@ -48,7 +49,9 @@ function PaymentsContent() {
     const searchParams = useSearchParams();
     const [payments, setPayments] = useState<Payment[]>([]);
     const [total, setTotal] = useState(0);
-    const [allocatingPayment, setAllocatingPayment] = useState<Payment | null>(null);
+    const [allocatingPayment, setAllocatingPayment]     = useState<Payment | null>(null);
+    const [refundRecipient, setRefundRecipient]         = useState<RefundFormRecipient | undefined>(undefined);
+    const [showRefundModal, setShowRefundModal]          = useState(false);
     const [page, setPage] = useState(1);
     const [pages, setPages] = useState(1);
     const [loading, setLoading] = useState(true);
@@ -105,12 +108,29 @@ function PaymentsContent() {
                     <h1 className="text-3xl font-bold text-white">Payments</h1>
                     <p className="text-gray-400 text-sm mt-1">{total.toLocaleString()} total records</p>
                 </div>
-                <Link
-                    href="/payments/record"
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-sm font-semibold transition-colors self-start sm:self-auto"
-                >
-                    + Record Payment
-                </Link>
+                <div className="flex items-center gap-3 self-start sm:self-auto flex-wrap">
+                    {/* Header-level Send Refund Form (blank form, staff fills in details) */}
+                    <SendRefundFormModal
+                        trigger={(onClick) => (
+                            <button
+                                onClick={() => { setRefundRecipient(undefined); onClick(); }}
+                                className="flex items-center gap-2 px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 rounded-lg text-sm font-semibold transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                        d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                                </svg>
+                                Send Refund Form
+                            </button>
+                        )}
+                    />
+                    <Link
+                        href="/payments/record"
+                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-sm font-semibold transition-colors"
+                    >
+                        + Record Payment
+                    </Link>
+                </div>
             </div>
 
             {/* Filters */}
@@ -225,14 +245,38 @@ function PaymentsContent() {
                                                 )}
                                             </td>
                                             <td className="px-5 py-3">
-                                                {!p.client && (
-                                                    <button
-                                                        onClick={() => setAllocatingPayment(p)}
-                                                        className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 rounded text-xs font-medium transition-colors"
-                                                    >
-                                                        Allocate
-                                                    </button>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    {!p.client && (
+                                                        <button
+                                                            onClick={() => setAllocatingPayment(p)}
+                                                            className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 rounded text-xs font-medium transition-colors"
+                                                        >
+                                                            Allocate
+                                                        </button>
+                                                    )}
+                                                    {p.client && (
+                                                        <SendRefundFormModal
+                                                            prefill={{
+                                                                name:    `${p.client.firstName} ${p.client.lastName}`,
+                                                                email:   '',           // clients may not have email on the Payment type — staff completes it
+                                                                caseRef: p.case?.fileNumber ?? undefined,
+                                                            }}
+                                                            trigger={(onClick) => (
+                                                                <button
+                                                                    onClick={onClick}
+                                                                    title="Send Refund Request Form to this consumer"
+                                                                    className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 rounded text-xs font-medium transition-colors flex items-center gap-1"
+                                                                >
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                                            d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                                                                    </svg>
+                                                                    Refund Form
+                                                                </button>
+                                                            )}
+                                                        />
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

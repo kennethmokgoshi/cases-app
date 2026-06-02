@@ -23,6 +23,8 @@ type Project = {
     parentId?: string | null;
     parent_id?: string | null;
     children?: Project[];
+    // Linked referrer — present when project is a registered referral sub-project
+    referrer?: { id: string; firstName: string; lastName: string } | null;
 };
 
 function getDescendants(parentId: string, allProjects: Project[]): Project[] {
@@ -169,6 +171,9 @@ function NewCaseWithAIComponent() {
 
     const [selectedParentId, setSelectedParentId] = useState('');
     const [selectedSubprojectId, setSelectedSubprojectId] = useState('');
+    // Auto-detected referrerId from selected sub-project (when sub-project is a registered Referrer)
+    const [autoDetectedReferrerId, setAutoDetectedReferrerId] = useState<string | null>(null);
+    const [autoDetectedReferrerName, setAutoDetectedReferrerName] = useState<string | null>(null);
     const [selectedYear, setSelectedYear] = useState(String(currentYearVal));
     const [selectedMonth, setSelectedMonth] = useState(currentMonthVal);
     const [finalProjectId, setFinalProjectId] = useState('');
@@ -526,6 +531,8 @@ function NewCaseWithAIComponent() {
     useEffect(() => {
         if (isAutoSelecting.current) return;
         setSelectedSubprojectId('');
+        setAutoDetectedReferrerId(null);
+        setAutoDetectedReferrerName(null);
         // REMOVED: Reseting Year/Month
     }, [selectedParentId]);
 
@@ -686,7 +693,8 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
+                    referrerId: autoDetectedReferrerId ?? undefined,
                 })
             });
             if (!tempCase.ok) throw new Error('Failed to initialize case');
@@ -802,7 +810,9 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0 }) });
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
+                    referrerId: autoDetectedReferrerId ?? undefined,
+                }) });
 
             if (!tempCase.ok) throw new Error('Failed to create temporary case');
             const tempCaseData = await tempCase.json();
@@ -1080,7 +1090,9 @@ function NewCaseWithAIComponent() {
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
-                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0 }) });
+                    partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
+                    referrerId: autoDetectedReferrerId ?? undefined,
+                }) });
 
             if (!tempCase.ok) throw new Error('Failed to initialize case');
             const tempCaseData = await tempCase.json();
@@ -1529,7 +1541,24 @@ function NewCaseWithAIComponent() {
                             </label>
                             <select
                                 value={selectedSubprojectId}
-                                onChange={(e) => setSelectedSubprojectId(e.target.value)}
+                                onChange={(e) => {
+                                    const id = e.target.value;
+                                    setSelectedSubprojectId(id);
+                                    // Auto-detect referrer from selected sub-project
+                                    if (id) {
+                                        const proj = allFlatProjects.find(p => p.id === id);
+                                        if (proj?.referrer) {
+                                            setAutoDetectedReferrerId(proj.referrer.id);
+                                            setAutoDetectedReferrerName(`${proj.referrer.firstName} ${proj.referrer.lastName}`);
+                                        } else {
+                                            setAutoDetectedReferrerId(null);
+                                            setAutoDetectedReferrerName(null);
+                                        }
+                                    } else {
+                                        setAutoDetectedReferrerId(null);
+                                        setAutoDetectedReferrerName(null);
+                                    }
+                                }}
                                 className="w-full px-4 py-3 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
                             >
                                 <option value="">No subproject (use main source)</option>
@@ -1537,6 +1566,12 @@ function NewCaseWithAIComponent() {
                                     <option key={project.id} value={project.id}>{project.name}</option>
                                 ))}
                             </select>
+                            {/* Referrer auto-detected badge */}
+                            {autoDetectedReferrerName && (
+                                <p className="mt-1.5 text-xs text-purple-400">
+                                    Referred by: <strong>{autoDetectedReferrerName}</strong> — commission will be tracked automatically
+                                </p>
+                            )}
                         </div>
                     )}
 

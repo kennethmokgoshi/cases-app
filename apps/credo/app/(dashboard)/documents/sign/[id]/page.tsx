@@ -14,14 +14,15 @@ export default function SignPoaPage() {
     const handleSaveSignature = async (signatureDataUrl: string) => {
         setLoading(true);
         setError('');
-        
+
         try {
             const res = await fetch(`/api/consumer/poa/sign`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     signatureImage: signatureDataUrl,
-                    requestId: params.id 
+                    requestId: params.id,
+                    poaSigningToken: undefined  // Direct Credo signing, no token
                 })
             });
 

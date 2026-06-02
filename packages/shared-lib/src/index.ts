@@ -44,3 +44,6 @@ export * from './debt-review-removal/removal-paths';
 
 // Utils
 export * from './utils/extract-id-number';
+
+// Court Documents (Node-only — pdf-lib; import directly in server routes)
+// import { generateCourtDoc } from '@zenowethu/shared-lib/src/court-docs'

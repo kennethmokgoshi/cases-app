@@ -3,7 +3,7 @@ import { toast, confirm } from '@zenowethu/ui';
 
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -20,7 +20,9 @@ import { CompareAnalysisModal } from '@zenowethu/ui';
 import { SendPoaModal } from '@zenowethu/ui';
 import { RichTextEditor } from '@zenowethu/ui';
 import { AIPlanTab } from '@zenowethu/ui';
+import { AIChatTab } from '@zenowethu/ui';
 import { DebtReviewTab } from './DebtReviewTab';
+import { CourtDocsTab } from './CourtDocsTab';
 import { SavingsAuditCard } from './SavingsAuditCard';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
 import SendQuoteModal from './SendQuoteModal';
@@ -274,6 +276,7 @@ export default function CaseDetailPage() {
 
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { data: session } = useSession();
     const isAdmin     = session?.user?.isAdmin === true;
     const isExecutive = session?.user?.isExecutive === true;
@@ -376,7 +379,14 @@ export default function CaseDetailPage() {
     const [isMandateModalOpen, setIsMandateModalOpen] = useState(false);
     const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
 
-    const [activeDetailTab, setActiveDetailTab] = useState<'ACTIVITY' | 'DOCUMENTS' | 'COMMUNICATION' | 'AI_PLAN' | 'DEBT_REVIEW'>('ACTIVITY');
+    const VALID_TABS = ['ACTIVITY', 'DOCUMENTS', 'COMMUNICATION', 'AI_PLAN', 'AI_ASSISTANT', 'DEBT_REVIEW', 'COURT_DOCS'] as const;
+    type DetailTab = typeof VALID_TABS[number];
+    const tabFromUrl = searchParams.get('tab')?.toUpperCase() as DetailTab | null;
+    const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>(
+        tabFromUrl && VALID_TABS.includes(tabFromUrl as DetailTab) ? tabFromUrl : 'ACTIVITY'
+    );
+    const tabsPanelRef = useRef<HTMLDivElement>(null);
+    const highlightedCommentId = searchParams.get('comment');
     // DC pre-send confirmation
     const [dcConfirmPending, setDcConfirmPending] = useState<'FILE_REQUEST' | 'INVOICE_REQUEST' | null>(null);
 
@@ -502,6 +512,15 @@ export default function CaseDetailPage() {
     useEffect(() => {
         fetchCase();
     }, [fetchCase]);
+
+    // When arriving from a notification link with ?tab=X, scroll the tabs panel into view
+    useEffect(() => {
+        if (!tabFromUrl || loading) return;
+        const timer = setTimeout(() => {
+            tabsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [tabFromUrl, loading]);
 
     const handleUpdateAssignments = async (userIds: string[]) => {
         try {
@@ -1666,9 +1685,10 @@ export default function CaseDetailPage() {
 
     // Debt-review-specific features: Form 16 + Debt Review Docs tab only visible for DR/DRR cases
     const caseServiceList: string[] = (() => { try { return JSON.parse(caseData.services ?? '[]'); } catch { return []; } })();
-    const isDebtReviewCase = caseServiceList.some(s =>
-        s.toLowerCase().includes('debt review') || s.toLowerCase().includes('flag removal')
-    );
+    const isDebtReviewCase = caseServiceList.some(s => {
+        const n = s.toLowerCase().replace(/_/g, ' ');
+        return n.includes('debt review') || n.includes('flag removal');
+    });
 
     return (
         <div className="max-w-7xl mx-auto">
@@ -3854,7 +3874,7 @@ export default function CaseDetailPage() {
                     </div >
 
                     {/* Enhanced Case Utilities - Tabbed Interface */}
-                    < div className="mt-12 bg-zeno-blue/10 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" >
+                    < div ref={tabsPanelRef} className="mt-12 bg-zeno-blue/10 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" >
                         <nav className="flex bg-zeno-navy/80 border-b border-white/5">
                             <button
                                 onClick={() => setActiveDetailTab('ACTIVITY')}
@@ -3892,6 +3912,15 @@ export default function CaseDetailPage() {
                             >
                                 <span>🤖</span> AI Plan
                             </button>
+                            <button
+                                onClick={() => setActiveDetailTab('AI_ASSISTANT')}
+                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'AI_ASSISTANT'
+                                    ? 'text-amber-400 border-b-2 border-amber-400 bg-amber-400/5'
+                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    }`}
+                            >
+                                <span>✨</span> AI Assistant
+                            </button>
                             {isDebtReviewCase && (
                                 <button
                                     onClick={() => setActiveDetailTab('DEBT_REVIEW')}
@@ -3903,12 +3932,23 @@ export default function CaseDetailPage() {
                                     <span>📄</span> Debt Review Docs
                                 </button>
                             )}
+                            {isDebtReviewCase && (
+                                <button
+                                    onClick={() => setActiveDetailTab('COURT_DOCS')}
+                                    className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'COURT_DOCS'
+                                        ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
+                                        : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                        }`}
+                                >
+                                    <span>⚖️</span> Court Docs
+                                </button>
+                            )}
                         </nav>
 
                         <div className="p-8">
                             {activeDetailTab === 'ACTIVITY' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <ActivityTab caseId={caseData.id} fileNumber={caseData.fileNumber} lastUpdate={activityUpdate} />
+                                    <ActivityTab caseId={caseData.id} fileNumber={caseData.fileNumber} lastUpdate={activityUpdate} highlightCommentId={highlightedCommentId} />
                                 </div>
                             )}
                             {activeDetailTab === 'DOCUMENTS' && (
@@ -3930,11 +3970,25 @@ export default function CaseDetailPage() {
                                     <AIPlanTab caseId={caseData.id} acquisitionType={caseData.acquisitionType} />
                                 </div>
                             )}
+                            {activeDetailTab === 'AI_ASSISTANT' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <AIChatTab caseId={caseData.id} />
+                                </div>
+                            )}
                             {isDebtReviewCase && activeDetailTab === 'DEBT_REVIEW' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <DebtReviewTab
                                         caseId={caseData.id}
                                         canApprove={!!(session?.user?.isAdmin || session?.user?.isExecutive || (session?.user as any)?.isSeniorManager || (session?.user as any)?.role === 'MANAGER')}
+                                    />
+                                </div>
+                            )}
+                            {isDebtReviewCase && activeDetailTab === 'COURT_DOCS' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <CourtDocsTab
+                                        caseId={caseData.id}
+                                        fileNumber={caseData.fileNumber}
+                                        clientEmail={caseData.client.email}
                                     />
                                 </div>
                             )}

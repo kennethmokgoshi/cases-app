@@ -4,6 +4,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import { prisma } from '@zenowethu/database';
 import { auth, createLogger, renderBrandedEmail } from '@zenowethu/shared-lib';
 import { generateStandardPoa, generateWesbankPoa } from '@zenowethu/shared-lib/src/poa/poa-generator';
+import { createPoaSigningToken } from '@zenowethu/shared-lib/src/poa/signing-service';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { GhlService } from '@zenowethu/shared-lib/src/integrations/ghl-service';
 
@@ -143,13 +144,25 @@ export async function POST(
         }
 
         // ---------------------------------------------------------------
+        // Create a signing token (72 h expiry — ECTA audit trail)
+        // ---------------------------------------------------------------
+        const signingToken = await createPoaSigningToken({
+            poaType:   type as 'STANDARD' | 'WESBANK',
+            channel:   channel as 'EMAIL' | 'WHATSAPP',
+            caseId:    caseId,
+            clientId:  client.id,
+        });
+
+        const baseUrl    = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://cases.zenowethu.co.za';
+        const signUrl    = `${baseUrl}/sign/poa/${signingToken}`;
+
+        // ---------------------------------------------------------------
         // Save PDF for download link (Fallback for GHL / WhatsApp)
         // ---------------------------------------------------------------
         const uploadDir = '/tmp/poa';
         await mkdir(uploadDir, { recursive: true });
         await writeFile(join(uploadDir, fileName), pdfBuffer);
 
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://cases.zenowethu.co.za';
         const downloadUrl = `${baseUrl}/api/poa/download/${fileName}`;
 
         // ---------------------------------------------------------------
@@ -160,9 +173,9 @@ export async function POST(
                 to: client.email!,
                 fromName:    session.user.name || undefined,
                 subject: type === 'WESBANK'
-                    ? `Wesbank Power of Attorney — Please Sign and Return | ${clientFullName}`
-                    : `Power of Attorney — Please Sign and Return | Zenowethu Debt Management`,
-                html: buildEmailHtml(clientFullName, type, downloadUrl),
+                    ? `Wesbank Power of Attorney — Please Sign Online | ${clientFullName}`
+                    : `Power of Attorney — Sign Online | Zenowethu Debt Management`,
+                html: buildEmailHtml(clientFullName, type, downloadUrl, signUrl),
                 attachments: [{
                     filename:    fileName,
                     content:     pdfBuffer,
@@ -176,10 +189,10 @@ export async function POST(
             }
 
             await logActivity(caseId, session.user.id, type, 'EMAIL', client.email!);
-            return NextResponse.json({ success: true, channel: 'EMAIL', messageId: emailResult.messageId, downloadUrl });
+            return NextResponse.json({ success: true, channel: 'EMAIL', messageId: emailResult.messageId, downloadUrl, signUrl });
         }
 
-        const waMessage = buildWhatsAppMessage(clientFullName, downloadUrl, type);
+        const waMessage = buildWhatsAppMessage(clientFullName, downloadUrl, signUrl, type);
 
         try {
             await GhlService.sendMessage(caseId, 'WHATSAPP', waMessage);
@@ -190,7 +203,7 @@ export async function POST(
         }
 
         await logActivity(caseId, session.user.id, type, 'WHATSAPP', client.whatsappNumber ?? client.phone ?? '');
-        return NextResponse.json({ success: true, channel: 'WHATSAPP', downloadUrl });
+        return NextResponse.json({ success: true, channel: 'WHATSAPP', downloadUrl, signUrl });
 
     } catch (error) {
         logger.error('[POA] Unexpected error', error);
@@ -225,52 +238,65 @@ async function logActivity(caseId: string, userId: string, type: string, channel
     });
 }
 
-function buildEmailHtml(clientName: string, type: string, downloadUrl: string): string {
+function buildEmailHtml(clientName: string, type: string, downloadUrl: string, signUrl: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
-    
+
     const content = `
         <p>Dear <strong>${clientName}</strong>,</p>
-        <p>Please find attached your personalised <strong>${docLabel}</strong> from Zenowethu Debt Management.</p>
-        
+        <p>Your personalised <strong>${docLabel}</strong> from Zenowethu Debt Management is ready and waiting for your signature.</p>
+
+        <div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 20px; border-radius: 4px; margin: 25px 0;">
+            <strong style="color: #1b5e20; display: block; margin-bottom: 10px;">✅ Easiest option — Sign Online (recommended):</strong>
+            <p style="margin: 0 0 12px; color: #1b5e20;">Click the button below to sign directly in your browser — no printing or scanning required. Takes less than 1 minute.</p>
+            <a href="${signUrl}" style="display: inline-block; background-color: #0d3870; color: white; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 15px;">Sign Online Now →</a>
+            <p style="margin: 10px 0 0; font-size: 12px; color: #388e3c;">This link is valid for 72 hours and can only be used once.</p>
+        </div>
+
         <div style="background-color: #f0f6ff; border-left: 4px solid #0d3870; padding: 20px; border-radius: 4px; margin: 25px 0;">
-            <strong style="color: #0d3870; display: block; margin-bottom: 10px;">What you need to do:</strong>
+            <strong style="color: #0d3870; display: block; margin-bottom: 10px;">Alternative — Sign manually:</strong>
             <ol style="margin: 0; padding-left: 20px;">
                 <li style="margin-bottom: 8px;">Download and open the attached PDF.</li>
-                <li style="margin-bottom: 8px;">Print it or use a PDF signing app (like Adobe Fill & Sign).</li>
+                <li style="margin-bottom: 8px;">Print it or use a PDF signing app (like Adobe Fill &amp; Sign).</li>
                 <li style="margin-bottom: 8px;">Sign where indicated and fill in the date.</li>
                 <li style="margin-bottom: 0;">Scan or photograph the signed document and send it back to us at <a href="mailto:notifications@zenowethu.co.za" style="color: #d9701a; text-decoration: none; font-weight: bold;">notifications@zenowethu.co.za</a>.</li>
             </ol>
         </div>
-        
-        <p>If you have any questions, please contact us at <strong>012 035 1824</strong> or simply reply to this email.</p>
+
+        <p style="font-size: 12px; color: #888;">Your digital signature is legally binding under the Electronic Communications and Transactions Act (ECTA, Act 25 of 2002). Your IP address and timestamp will be recorded.</p>
+        <p>Questions? Call us at <strong>012 035 1824</strong> or reply to this email.</p>
         <p>Kind regards,<br/><strong>Zenowethu Debt Management Team</strong></p>
     `;
 
     return renderBrandedEmail(content, {
-        title: `${docLabel} — Action Required`,
-        previewText: `Your personalised ${docLabel} is ready for signature.`,
+        title: `${docLabel} — Sign Online`,
+        previewText: `Your personalised ${docLabel} is ready — sign it online in under 1 minute.`,
         button: {
-            text: `Download ${docLabel} (PDF)`,
-            url: downloadUrl
-        }
+            text: `Sign Online Now`,
+            url:  signUrl,
+        },
     });
 }
 
-function buildWhatsAppMessage(clientName: string, downloadUrl: string, type: string): string {
+function buildWhatsAppMessage(clientName: string, downloadUrl: string, signUrl: string, type: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
-    return `Hello ${clientName.split(' ')[0]},
+    const firstName = clientName.split(' ')[0];
+    return `Hello ${firstName},
 
-Zenowethu Debt Management has sent you a personalised *${docLabel}* document.
+Zenowethu Debt Management has sent you a *${docLabel}* — ready for your signature. 📝
 
-📄 Download & sign here:
+✅ *Sign Online (easiest — takes 1 min):*
+${signUrl}
+
+Just tap the link, draw your signature, and submit. Done! No printing needed.
+
+_Link valid for 72 hours._
+
+📄 *Or download the PDF manually:*
 ${downloadUrl}
 
-*Steps:*
-1. Open the link and download the PDF.
-2. Sign where indicated and fill in today's date.
-3. Send the signed copy back to us on WhatsApp or email notifications@zenowethu.co.za
+Questions? Call us: *012 035 1824*
 
-Questions? Call us: 012 035 1824
+_Your signature is legally valid under the Electronic Communications and Transactions Act (ECTA)._
 
 — Zenowethu Debt Management`;
 }

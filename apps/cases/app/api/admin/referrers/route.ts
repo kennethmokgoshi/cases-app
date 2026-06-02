@@ -36,6 +36,8 @@ const CreateSchema = z.object({
     // Commission
     commissionType: z.enum(COMMISSION_TYPES).optional(),
     fixedCommissionAmount: z.number().min(1).max(99999).nullable().optional(),
+    // Hierarchy — who referred this referrer (optional)
+    parentReferrerId: z.string().nullable().optional(),
 });
 
 // GET /api/admin/referrers — paginated list with search and status filters
@@ -74,7 +76,8 @@ export async function GET(request: Request) {
                 skip: (page - 1) * PAGE_SIZE,
                 take: PAGE_SIZE,
                 include: {
-                    project: { select: { id: true, name: true } },
+                    project: { select: { id: true, name: true, parentId: true } },
+                    parentReferrer: { select: { id: true, firstName: true, lastName: true } },
                     _count: { select: { cases: true } },
                 },
             }),
@@ -152,14 +155,35 @@ export async function POST(request: Request) {
             }
         }
 
-        // Find or create the root "Referrals" acquisition source project
-        let referralsRoot = await prisma.project.findFirst({
-            where: { name: 'Referrals', type: 'ACQUISITION_SOURCE', parentId: null },
-        });
-        if (!referralsRoot) {
-            referralsRoot = await prisma.project.create({
-                data: { name: 'Referrals', type: 'ACQUISITION_SOURCE', description: 'Cases referred by external referrers' },
+        // Validate parent referrer if provided
+        let parentProjectId: string | null = null;
+        if (data.parentReferrerId) {
+            const parent = await prisma.referrer.findUnique({
+                where: { id: data.parentReferrerId },
+                select: { id: true, projectId: true, firstName: true, lastName: true },
             });
+            if (!parent) {
+                return NextResponse.json({ error: 'Parent referrer not found' }, { status: 404 });
+            }
+            parentProjectId = parent.projectId ?? null;
+        }
+
+        // Determine the parent project for the new sub-project:
+        // - If this referrer was referred by another referrer → nest under their sub-project
+        // - Otherwise → find or create the root "Referrals" acquisition source project
+        let subProjectParentId: string;
+        if (parentProjectId) {
+            subProjectParentId = parentProjectId;
+        } else {
+            let referralsRoot = await prisma.project.findFirst({
+                where: { name: 'Referrals', type: 'ACQUISITION_SOURCE', parentId: null },
+            });
+            if (!referralsRoot) {
+                referralsRoot = await prisma.project.create({
+                    data: { name: 'Referrals', type: 'ACQUISITION_SOURCE', description: 'Cases referred by external referrers' },
+                });
+            }
+            subProjectParentId = referralsRoot.id;
         }
 
         // Create sub-project named after the referrer
@@ -168,19 +192,22 @@ export async function POST(request: Request) {
                 name: `${data.firstName} ${data.lastName}`,
                 type: 'REFERRER',
                 description: `Referral sub-project for ${data.firstName} ${data.lastName}${data.idNumber ? ` (ID: ${data.idNumber})` : ''}`,
-                parentId: referralsRoot.id,
+                parentId: subProjectParentId,
             },
         });
 
+        const { parentReferrerId, ...restData } = data;
         const referrer = await prisma.referrer.create({
             data: {
-                ...data,
-                monthlyIncome: data.monthlyIncome != null ? data.monthlyIncome : undefined,
+                ...restData,
+                monthlyIncome: restData.monthlyIncome != null ? restData.monthlyIncome : undefined,
                 projectId: subProject.id,
                 createdById: session.user.id,
+                parentReferrerId: parentReferrerId ?? null,
             },
             include: {
-                project: { select: { id: true, name: true } },
+                project: { select: { id: true, name: true, parentId: true } },
+                parentReferrer: { select: { id: true, firstName: true, lastName: true } },
                 _count: { select: { cases: true } },
             },
         });

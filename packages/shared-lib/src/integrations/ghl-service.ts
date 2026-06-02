@@ -14,6 +14,7 @@ import {
 import { generateAutoReply } from '../ai/auto-reply';
 import { extractSaIdNumber } from '../utils/extract-id-number';
 import { logAutomationRun } from '../automation/run-logger';
+import { mapGhlSourceToLeadSource } from './ghl-source-map';
 
 export interface GhlSendResult {
     success: boolean;
@@ -401,13 +402,16 @@ export class GhlService {
         const email = payload.email as string | undefined;
         const phone = payload.phone as string | undefined;
         const contactId = payload.id as string;
+        const tags = (payload.tags as string[] | undefined) ?? [];
+        const rawFields = (payload.customFields as Array<{ id: string; value: string }> | undefined) ?? [];
+        const customFields: Record<string, string> = Object.fromEntries(rawFields.map(f => [f.id, f.value]));
 
         if (!contactId || (!email && !phone)) {
             return { success: false, error: 'Missing contact info' };
         }
 
-        // Check if client exists
-        let client = await prisma.client.findFirst({
+        // 1. Match existing Client — update ghlContactId if needed and return early
+        const client = await prisma.client.findFirst({
             where: {
                 OR: [
                     { ghlContactId: contactId },
@@ -418,30 +422,72 @@ export class GhlService {
         });
 
         if (client) {
-            // Update client with ghlContactId if missing
             if (!client.ghlContactId) {
-                await prisma.client.update({
-                    where: { id: client.id },
-                    data: { ghlContactId: contactId },
-                });
+                await prisma.client.update({ where: { id: client.id }, data: { ghlContactId: contactId } });
             }
             return { success: true, clientId: client.id };
         }
 
-        // Create new client
-        client = await prisma.client.create({
+        // 2. Match existing Lead — update ghlContactId if needed and return early
+        const existingLead = await prisma.lead.findFirst({
+            where: {
+                OR: [
+                    { ghlContactId: contactId },
+                    ...(email ? [{ email }] : []),
+                    ...(phone ? [{ phone }] : []),
+                ],
+            },
+        });
+
+        if (existingLead) {
+            if (!existingLead.ghlContactId) {
+                await prisma.lead.update({ where: { id: existingLead.id }, data: { ghlContactId: contactId } });
+            }
+            return { success: true, leadId: existingLead.id };
+        }
+
+        // 3. No match — create a new Lead for staff triage
+        const source = mapGhlSourceToLeadSource(tags, customFields);
+        const SERVICE_TAGS = ['debt-review-removal', 'court-rescission', 'credit-repair', 'insurance'];
+        const service = tags.find(t => SERVICE_TAGS.includes(t)) ?? 'debt-review-removal';
+
+        const lead = await prisma.lead.create({
             data: {
                 firstName,
                 lastName,
                 email,
-                phone,
+                phone: phone ?? '',
                 ghlContactId: contactId,
-                idNumber: `GHL-${contactId.substring(0, 8)}`, // Placeholder ID if none provided
+                source,
+                service,
+                status: 'NEW',
+                popiaConsent: false,
             },
         });
 
-        logger.info(`[GHL Webhook] Created new client ${client.id} from GHL contact ${contactId}`);
-        return { success: true, clientId: client.id };
+        // Notify all admin users about the new lead
+        const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+        if (admins.length > 0) {
+            await prisma.inAppNotification.createMany({
+                data: admins.map(a => ({
+                    userId: a.id,
+                    type: 'NEW_LEAD',
+                    title: 'New GHL Lead',
+                    message: `${firstName} ${lastName} (${source.replace(/_/g, ' ')}) has been added to the lead triage queue.`,
+                    linkUrl: '/leads',
+                })),
+            });
+        }
+
+        await logAutomationRun({
+            type: 'GHL_WEBHOOK',
+            status: 'SUCCESS',
+            startedAt: new Date(),
+            logs: { event: 'ContactCreate', leadId: lead.id, source, contactId },
+        });
+
+        logger.info(`[GHL Webhook] Created new Lead ${lead.id} from GHL contact ${contactId} (source: ${source})`);
+        return { success: true, leadId: lead.id };
     }
 
     private static async handleOpportunityUpdate(payload: Record<string, unknown>) {

@@ -28,7 +28,8 @@ type Referrer = {
     accountHolderName: string | null;
     isActive: boolean;
     notes: string | null;
-    project: { id: string; name: string } | null;
+    project: { id: string; name: string; parentId: string | null } | null;
+    parentReferrer: { id: string; firstName: string; lastName: string } | null;
     _count: { cases: number };
     createdAt: string;
     outstandingCommission: number;
@@ -64,6 +65,7 @@ const emptyForm = {
     isActive: true,
     commissionType: 'FIXED' as 'FIXED' | 'VOLUME_BASED',
     fixedCommissionAmount: '',
+    parentReferrerId: '',
 };
 
 type FormState = typeof emptyForm;
@@ -91,6 +93,10 @@ export default function ReferrersPage() {
     const [deleting, setDeleting] = useState(false);
 
     const [detailTarget, setDetailTarget] = useState<Referrer | null>(null);
+    const [allReferrers, setAllReferrers] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
+    const [unregisteredFolders, setUnregisteredFolders] = useState<{ id: string; name: string; type: string; parent: { id: string; name: string } | null; _count: { cases: number } }[]>([]);
+    const [loadingFolders, setLoadingFolders] = useState(false);
+    const [registeringFolderId, setRegisteringFolderId] = useState<string | null>(null);
 
     const isManager = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'MANAGER';
     const canDelete = session?.user?.isAdmin || session?.user?.isExecutive;
@@ -121,19 +127,20 @@ export default function ReferrersPage() {
 
     useEffect(() => { fetchReferrers(); }, [fetchReferrers]);
 
-    function openAdd() {
+    async function openAdd() {
         setEditTarget(null);
         setForm(emptyForm);
         setFormError('');
+        await loadAllReferrers();
         setModalOpen(true);
     }
 
-    function openEdit(r: Referrer) {
+    async function openEdit(r: Referrer) {
         setEditTarget(r);
         setForm({
             firstName: r.firstName,
             lastName: r.lastName,
-            idNumber: r.idNumber,
+            idNumber: r.idNumber ?? '',
             email: r.email ?? '',
             cellNumber: r.cellNumber ?? '',
             employerName: r.employerName ?? '',
@@ -151,9 +158,60 @@ export default function ReferrersPage() {
             isActive: r.isActive,
             commissionType: (r.commissionType as 'FIXED' | 'VOLUME_BASED') ?? 'FIXED',
             fixedCommissionAmount: r.fixedCommissionAmount != null ? String(r.fixedCommissionAmount) : '',
+            parentReferrerId: r.parentReferrer?.id ?? '',
         });
         setFormError('');
+        await loadAllReferrers();
         setModalOpen(true);
+    }
+
+    async function loadAllReferrers() {
+        try {
+            const res = await fetch('/api/admin/referrers?page=1');
+            if (!res.ok) return;
+            const data = await res.json();
+            setAllReferrers(data.referrers.map((r: Referrer) => ({ id: r.id, firstName: r.firstName, lastName: r.lastName })));
+        } catch {
+            // non-critical — dropdown just stays empty
+        }
+    }
+
+    const fetchUnregisteredFolders = useCallback(async () => {
+        setLoadingFolders(true);
+        try {
+            const res = await fetch('/api/admin/referrers/unregistered-folders');
+            if (!res.ok) return;
+            const data = await res.json();
+            setUnregisteredFolders(data.folders ?? []);
+        } catch {
+            // non-critical
+        } finally {
+            setLoadingFolders(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchUnregisteredFolders(); }, [fetchUnregisteredFolders]);
+
+    async function registerFolder(projectId: string) {
+        setRegisteringFolderId(projectId);
+        try {
+            const res = await fetch('/api/admin/referrers/register-from-project', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                toast.error(json.error ?? 'Failed to register');
+                return;
+            }
+            toast.success(`${json.firstName} ${json.lastName} registered as referrer`);
+            await Promise.all([fetchReferrers(), fetchUnregisteredFolders()]);
+        } catch {
+            toast.error('Network error');
+        } finally {
+            setRegisteringFolderId(null);
+        }
     }
 
     async function handleSave() {
@@ -163,10 +221,10 @@ export default function ReferrersPage() {
             const payload: Record<string, unknown> = {
                 firstName: form.firstName.trim(),
                 lastName: form.lastName.trim(),
-                idNumber: form.idNumber.trim() || null,
-                email: form.email.trim() || null,
-                cellNumber: form.cellNumber.trim() || null,
-                employerName: form.employerName.trim() || null,
+                idNumber: (form.idNumber ?? '').trim() || null,
+                email: (form.email ?? '').trim() || null,
+                cellNumber: (form.cellNumber ?? '').trim() || null,
+                employerName: (form.employerName ?? '').trim() || null,
                 employmentType: form.employmentType || null,
                 employerAddress: form.employerAddress.trim() || null,
                 employerPhone: form.employerPhone.trim() || null,
@@ -183,6 +241,7 @@ export default function ReferrersPage() {
                 fixedCommissionAmount: form.commissionType === 'FIXED' && form.fixedCommissionAmount
                     ? parseFloat(form.fixedCommissionAmount)
                     : null,
+                parentReferrerId: form.parentReferrerId || null,
             };
 
             const url = editTarget ? `/api/admin/referrers/${editTarget.id}` : '/api/admin/referrers';
@@ -265,6 +324,45 @@ export default function ReferrersPage() {
                 ))}
             </div>
 
+            {/* Unregistered Referral Folders — alert panel */}
+            {(loadingFolders || unregisteredFolders.length > 0) && (
+                <div className="bg-amber-500/5 border border-amber-500/25 rounded-xl p-5 mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <h2 className="text-sm font-semibold text-amber-400">Unregistered Referral Folders</h2>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                                These project folders are used as referral buckets but have no Referrer record.
+                                Cases inside them are not tracked for commissions. Click <strong className="text-white">Register</strong> to link them.
+                            </p>
+                        </div>
+                    </div>
+                    {loadingFolders ? (
+                        <p className="text-xs text-gray-500">Loading…</p>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-2">
+                            {unregisteredFolders.map((folder) => (
+                                <div key={folder.id} className="flex items-center justify-between bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg px-4 py-2.5">
+                                    <div>
+                                        <span className="text-white text-sm font-medium">{folder.name}</span>
+                                        {folder.parent && (
+                                            <span className="text-gray-500 text-xs ml-2">under {folder.parent.name}</span>
+                                        )}
+                                        <span className="ml-3 text-xs text-gray-400">{folder._count.cases} case{folder._count.cases !== 1 ? 's' : ''}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => registerFolder(folder.id)}
+                                        disabled={registeringFolderId === folder.id}
+                                        className="bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {registeringFolderId === folder.id ? 'Registering…' : 'Register'}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Filters */}
             <div className="flex flex-wrap gap-3 mb-5">
                 <input
@@ -295,6 +393,7 @@ export default function ReferrersPage() {
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Contact</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Employer</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Sub-Project</th>
+                            <th className="text-left py-3 px-4 text-gray-400 font-medium">Referred By</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Cases</th>
                             <th className="text-right py-3 px-4 text-gray-400 font-medium">Outstanding</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium pl-6">Status</th>
@@ -303,9 +402,9 @@ export default function ReferrersPage() {
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={8} className="py-12 text-center text-gray-400">Loading...</td></tr>
+                            <tr><td colSpan={9} className="py-12 text-center text-gray-400">Loading...</td></tr>
                         ) : referrers.length === 0 ? (
-                            <tr><td colSpan={8} className="py-12 text-center text-gray-400">No referrers found</td></tr>
+                            <tr><td colSpan={9} className="py-12 text-center text-gray-400">No referrers found</td></tr>
                         ) : referrers.map((r) => (
                             <tr key={r.id} className="border-b border-zeno-blue/20 hover:bg-zeno-blue/20 transition-colors">
                                 <td className="py-3 px-4">
@@ -331,6 +430,13 @@ export default function ReferrersPage() {
                                         </Link>
                                     ) : (
                                         <span className="text-gray-500 text-xs">—</span>
+                                    )}
+                                </td>
+                                <td className="py-3 px-4">
+                                    {r.parentReferrer ? (
+                                        <span className="text-purple-400 text-xs">{r.parentReferrer.firstName} {r.parentReferrer.lastName}</span>
+                                    ) : (
+                                        <span className="text-gray-600 text-xs">—</span>
                                     )}
                                 </td>
                                 <td className="py-3 px-4">
@@ -508,6 +614,25 @@ export default function ReferrersPage() {
                                 </div>
                             </section>
 
+                            {/* Referred By */}
+                            <section>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Referred By (Optional)</h3>
+                                <p className="text-xs text-gray-500 mb-2">If this referrer was brought in by another referrer, select them here. Their sub-project will be nested under the referring referrer.</p>
+                                <select
+                                    value={form.parentReferrerId}
+                                    onChange={(e) => setForm((f) => ({ ...f, parentReferrerId: e.target.value }))}
+                                    className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zeno-cyan/50"
+                                >
+                                    <option value="">— None (top-level referrer) —</option>
+                                    {allReferrers
+                                        .filter((r) => r.id !== editTarget?.id)
+                                        .map((r) => (
+                                            <option key={r.id} value={r.id}>{r.firstName} {r.lastName}</option>
+                                        ))
+                                    }
+                                </select>
+                            </section>
+
                             {/* Status & Notes */}
                             <section>
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Status & Notes</h3>
@@ -608,6 +733,15 @@ export default function ReferrersPage() {
                                     <p className="text-gray-400 text-xs">R200 (1–9 cases) / R300 (10+ cases)</p>
                                 )}
                             </DetailSection>
+
+                            {detailTarget.parentReferrer && (
+                                <DetailSection title="Referred By">
+                                    <p className="text-purple-400 text-sm font-medium">
+                                        {detailTarget.parentReferrer.firstName} {detailTarget.parentReferrer.lastName}
+                                    </p>
+                                    <p className="text-gray-500 text-xs mt-1">This referrer was brought in by the above referrer. Their sub-project is nested under theirs.</p>
+                                </DetailSection>
+                            )}
 
                             <DetailSection title="Sub-Project">
                                 {detailTarget.project ? (

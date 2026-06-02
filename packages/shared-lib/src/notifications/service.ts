@@ -233,9 +233,11 @@ export async function sendManualMessage(
     options?: {
         cc?: string[];
         attachments?: string[];  // public URLs — each provider resolves them appropriately
+        senderId?: string;
     }
-): Promise<NotificationResult> {
-    const result: NotificationResult = {
+): Promise<NotificationResult & { logId?: string }> {
+    const senderId = options?.senderId;
+    const result: NotificationResult & { logId?: string } = {
         smsSuccess: false,
         emailSuccess: false,
         whatsappSuccess: false,
@@ -250,9 +252,9 @@ export async function sendManualMessage(
             result.smsMessageId = res.messageId;
             result.contactId = (res as any).contactId;
             if (res.error) result.errors.push(res.error);
-            await logNotification({
+            result.logId = await logNotification({
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message,
-                success: res.success, messageId: res.messageId, error: res.error, provider: res.provider
+                success: res.success, messageId: res.messageId, error: res.error, provider: res.provider, senderId
             });
             if (!res.success) {
                 await enqueueFailedNotification({ caseId, channel, recipient, body: message, error: res.error });
@@ -279,9 +281,9 @@ export async function sendManualMessage(
             result.emailMessageId = res.messageId;
             result.contactId = (res as any).contactId;
             if (res.error) result.errors.push(res.error);
-            await logNotification({
+            result.logId = await logNotification({
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message: subject || message,
-                success: res.success, messageId: res.messageId, error: res.error, provider: res.provider
+                success: res.success, messageId: res.messageId, error: res.error, provider: res.provider, senderId
             });
             if (!res.success) {
                 await enqueueFailedNotification({
@@ -294,7 +296,7 @@ export async function sendManualMessage(
                 await logNotification({
                     caseId, channel, recipient: ccAddr, recipientType: 'CLIENT', statusCode: 'MANUAL_CC',
                     message: subject || message, success: res.success, messageId: res.messageId,
-                    error: res.error, provider: res.provider
+                    error: res.error, provider: res.provider, senderId
                 });
             }
         } else if (channel === 'WHATSAPP') {
@@ -304,9 +306,9 @@ export async function sendManualMessage(
             result.whatsappMessageId = res.messageId;
             result.contactId = (res as any).contactId;
             if (res.error) result.errors.push(res.error);
-            await logNotification({
+            result.logId = await logNotification({
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message,
-                success: res.success, messageId: res.messageId, error: res.error, provider: res.provider
+                success: res.success, messageId: res.messageId, error: res.error, provider: res.provider, senderId
             });
             if (!res.success) {
                 await enqueueFailedNotification({ caseId, channel, recipient, body: message, error: res.error });
@@ -494,11 +496,12 @@ interface NotificationLogEntry {
     messageId?: string;
     error?: string;
     provider: string;
+    senderId?: string;
 }
 
-async function logNotification(entry: NotificationLogEntry): Promise<void> {
+async function logNotification(entry: NotificationLogEntry): Promise<string | undefined> {
     try {
-        await prisma.notificationLog.create({
+        const record = await prisma.notificationLog.create({
             data: {
                 caseId: entry.caseId,
                 channel: entry.channel,
@@ -510,9 +513,12 @@ async function logNotification(entry: NotificationLogEntry): Promise<void> {
                 externalId: entry.messageId || null,
                 error: entry.error || null,
                 provider: entry.provider,
+                senderId: entry.senderId || null,
                 sentAt: new Date() } });
+        return record.id;
     } catch (error) {
         logger.error('Failed to log notification:', error);
+        return undefined;
     }
 }
 

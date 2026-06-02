@@ -7,21 +7,22 @@ import { useSession } from '@zenowethu/ui';
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type Lead = {
-    id:             string;
-    firstName:      string;
-    lastName:       string;
-    idNumber:       string | null;
-    phone:          string;
-    email:          string | null;
-    service:        string;
-    status:         string;
-    source:         string;
-    popiaConsent:   boolean;
-    notes:          string | null;
+    id:              string;
+    firstName:       string;
+    lastName:        string;
+    idNumber:        string | null;
+    phone:           string;
+    email:           string | null;
+    service:         string;
+    status:          string;
+    source:          string;
+    ghlContactId:    string | null;
+    popiaConsent:    boolean;
+    notes:           string | null;
     convertedCaseId: string | null;
-    assignedToId:   string | null;
-    createdAt:      string;
-    assignedTo:     { id: string; firstName: string; lastName: string } | null;
+    assignedToId:    string | null;
+    createdAt:       string;
+    assignedTo:      { id: string; firstName: string; lastName: string } | null;
 };
 
 type Meta = { total: number; page: number; limit: number; pages: number };
@@ -37,6 +38,25 @@ const STATUS_CONFIG: Record<string, { label: string; colour: string; bg: string 
     CLOSED:    { label: 'Closed',    colour: 'text-gray-500',     bg: 'bg-gray-500/10 border-gray-500/30' },
 };
 
+const ALL_STATUSES = ['ALL', 'NEW', 'CONTACTED', 'CONVERTED', 'REJECTED', 'DUPLICATE', 'CLOSED'];
+
+// ─── Source config ─────────────────────────────────────────────────────────
+
+const SOURCE_CONFIG: Record<string, { label: string; colour: string; bg: string }> = {
+    WEBSITE_ASSESSMENT: { label: 'Website',    colour: 'text-emerald-400',  bg: 'bg-emerald-400/10 border-emerald-400/30' },
+    FACEBOOK_AD:        { label: 'Facebook',   colour: 'text-blue-400',     bg: 'bg-blue-400/10 border-blue-400/30' },
+    INSTAGRAM_AD:       { label: 'Instagram',  colour: 'text-pink-400',     bg: 'bg-pink-400/10 border-pink-400/30' },
+    TIKTOK:             { label: 'TikTok',     colour: 'text-white',        bg: 'bg-white/10 border-white/20' },
+    LINKEDIN:           { label: 'LinkedIn',   colour: 'text-blue-300',     bg: 'bg-blue-900/30 border-blue-400/30' },
+    PINTEREST:          { label: 'Pinterest',  colour: 'text-red-400',      bg: 'bg-red-400/10 border-red-400/30' },
+    WEBSITE_CHAT:       { label: 'Web Chat',   colour: 'text-emerald-300',  bg: 'bg-emerald-900/30 border-emerald-400/30' },
+    WEBSITE_VOICE:      { label: 'Voice AI',   colour: 'text-purple-400',   bg: 'bg-purple-400/10 border-purple-400/30' },
+    GHL_MANUAL:         { label: 'GHL Manual', colour: 'text-orange-400',   bg: 'bg-orange-400/10 border-orange-400/30' },
+    REFERRAL:           { label: 'Referral',   colour: 'text-yellow-400',   bg: 'bg-yellow-400/10 border-yellow-400/30' },
+};
+
+const ALL_SOURCES = ['ALL', ...Object.keys(SOURCE_CONFIG)];
+
 const SERVICE_LABELS: Record<string, string> = {
     'debt-review-removal': 'DR Removal (17.W)',
     'court-rescission':    'Court Rescission',
@@ -44,21 +64,19 @@ const SERVICE_LABELS: Record<string, string> = {
     'insurance':           'Lower Insurance',
 };
 
-const ALL_STATUSES = ['ALL', 'NEW', 'CONTACTED', 'CONVERTED', 'REJECTED', 'DUPLICATE', 'CLOSED'];
-
 // ─── Convert modal ─────────────────────────────────────────────────────────
 
 type ConvertModalProps = {
-    lead:     Lead;
-    onClose:  () => void;
+    lead:      Lead;
+    onClose:   () => void;
     onSuccess: (caseId: string) => void;
 };
 
 function ConvertModal({ lead, onClose, onSuccess }: ConvertModalProps) {
-    const [projectId, setProjectId]   = useState('');
-    const [projects,  setProjects]    = useState<{ id: string; name: string }[]>([]);
-    const [loading,   setLoading]     = useState(false);
-    const [error,     setError]       = useState('');
+    const [projectId, setProjectId] = useState('');
+    const [projects,  setProjects]  = useState<{ id: string; name: string }[]>([]);
+    const [loading,   setLoading]   = useState(false);
+    const [error,     setError]     = useState('');
 
     useEffect(() => {
         fetch('/api/projects?limit=200')
@@ -144,16 +162,17 @@ export default function LeadsPage() {
     const router = useRouter();
     const { data: session } = useSession();
 
-    const [leads,          setLeads]         = useState<Lead[]>([]);
-    const [meta,           setMeta]          = useState<Meta | null>(null);
-    const [counts,         setCounts]        = useState<Record<string, number>>({});
-    const [loading,        setLoading]       = useState(true);
-    const [error,          setError]         = useState('');
-    const [statusFilter,   setStatusFilter]  = useState('NEW');
-    const [search,         setSearch]        = useState('');
-    const [page,           setPage]          = useState(1);
-    const [convertTarget,  setConvertTarget] = useState<Lead | null>(null);
-    const [toastMsg,       setToastMsg]      = useState('');
+    const [leads,         setLeads]        = useState<Lead[]>([]);
+    const [meta,          setMeta]         = useState<Meta | null>(null);
+    const [counts,        setCounts]       = useState<Record<string, number>>({});
+    const [loading,       setLoading]      = useState(true);
+    const [error,         setError]        = useState('');
+    const [statusFilter,  setStatusFilter] = useState('NEW');
+    const [sourceFilter,  setSourceFilter] = useState('ALL');
+    const [search,        setSearch]       = useState('');
+    const [page,          setPage]         = useState(1);
+    const [convertTarget, setConvertTarget]= useState<Lead | null>(null);
+    const [toastMsg,      setToastMsg]     = useState('');
 
     const showToast = (msg: string) => {
         setToastMsg(msg);
@@ -163,12 +182,9 @@ export default function LeadsPage() {
     const fetchLeads = useCallback(async () => {
         setLoading(true); setError('');
         try {
-            const qs = new URLSearchParams({
-                status: statusFilter === 'ALL' ? '' : statusFilter,
-                search,
-                page:   String(page),
-                limit:  '50',
-            });
+            const qs = new URLSearchParams({ search, page: String(page), limit: '50' });
+            if (statusFilter !== 'ALL') qs.set('status', statusFilter);
+            if (sourceFilter !== 'ALL') qs.set('source', sourceFilter);
             const res  = await fetch(`/api/leads?${qs}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error ?? 'Failed to load');
@@ -180,16 +196,14 @@ export default function LeadsPage() {
         } finally {
             setLoading(false);
         }
-    }, [statusFilter, search, page]);
+    }, [statusFilter, sourceFilter, search, page]);
 
     useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-    // Debounced search
-    useEffect(() => { setPage(1); }, [search, statusFilter]);
+    useEffect(() => { setPage(1); }, [search, statusFilter, sourceFilter]);
 
     const handleStatusChange = async (lead: Lead, newStatus: string) => {
         const prev = lead.status;
-        // Optimistic update
         setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, status: newStatus } : l));
         try {
             const res = await fetch(`/api/leads/${lead.id}`, {
@@ -207,7 +221,7 @@ export default function LeadsPage() {
 
     const handleConvertSuccess = (caseId: string) => {
         setConvertTarget(null);
-        showToast('Lead converted to case ✓');
+        showToast('Lead converted to case');
         fetchLeads();
         setTimeout(() => router.push(`/cases/${caseId}`), 1200);
     };
@@ -219,16 +233,16 @@ export default function LeadsPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Website Leads</h1>
+                    <h1 className="text-2xl font-bold text-white">Leads Triage</h1>
                     <p className="text-sm text-gray-400 mt-1">
-                        Enquiries from the public assessment form —{' '}
+                        All inbound leads from website and social campaigns —{' '}
                         {meta ? `${meta.total} total` : 'loading…'}
                     </p>
                 </div>
             </div>
 
             {/* Status filter pills */}
-            <div className="flex flex-wrap gap-2 mb-5">
+            <div className="flex flex-wrap gap-2 mb-3">
                 {ALL_STATUSES.map(s => {
                     const cfg   = STATUS_CONFIG[s];
                     const count = s === 'ALL'
@@ -245,7 +259,28 @@ export default function LeadsPage() {
                                     : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20'
                             }`}
                         >
-                            {cfg?.label ?? s} {count > 0 && <span className="ml-1 opacity-70">({count})</span>}
+                            {cfg?.label ?? s}{count > 0 && <span className="ml-1 opacity-70">({count})</span>}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Source filter pills */}
+            <div className="flex flex-wrap gap-2 mb-5">
+                {ALL_SOURCES.map(src => {
+                    const cfg = SOURCE_CONFIG[src];
+                    return (
+                        <button
+                            key={src}
+                            type="button"
+                            onClick={() => setSourceFilter(src)}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                                sourceFilter === src
+                                    ? (cfg ? `${cfg.bg} ${cfg.colour}` : 'bg-white/10 border-white/30 text-white')
+                                    : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20'
+                            }`}
+                        >
+                            {cfg?.label ?? 'All Sources'}
                         </button>
                     );
                 })}
@@ -277,6 +312,7 @@ export default function LeadsPage() {
                             <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">Name</th>
                             <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">Contact</th>
                             <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">Service</th>
+                            <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">Source</th>
                             <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">POPIA</th>
                             <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">Status</th>
                             <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">Received</th>
@@ -286,18 +322,19 @@ export default function LeadsPage() {
                     <tbody className="divide-y divide-white/5">
                         {loading ? (
                             <tr>
-                                <td colSpan={7} className="px-4 py-12 text-center text-gray-500 text-sm">
+                                <td colSpan={8} className="px-4 py-12 text-center text-gray-500 text-sm">
                                     Loading…
                                 </td>
                             </tr>
                         ) : leads.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="px-4 py-12 text-center text-gray-500 text-sm">
+                                <td colSpan={8} className="px-4 py-12 text-center text-gray-500 text-sm">
                                     {search ? 'No leads match your search.' : `No ${statusFilter === 'ALL' ? '' : statusFilter.toLowerCase()} leads.`}
                                 </td>
                             </tr>
                         ) : leads.map(lead => {
-                            const cfg = STATUS_CONFIG[lead.status];
+                            const statusCfg = STATUS_CONFIG[lead.status];
+                            const sourceCfg = SOURCE_CONFIG[lead.source] ?? SOURCE_CONFIG['GHL_MANUAL']!;
                             return (
                                 <tr key={lead.id} className="hover:bg-white/3 transition-colors">
                                     <td className="px-4 py-3">
@@ -318,6 +355,22 @@ export default function LeadsPage() {
                                         {SERVICE_LABELS[lead.service] ?? lead.service}
                                     </td>
                                     <td className="px-4 py-3">
+                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${sourceCfg.bg} ${sourceCfg.colour}`}>
+                                            {sourceCfg.label}
+                                        </span>
+                                        {lead.ghlContactId && (
+                                            <a
+                                                href={`https://app.gohighlevel.com/contacts/${lead.ghlContactId}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="block mt-1 text-xs text-gray-600 hover:text-brand-cyan truncate max-w-[80px]"
+                                                title={`GHL: ${lead.ghlContactId}`}
+                                            >
+                                                GHL ↗
+                                            </a>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-3">
                                         {lead.popiaConsent ? (
                                             <span className="text-emerald-400 text-xs font-bold">✓ Yes</span>
                                         ) : (
@@ -325,8 +378,8 @@ export default function LeadsPage() {
                                         )}
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${cfg?.bg ?? 'bg-white/5 border-white/10'} ${cfg?.colour ?? 'text-gray-400'}`}>
-                                            {cfg?.label ?? lead.status}
+                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${statusCfg?.bg ?? 'bg-white/5 border-white/10'} ${statusCfg?.colour ?? 'text-gray-400'}`}>
+                                            {statusCfg?.label ?? lead.status}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-xs text-gray-500">
@@ -341,7 +394,6 @@ export default function LeadsPage() {
                                     </td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center justify-end gap-2">
-                                            {/* Quick status actions */}
                                             {lead.status === 'NEW' && (
                                                 <button
                                                     type="button"

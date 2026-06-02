@@ -1,7 +1,252 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-05-30 (Build errors fixed, GHL new subaccount wired, app deployed)
+> Last updated: 2026-06-02 (Consumer Overcharge Refund Form + Finance app Send button)
+
+---
+
+### Consumer Overcharge Refund Form (2026-06-02)
+
+**What was built:**
+- [x] 2-page fillable PDF (`docs/files/Zenowethu_Refund_Request_Form.pdf`) — Zenowethu letterhead, navy/amber brand, 9 sections covering consumer details, bank account, overcharge type checkboxes (debit order overcharge, double debit, unauthorised debit, other), full description, prior steps, supporting document checklist, personal notes, declaration & signature, and office-use-only block. PDF copied to `apps/finance/public/forms/` for runtime serving.
+- [x] API route `POST /api/finance/refund-form/send` — Zod-validated, attaches PDF, sends personalised branded email via existing `sendEmail()` chain (SMTP → Resend → GHL → mock)
+- [x] `SendRefundFormModal.tsx` — dark-themed modal component matching Finance app UI; pre-fills consumer name and case reference from payment row; email + phone collected; 4 overcharge type checkboxes; optional personal message; loading/success/error states; no `alert()` usage
+- [x] Payments page header — amber "Send Refund Form" button (blank form, staff fills in all details)
+- [x] Payments page per-row — "Refund Form" action button on every row with a linked client
+- **TypeScript:** 0 errors (`tsc --noEmit` exit 0)
+- **Build:** Compiled successfully (80/80 pages); standalone symlink step fails on Windows due to EPERM — pre-existing OS permission issue, not related to this change
+
+---
+
+### Referrer Hierarchy — Parent Referrer & Sub-Project Nesting (2026-06-02)
+
+**Problem fixed:** Referrer sub-projects were always placed under a top-level "Referrals" root project, disconnected from the actual case folder hierarchy staff used. There was also no way to record who referred a referrer.
+
+**Schema:**
+- [x] Added `parentReferrerId String?` to `Referrer` model (self-referential FK → `Referrer`)
+- [x] Added `parentReferrer` / `referredReferrers` relations (`ReferrerHierarchy`)
+- [x] Migration: `packages/database/prisma/migrations/20260602_add_parent_referrer_id/migration.sql`
+- ⚠️ **Manual step required**: Run `npx prisma migrate deploy` (or `prisma db push`) on the production DB
+
+**API:**
+- [x] `POST /api/admin/referrers` — accepts `parentReferrerId`; when set, creates the new referrer's sub-project nested under the parent referrer's sub-project instead of the "Referrals" root
+- [x] `PATCH /api/admin/referrers/[id]` — accepts `parentReferrerId`; re-parents the sub-project accordingly; guards against self-reference; clears back to "Referrals" root when parentReferrerId is set to null
+- [x] `GET /api/admin/referrers` — now includes `parentReferrer` in response
+- [x] `GET /api/admin/referrers/[id]` — now includes `parentReferrer` and `referredReferrers`
+
+**UI (`/admin/referrers`):**
+- [x] "Referred by" dropdown in Add/Edit modal — lists all existing referrers; excluded from own edit
+- [x] New "Referred By" column in referrers table
+- [x] Detail drawer shows "Referred By" section with explanation when set
+
+---
+
+### POA Online Signing — All Channels (2026-06-02)
+
+**End-to-end implementation:** Email → link, WhatsApp → link, Credo dashboard → direct signing. No printing, no manual returns.
+
+**Database:**
+- [x] New `PoaSigningRequest` model — `token` (unique), `status` (PENDING | SIGNED | EXPIRED | CANCELLED), `poaType`, `channel`, `caseId`, `clientId`, `consumerId`, `expiresAt` (72 h), `signedAt`, `signedPdfPath`, `ipAddress`, `userAgent` (ECTA audit trail)
+- [x] Relations: `Client → poaSigningRequests`, `Case → poaSigningRequests`, `ConsumerAccount → poaSigningRequests`
+- [x] Migration applied: schema synced to production DB (Prisma db push)
+
+**Shared service — `packages/shared-lib/src/poa/signing-service.ts`:**
+- [x] `createPoaSigningToken(input)` → generates 72-hour-expiry token, stored in DB
+- [x] `resolveSigningToken(token)` → validates token, auto-marks expired, returns client/consumer/case data, rejects if already signed/cancelled
+- [x] `completePoaSigning(token, signatureImage, ipAddress, userAgent)` → embeds signature into PDF via `poa-generator.ts`, saves signed PDF, creates Document/CredoDocument record, logs case activity, records ECTA audit trail
+- [x] All 6 unit tests passing (token creation, validation, expiry, already-signed rejection, TTL check)
+- [x] Exported from `packages/shared-lib/src/poa/index.ts`
+
+**Cases app — POA send flow updated:**
+- [x] `POST /api/cases/[id]/poa` now generates signing token on every send
+- [x] Email subject: "Sign Online" (improved from "Please Sign and Return")
+- [x] Email body: **prominently featured "Sign Online Now" button** (green success styling) + fallback manual instructions
+- [x] Email also includes legal notice: "Your digital signature is legally binding under ECTA"
+- [x] WhatsApp message: "Sign Online (easiest — takes 1 min)" first, download link second as fallback
+- [x] Response includes both `downloadUrl` and `signUrl` for fallback handling
+- [x] Signature embedding supported for STANDARD POA type (Wesbank falls back to unsigned)
+- [x] Updated email builders: `buildEmailHtml(clientName, type, downloadUrl, signUrl)` + `buildWhatsAppMessage(clientName, downloadUrl, signUrl, type)`
+
+**Public signing flow (no auth required):**
+- [x] `GET /sign/poa/[token]` — public client page (no login needed)
+  - Validates token on mount via `GET /api/poa/validate/[token]`
+  - Shows client name, POA type, expiry hours
+  - Renders SignaturePad component (draw signature in browser)
+  - Success state: "Document Signed!" with auto-redirect
+  - Error state: clear messaging + phone number to request new link
+  - ECTA legal notice: "Your digital signature is legally binding under ECTA, Act 25 of 2002. IP address and timestamp recorded."
+  - Dark theme (Zenowethu brand colors: navy + cyan)
+- [x] `GET /api/poa/validate/[token]` — returns `{ clientName, poaType, channel, expiryHours }`
+- [x] `POST /api/poa/sign/[token]` — accepts signature, calls shared `completePoaSigning()`, returns documentId
+
+**Credo consumer app — enhanced:**
+- [x] `POST /api/consumer/poa/sign` now accepts optional `poaSigningToken` parameter
+- [x] If token provided: uses shared `completePoaSigning()` (linked from email/WhatsApp)
+- [x] If no token: creates inline PoaSigningRequest record + uses shared service (direct Credo signing)
+- [x] Both flows save CredoDocument + return same response format
+- [x] Backward compatible: existing direct signing flow still works
+
+**Staff visibility (Documents tab):**
+- [x] Case Documents tab now shows signing status badges for POA documents:
+  - Green "Signed ✓" badge if status = SIGNED
+  - Orange "Pending…" badge if status = PENDING + not yet expired
+  - Gray "Expired" badge if token expired
+- [x] Staff can see when client signed (timestamp), from which channel (EMAIL | WHATSAPP | CREDO)
+- [x] Case comment logged: "Client signed the POA online via EMAIL. Signed PDF saved. IP: [IP]."
+
+**Tests:**
+- [x] 6 unit tests for signing service (all passing):
+  1. Token creation with correct 72-hour expiry
+  2. Token validation returns record when valid
+  3. Token not found returns 404
+  4. Expired token auto-marked + returns 410
+  5. Already-signed token rejected + returns 409
+  6. TTL constant = 72 hours
+- [x] Test run: `@zenowethu/shared-lib:test: ✓ src/poa/signing-service.test.ts (6 tests) 7ms`
+
+**Files changed (13 total):**
+1. `packages/database/prisma/schema.prisma` — new PoaSigningRequest model + relations
+2. `packages/shared-lib/src/poa/signing-service.ts` — new shared service
+3. `packages/shared-lib/src/poa/index.ts` — export signing-service
+4. `packages/shared-lib/src/poa/signing-service.test.ts` — 6 unit tests
+5. `apps/cases/app/api/cases/[id]/poa/route.ts` — updated to generate tokens & include sign links
+6. `apps/cases/app/api/poa/sign/[token]/route.ts` — new public signing API
+7. `apps/cases/app/api/poa/validate/[token]/route.ts` — new token validation API
+8. `apps/cases/app/sign/poa/[token]/page.tsx` — new public signing page
+9. `apps/credo/app/api/consumer/poa/sign/route.ts` — updated to use shared service + token support
+10. `apps/credo/app/(dashboard)/documents/sign/[id]/page.tsx` — minor: explicit poaSigningToken param
+11. `STATUS.md` — this section
+
+**Known limitations & future work:**
+- Wesbank POA type doesn't embed signature (requires staff agent details in signed PDF). Currently generates unsigned; staff still see SIGNED status. Can implement full signature embedding later if needed.
+- Token expiry is checked server-side on validation; client-side UI shows "expires in X hours" but does not auto-refresh countdown
+- No rate limiting on token creation (YAGNI for now; can add later if abuse detected)
+
+**Recommended next steps:**
+1. Manual test the full flow: send POA via email, click link, sign in browser, confirm signed PDF appears in case Documents tab
+2. Test WhatsApp fallback (if WhatsApp send fails)
+3. Test Credo dashboard direct signing (backward compat)
+4. Monitor production for any ECTA audit trail edge cases (IP capture, user-agent)
+5. Optionally: add dashboard widget showing "POAs awaiting signature" (count of PENDING tokens < 24 h old)
+6. Build the AI Debt Review Removal trigger (immediate operational priority — see Tier 2 Sprint 1)
+
+---
+
+### Communication Hub — Conversation Saving Fixed (2026-06-02)
+
+- [x] `packages/shared-lib/src/notifications/service.ts` — `NotificationLogEntry` gains optional `senderId`; `logNotification` now returns the saved record `id`; `sendManualMessage` accepts `options.senderId`, threads it into all three channel paths, returns `logId`
+- [x] `apps/cases/app/api/cases/[id]/notifications/route.ts` — POST now auth-guards with `session.user`; passes `session.user.id` as `senderId`; after send, fetches and returns the real saved `NotificationLog` row so the UI gets an accurate record; falls back gracefully if `logId` is unavailable
+- [x] `packages/ui/src/cases/CommunicationHub.tsx` — replaced broken optimistic update (which inserted wrong-shaped data) with a proper re-fetch of the log list after every send; shows a warning toast when delivery failed (207); shows the error message from the server on failure
+
+---
+
+### Sent Communications Page (2026-06-02)
+
+- [x] `apps/cases/app/api/admin/notifications/sent/route.ts` — new `GET` endpoint reading `NotificationLog` where `success = true`; supports filters: channel, free-text search (recipient/message/case/client), date range (from/to), pagination (50 per page)
+- [x] `apps/cases/app/(authenticated)/admin/sent-communications/page.tsx` — full audit log UI: channel badges, recipient, message preview, case link with client name, provider badge, sent timestamp; detail modal shows full message body (HTML rendered for emails, plain text for SMS/WhatsApp); pagination controls
+- [x] `apps/cases/app/(authenticated)/admin/page.tsx` — added "Sent Communications" card to Admin Dashboard (emerald/teal colour)
+- [x] `apps/cases/app/api/admin/notifications/sent/route.test.ts` — 5 tests: 403 unauthenticated, 403 non-admin, returns paginated results, channel filter, search filter — all passing
+- [x] 286 pre-existing tests still passing; 6 pre-existing failures in review route test (pre-existing, not introduced here)
+
+---
+
+### Dedicated Notifications Page (2026-06-01)
+
+- [x] `packages/ui/src/NotificationBell.tsx` — added **"View all notifications →"** footer link pointing to `/notifications`
+- [x] `apps/cases/app/(authenticated)/notifications/page.tsx` — Server Component: fetches up to 200 notifications + case `fileNumber` + client name in one round-trip, passes to client
+- [x] `apps/cases/app/(authenticated)/notifications/NotificationsClient.tsx` — full interactive client:
+  - Stats strip: Total / Unread / Overdue / Alerts counts
+  - **Source breakdown chips** (clickable) — groups by type with count badges showing which automation/module originated each notification: Overdue Scan, GHL/OPSGENTY, DHS Handler, XDS Bureau Sync, DRR Trigger, Case Comment, etc.
+  - Filter tabs: All | Overdue | Mentions | Assignments | Status Changes | Comments | System/DHS | New Leads | DRR | New File
+  - **Unread only** toggle
+  - Each notification shows: type icon, title, message, source label badge, case file number chip (links to case), client name, time ago
+  - Per-row actions: mark as read (tick), delete (×) — visible on hover
+  - Bulk: Mark all read, Clear read
+  - Auth-guarded: redirects to /login if unauthenticated
+- [x] `launch.json` — fixed pnpm path to `C:/Users/Kenneth/bin/pnpm.cmd` for all configs
+- [x] No new TypeScript errors introduced
+
+---
+
+### Court Document PDF Generator — Debt Review Removal (2026-06-01)
+
+**New package — `packages/shared-lib/src/court-docs/court-doc-pdf.ts`:**
+- [x] `generateCourtDoc(type, input)` — generates all 6 court documents as PDF bytes using pdf-lib
+- [x] Zenowethu brand: Navy (#0B1D35) header bar, Amber (#C4953A) accent strip
+- [x] `NOTICE_OF_MOTION` — parties, relief sought (flag removal), annexure list
+- [x] `FOUNDING_AFFIDAVIT` — sworn statement; accounts table (Annexure D) **only if accounts exist**; paid-up letter section (Annexure E) **only if settled/closed accounts exist**
+- [x] `NOTICE_OF_SET_DOWN` — hearing details, filed documents list
+- [x] `NOTICE_OF_MOTION_RESCISSION` — rescission grounds, paid-up references if applicable
+- [x] `COURT_ORDER_GRANTED` — draft order directing all 4 bureaux + NCR + credit providers (only if accounts)
+- [x] `PROOF_OF_SERVICE` — affidavit of service, documents served, NCR service details; paid-up annexure listed only if applicable
+- [x] `CourtDocInput` type with optional `creditAccounts[]` and joint client fields
+- [x] TypeScript: 0 errors
+
+**New API route — `apps/cases/app/api/cases/[id]/court-docs/route.ts`:**
+- [x] `POST` — validates with Zod, fetches case + client + joint client + credit accounts (isIncluded=true)
+- [x] Detects paid-up: `CreditAccountDocument.documentType = 'PAID_UP_LETTER'` OR `CreditAccount.status = 'CLOSED'`
+- [x] Download mode: returns PDF as `application/pdf` attachment
+- [x] Email mode: sends via SMTP (if `SMTP_HOST`) or Resend (if `RESEND_API_KEY`) with PDF buffer attachment
+
+**New UI tab — `apps/cases/app/(authenticated)/cases/[id]/CourtDocsTab.tsx`:**
+- [x] 6 document cards with descriptions, number badges, icons
+- [x] "Generate PDF" opens modal with optional Court Name + Case Number fields
+- [x] Toggle: Download PDF vs Email PDF
+- [x] Email pre-filled with client email; editable
+- [x] Info note explaining what is conditionally included
+- [x] Wired into case detail page as "Court Docs" tab (visible for debt review cases only)
+
+---
+
+### GHL Social Media → Lead Triage Pipeline (2026-05-31)
+
+**Schema:**
+- [x] Added `ghlContactId String?` field + index to `Lead` model
+- [x] Migration `20260531_add_ghl_contact_id_to_lead` applied to production DB
+
+**New utility — `packages/shared-lib/src/integrations/ghl-source-map.ts`:**
+- [x] `LEAD_SOURCES` constant (10 sources: WEBSITE_ASSESSMENT, FACEBOOK_AD, INSTAGRAM_AD, TIKTOK, LINKEDIN, PINTEREST, WEBSITE_CHAT, WEBSITE_VOICE, GHL_MANUAL, REFERRAL)
+- [x] `mapGhlSourceToLeadSource(tags, customFields)` — maps GHL tags/custom fields to source enum, with custom field override support
+- [x] Exported from `packages/shared-lib/src/integrations/index.ts`
+
+**GHL Service — `handleContactCreate` rewritten:**
+- [x] No longer creates a bare `Client` with placeholder ID for unknown contacts
+- [x] Now checks existing Client → existing Lead → creates new Lead (in that order)
+- [x] New Lead created with: firstName, lastName, phone, email, ghlContactId, source (mapped), service (from tags), status=NEW, popiaConsent=false
+- [x] Admin users notified via `InAppNotification.createMany` on new Lead creation
+- [x] AutomationRun logged for every ContactCreate event
+
+**GHL Provider — `createContact` upgraded:**
+- [x] Now accepts optional `details: { firstName?, lastName?, idNumber? }`
+- [x] Sends full name + idNumber custom field to GHL when provided
+- [x] Fully backward-compatible — existing callers unchanged
+
+**Lead Convert Route — GHL contact sync:**
+- [x] After Client+Case transaction, PUTs full name + idNumber to GHL contact if `lead.ghlContactId` present
+- [x] Non-fatal — failure is logged as warning, conversion still succeeds
+
+**Leads API — `GET /api/leads`:**
+- [x] Added `source` query filter (alongside existing `status` and `search`)
+
+**Leads Triage UI — `apps/cases/app/(authenticated)/leads/page.tsx`:**
+- [x] Page renamed "Leads Triage" with updated subtitle
+- [x] `ghlContactId` added to Lead type
+- [x] `SOURCE_CONFIG` — 10 colour-coded source badges
+- [x] Source filter pill row (below status pills)
+- [x] Source column in table with coloured badge + clickable "GHL ↗" link when ghlContactId present
+- [x] Source filter wired to API query
+
+**Tests:**
+- [x] `ghl-source-map.test.ts` — 16 unit tests (all passing)
+- [x] `ghl-service.test.ts` — 6 new ContactCreate/Lead path tests (all passing)
+- [x] Total: 310 tests passing across 22 test files
+
+**GHL Setup required in your GHL account (no code — config only):**
+- [ ] Connect Facebook, Instagram, TikTok, LinkedIn, Pinterest in GHL Social Planner
+- [ ] Set up Meta Lead Ads to flow contacts into GHL
+- [ ] Add custom field `lead_source` in GHL contacts (text field) — populate via workflow when contact is created from a campaign
+- [ ] Configure service tags (`debt-review-removal`, `credit-repair`, `insurance`, `court-rescission`) in GHL lead gen forms
+- [ ] Workflow: Contact Created → set `lead_source` custom field based on attribution → webhook to `/api/webhooks/ghl`
 
 ---
 

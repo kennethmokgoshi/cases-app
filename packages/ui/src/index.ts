@@ -37,6 +37,8 @@ export * from './plan/ConfidenceReport'
 export * from './plan/InfoUpdatePanel'
 export * from './plan/PlanDiffView'
 
+export * from './cases/AIChatTab'
+
 // Tier 1 Step 3 Additions
 export * from './ui/Toaster'
 export * from './ui/ConfirmDialog'

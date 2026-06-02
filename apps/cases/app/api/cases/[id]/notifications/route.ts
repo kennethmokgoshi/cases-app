@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
+import { auth } from '@zenowethu/shared-lib';
 import { sendStatusChangeNotification, sendManualMessage, createLogger } from '@zenowethu/shared-lib';
 import { CaseNotificationSendSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
@@ -40,6 +41,11 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const session = await auth();
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { id } = await params;
         const parsed = parseBody(CaseNotificationSendSchema, await request.json());
         if (!parsed.success) return parsed.response;
@@ -68,16 +74,38 @@ export async function POST(
                 id,
                 channel || 'WHATSAPP',
                 finalRecipient,
-                message
+                message,
+                undefined,
+                { senderId: session.user.id }
             );
 
-            return NextResponse.json({
-                success: result.smsSuccess || result.emailSuccess || result.whatsappSuccess,
-                result: {
-                    ...result,
-                    sentAt: new Date().toISOString()
+            const sent = result.smsSuccess || result.emailSuccess || result.whatsappSuccess;
+
+            // Return the saved log entry so the UI can prepend it immediately
+            if (result.logId) {
+                const logEntry = await prisma.notificationLog.findUnique({
+                    where: { id: result.logId },
+                    include: {
+                        sender: { select: { firstName: true, lastName: true } }
+                    }
+                });
+                if (logEntry) {
+                    return NextResponse.json(logEntry, { status: sent ? 200 : 207 });
                 }
-            });
+            }
+
+            // Fallback if logId not available
+            return NextResponse.json({
+                id: crypto.randomUUID(),
+                channel: channel || 'WHATSAPP',
+                recipient: finalRecipient,
+                message,
+                success: sent,
+                sentAt: new Date().toISOString(),
+                provider: 'unknown',
+                error: result.errors[0] ?? null,
+                sender: null,
+            }, { status: sent ? 200 : 207 });
         }
 
         // Standard status change notification

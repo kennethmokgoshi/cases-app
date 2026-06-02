@@ -227,12 +227,20 @@ export async function GET(request: NextRequest) {
                     // Only include children that the user is also a member of
                     children: {
                         where: { id: { in: memberProjectIds } },
-                        select: { id: true, name: true, type: true }
+                        select: {
+                            id: true,
+                            name: true,
+                            type: true,
+                            // Include linked referrer so case creation can auto-detect referrerId
+                            referrer: { select: { id: true, firstName: true, lastName: true } },
+                        }
                     },
                     _count: { select: { children: true } },
                     members: {
                         include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } }
-                    }
+                    },
+                    // Also include referrer on the top-level project itself
+                    referrer: { select: { id: true, firstName: true, lastName: true } },
                 },
                 orderBy: { name: 'asc' }
             });

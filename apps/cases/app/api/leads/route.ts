@@ -27,6 +27,7 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const status  = searchParams.get('status') || '';
+        const source  = searchParams.get('source') || '';
         const search  = searchParams.get('search') || '';
         const page    = Math.max(1, parseInt(searchParams.get('page')  || '1',  10));
         const limit   = Math.min(100, parseInt(searchParams.get('limit') || '50', 10));
@@ -36,6 +37,10 @@ export async function GET(request: Request) {
 
         if (status && status !== 'ALL') {
             where.status = status;
+        }
+
+        if (source && source !== 'ALL') {
+            where.source = source;
         }
 
         if (search.trim()) {

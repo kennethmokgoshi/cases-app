@@ -307,11 +307,26 @@ export async function POST(request: Request) {
             jointClientId = joint.id;
         }
 
+        // Auto-detect referrerId from the primary project if not explicitly provided.
+        // When a sub-project IS a registered referral folder (has a linked Referrer record),
+        // the case should be credited to that referrer even if the client didn't send referrerId.
+        let resolvedReferrerId = data.referrerId ?? null;
+        if (!resolvedReferrerId && data.projectId) {
+            const projectReferrer = await prisma.referrer.findUnique({
+                where: { projectId: data.projectId },
+                select: { id: true },
+            });
+            if (projectReferrer) {
+                resolvedReferrerId = projectReferrer.id;
+                logger.info(`Auto-detected referrerId=${resolvedReferrerId} from projectId=${data.projectId}`);
+            }
+        }
+
         // Resolve referrer's sub-project so the case appears in their project folder
         let referrerSubProjectId: string | null = null;
-        if (data.referrerId) {
+        if (resolvedReferrerId) {
             const referrerRecord = await prisma.referrer.findUnique({
-                where: { id: data.referrerId },
+                where: { id: resolvedReferrerId },
                 select: { projectId: true },
             });
             const secondaryIds = data.secondaryProjectIds || [];
@@ -333,7 +348,7 @@ export async function POST(request: Request) {
                 createdBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined,
                 client: { connect: { id: client.id } },
                 jointClient: jointClientId ? { connect: { id: jointClientId } } : undefined,
-                referrer: data.referrerId ? { connect: { id: data.referrerId } } : undefined,
+                referrer: resolvedReferrerId ? { connect: { id: resolvedReferrerId } } : undefined,
                 services: data.services ? JSON.stringify(data.services) : null,
                 projects: {
                     create: [

@@ -364,11 +364,18 @@ class GhlBaseProvider {
         }
     }
 
-    protected async createContact(value: string, type: 'phone' | 'email'): Promise<string | null> {
+    protected async createContact(
+        value: string,
+        type: 'phone' | 'email',
+        details?: { firstName?: string; lastName?: string; idNumber?: string },
+    ): Promise<string | null> {
         try {
-            const body: Record<string, string> = { locationId: this.locationId };
+            const body: Record<string, unknown> = { locationId: this.locationId };
             if (type === 'phone') body.phone = value;
             else body.email = value;
+            if (details?.firstName) body.firstName = details.firstName;
+            if (details?.lastName)  body.lastName  = details.lastName;
+            if (details?.idNumber)  body.customField = [{ id: 'idNumber', value: details.idNumber }];
 
             const response = await fetch(`${GHL_BASE_URL}/contacts/`, {
                 method: 'POST',

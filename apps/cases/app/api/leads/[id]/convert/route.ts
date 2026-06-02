@@ -7,9 +7,11 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth, createLogger, calculateSlaDeadline } from '@zenowethu/shared-lib';
+import { auth, createLogger, calculateSlaDeadline, getGHLCredentials } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { LeadConvertSchema } from '@/lib/schemas';
+
+const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
 
 const logger = createLogger('api/leads/[id]/convert');
 
@@ -132,6 +134,33 @@ export async function POST(request: Request, { params }: RouteCtx) {
         });
 
         logger.info(`[convert] Lead ${id} → Case ${newCase.id} (client ${client.id})`);
+
+        // ── Sync GHL contact with full details (non-fatal) ─────────────────
+        if (lead.ghlContactId) {
+            try {
+                const ghl = await getGHLCredentials();
+                const patch: Record<string, unknown> = {
+                    locationId: ghl.locationId,
+                    firstName:  client.firstName,
+                    lastName:   client.lastName,
+                };
+                if (client.idNumber && !client.idNumber.startsWith('NOID-')) {
+                    patch.customField = [{ id: 'idNumber', value: client.idNumber }];
+                }
+                await fetch(`${GHL_BASE_URL}/contacts/${lead.ghlContactId}`, {
+                    method:  'PUT',
+                    headers: {
+                        Authorization:  `Bearer ${ghl.apiKey}`,
+                        'Content-Type': 'application/json',
+                        Version:        '2021-07-28',
+                    },
+                    body: JSON.stringify(patch),
+                });
+                logger.info(`[convert] GHL contact ${lead.ghlContactId} updated with full details`);
+            } catch (ghlErr) {
+                logger.warn('[convert] GHL contact sync failed (non-critical):', ghlErr);
+            }
+        }
 
         return NextResponse.json({ caseId: newCase.id, clientId: client.id, fileNumber }, { status: 201 });
     } catch (error) {

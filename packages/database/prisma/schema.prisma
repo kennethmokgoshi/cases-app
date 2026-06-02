@@ -77,14 +77,19 @@ model Referrer {
   // Commission tier configuration
   commissionType        String               @default("FIXED")  // FIXED | VOLUME_BASED
   fixedCommissionAmount Decimal?                                 // Used when commissionType = FIXED
+  // Referrer hierarchy — who referred this referrer
+  parentReferrerId      String?
   cases                 Case[]
   createdBy             User?                @relation("ReferrerCreator", fields: [createdById], references: [id])
   project               Project?             @relation(fields: [projectId], references: [id])
   commissions           ReferrerCommission[]
+  parentReferrer        Referrer?            @relation("ReferrerHierarchy", fields: [parentReferrerId], references: [id])
+  referredReferrers     Referrer[]           @relation("ReferrerHierarchy")
 
   @@index([lastName])
   @@index([idNumber])
   @@index([isActive])
+  @@index([parentReferrerId])
 }
 
 model ReferrerCommission {
@@ -141,6 +146,7 @@ model Client {
   LegalMatter       LegalMatter[]
   payments          Payment[]
   automationRuns    AutomationRun[]
+  poaSigningRequests PoaSigningRequest[]
 }
 
 model AuditLog {
@@ -304,6 +310,7 @@ model Case {
   workflowLogs            WorkflowLog[]
   automationRuns          AutomationRun[]
   notificationQueue       NotificationQueue[]
+  poaSigningRequests      PoaSigningRequest[]
 
   @@index([status])
   @@index([isOverdue])
@@ -771,6 +778,7 @@ model ConsumerAccount {
   serviceRequests      ServiceRequest[]
   subscriptions        CredoSubscription[]
   activeSubscription   CredoSubscription?  @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
+  poaSigningRequests   PoaSigningRequest[]
 
   @@index([email])
   @@index([tenantId])
@@ -1490,12 +1498,14 @@ model Lead {
   service         String
   /// NEW | CONTACTED | CONVERTED | REJECTED | DUPLICATE | CLOSED
   status          String   @default("NEW")
-  /// Where the lead originated (e.g. WEBSITE_ASSESSMENT)
+  /// Where the lead originated — WEBSITE_ASSESSMENT | FACEBOOK_AD | INSTAGRAM_AD | TIKTOK | LINKEDIN | PINTEREST | WEBSITE_CHAT | WEBSITE_VOICE | GHL_MANUAL | REFERRAL
   source          String   @default("WEBSITE_ASSESSMENT")
   popiaConsent    Boolean  @default(false)
   notes           String?
   convertedCaseId String?
   assignedToId    String?
+  /// GoHighLevel contact ID — set when lead originates from or is synced with GHL
+  ghlContactId    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   assignedTo      User?    @relation("LeadAssignment", fields: [assignedToId], references: [id])
@@ -1503,6 +1513,7 @@ model Lead {
   @@index([status])
   @@index([createdAt])
   @@index([assignedToId])
+  @@index([ghlContactId])
 }
 
 model AutomationRun {
@@ -1535,4 +1546,37 @@ model AutomationRun {
   @@index([status])
   @@index([caseId])
   @@index([clientId])
+}
+
+// ─── POA Online Signing ────────────────────────────────────────────────────────
+// Tracks every POA sent via email, WhatsApp, or Credo that has an online
+// signing link. Status: PENDING → SIGNED (or EXPIRED / CANCELLED).
+// The `token` field is the URL-safe identifier embedded in the signing link.
+
+model PoaSigningRequest {
+  id            String    @id @default(cuid())
+  token         String    @unique @default(cuid())
+  status        String    @default("PENDING") // PENDING | SIGNED | EXPIRED | CANCELLED
+  poaType       String    // STANDARD | WESBANK
+  channel       String    // EMAIL | WHATSAPP | CREDO
+  caseId        String?
+  clientId      String?
+  consumerId    String?
+  expiresAt     DateTime
+  signedAt      DateTime?
+  signedPdfPath String?   // server path of the signed PDF
+  ipAddress     String?   // captured at signing for ECTA audit trail
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  case          Case?            @relation(fields: [caseId], references: [id])
+  client        Client?          @relation(fields: [clientId], references: [id])
+  consumer      ConsumerAccount? @relation(fields: [consumerId], references: [id])
+
+  @@index([token])
+  @@index([caseId])
+  @@index([clientId])
+  @@index([consumerId])
+  @@index([status])
 }

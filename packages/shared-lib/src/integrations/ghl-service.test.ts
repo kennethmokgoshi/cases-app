@@ -29,14 +29,27 @@ const mockPrisma = vi.hoisted(() => ({
     },
     client: {
         update: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(null),
+    },
+    lead: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: 'lead-new-id' }),
+        update: vi.fn().mockResolvedValue({}),
     },
     user: {
         findFirst: vi.fn().mockResolvedValue({ id: 'admin-user-id' }),
+        findMany: vi.fn().mockResolvedValue([{ id: 'admin-1' }]),
     },
     caseComment: {
         create: vi.fn().mockResolvedValue({}),
     },
     notificationLog: {
+        create: vi.fn().mockResolvedValue({}),
+    },
+    inAppNotification: {
+        createMany: vi.fn().mockResolvedValue({}),
+    },
+    automationRun: {
         create: vi.fn().mockResolvedValue({}),
     },
 }));
@@ -443,5 +456,128 @@ describe('GhlService.applyTags', () => {
         const result = await GhlService.applyTags('case-1', ['tag']);
 
         expect(result).toEqual({ success: false, error: 'Unauthorized' });
+    });
+});
+
+// ─── handleContactCreate — Lead path ─────────────────────────────────────────
+
+describe('GhlService.handleWebhook — ContactCreate Lead path', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // By default: no existing client, no existing lead
+        mockPrisma.client.findFirst.mockResolvedValue(null);
+        mockPrisma.lead.findFirst.mockResolvedValue(null);
+        mockPrisma.lead.create.mockResolvedValue({ id: 'lead-new-id' });
+        mockPrisma.user.findMany.mockResolvedValue([{ id: 'admin-1' }]);
+        mockPrisma.inAppNotification.createMany.mockResolvedValue({});
+        mockPrisma.automationRun.create.mockResolvedValue({});
+    });
+
+    it('returns early with error when contactId or phone/email is missing', async () => {
+        const result = await GhlService.handleWebhook({
+            type: 'ContactCreate',
+            id: 'abc123',
+            // no phone, no email
+        });
+        expect(result).toEqual({ success: false, error: 'Missing contact info' });
+        expect(mockPrisma.lead.create).not.toHaveBeenCalled();
+    });
+
+    it('updates existing client ghlContactId and returns without creating a Lead', async () => {
+        mockPrisma.client.findFirst.mockResolvedValue({ id: 'client-existing', ghlContactId: null });
+
+        const result = await GhlService.handleWebhook({
+            type: 'ContactCreate',
+            id: 'abc123',
+            firstName: 'Jane',
+            lastName: 'Smith',
+            phone: '+27821234567',
+        });
+
+        expect(result).toEqual({ success: true, clientId: 'client-existing' });
+        expect(mockPrisma.lead.create).not.toHaveBeenCalled();
+        expect(mockPrisma.client.update).toHaveBeenCalledWith({
+            where: { id: 'client-existing' },
+            data: { ghlContactId: 'abc123' },
+        });
+    });
+
+    it('updates existing Lead ghlContactId and returns without creating a new Lead', async () => {
+        mockPrisma.client.findFirst.mockResolvedValue(null);
+        mockPrisma.lead.findFirst.mockResolvedValue({ id: 'lead-existing', ghlContactId: null });
+
+        const result = await GhlService.handleWebhook({
+            type: 'ContactCreate',
+            id: 'abc123',
+            phone: '+27821234567',
+        });
+
+        expect(result).toEqual({ success: true, leadId: 'lead-existing' });
+        expect(mockPrisma.lead.create).not.toHaveBeenCalled();
+        expect(mockPrisma.lead.update).toHaveBeenCalledWith({
+            where: { id: 'lead-existing' },
+            data: { ghlContactId: 'abc123' },
+        });
+    });
+
+    it('creates Lead with source GHL_MANUAL when no tags are present', async () => {
+        const result = await GhlService.handleWebhook({
+            type: 'ContactCreate',
+            id: 'abc123',
+            firstName: 'John',
+            lastName: 'Doe',
+            phone: '+27821234567',
+        });
+
+        expect(result).toEqual({ success: true, leadId: 'lead-new-id' });
+        expect(mockPrisma.lead.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    ghlContactId: 'abc123',
+                    source: 'GHL_MANUAL',
+                    status: 'NEW',
+                    popiaConsent: false,
+                }),
+            })
+        );
+    });
+
+    it('creates Lead with source FACEBOOK_AD when facebook-ad tag is present', async () => {
+        await GhlService.handleWebhook({
+            type: 'ContactCreate',
+            id: 'abc123',
+            firstName: 'John',
+            lastName: 'Doe',
+            phone: '+27821234567',
+            tags: ['facebook-ad'],
+        });
+
+        expect(mockPrisma.lead.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ source: 'FACEBOOK_AD' }),
+            })
+        );
+    });
+
+    it('notifies admin users via inAppNotification.createMany after Lead creation', async () => {
+        await GhlService.handleWebhook({
+            type: 'ContactCreate',
+            id: 'abc123',
+            firstName: 'John',
+            lastName: 'Doe',
+            phone: '+27821234567',
+        });
+
+        expect(mockPrisma.inAppNotification.createMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.arrayContaining([
+                    expect.objectContaining({
+                        userId: 'admin-1',
+                        type: 'NEW_LEAD',
+                        linkUrl: '/leads',
+                    }),
+                ]),
+            })
+        );
     });
 });

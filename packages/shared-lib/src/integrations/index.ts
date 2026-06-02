@@ -14,3 +14,5 @@ export { calculateCliCommission, calculateAipCommission, calculateFuneralCommiss
 export type { DCCPPortfolioCommission } from './dccp-commission'
 export { checkDCCPEligibility, checkCliEligibility, checkAipEligibility, checkFuneralEligibility } from './dccp-eligibility'
 export { DCCPService, dccpService } from './dccp'
+export { mapGhlSourceToLeadSource, LEAD_SOURCES } from './ghl-source-map'
+export type { LeadSource } from './ghl-source-map'

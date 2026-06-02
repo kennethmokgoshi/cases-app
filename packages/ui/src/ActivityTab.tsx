@@ -53,9 +53,10 @@ interface ActivityTabProps {
     caseId: string;
     fileNumber: string;
     lastUpdate?: number;
+    highlightCommentId?: string | null;
 }
 
-export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabProps) {
+export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightCommentId }: ActivityTabProps) {
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [loading, setLoading] = useState(true);
@@ -94,6 +95,22 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
         }
         fetchComments();
     }, [caseId, lastUpdate]);
+
+    // Scroll to and highlight specific comment when arriving from a notification
+    useEffect(() => {
+        if (!highlightCommentId || loading) return;
+        const timer = setTimeout(() => {
+            const el = document.getElementById(`comment-${highlightCommentId}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-zeno-cyan', 'ring-offset-2', 'ring-offset-transparent');
+                setTimeout(() => {
+                    el.classList.remove('ring-2', 'ring-zeno-cyan', 'ring-offset-2', 'ring-offset-transparent');
+                }, 3000);
+            }
+        }, 600);
+        return () => clearTimeout(timer);
+    }, [highlightCommentId, loading]);
 
     // Search users for @mentions
     useEffect(() => {
@@ -402,7 +419,7 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0 }: ActivityTabP
                     </div>
                 ) : (
                     filteredComments.map(comment => (
-                        <div key={comment.id} className={`flex gap-3 p-4 rounded-2xl transition-all border ${getEventStyle(comment)}`}>
+                        <div key={comment.id} id={`comment-${comment.id}`} className={`flex gap-3 p-4 rounded-2xl transition-all border ${getEventStyle(comment)}`}>
                             <div className="flex-shrink-0">
                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${comment.type === 'JOURNAL' ? 'bg-amber-500/20 shadow-lg shadow-amber-500/5' : 'bg-zeno-cyan/10'
                                     }`}>
