@@ -195,7 +195,7 @@ export async function POST(
         nctStatus: caseRecord.nctStatus,
         totalDebt: caseRecord.totalDebtAmount ? `R ${Number(caseRecord.totalDebtAmount).toLocaleString('en-ZA')}` : null,
         totalMonthly: caseRecord.totalMonthlyInstallment ? `R ${Number(caseRecord.totalMonthlyInstallment).toLocaleString('en-ZA')}` : null,
-        serviceFee: caseRecord.serviceFee,
+        serviceFee: caseRecord.serviceFee ? `R ${Number(caseRecord.serviceFee).toLocaleString('en-ZA')}` : null,
         acquisitionType: caseRecord.acquisitionType ?? 'B2C',
         partnerName: caseRecord.partnerName,
         description: caseRecord.description,
