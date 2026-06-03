@@ -59,7 +59,8 @@ export async function GET(request: Request) {
                     sender: {
                         select: {
                             id: true,
-                            name: true,
+                            firstName: true,
+                            lastName: true,
                             email: true,
                         },
                     },
