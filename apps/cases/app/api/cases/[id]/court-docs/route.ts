@@ -155,13 +155,13 @@ export async function POST(
         const smtpHost = process.env.SMTP_HOST;
         let emailResult: { success: boolean; error?: string };
         if (smtpHost) {
-            const provider = new SmtpEmailProvider(
-                smtpHost,
-                Number(process.env.SMTP_PORT ?? 587),
-                process.env.SMTP_USER ?? '',
-                process.env.SMTP_PASS ?? '',
-                process.env.SMTP_FROM ?? process.env.SMTP_USER ?? '',
-            );
+            const provider = new SmtpEmailProvider({
+                host: smtpHost,
+                port: Number(process.env.SMTP_PORT ?? 587),
+                secure: Number(process.env.SMTP_PORT ?? 587) === 465,
+                auth: { user: process.env.SMTP_USER ?? '', pass: process.env.SMTP_PASS ?? '' },
+                fromEmail: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? '',
+            });
             emailResult = await provider.send(emailTo, subject, htmlBody, textBody, { attachments: [attachment] });
         } else if (process.env.RESEND_API_KEY) {
             const provider = new ResendEmailProvider(process.env.RESEND_API_KEY, process.env.RESEND_FROM ?? 'info@zenowethu.co.za');
