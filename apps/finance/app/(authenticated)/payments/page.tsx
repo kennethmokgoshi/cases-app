@@ -21,7 +21,7 @@ type Payment = {
     status: string;
     category: string;
     notes: string | null;
-    client: { firstName: string; lastName: string; idNumber: string } | null;
+    client: { id: string; firstName: string; lastName: string; idNumber: string } | null;
     case: { fileNumber: string } | null;
     recordedBy: { firstName: string; lastName: string } | null;
     batch: { fileName: string; status: string } | null;
@@ -219,10 +219,10 @@ function PaymentsContent() {
                                             </td>
                                             <td className="px-5 py-3">
                                                 {p.client ? (
-                                                    <div>
-                                                        <p className="text-white font-medium">{p.client.firstName} {p.client.lastName}</p>
+                                                    <Link href={`/clients/${p.client.id}/payments`} className="group">
+                                                        <p className="text-white font-medium group-hover:text-cyan-400 transition-colors">{p.client.firstName} {p.client.lastName}</p>
                                                         <p className="text-gray-500 text-xs">{p.client.idNumber}</p>
-                                                    </div>
+                                                    </Link>
                                                 ) : (
                                                     <span className="text-red-400 text-xs">Unallocated</span>
                                                 )}

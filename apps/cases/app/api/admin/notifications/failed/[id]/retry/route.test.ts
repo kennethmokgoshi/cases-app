@@ -34,7 +34,7 @@ describe('POST /api/admin/notifications/failed/[id]/retry', () => {
     });
 
     it('returns 404 if not found', async () => {
-        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN' } } as any);
+        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN', isAdmin: true } } as any);
         vi.mocked(prisma.notificationQueue.findUnique).mockResolvedValueOnce(null);
         
         const req = new NextRequest('http://localhost/api/admin/notifications/failed/q1/retry', { method: 'POST' });
@@ -44,7 +44,7 @@ describe('POST /api/admin/notifications/failed/[id]/retry', () => {
     });
 
     it('retries successfully', async () => {
-        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN' } } as any);
+        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN', isAdmin: true } } as any);
         vi.mocked(prisma.notificationQueue.findUnique).mockResolvedValueOnce({ id: 'q1', status: 'PENDING_RETRY' } as any);
         vi.mocked(executeNotificationRetry).mockResolvedValueOnce({ smsSuccess: true } as any);
         
@@ -58,7 +58,7 @@ describe('POST /api/admin/notifications/failed/[id]/retry', () => {
     });
 
     it('returns 500 on retry failure', async () => {
-        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN' } } as any);
+        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN', isAdmin: true } } as any);
         vi.mocked(prisma.notificationQueue.findUnique).mockResolvedValueOnce({ id: 'q1', status: 'PENDING_RETRY' } as any);
         vi.mocked(executeNotificationRetry).mockResolvedValueOnce({ emailSuccess: false, errors: ['Failed'] } as any);
         

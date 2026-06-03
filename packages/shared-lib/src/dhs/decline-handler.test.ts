@@ -75,6 +75,14 @@ describe('classifyDeclineReason', () => {
     });
 
     // UNKNOWN
+    it('classifies real-world typo "Please sent tranfer documents" as SEND_DOCS', () => {
+        expect(classifyDeclineReason('Please sent tranfer documents to info@onmnconsulting.co.za')).toBe('SEND_DOCS');
+    });
+
+    it('classifies "transfer documents" without send/please as SEND_DOCS', () => {
+        expect(classifyDeclineReason('Kindly forward transfer documents to dc@firm.co.za')).toBe('SEND_DOCS');
+    });
+
     it('returns UNKNOWN for unrecognised text', () => {
         expect(classifyDeclineReason('The reason is unknown at this time')).toBe('UNKNOWN');
     });

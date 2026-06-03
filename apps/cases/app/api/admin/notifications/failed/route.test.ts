@@ -29,7 +29,7 @@ describe('GET /api/admin/notifications/failed', () => {
     });
 
     it('fetches failed notifications', async () => {
-        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN' } } as any);
+        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN', isAdmin: true } } as any);
         const mockData = [{ id: 'q1', channel: 'EMAIL', status: 'PENDING_RETRY' }];
         vi.mocked(prisma.notificationQueue.findMany).mockResolvedValueOnce(mockData as any);
         

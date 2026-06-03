@@ -38,7 +38,7 @@ describe('GET /api/dccp/policies/[id]/status', () => {
   it('should return 401 if unauthorized', async () => {
     vi.mocked(auth).mockResolvedValueOnce(null)
     const request = new Request('http://localhost')
-    const response = await GET(request, { params: { id: 'test-id' } })
+    const response = await GET(request, { params: Promise.resolve({ id: 'test-id' }) })
     expect(response.status).toBe(401)
   })
 
@@ -57,7 +57,7 @@ describe('GET /api/dccp/policies/[id]/status', () => {
     })
 
     const request = new Request('http://localhost')
-    const response = await GET(request, { params: { id: 'test-id' } })
+    const response = await GET(request, { params: Promise.resolve({ id: 'test-id' }) })
     
     expect(response.status).toBe(200)
     const data = await response.json()

@@ -139,7 +139,22 @@
       "Bash(pnpm --filter finance build)",
       "Bash(pnpm run *)",
       "PowerShell(Get-Process -Name node -ErrorAction SilentlyContinue)",
-      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)"
+      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "Bash(git commit -m 'fix\\(build\\): replace User.name with firstName/lastName in sent-notifications route *)",
+      "Bash(git commit -m 'fix\\(build\\): convert Decimal serviceFee to formatted string in ai-chat route *)",
+      "Bash(git commit -m 'fix\\(build\\): fix SmtpEmailProvider constructor call in court-docs route *)",
+      "Bash(git commit -m 'fix\\(build\\): wrap Uint8Array in Buffer for NextResponse in court-docs route *)",
+      "Bash(pnpm --filter @zenowethu/shared-lib test -- --reporter=verbose)",
+      "Bash(echo '=== __TRACKED_VAR__ ===')",
+      "Read(//c/Visual Studio Code/06 March 2026/apps$app/app/**)",
+      "Bash(echo \"NOT FOUND\")",
+      "Bash(for app *)",
+      "Bash(echo '=== __TRACKED_VAR__ layout.tsx ===')",
+      "Bash(echo)",
+      "Bash(node scripts/fix-alerts.cjs)",
+      "Bash(node -e \"const path=require\\('path'\\); console.log\\(path.join\\(__dirname,'..','apps'\\)\\); console.log\\(require\\('fs'\\).existsSync\\(path.join\\(__dirname,'..','apps'\\)\\)\\)\")",
+      "Bash(node -e \"process.chdir\\('scripts'\\); const path=require\\('path'\\); console.log\\(__dirname\\)\")",
+      "Bash(node scripts/fix-alerts.cjs --debug)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

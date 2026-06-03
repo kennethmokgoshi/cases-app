@@ -78,7 +78,7 @@ export async function GET(request: Request) {
                 skip,
                 take: limit,
                 include: {
-                    client: { select: { firstName: true, lastName: true, idNumber: true } },
+                    client: { select: { id: true, firstName: true, lastName: true, idNumber: true } },
                     case: { select: { fileNumber: true } },
                     recordedBy: { select: { firstName: true, lastName: true } },
                     batch: { select: { fileName: true, status: true } } } }),

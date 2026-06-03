@@ -98,7 +98,8 @@ describe('GET /api/admin/referrers', () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([sampleReferrer] as never);
         vi.mocked(prisma.referrer.count).mockResolvedValueOnce(1).mockResolvedValueOnce(1).mockResolvedValueOnce(1);
-        vi.mocked(prisma.referrerCommission.groupBy).mockResolvedValue([] as never);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma.referrerCommission.groupBy as any).mockResolvedValue([]);
         const res = await GET(makeReq('http://localhost/api/admin/referrers'));
         expect(res.status).toBe(200);
         const json = await res.json();
@@ -110,7 +111,8 @@ describe('GET /api/admin/referrers', () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([] as never);
         vi.mocked(prisma.referrer.count).mockResolvedValue(0);
-        vi.mocked(prisma.referrerCommission.groupBy).mockResolvedValue([] as never);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma.referrerCommission.groupBy as any).mockResolvedValue([]);
         const res = await GET(makeReq('http://localhost/api/admin/referrers?search=John'));
         expect(res.status).toBe(200);
         const [callArgs] = vi.mocked(prisma.referrer.findMany).mock.calls;

@@ -116,7 +116,7 @@ export default function UnderwritingQueuePage() {
                 return;
             }
             const data = await res.json();
-            toast.error(`${data.results?.filter((r: any) => r.status === 'created').length ?? 0} letter(s) generated.`);
+            toast.success(`${data.results?.filter((r: any) => r.status === 'created').length ?? 0} letter(s) generated.`);
             await fetchAssessments();
         } catch (e: any) {
             toast.error(`Error: ${e.message}`);

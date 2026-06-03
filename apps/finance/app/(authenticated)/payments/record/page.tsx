@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 type ClientMatch = {
@@ -14,7 +14,8 @@ type ClientMatch = {
 
 export default function RecordPaymentPage() {
     const router = useRouter();
-    const [idNumber, setIdNumber] = useState('');
+    const searchParams = useSearchParams();
+    const [idNumber, setIdNumber] = useState(searchParams.get('idNumber') ?? '');
     const [clientMatch, setClientMatch] = useState<ClientMatch | null>(null);
     const [lookupLoading, setLookupLoading] = useState(false);
     const [lookupError, setLookupError] = useState('');
@@ -28,6 +29,11 @@ export default function RecordPaymentPage() {
 
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (idNumber.length >= 6) lookupClient();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     async function lookupClient() {
         if (idNumber.length < 6) return;
@@ -81,6 +87,7 @@ export default function RecordPaymentPage() {
         <div className="p-6 max-w-2xl mx-auto">
             <div className="mb-8">
                 <Link href="/payments" className="text-cyan-400 hover:text-cyan-300 text-sm mb-2 inline-block">← Back to Payments</Link>
+
                 <h1 className="text-3xl font-bold text-white">Record Manual Payment</h1>
                 <p className="text-gray-400 text-sm mt-1">Log a single payment and link it to a client</p>
             </div>

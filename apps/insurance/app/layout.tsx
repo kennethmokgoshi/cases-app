@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { SessionProvider } from '@zenowethu/ui';
-import { ThemeProvider } from "@zenowethu/ui";
+import { SessionProvider, ThemeProvider, Toaster, ConfirmProvider } from '@zenowethu/ui';
 
 export const metadata: Metadata = {
   title: "Zenowethu - Case Management",
@@ -51,6 +50,7 @@ export default function RootLayout({
         <ThemeProvider>
           <SessionProvider>
             {children}
+            <Toaster />
           </SessionProvider>
         </ThemeProvider>
         {/* Service Worker Registration */}

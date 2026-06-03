@@ -30,7 +30,7 @@ describe('PATCH /api/admin/notifications/failed/[id]/review', () => {
     });
 
     it('returns 400 for invalid input', async () => {
-        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN' } } as any);
+        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN', isAdmin: true } } as any);
         const req = new NextRequest('http://localhost/api/admin/notifications/failed/q1/review', { 
             method: 'PATCH',
             body: JSON.stringify({ status: 'INVALID_STATUS' })
@@ -40,7 +40,7 @@ describe('PATCH /api/admin/notifications/failed/[id]/review', () => {
     });
 
     it('updates status to CANCELLED', async () => {
-        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN' } } as any);
+        vi.mocked(auth).mockResolvedValueOnce({ user: { id: 'u1', role: 'ADMIN', isAdmin: true } } as any);
         vi.mocked(prisma.notificationQueue.findUnique).mockResolvedValueOnce({ id: 'q1', status: 'HUMAN_REVIEW' } as any);
         
         const req = new NextRequest('http://localhost/api/admin/notifications/failed/q1/review', { 

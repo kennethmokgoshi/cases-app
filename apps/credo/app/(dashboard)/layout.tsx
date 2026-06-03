@@ -4,21 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { 
-  DashboardIcon, 
-  CreditIcon, 
-  CasesIcon, 
-  QuoteIcon, 
-  DocumentsIcon, 
-  SettingsIcon, 
-  MenuIcon, 
-  BellIcon, 
-  SearchIcon 
+import {
+  DashboardIcon,
+  CreditIcon,
+  CasesIcon,
+  QuoteIcon,
+  DocumentsIcon,
+  SettingsIcon,
+  MenuIcon,
+  BellIcon,
+  SearchIcon,
+  AccountIcon,
 } from "../../components/icons";
 
 /* ─── Nav items ──────────────────────────────────────────────────── */
 const NAV_ITEMS = [
   { href: "/dashboard",       label: "Dashboard",     Icon: DashboardIcon },
+  { href: "/my-account",      label: "My Account",    Icon: AccountIcon   },
   { href: "/credit-report",   label: "Credit Report", Icon: CreditIcon    },
   { href: "/cases",           label: "My Cases",      Icon: CasesIcon     },
   { href: "/quote",           label: "Get a Quote",   Icon: QuoteIcon     },
@@ -233,6 +235,7 @@ function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
 
   const pageTitle: Record<string, string> = {
     "/dashboard":     "Dashboard",
+    "/my-account":    "My Account",
     "/credit-report": "Credit Report",
     "/cases":         "My Cases",
     "/quote":         "Get a Quote",

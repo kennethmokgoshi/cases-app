@@ -61,6 +61,7 @@ export function classifyDeclineReason(reason: string): DeclineCategory {
     if (
         r.includes('NO TRANSFER DOCUMENTS') ||
         r.includes('PLEASE SEND') ||
+        r.includes('PLEASE SENT') || // real-world typo variant
         r.includes('SIGNED AND DATED POA') ||
         (r.includes('COPY OF') && (r.includes(' ID') || r.includes('IDENTITY'))) ||
         r.includes('DOCUMENTS HAVE NOT BEEN') ||
@@ -68,6 +69,10 @@ export function classifyDeclineReason(reason: string): DeclineCategory {
         r.includes('DOCUMENTS REQUIRED') ||
         r.includes('SEND POA') ||
         r.includes('SEND DOCUMENTS') ||
+        r.includes('SEND TRANSFER DOCUMENTS') ||
+        r.includes('SENT TRANSFER DOCUMENTS') || // real-world typo variant
+        r.includes('TRANSFER DOCUMENTS') ||
+        r.includes('TRANFER DOCUMENTS') || // real-world typo variant
         r.includes('UPLOAD DOCUMENTS') ||
         (r.includes('ATTACH') && r.includes('POA')) ||
         r.includes('FORM 16') ||
@@ -224,6 +229,25 @@ export async function handleDHSDecline(params: {
 
         // ── Category handlers ────────────────────────────────────────────────
 
+        // Helper: send client SMS or WhatsApp (WhatsApp preferred)
+        const notifyClientSmsOrWa = async (body: string): Promise<void> => {
+            if (caseData.client.whatsappNumber) {
+                const r = await sendManualMessage(caseId, 'WHATSAPP', caseData.client.whatsappNumber, body);
+                if (r.whatsappSuccess) {
+                    result.whatsappSent = true;
+                    result.actionsPerformed.push(`WhatsApp sent to consumer (${caseData.client.whatsappNumber})`);
+                } else result.errors.push(...r.errors);
+            } else if (caseData.client.phone) {
+                const r = await sendManualMessage(caseId, 'SMS', caseData.client.phone, body);
+                if (r.smsSuccess) {
+                    result.smsSent = true;
+                    result.actionsPerformed.push(`SMS sent to consumer (${caseData.client.phone})`);
+                } else result.errors.push(...r.errors);
+            }
+        };
+
+        const clientCc = caseData.client.email ? [caseData.client.email] : [];
+
         if (category === 'SEND_DOCS' || category === 'SEND_DOCS_WITH_NCR') {
             await safeUpdateCase(caseId, { status: 'REJECTED_EMAIL_DOCS', nextUpdate: addWorkingDays(new Date(), 3) }, triggeredByUserId);
             result.statusUpdatedTo = 'REJECTED_EMAIL_DOCS';
@@ -261,7 +285,7 @@ export async function handleDHSDecline(params: {
                 const ncrLine = ncrCertUrl
                     ? '\n• NCR Certificate of Registration (NCRDC3693)'
                     : '';
-                const subject = `Re: Transfer Request – ${clientName} (ID: ${idNumber})`;
+                const subject = `Re: DHS Transfer Request – ${clientName} (ID: ${idNumber})`;
                 const body = buildSendDocsEmail({
                     clientName,
                     idNumber,
@@ -271,19 +295,21 @@ export async function handleDHSDecline(params: {
                     ncrLine,
                 });
 
+                // Email DC — CC client so they can see we responded on their behalf
                 const emailResult = await sendManualMessage(
                     caseId,
                     'EMAIL',
                     dcEmail,
                     body,
                     subject,
-                    { attachments: allAttachments }
+                    { attachments: allAttachments, cc: clientCc }
                 );
                 result.emailSent = emailResult.emailSuccess;
 
                 if (emailResult.emailSuccess) {
                     const withNCR = ncrCertUrl ? ' (including NCR Certificate)' : '';
-                    result.actionsPerformed.push(`Documents emailed to ${dcEmail}${withNCR}`);
+                    const ccNote = clientCc.length ? ` (client CC'd on ${clientCc[0]})` : '';
+                    result.actionsPerformed.push(`Documents emailed to DC at ${dcEmail}${withNCR}${ccNote}`);
                     await safeUpdateCase(
                         caseId,
                         { status: 'DOCUMENTS_EMAILED', nextUpdate: addWorkingDays(new Date(), 5) },
@@ -293,11 +319,14 @@ export async function handleDHSDecline(params: {
                     await addComment(
                         caseId,
                         triggeredByUserId,
-                        `[SYSTEM] DHS Decline Handler: Documents emailed to ${dcEmail}${withNCR}. Status → Documents Emailed. Decline reason: "${declineReason}"`
+                        `[SYSTEM] DHS Decline Handler: Documents emailed to ${dcEmail}${withNCR}${ccNote}. Status → Documents Emailed. DHS decline reason: "${declineReason}"`
                     );
                 } else {
                     result.errors.push(...emailResult.errors);
                 }
+
+                // SMS/WhatsApp client to let them know we've responded
+                await notifyClientSmsOrWa(buildSendDocsSms({ clientFirstName, dcName, declineReason }));
             }
         }
 
@@ -309,9 +338,7 @@ export async function handleDHSDecline(params: {
             );
             result.statusUpdatedTo = 'REJECTED_NOT_CONSENT';
 
-            const dcContactLine = dcEmail
-                ? ` at ${dcEmail}`
-                : '';
+            const dcContactLine = dcEmail ? ` at ${dcEmail}` : '';
             const emailBody = buildConsumerConsentEmail({
                 clientFirstName,
                 dcName,
@@ -331,23 +358,7 @@ export async function handleDHSDecline(params: {
                 else result.errors.push(...emailResult.errors);
             }
 
-            if (caseData.client.whatsappNumber) {
-                const waResult = await sendManualMessage(
-                    caseId, 'WHATSAPP', caseData.client.whatsappNumber, smsBody
-                );
-                result.whatsappSent = waResult.whatsappSuccess;
-                if (waResult.whatsappSuccess)
-                    result.actionsPerformed.push(`WhatsApp sent to consumer (${caseData.client.whatsappNumber})`);
-                else result.errors.push(...waResult.errors);
-            } else if (caseData.client.phone) {
-                const smsResult = await sendManualMessage(
-                    caseId, 'SMS', caseData.client.phone, smsBody
-                );
-                result.smsSent = smsResult.smsSuccess;
-                if (smsResult.smsSuccess)
-                    result.actionsPerformed.push(`SMS sent to consumer (${caseData.client.phone})`);
-                else result.errors.push(...smsResult.errors);
-            }
+            await notifyClientSmsOrWa(smsBody);
 
             if (result.actionsPerformed.length > 0) {
                 await safeUpdateCase(
@@ -361,7 +372,7 @@ export async function handleDHSDecline(params: {
             await addComment(
                 caseId,
                 triggeredByUserId,
-                `[SYSTEM] DHS Decline Handler: Consumer notified via ${result.actionsPerformed.join(' + ') || 'no channels available'}. Status → Consumer Contacted DC. Decline reason: "${declineReason}"`
+                `[SYSTEM] DHS Decline Handler: Consumer notified via ${result.actionsPerformed.join(' + ') || 'no channels available'}. Status → Consumer Contacted DC. DHS decline reason: "${declineReason}"`
             );
         }
 
@@ -379,8 +390,8 @@ export async function handleDHSDecline(params: {
                 fileNumber,
                 declineReason,
             });
-            const feesSmsBody = `Hi ${clientFirstName}, your current Debt Counsellor has indicated outstanding fees before your file can be transferred. We will send you an invoice shortly. — Zenowethu Debt Management`;
-            const feesSubject = `Outstanding Fees – Your Debt Review Case (File: ${fileNumber})`;
+            const feesSmsBody = buildFeesSms({ clientFirstName, dcName });
+            const feesSubject = `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`;
 
             if (caseData.client.email) {
                 const emailResult = await sendManualMessage(
@@ -392,24 +403,12 @@ export async function handleDHSDecline(params: {
                 else result.errors.push(...emailResult.errors);
             }
 
-            if (caseData.client.whatsappNumber) {
-                const waResult = await sendManualMessage(
-                    caseId, 'WHATSAPP', caseData.client.whatsappNumber, feesSmsBody
-                );
-                if (waResult.whatsappSuccess)
-                    result.actionsPerformed.push(`WhatsApp sent to consumer about outstanding fees`);
-            } else if (caseData.client.phone) {
-                const smsResult = await sendManualMessage(
-                    caseId, 'SMS', caseData.client.phone, feesSmsBody
-                );
-                if (smsResult.smsSuccess)
-                    result.actionsPerformed.push(`SMS sent to consumer about outstanding fees`);
-            }
+            await notifyClientSmsOrWa(feesSmsBody);
 
             await addComment(
                 caseId,
                 triggeredByUserId,
-                `[SYSTEM] DHS Decline Handler: Outstanding fees. Consumer notified via ${result.actionsPerformed.join(' + ') || 'no channels available'}. Status → Rejected - Owes Fees. Decline reason: "${declineReason}"`
+                `[SYSTEM] DHS Decline Handler: Outstanding fees. Consumer notified via ${result.actionsPerformed.join(' + ') || 'no channels available'}. Status → Rejected - Owes Fees. DHS decline reason: "${declineReason}"`
             );
         }
 
@@ -419,12 +418,23 @@ export async function handleDHSDecline(params: {
                 result.errors.push(
                     'Attorney contact required but no email address found in decline reason. Please contact them manually.'
                 );
+                // Still notify client so they are not left in the dark
+                if (caseData.client.email) {
+                    const r = await sendManualMessage(
+                        caseId, 'EMAIL', caseData.client.email,
+                        buildAttorneyClientEmail({ clientFirstName, dcName, fileNumber, declineReason, attorneyEmail: null }),
+                        `Update on Your Debt Review Transfer – ${clientName}`
+                    );
+                    if (r.emailSuccess) result.actionsPerformed.push(`Client notified of attorney involvement (${caseData.client.email})`);
+                }
+                await notifyClientSmsOrWa(buildAttorneySms({ clientFirstName }));
                 await addComment(
                     caseId,
                     triggeredByUserId,
-                    `[SYSTEM] DHS Decline Handler: Attorney involvement required — no email found in decline text. Manual contact needed. Decline reason: "${declineReason}"`
+                    `[SYSTEM] DHS Decline Handler: Attorney involvement required — no email found in decline text. Manual contact needed. Client notified. DHS decline reason: "${declineReason}"`
                 );
             } else {
+                // Email attorney — CC client
                 const body = buildAttorneyEmail({
                     clientName,
                     idNumber,
@@ -439,15 +449,26 @@ export async function handleDHSDecline(params: {
                     attorneyEmail,
                     body,
                     subject,
-                    { attachments: docAttachments }
+                    { attachments: docAttachments, cc: clientCc }
                 );
                 result.emailSent = emailResult.emailSuccess;
                 if (emailResult.emailSuccess) {
-                    result.actionsPerformed.push(`Attorney email sent to ${attorneyEmail}`);
+                    const ccNote = clientCc.length ? ` (client CC'd on ${clientCc[0]})` : '';
+                    result.actionsPerformed.push(`Attorney email sent to ${attorneyEmail}${ccNote}`);
+                    // Separate plain-language client email + SMS
+                    if (caseData.client.email) {
+                        const r = await sendManualMessage(
+                            caseId, 'EMAIL', caseData.client.email,
+                            buildAttorneyClientEmail({ clientFirstName, dcName, fileNumber, declineReason, attorneyEmail }),
+                            `Update on Your Debt Review Transfer – ${clientName}`
+                        );
+                        if (r.emailSuccess) result.actionsPerformed.push(`Client update email sent (${caseData.client.email})`);
+                    }
+                    await notifyClientSmsOrWa(buildAttorneySms({ clientFirstName }));
                     await addComment(
                         caseId,
                         triggeredByUserId,
-                        `[SYSTEM] DHS Decline Handler: Attorney at ${attorneyEmail} contacted. Decline reason: "${declineReason}"`
+                        `[SYSTEM] DHS Decline Handler: Attorney at ${attorneyEmail} contacted${ccNote}. Client notified. DHS decline reason: "${declineReason}"`
                     );
                 } else {
                     result.errors.push(...emailResult.errors);
@@ -462,10 +483,25 @@ export async function handleDHSDecline(params: {
                 triggeredByUserId
             );
             result.actionsPerformed.push('Next update set to +7 working days — file will be re-checked');
+
+            // Client update — they deserve to know the file is still being processed
+            if (caseData.client.email) {
+                const r = await sendManualMessage(
+                    caseId, 'EMAIL', caseData.client.email,
+                    buildResubmitClientEmail({ clientFirstName, dcName, fileNumber, declineReason }),
+                    `Update on Your Debt Review Transfer (File: ${fileNumber})`
+                );
+                if (r.emailSuccess) {
+                    result.emailSent = true;
+                    result.actionsPerformed.push(`Client update email sent (${caseData.client.email})`);
+                }
+            }
+            await notifyClientSmsOrWa(buildResubmitSms({ clientFirstName }));
+
             await addComment(
                 caseId,
                 triggeredByUserId,
-                `[SYSTEM] DHS Decline Handler: Classified as resubmit later. Next update +7 working days. Decline reason: "${declineReason}"`
+                `[SYSTEM] DHS Decline Handler: Classified as resubmit later. Next update +7 working days. Client notified. DHS decline reason: "${declineReason}"`
             );
         }
 
@@ -555,26 +591,36 @@ function buildSendDocsEmail(p: {
 }): string {
     return `Dear ${p.dcName},
 
-Thank you for your response regarding the transfer request for the following consumer:
+Thank you for your response via the NCR Debt Help System (DHS) regarding the transfer request for the following consumer:
 
   Client:       ${p.clientName}
   ID Number:    ${p.idNumber}
   File Number:  ${p.fileNumber}
 
-Your response indicated:
+Your DHS response reads:
 "${p.declineReason}"
 
 As requested, please find the following documents attached to this email:
   • Signed and dated Power of Attorney (POA)
   • Copy of Consumer Identity Document (ID)${p.ncrLine}
 
-We trust these documents meet your requirements and kindly request that you proceed with processing the transfer at your earliest convenience.
+We trust these documents meet your requirements and kindly request that you proceed with processing the transfer on the DHS at your earliest convenience.
 
 Should you require any additional documentation or information, please do not hesitate to contact us.
+
+Please note: our client (${p.clientName}) has been copied on this email for transparency.
 
 Yours sincerely,
 
 ${SIGNATURE}`;
+}
+
+function buildSendDocsSms(p: {
+    clientFirstName: string;
+    dcName: string;
+    declineReason: string;
+}): string {
+    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined the DHS transfer request: "${p.declineReason.slice(0, 100)}${p.declineReason.length > 100 ? '…' : ''}". We have responded with your documents and requested they proceed. We will follow up. — Zenowethu (012 035 1824)`;
 }
 
 function buildConsumerConsentEmail(p: {
@@ -589,7 +635,7 @@ We trust this message finds you well.
 
 We are reaching out regarding the transfer of your debt review file to Zenowethu Debt Management.
 
-Your current Debt Counsellor (${p.dcName}) has advised us that they require your direct consent before the transfer can proceed. Their response reads:
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request and their DHS response reads:
 
 "${p.declineReason}"
 
@@ -598,7 +644,7 @@ ACTION REQUIRED
 ─────────────────────────────────────────
 Please contact ${p.dcName}${p.dcContactLine} as soon as possible and confirm that you consent to your file being transferred to Zenowethu Debt Management.
 
-Once you have given your consent, please reply to this email or call us so we can proceed with the transfer on your behalf.
+Once you have given your consent, please reply to this email or call us so we can resubmit the transfer request on your behalf.
 
 If you are experiencing any difficulties contacting your Debt Counsellor, please let us know and we will assist you.
 
@@ -614,7 +660,7 @@ function buildConsentSms(p: {
     dcName: string;
     dcContactLine: string;
 }): string {
-    return `Hi ${p.clientFirstName}, your Debt Counsellor (${p.dcName}) requires your consent to transfer your file to Zenowethu. Please contact them${p.dcContactLine} and confirm consent, then reply to this message. — Zenowethu Debt Management (012 035 1824)`;
+    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined your DHS transfer request — they need your direct consent. Please contact them${p.dcContactLine} to confirm consent, then reply here. — Zenowethu (012 035 1824)`;
 }
 
 function buildOutstandingFeesEmail(p: {
@@ -629,7 +675,7 @@ We trust this message finds you well.
 
 We are writing regarding your debt review file (File No: ${p.fileNumber}) and the transfer of your case to Zenowethu Debt Management.
 
-Your current Debt Counsellor (${p.dcName}) has advised us that there are outstanding fees that must be settled before the transfer can proceed. Their response reads:
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request. Their DHS response reads:
 
 "${p.declineReason}"
 
@@ -647,6 +693,13 @@ Yours sincerely,
 ${SIGNATURE}`;
 }
 
+function buildFeesSms(p: {
+    clientFirstName: string;
+    dcName: string;
+}): string {
+    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined your DHS transfer — outstanding fees must be settled first. We are requesting the invoice and will send it to you. Contact us on 012 035 1824. — Zenowethu`;
+}
+
 function buildAttorneyEmail(p: {
     clientName: string;
     idNumber: string;
@@ -658,23 +711,89 @@ function buildAttorneyEmail(p: {
 
 We trust this email finds you well.
 
-We are writing on behalf of our client regarding their debt review matter, and we understand the matter has been referred to your offices.
+We are writing on behalf of our client regarding their debt review matter. We submitted a transfer request via the NCR Debt Help System (DHS) and understand the matter has been referred to your offices.
 
   Client:       ${p.clientName}
   ID Number:    ${p.idNumber}
   File Number:  ${p.fileNumber}
   Current DC:   ${p.dcName}
 
-The decline received from the Debt Help System states:
+The decline received from the NCR Debt Help System (DHS) states:
 "${p.declineReason}"
 
-We kindly request your assistance in clarifying the current status of this matter and advising on the steps required before the file transfer can proceed.
+We kindly request your assistance in clarifying the current status of this matter and advising on the steps required before the file transfer can proceed on the DHS.
 
-Please find attached the consumer's supporting documentation (POA and ID) for your reference.
+Please find attached the consumer's supporting documentation (POA and ID) for your reference. Our client has been copied on this email.
 
 We look forward to your response.
 
 Yours sincerely,
 
 ${SIGNATURE}`;
+}
+
+function buildAttorneyClientEmail(p: {
+    clientFirstName: string;
+    dcName: string;
+    fileNumber: string;
+    declineReason: string;
+    attorneyEmail: string | null;
+}): string {
+    const attorneyLine = p.attorneyEmail
+        ? `We have contacted the attorney at ${p.attorneyEmail} and requested their guidance on the next steps. You have been copied on that email.`
+        : `Attorney involvement is required but we were unable to find their contact details in the DHS response. Our team will contact them manually and keep you updated.`;
+    return `Dear ${p.clientFirstName},
+
+We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
+
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request and indicated that a legal matter is involved. Their DHS response reads:
+
+"${p.declineReason}"
+
+─────────────────────────────────────────
+WHAT WE ARE DOING
+─────────────────────────────────────────
+${attorneyLine}
+
+You do not need to take any action at this time. We will keep you informed as the matter progresses. If you have any questions, please do not hesitate to contact us.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}
+
+function buildAttorneySms(p: { clientFirstName: string }): string {
+    return `Hi ${p.clientFirstName}, your DC's DHS response indicates legal/attorney involvement is required for your transfer. We are engaging with the relevant parties and will keep you updated. — Zenowethu (012 035 1824)`;
+}
+
+function buildResubmitClientEmail(p: {
+    clientFirstName: string;
+    dcName: string;
+    fileNumber: string;
+    declineReason: string;
+}): string {
+    return `Dear ${p.clientFirstName},
+
+We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
+
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has indicated that the request cannot be processed immediately. Their DHS response reads:
+
+"${p.declineReason}"
+
+─────────────────────────────────────────
+WHAT HAPPENS NEXT
+─────────────────────────────────────────
+This is a temporary delay. We will monitor the DHS and resubmit your transfer request within the next 5–7 working days. You do not need to take any action at this time.
+
+If you have any concerns or questions in the meantime, please do not hesitate to contact us on 012 035 1824 or reply to this email.
+
+Thank you for your patience — we are working on your behalf.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}
+
+function buildResubmitSms(p: { clientFirstName: string }): string {
+    return `Hi ${p.clientFirstName}, your DC's DHS response indicates a temporary delay on your file transfer. We will resubmit within 5–7 working days. No action needed from you. — Zenowethu (012 035 1824)`;
 }

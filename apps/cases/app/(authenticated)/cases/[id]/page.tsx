@@ -23,6 +23,7 @@ import { AIPlanTab } from '@zenowethu/ui';
 import { AIChatTab } from '@zenowethu/ui';
 import { DebtReviewTab } from './DebtReviewTab';
 import { CourtDocsTab } from './CourtDocsTab';
+import { WorkflowTimeline } from './WorkflowTimeline';
 import { SavingsAuditCard } from './SavingsAuditCard';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
 import SendQuoteModal from './SendQuoteModal';
@@ -379,7 +380,7 @@ export default function CaseDetailPage() {
     const [isMandateModalOpen, setIsMandateModalOpen] = useState(false);
     const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
 
-    const VALID_TABS = ['ACTIVITY', 'DOCUMENTS', 'COMMUNICATION', 'AI_PLAN', 'AI_ASSISTANT', 'DEBT_REVIEW', 'COURT_DOCS'] as const;
+    const VALID_TABS = ['ACTIVITY', 'DOCUMENTS', 'COMMUNICATION', 'AI_PLAN', 'AI_ASSISTANT', 'DEBT_REVIEW', 'COURT_DOCS', 'WORKFLOW'] as const;
     type DetailTab = typeof VALID_TABS[number];
     const tabFromUrl = searchParams.get('tab')?.toUpperCase() as DetailTab | null;
     const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>(
@@ -3943,6 +3944,15 @@ export default function CaseDetailPage() {
                                     <span>⚖️</span> Court Docs
                                 </button>
                             )}
+                            <button
+                                onClick={() => setActiveDetailTab('WORKFLOW')}
+                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'WORKFLOW'
+                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
+                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    }`}
+                            >
+                                <span>📈</span> Workflow & Payments
+                            </button>
                         </nav>
 
                         <div className="p-8">
@@ -3990,6 +4000,11 @@ export default function CaseDetailPage() {
                                         fileNumber={caseData.fileNumber}
                                         clientEmail={caseData.client.email}
                                     />
+                                </div>
+                            )}
+                            {activeDetailTab === 'WORKFLOW' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <WorkflowTimeline caseId={caseData.id} />
                                 </div>
                             )}
                         </div>

@@ -38,7 +38,7 @@ describe('POST /api/dccp/policies/[id]/submit', () => {
   it('should return 401 if unauthorized', async () => {
     vi.mocked(auth).mockResolvedValueOnce(null)
     const request = new Request('http://localhost')
-    const response = await POST(request, { params: { id: 'test-id' } })
+    const response = await POST(request, { params: Promise.resolve({ id: 'test-id' }) })
     expect(response.status).toBe(401)
   })
 
@@ -65,7 +65,7 @@ describe('POST /api/dccp/policies/[id]/submit', () => {
     })
 
     const request = new Request('http://localhost')
-    const response = await POST(request, { params: { id: 'test-id' } })
+    const response = await POST(request, { params: Promise.resolve({ id: 'test-id' }) })
     
     expect(response.status).toBe(200)
     const data = await response.json()

@@ -73,7 +73,7 @@ export const confirm = async (options: ConfirmOptions | string): Promise<boolean
     if (!globalConfirmFn) {
         console.warn('ConfirmProvider is not mounted. Falling back to window.confirm.');
         const msg = typeof options === 'string' ? options : (typeof options.message === 'string' ? options.message : 'Are you sure?');
-        return await confirm(msg);
+        return typeof window !== 'undefined' ? window.confirm(msg) : false;
     }
     return globalConfirmFn(options);
 };

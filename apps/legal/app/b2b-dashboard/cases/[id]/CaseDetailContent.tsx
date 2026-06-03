@@ -205,7 +205,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                 if (pendingPart2) {
                     setSelectedFile(pendingPart2);
                     setPendingPart2(null);
-                    toast.error('Part 1 uploaded! I have automatically selected PART 2 for you. Click Upload again.');
+                    toast.success('Part 1 uploaded! I have automatically selected PART 2 for you. Click Upload again.');
                 } else {
                     setSelectedFile(null);
                     toast.success('Document uploaded successfully');
@@ -316,7 +316,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
 
             setSelectedFile(file1);
             setPendingPart2(file2);
-            toast.error(`PDF Split in half! I've loaded PART 1 for you. Once you upload it, I will automatically load PART 2.`);
+            toast.success(`PDF Split in half! I've loaded PART 1 for you. Once you upload it, I will automatically load PART 2.`);
 
         } catch (err) {
             logger.error('Error splitting PDF:', err);

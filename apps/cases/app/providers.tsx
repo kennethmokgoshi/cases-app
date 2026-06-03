@@ -1,12 +1,15 @@
 'use client';
 
-import { SessionProvider, ThemeProvider } from '@zenowethu/ui';
+import { SessionProvider, ThemeProvider, Toaster, ConfirmProvider } from '@zenowethu/ui';
 
 export function Providers({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider>
             <SessionProvider>
-                {children}
+                <ConfirmProvider>
+                    {children}
+                </ConfirmProvider>
+                <Toaster />
             </SessionProvider>
         </ThemeProvider>
     );

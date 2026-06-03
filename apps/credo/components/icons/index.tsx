@@ -136,3 +136,11 @@ export const SearchIcon = () => (
     <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 );
+
+export const AccountIcon = ({ active }: { active?: boolean }) => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <circle cx="9" cy="6" r="3.5" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} />
+    <path d="M2 16c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" strokeWidth={active ? "1.8" : "1.5"} strokeLinecap="round" />
+    <path d="M11.5 13l1.5 1.5L16 11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);

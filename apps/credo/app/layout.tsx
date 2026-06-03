@@ -51,6 +51,7 @@ export const viewport: Viewport = {
 };
 
 import { AuthProvider } from "../components/AuthProvider";
+import { Toaster, ConfirmProvider } from "@zenowethu/ui";
 
 export default function RootLayout({
   children,
@@ -76,7 +77,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased" suppressHydrationWarning>
         <AuthProvider>
-          {children}
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
+          <Toaster />
         </AuthProvider>
       </body>
     </html>
