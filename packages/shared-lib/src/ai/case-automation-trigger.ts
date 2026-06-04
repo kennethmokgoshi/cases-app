@@ -332,11 +332,93 @@ export async function runCaseAutomationTrigger(
         return { action: 'SKIPPED', message: `Case status is ${currentCase.status} - skipping auto-request.` };
     }
 
-    //  Step 3: Check for Zenowethu POA and ID
+    //  Step 3 (DHS PORTAL CHECK FIRST): Before touching documents, verify whether a transfer
+    //  request already exists on DHS — the client may have been requested before via another route.
+    logger.info(`[CASE_AUTOMATION] Checking DHS portal for existing transfer request on ${currentCase.fileNumber}...`);
+    let existingDhsStatus: string | undefined;
+    try {
+        const portalCheck = await checkTransferStatus(currentCase.client.idNumber);
+        existingDhsStatus = portalCheck?.status;
+        logger.info(`[CASE_AUTOMATION] DHS portal pre-check for ${currentCase.fileNumber}: status=${existingDhsStatus}`);
+    } catch (preCheckErr) {
+        logger.warn(`[CASE_AUTOMATION] DHS portal pre-check failed for ${currentCase.fileNumber} — proceeding to document check:`, preCheckErr);
+    }
+
+    if (existingDhsStatus === 'PENDING') {
+        // Already requested — update case to match DHS reality and stop
+        await prisma.case.update({
+            where: { id: caseId },
+            data: {
+                status: 'REQUESTED_VIA_DHS',
+                dhsStatus: 'Requested via DHS',
+                nextUpdate: addWorkingDays(new Date(), 3),
+            }
+        });
+        await prisma.workflowLog.create({
+            data: {
+                caseId,
+                fromStatus: currentCase.status,
+                toStatus: 'REQUESTED_VIA_DHS',
+                timestamp: new Date(),
+                notes: `[AI] DHS portal pre-check found existing PENDING request — status updated to match DHS reality.`,
+                userId: adminId || null
+            }
+        });
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: 'DHS portal pre-check: a transfer request is already PENDING on NCR Debt Help System.',
+            action: 'Status updated to "Requested via DHS" to match DHS reality. No new request submitted. Next update: 3 working days.'
+        });
+        await notifyManagers(caseId, currentCase.fileNumber, 'Requested via DHS', adminId);
+        GhlService.applyTags(caseId, ['dhs_file_requested']).catch(err =>
+            logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err)
+        );
+        return { action: 'DHS_REQUESTED', message: 'Existing PENDING request found on DHS portal — case status updated.' };
+    }
+
+    if (existingDhsStatus === 'ACCEPTED') {
+        await prisma.case.update({
+            where: { id: caseId },
+            data: { status: 'ACCEPTED_VIA_DHS', dhsStatus: 'Accepted', nextUpdate: addWorkingDays(new Date(), 5) }
+        });
+        await prisma.workflowLog.create({
+            data: {
+                caseId,
+                fromStatus: currentCase.status,
+                toStatus: 'ACCEPTED_VIA_DHS',
+                timestamp: new Date(),
+                notes: `[AI] DHS portal pre-check found transfer already ACCEPTED.`,
+                userId: adminId || null
+            }
+        });
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: 'DHS portal pre-check: transfer has already been ACCEPTED on NCR Debt Help System.',
+            action: 'Status updated to "Accepted via DHS". Next update: 5 working days. Admin notified.'
+        });
+        await notifyManagers(caseId, currentCase.fileNumber, 'Accepted via DHS', adminId);
+        return { action: 'SKIPPED', message: 'Transfer already ACCEPTED on DHS — case status updated.' };
+    }
+
+    if (existingDhsStatus === 'DECLINED') {
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: 'DHS portal pre-check: transfer request has been DECLINED on NCR Debt Help System.',
+            action: 'Please check the decline reason on the DHS portal and handle accordingly.'
+        });
+        return { action: 'SKIPPED', message: 'Transfer DECLINED on DHS — staff must review decline reason.' };
+    }
+
+    // DHS portal confirmed NOT_REQUESTED (or check failed) — proceed to document check and submit transfer.
+
+    //  Step 4: Check for Zenowethu POA and ID
     let poaDoc = currentCase.documents.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
     let idDoc = currentCase.documents.find(d => d.type === 'ID');
 
-    //  Step 3b: If documents missing, try to run extraction
+    //  Step 4b: If documents missing, try to run extraction
     if (!poaDoc || !idDoc) {
         const combinedFile = currentCase.documents.find(d => d.type === 'COMBINED' || d.type === 'OTHER');
         if (combinedFile) {
@@ -359,7 +441,7 @@ export async function runCaseAutomationTrigger(
         }
     }
 
-    //  Step 3c: If we now have both docs, run the transfer request
+    //  Step 4c: If we now have both docs, run the transfer request
     if (poaDoc && idDoc) {
         logger.info(`[CASE_AUTOMATION] Found all docs for ${currentCase.fileNumber}. Running auto-transfer request...`);
         return await performAutoDhsTransferRequest(currentCase, adminId, serviceLabels, triggeredBy);

@@ -284,6 +284,19 @@ export async function PATCH(
                 where: {
                     idNumber: client.idNumber,
                     id: { not: currentCase.clientId }
+                },
+                include: {
+                    cases: {
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                        include: {
+                            projects: {
+                                where: { isPrimary: true },
+                                include: { project: { select: { name: true } } },
+                                take: 1
+                            }
+                        }
+                    }
                 }
             });
 
@@ -478,10 +491,9 @@ export async function PATCH(
                     });
 
                 } else {
-                    // Generate suggested prefixed ID (e.g., DRL8207225452088 for "Debt Review Letsatsi")
-                    const suggestedPrefix = 'DRL'; // Default suggested prefix
-                    const suggestedIdNumber = `${suggestedPrefix}${client.idNumber}`;
-
+                    const existingLatestCase = (existingByIdNumber as any).cases?.[0];
+                    const existingProjectName = existingLatestCase?.projects?.[0]?.project?.name || 'Unknown Project';
+                    const existingFileNumber = existingLatestCase?.fileNumber || '';
                     return NextResponse.json({
                         error: `ID Number "${client.idNumber}" already exists for another client: ${existingByIdNumber.firstName} ${existingByIdNumber.lastName}`,
                         code: 'DUPLICATE_ID_NUMBER',
@@ -490,8 +502,9 @@ export async function PATCH(
                             id: existingByIdNumber.id,
                             name: `${existingByIdNumber.firstName} ${existingByIdNumber.lastName}`
                         },
-                        allowPrefixedId: true,
-                        suggestedIdNumber: suggestedIdNumber,
+                        existingClientName: `${existingByIdNumber.firstName} ${existingByIdNumber.lastName}`,
+                        existingFileNumber,
+                        existingProjectName,
                         originalIdNumber: client.idNumber
                     }, { status: 409 });
                 }

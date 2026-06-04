@@ -75,7 +75,8 @@ export const CaseCreateSchema = z.object({
     partnerSplitPercent: z.number().min(0).max(100).optional().default(0),
     services: z.array(z.string()).optional().nullable(),
     referrerId: z.string().optional().nullable(),
-    assignedToId: z.string().optional().nullable() });
+    assignedToId: z.string().optional().nullable(),
+    allowDuplicate: z.boolean().optional().default(false) });
 
 export const CasePatchSchema = z.object({
     client: ClientUpdateSchema.optional(),

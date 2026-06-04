@@ -1922,78 +1922,39 @@ function NewCaseWithAIComponent() {
                     </div>
                 </div>
             )}
-            {/* Duplicate Override Modal */}
+            {/* Duplicate Client Alert */}
             {duplicateError && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-zeno-navy border border-white/10 rounded-xl p-6 max-w-xl w-full shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center gap-3 mb-4 text-amber-500">
-                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                            <h3 className="text-xl font-bold text-white">Duplicate Client Detected</h3>
+                    <div className="bg-zeno-navy border border-amber-500/40 rounded-xl p-6 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-xl flex-shrink-0">⚠️</div>
+                            <h3 className="text-xl font-bold text-white">Duplicate ID Number Detected</h3>
                         </div>
-
-                        <p className="text-gray-300 mb-4 leading-relaxed">
-                            {duplicateError.error}
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
+                            <p className="text-amber-200 text-sm">This ID number is already on file as:</p>
+                            <p className="text-white font-bold text-lg mt-1">
+                                {duplicateError.existingClientName || duplicateError.existingClient?.name || 'Unknown'}
+                            </p>
+                            {duplicateError.existingFileNumber && (
+                                <p className="text-gray-300 text-sm mt-1">Case: <span className="text-zeno-cyan font-mono">{duplicateError.existingFileNumber}</span></p>
+                            )}
+                            <p className="text-gray-300 text-sm mt-0.5">Project: <span className="text-gray-100">{duplicateError.existingProjectName || 'Unknown Project'}</span></p>
+                        </div>
+                        <p className="text-gray-400 text-sm mb-5">
+                            You can merge this submission into the existing client record, or cancel and search for their existing case.
                         </p>
-
-                        {/* Option 1: Update existing record */}
-                        <div className="mb-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg">
-                            <p className="text-white font-medium mb-2">Option 1: Update Existing Record</p>
-                            <p className="text-sm text-gray-400 mb-3">This will merge the new documents and financial data into the existing client's file.</p>
-                            <button
-                                onClick={() => { setDuplicateError(null); setPrefixedIdInput(''); handleSubmit(true); }}
-                                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-medium"
-                            >
-                                Update Existing Record
-                            </button>
-                        </div>
-
-                        {/* Option 2: Capture with prefix */}
-                        {duplicateError.allowPrefixedId && (
-                            <div className="mb-4 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-                                <p className="text-white font-medium mb-2">Option 2: Create New Record with Prefixed ID</p>
-                                <p className="text-sm text-gray-400 mb-3">
-                                    Add a prefix to make the ID unique (e.g., <span className="text-blue-300 font-mono">DRL</span> for "Debt Review Letsatsi client").
-                                </p>
-                                <div className="flex gap-2 items-center mb-3">
-                                    <input
-                                        type="text"
-                                        value={prefixedIdInput || duplicateError.suggestedIdNumber || ''}
-                                        onChange={(e) => setPrefixedIdInput(e.target.value.toUpperCase())}
-                                        placeholder={duplicateError.suggestedIdNumber || `DRL${duplicateError.originalIdNumber}`}
-                                        className="flex-1 bg-zeno-dark border border-blue-500/50 rounded-lg px-4 py-2 text-white font-mono focus:outline-none focus:border-blue-400"
-                                    />
-                                </div>
-                                <p className="text-xs text-gray-500 mb-3">
-                                    Common prefixes: <span className="text-blue-400">DRL</span> (Debt Review Letsatsi), <span className="text-blue-400">DRS</span> (Debt Review Shosholoza), <span className="text-blue-400">DUP</span> (Duplicate)
-                                </p>
-                                <button
-                                    onClick={() => {
-                                        const newIdNumber = prefixedIdInput || duplicateError.suggestedIdNumber;
-                                        if (newIdNumber && newIdNumber !== duplicateError.originalIdNumber) {
-                                            // Update the form with the new prefixed ID
-                                            setFormData(prev => ({ ...prev, idNumber: newIdNumber }));
-                                            setDuplicateError(null);
-                                            setPrefixedIdInput('');
-                                            // Re-submit with the new ID
-                                            setTimeout(() => handleSubmit(false), 100);
-                                        } else {
-                                            toast.error('Please enter a valid prefixed ID number');
-                                        }
-                                    }}
-                                    disabled={!(prefixedIdInput || duplicateError.suggestedIdNumber)}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
-                                >
-                                    Create with Prefixed ID
-                                </button>
-                            </div>
-                        )}
-
-                        <div className="flex justify-end">
+                        <div className="flex gap-3">
                             <button
                                 onClick={() => { setDuplicateError(null); setPrefixedIdInput(''); setSubmitting(false); }}
-                                className="px-4 py-2 bg-transparent text-gray-400 hover:text-white transition-colors"
+                                className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium"
                             >
                                 Cancel
+                            </button>
+                            <button
+                                onClick={() => { setDuplicateError(null); setPrefixedIdInput(''); handleSubmit(true); }}
+                                className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-bold"
+                            >
+                                Merge into Existing Record
                             </button>
                         </div>
                     </div>

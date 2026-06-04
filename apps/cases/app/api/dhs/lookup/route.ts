@@ -719,6 +719,42 @@ export async function POST(request: Request) {
                 });
             }
 
+            // Compare client name on file vs DHS before requesting
+            let dhsNameWarning: string | null = null;
+            try {
+                const nameCheck = await searchConsumer(idNumber);
+                if (nameCheck.found && nameCheck.consumer) {
+                    const dhsSurname    = (nameCheck.consumer.surname    || '').trim().toUpperCase();
+                    const dhsFirstNames = (nameCheck.consumer.firstNames || '').trim().toUpperCase();
+                    const fileSurname   = (caseData.client.lastName  || '').trim().toUpperCase();
+                    const fileFirstName = (caseData.client.firstName || '').trim().toUpperCase();
+
+                    // DHS stores surname in one field; our file may have a multi-word first name
+                    const surnameMatch = dhsSurname && fileSurname && dhsSurname.includes(fileSurname);
+                    const firstMatch   = dhsFirstNames && fileFirstName && (dhsFirstNames.includes(fileFirstName) || fileFirstName.includes(dhsFirstNames));
+
+                    if (!surnameMatch || !firstMatch) {
+                        dhsNameWarning =
+                            `NAME MISMATCH DETECTED: ` +
+                            `On file: "${caseData.client.firstName} ${caseData.client.lastName}" — ` +
+                            `On DHS: "${nameCheck.consumer.firstNames} ${nameCheck.consumer.surname}". ` +
+                            `Transfer has been submitted but please verify identity before proceeding with debt review flag removal.`;
+                        logger.warn(`[DHS validate_and_request] ${dhsNameWarning}`);
+                        await prisma.caseComment.create({
+                            data: {
+                                caseId,
+                                userId: actingUserId || '',
+                                content: `[SYSTEM] ⚠️ ${dhsNameWarning}`
+                            }
+                        });
+                    } else {
+                        logger.info(`[DHS validate_and_request] Name check passed — DHS: "${nameCheck.consumer.firstNames} ${nameCheck.consumer.surname}" matches file.`);
+                    }
+                }
+            } catch (nameCheckErr) {
+                logger.warn('[DHS validate_and_request] Name pre-check failed (non-fatal):', nameCheckErr);
+            }
+
             logger.info('Attempting DHS transfer request...');
             const dhsResult = await requestTransfer(idNumber, poaFilePath, idFilePath);
 
@@ -809,9 +845,11 @@ export async function POST(request: Request) {
                     success: true,
                     dhsRequested: true,
                     emailSent: false,
+                    nameWarning: dhsNameWarning,
                     message: 'Requested via DHS but email not sent: no valid email address found for this debt counsellor. ' +
                         'The email may have been flagged as invalid or could not be found in our records or on ncr.org.za. ' +
                         'Please call the debt counsellor to obtain a working email address and update the case.'
+                        + (dhsNameWarning ? ` ⚠️ ${dhsNameWarning}` : '')
                 };
             } else {
                 if (resolvedEmail !== caseData.dcEmail) {
@@ -903,14 +941,19 @@ export async function POST(request: Request) {
                         success: true,
                         dhsRequested: true,
                         emailSent: true,
-                        message: `Requested via DHS successfully. Email sent to debt counsellor (${resolvedEmail})${attachNote}${ccNote}. Source: ${emailSource}.`
+                        nameWarning: dhsNameWarning,
+                        message: dhsNameWarning
+                            ? `Requested via DHS. ⚠️ ${dhsNameWarning}`
+                            : `Requested via DHS successfully. Email sent to debt counsellor (${resolvedEmail})${attachNote}${ccNote}. Source: ${emailSource}.`
                     };
                 } else {
                     result = {
                         success: true,
                         dhsRequested: true,
                         emailSent: false,
+                        nameWarning: dhsNameWarning,
                         message: `Requested via DHS but email not sent: failed to deliver to DC (${resolvedEmail}). Reason: ${emailResult.errors.join(', ')}`
+                            + (dhsNameWarning ? ` ⚠️ ${dhsNameWarning}` : '')
                     };
                 }
             }

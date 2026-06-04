@@ -312,6 +312,9 @@ model Case {
   notificationQueue       NotificationQueue[]
   poaSigningRequests      PoaSigningRequest[]
 
+  debtCounsellordId       String?
+  debtCounsellor          DebtCounsellor?       @relation(fields: [debtCounsellordId], references: [id])
+
   @@index([status])
   @@index([isOverdue])
   @@index([updatedAt])
@@ -319,6 +322,42 @@ model Case {
   @@index([referrerId])
   @@index([isAdminOnly])
   @@index([deletedAt])
+  @@index([debtCounsellordId])
+}
+
+model DebtCounsellor {
+  id              String                       @id @default(cuid())
+  ncrdcNo         String                       @unique
+  fullName        String?
+  tradingName     String?
+  operatingStatus String?
+  province        String?
+  tel             String?
+  mobile          String?
+  fax             String?
+  email           String?
+  preferredEmail  String?
+  lastKnownEmail  String?
+  notes           String?
+  staffNotes      String?
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  updatedById     String?
+  updatedBy       User?                        @relation("DCUpdatedBy", fields: [updatedById], references: [id])
+  cases           Case[]
+  emailHistory    DebtCounsellorEmailHistory[]
+}
+
+model DebtCounsellorEmailHistory {
+  id               String         @id @default(cuid())
+  debtCounsellordId String
+  email            String
+  source           String
+  recordedAt       DateTime       @default(now())
+  notes            String?
+  debtCounsellor   DebtCounsellor @relation(fields: [debtCounsellordId], references: [id], onDelete: Cascade)
+
+  @@index([debtCounsellordId])
 }
 
 model Document {
@@ -437,6 +476,7 @@ model User {
   assignedLeads             Lead[]            @relation("LeadAssignment")
   automationRuns            AutomationRun[]
   triggeredAutomations      AutomationRun[]   @relation("AutomationTrigger")
+  debtCounsellorsUpdated    DebtCounsellor[]  @relation("DCUpdatedBy")
 }
 
 model CaseAssignment {

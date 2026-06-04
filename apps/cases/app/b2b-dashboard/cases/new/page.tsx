@@ -119,9 +119,12 @@ function PartnerNewCaseComponent() {
     const [jointCellNumber, setJointCellNumber] = useState('');
     const [jointEmail, setJointEmail] = useState('');
 
-    // Duplicate Check State
-    const [duplicateError, setDuplicateError] = useState<any | null>(null);
-    const [prefixedIdInput, setPrefixedIdInput] = useState('');
+    // Duplicate alert state
+    const [duplicateAlert, setDuplicateAlert] = useState<{
+        existingClientName: string;
+        existingFileNumber: string;
+        existingProjectName: string;
+    } | null>(null);
 
     const isB2BPartner = session?.user?.userType === 'B2B_PARTNER';
 
@@ -344,7 +347,7 @@ function PartnerNewCaseComponent() {
         }));
     };
 
-    const handleCreateCase = async () => {
+    const handleCreateCase = async (allowDuplicate = false) => {
         // Validate required fields (phone and email are now optional)
         if (!surname || !fullNames || !idNumber) {
             toast.error('Please fill in Surname, Full Names, and ID Number');
@@ -427,26 +430,25 @@ function PartnerNewCaseComponent() {
                     partnerBranch: getBranchNameFromProject(),
                     partnerSplitPercent: 50,
                     services: selectedServices,
+                    allowDuplicate,
                 }) });
 
             if (!caseResponse.ok) {
                 const errorData = await caseResponse.json();
 
-                // Check if it's a duplicate ID error (409 Conflict)
-                if (caseResponse.status === 409 && errorData.code === 'DUPLICATE_ID_NUMBER' && errorData.allowPrefixedId) {
-                    // Show the duplicate modal with prefixed ID option
-                    setDuplicateError(errorData);
-                    setPrefixedIdInput(errorData.suggestedIdNumber || '');
+                if (caseResponse.status === 409 && (errorData.code === 'DUPLICATE_CASE' || errorData.code === 'DUPLICATE_ID_NUMBER')) {
+                    setDuplicateAlert({
+                        existingClientName: errorData.existingClientName || errorData.existingClient?.name || 'Unknown',
+                        existingFileNumber: errorData.existingFileNumber || '',
+                        existingProjectName: errorData.existingProjectName || 'Unknown Project',
+                    });
                     setSubmitting(false);
                     return;
                 } else if (caseResponse.status === 409) {
-                    // Other duplicate errors (phone, email)
-                    const fieldName = errorData.field === 'idNumber' ? 'ID Number'
-                        : errorData.field === 'phone' ? 'Cell Number'
-                            : errorData.field === 'email' ? 'Email Address'
-                                : 'Field';
-
-                    toast.error(`❌ ${errorData.error}\n\n${errorData.message}\n\nPlease use a different ${fieldName}.`);
+                    const fieldName = errorData.field === 'phone' ? 'Cell Number'
+                        : errorData.field === 'email' ? 'Email Address'
+                            : 'Field';
+                    toast.error(`❌ ${errorData.error || 'Duplicate detected'}\n\nA record with this ${fieldName} already exists.`);
                 } else if (errorData.errors && typeof errorData.errors === 'object') {
                     const fieldMessages = Object.entries(errorData.errors as Record<string, string[]>)
                         .map(([field, msgs]) => `• ${field}: ${msgs.join(', ')}`)
@@ -1359,66 +1361,39 @@ function PartnerNewCaseComponent() {
                 </div>
             )}
 
-            {/* Duplicate Override Modal */}
-            {duplicateError && (
+            {/* Duplicate Client Alert */}
+            {duplicateAlert && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-zeno-navy border border-white/10 rounded-xl p-6 max-w-xl w-full shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center gap-3 mb-4 text-amber-500">
-                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                            <h3 className="text-xl font-bold text-white">Duplicate Client Detected</h3>
+                    <div className="bg-zeno-navy border border-amber-500/40 rounded-xl p-6 max-w-lg w-full shadow-2xl">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-xl flex-shrink-0">⚠️</div>
+                            <h3 className="text-xl font-bold text-white">Duplicate ID Number Detected</h3>
                         </div>
-
-                        <p className="text-gray-300 mb-4 leading-relaxed">
-                            {duplicateError.error}
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-5">
+                            <p className="text-amber-200 text-sm leading-relaxed">
+                                This ID number is already on file as:
+                            </p>
+                            <p className="text-white font-bold text-lg mt-1">{duplicateAlert.existingClientName}</p>
+                            {duplicateAlert.existingFileNumber && (
+                                <p className="text-gray-300 text-sm mt-1">Case: <span className="text-zeno-cyan font-mono">{duplicateAlert.existingFileNumber}</span></p>
+                            )}
+                            <p className="text-gray-300 text-sm mt-0.5">Project: <span className="text-gray-100">{duplicateAlert.existingProjectName}</span></p>
+                        </div>
+                        <p className="text-gray-400 text-sm mb-5">
+                            Do you want to record this referral anyway? A new case will be created and linked to the existing client record with their correct ID number.
                         </p>
-
-                        {/* Option: Capture with prefix */}
-                        {duplicateError.allowPrefixedId && (
-                            <div className="mb-4 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-                                <p className="text-white font-medium mb-2">Create New Record with Prefixed ID</p>
-                                <p className="text-sm text-gray-400 mb-3">
-                                    Add a prefix to make the ID unique (e.g., <span className="text-blue-300 font-mono">DRL</span> for "Debt Review Letsatsi client").
-                                </p>
-                                <div className="flex gap-2 items-center mb-3">
-                                    <input
-                                        type="text"
-                                        value={prefixedIdInput}
-                                        onChange={(e) => setPrefixedIdInput(e.target.value.toUpperCase())}
-                                        placeholder={duplicateError.suggestedIdNumber || `DRL${duplicateError.originalIdNumber}`}
-                                        className="flex-1 bg-zeno-dark border border-blue-500/50 rounded-lg px-4 py-2 text-white font-mono focus:outline-none focus:border-blue-400"
-                                    />
-                                </div>
-                                <p className="text-xs text-gray-500 mb-3">
-                                    Common prefixes: <span className="text-blue-400">DRL</span> (Debt Review Letsatsi), <span className="text-blue-400">DRS</span> (Debt Review Shosholoza), <span className="text-blue-400">DUP</span> (Duplicate)
-                                </p>
-                                <button
-                                    onClick={async () => {
-                                        const newIdNumber = prefixedIdInput || duplicateError.suggestedIdNumber;
-                                        if (newIdNumber && newIdNumber !== duplicateError.originalIdNumber) {
-                                            // Update the ID and retry
-                                            setIdNumber(newIdNumber);
-                                            setDuplicateError(null);
-                                            setPrefixedIdInput('');
-                                            // Re-submit with the new ID after a short delay
-                                            setTimeout(() => handleCreateCase(), 100);
-                                        } else {
-                                            toast.error('Please enter a valid prefixed ID number');
-                                        }
-                                    }}
-                                    disabled={!prefixedIdInput && !duplicateError.suggestedIdNumber}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
-                                >
-                                    Create with Prefixed ID
-                                </button>
-                            </div>
-                        )}
-
-                        <div className="flex justify-end">
+                        <div className="flex gap-3">
                             <button
-                                onClick={() => { setDuplicateError(null); setPrefixedIdInput(''); setSubmitting(false); }}
-                                className="px-4 py-2 bg-transparent text-gray-400 hover:text-white transition-colors"
+                                onClick={() => { setDuplicateAlert(null); setSubmitting(false); }}
+                                className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium"
                             >
                                 Cancel
+                            </button>
+                            <button
+                                onClick={() => { setDuplicateAlert(null); handleCreateCase(true); }}
+                                className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-bold"
+                            >
+                                Record Anyway
                             </button>
                         </div>
                     </div>

@@ -1,125 +1,146 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
+import { classifyDeclineReason } from '@zenowethu/shared-lib/src/dhs/decline-handler';
 
-const logger = {
-    info: (...args: unknown[]) => console.log('[INFO]', ...args),
-    error: (...args: unknown[]) => console.error('[ERROR]', ...args),
-};
+const logger = createLogger('api/admin/debt-counsellors');
 
 /**
  * GET /api/admin/debt-counsellors
- * Returns one record per unique NCRDC number (or email if no NCRDC),
- * including the latest contact details across all matching cases.
+ * Returns all DebtCounsellor records with aggregate stats.
+ * Stats are computed from linked Case records.
  */
-export async function GET() {
+export async function GET(request: Request) {
     try {
         const session = await auth();
         if (!session?.user?.isAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
 
-        // Pull every case that has had a DC email sent (has dcEmail set)
-        const cases = await prisma.case.findMany({
-            where: {
-                OR: [
-                    { dcEmail: { not: null } },
-                    { ncrdcNo: { not: null } },
-                ],
-            },
-            select: {
-                ncrdcNo: true,
-                debtCounsellorName: true,
-                dcTradingName: true,
-                dcEmail: true,
-                lastKnownEmail: true,
-                dcMobile: true,
-                lastUsedMobile: true,
-                dcTel: true,
-                lastUsedTel: true,
-                dcOperatingStatus: true,
-                dcProvince: true,
-                updatedAt: true,
+        const { searchParams } = new URL(request.url);
+        const search = searchParams.get('search') ?? '';
+
+        const now = new Date();
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+        const counsellors = await (prisma as any).debtCounsellor.findMany({
+            where: search
+                ? {
+                    OR: [
+                        { ncrdcNo: { contains: search, mode: 'insensitive' } },
+                        { fullName: { contains: search, mode: 'insensitive' } },
+                        { tradingName: { contains: search, mode: 'insensitive' } },
+                        { email: { contains: search, mode: 'insensitive' } },
+                        { province: { contains: search, mode: 'insensitive' } },
+                    ],
+                }
+                : undefined,
+            include: {
+                cases: {
+                    select: {
+                        id: true,
+                        dhsStatus: true,
+                        declineReason: true,
+                        createdAt: true,
+                    },
+                },
+                emailHistory: {
+                    orderBy: { recordedAt: 'desc' },
+                    take: 1,
+                },
+                updatedBy: {
+                    select: { firstName: true, lastName: true },
+                },
             },
             orderBy: { updatedAt: 'desc' },
         });
 
-        // Group by ncrdcNo (or fallback key = email), keep freshest values
-        const map = new Map<string, {
-            ncrdcNo: string | null;
-            debtCounsellorName: string | null;
-            dcTradingName: string | null;
-            dcEmail: string | null;
-            lastKnownEmail: string | null;
-            dcMobile: string | null;
-            lastUsedMobile: string | null;
-            dcTel: string | null;
-            lastUsedTel: string | null;
-            dcOperatingStatus: string | null;
-            dcProvince: string | null;
-            caseCount: number;
-        }>();
+        const result = counsellors.map((dc: any) => {
+            const cases = dc.cases as Array<{
+                id: string;
+                dhsStatus: string | null;
+                declineReason: string | null;
+                createdAt: Date;
+            }>;
 
-        for (const c of cases) {
-            const key = c.ncrdcNo ?? c.dcEmail ?? '__unknown__';
-            if (!map.has(key)) {
-                map.set(key, {
-                    ncrdcNo: c.ncrdcNo,
-                    debtCounsellorName: c.debtCounsellorName,
-                    dcTradingName: c.dcTradingName,
-                    dcEmail: c.dcEmail,
-                    lastKnownEmail: c.lastKnownEmail,
-                    dcMobile: c.dcMobile,
-                    lastUsedMobile: c.lastUsedMobile,
-                    dcTel: c.dcTel,
-                    lastUsedTel: c.lastUsedTel,
-                    dcOperatingStatus: c.dcOperatingStatus,
-                    dcProvince: c.dcProvince,
-                    caseCount: 1,
-                });
-            } else {
-                const existing = map.get(key)!;
-                existing.caseCount++;
-                // Fill in missing fields from older cases (freshest first, so only fill nulls)
-                if (!existing.debtCounsellorName && c.debtCounsellorName) existing.debtCounsellorName = c.debtCounsellorName;
-                if (!existing.dcTradingName && c.dcTradingName) existing.dcTradingName = c.dcTradingName;
-                if (!existing.dcEmail && c.dcEmail) existing.dcEmail = c.dcEmail;
-                if (!existing.lastKnownEmail && c.lastKnownEmail) existing.lastKnownEmail = c.lastKnownEmail;
-                if (!existing.dcMobile && c.dcMobile) existing.dcMobile = c.dcMobile;
-                if (!existing.lastUsedMobile && c.lastUsedMobile) existing.lastUsedMobile = c.lastUsedMobile;
-                if (!existing.dcTel && c.dcTel) existing.dcTel = c.dcTel;
-                if (!existing.lastUsedTel && c.lastUsedTel) existing.lastUsedTel = c.lastUsedTel;
-                if (!existing.dcOperatingStatus && c.dcOperatingStatus) existing.dcOperatingStatus = c.dcOperatingStatus;
-                if (!existing.dcProvince && c.dcProvince) existing.dcProvince = c.dcProvince;
+            const total = cases.length;
+            const thisYear = cases.filter((c) => c.createdAt >= startOfYear).length;
+            const thisMonth = cases.filter((c) => c.createdAt >= startOfMonth).length;
+            const lastMonth = cases.filter(
+                (c) => c.createdAt >= startOfLastMonth && c.createdAt < startOfMonth,
+            ).length;
+            const accepted = cases.filter((c) => c.dhsStatus === 'ACCEPTED').length;
+            const declined = cases.filter((c) => c.dhsStatus === 'DECLINED').length;
+
+            // Most common decline category
+            const declineCounts: Record<string, number> = {};
+            for (const c of cases) {
+                if (c.dhsStatus === 'DECLINED' && c.declineReason) {
+                    const cat = classifyDeclineReason(c.declineReason);
+                    declineCounts[cat] = (declineCounts[cat] ?? 0) + 1;
+                }
             }
-        }
+            const topDeclineCategory =
+                Object.entries(declineCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
-        const counsellors = Array.from(map.values());
-        return NextResponse.json({ counsellors, total: counsellors.length });
+            return {
+                id: dc.id,
+                ncrdcNo: dc.ncrdcNo,
+                fullName: dc.fullName,
+                tradingName: dc.tradingName,
+                operatingStatus: dc.operatingStatus,
+                province: dc.province,
+                tel: dc.tel,
+                mobile: dc.mobile,
+                email: dc.email,
+                preferredEmail: dc.preferredEmail,
+                lastKnownEmail: dc.lastKnownEmail,
+                staffNotes: dc.staffNotes,
+                updatedAt: dc.updatedAt,
+                updatedBy: dc.updatedBy
+                    ? `${dc.updatedBy.firstName} ${dc.updatedBy.lastName}`
+                    : null,
+                stats: {
+                    total,
+                    thisYear,
+                    thisMonth,
+                    lastMonth,
+                    accepted,
+                    declined,
+                    topDeclineCategory,
+                },
+            };
+        });
+
+        return NextResponse.json({ counsellors: result, total: result.length });
     } catch (error) {
-        logger.error('GET /api/admin/debt-counsellors error:', error);
+        logger.error('GET /api/admin/debt-counsellors', { error });
         return NextResponse.json({ error: 'Failed to fetch debt counsellors' }, { status: 500 });
     }
 }
 
 const PatchSchema = z.object({
+    id: z.string().min(1),
     ncrdcNo: z.string().min(1),
-    debtCounsellorName: z.string().optional(),
-    dcTradingName: z.string().optional(),
-    dcEmail: z.string().email().optional().or(z.literal('')),
+    fullName: z.string().optional(),
+    tradingName: z.string().optional(),
+    operatingStatus: z.string().optional(),
+    province: z.string().optional(),
+    tel: z.string().optional(),
+    mobile: z.string().optional(),
+    fax: z.string().optional(),
+    email: z.string().email().optional().or(z.literal('')),
+    preferredEmail: z.string().email().optional().or(z.literal('')),
     lastKnownEmail: z.string().email().optional().or(z.literal('')),
-    dcMobile: z.string().optional(),
-    lastUsedMobile: z.string().optional(),
-    dcTel: z.string().optional(),
-    lastUsedTel: z.string().optional(),
-    dcOperatingStatus: z.string().optional(),
-    dcProvince: z.string().optional(),
+    staffNotes: z.string().optional(),
 });
 
 /**
  * PATCH /api/admin/debt-counsellors
- * Update contact details for all cases with a given NCRDC number.
+ * Update a DebtCounsellor record. Also syncs key fields back to linked Case rows.
  */
 export async function PATCH(request: Request) {
     try {
@@ -131,31 +152,64 @@ export async function PATCH(request: Request) {
         const body = await request.json();
         const parsed = PatchSchema.safeParse(body);
         if (!parsed.success) {
-            return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
+            return NextResponse.json(
+                { error: 'Invalid request', details: parsed.error.flatten() },
+                { status: 400 },
+            );
         }
 
-        const { ncrdcNo, ...updates } = parsed.data;
+        const { id, ...fields } = parsed.data;
 
-        // Build update object — only include fields that were provided
-        const data: Record<string, string | null> = {};
-        for (const [key, value] of Object.entries(updates)) {
+        const data: Record<string, string | null> = { updatedById: session.user.id };
+        for (const [key, value] of Object.entries(fields)) {
             if (value !== undefined) {
                 data[key] = value === '' ? null : value;
             }
         }
 
-        const result = await prisma.case.updateMany({
-            where: { ncrdcNo },
-            data: {
-                ...data,
-                updatedById: session.user.id
-            },
+        const dc = await (prisma as any).debtCounsellor.update({
+            where: { id },
+            data,
         });
 
-        logger.info(`DC details updated for NCRDC ${ncrdcNo}: ${result.count} cases`);
-        return NextResponse.json({ success: true, updatedCases: result.count });
+        // Track email change in history
+        if (fields.email && fields.email !== '') {
+            const existing = await (prisma as any).debtCounsellorEmailHistory.findFirst({
+                where: { debtCounsellordId: id, email: fields.email },
+            });
+            if (!existing) {
+                await (prisma as any).debtCounsellorEmailHistory.create({
+                    data: {
+                        debtCounsellordId: id,
+                        email: fields.email,
+                        source: 'STAFF',
+                        notes: `Updated by ${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim(),
+                    },
+                });
+            }
+        }
+
+        // Sync contact fields back to all linked cases
+        const caseSync: Record<string, string | null> = {};
+        if ('email' in data) caseSync.dcEmail = data.email;
+        if ('fullName' in data) caseSync.debtCounsellorName = data.fullName;
+        if ('tradingName' in data) caseSync.dcTradingName = data.tradingName;
+        if ('mobile' in data) caseSync.dcMobile = data.mobile;
+        if ('tel' in data) caseSync.dcTel = data.tel;
+        if ('province' in data) caseSync.dcProvince = data.province;
+        if ('operatingStatus' in data) caseSync.dcOperatingStatus = data.operatingStatus;
+
+        if (Object.keys(caseSync).length > 0) {
+            await prisma.case.updateMany({
+                where: { debtCounsellordId: id },
+                data: { ...caseSync, updatedById: session.user.id },
+            });
+        }
+
+        logger.info('DC record updated', { id: dc.id, ncrdcNo: dc.ncrdcNo });
+        return NextResponse.json({ success: true, dc });
     } catch (error) {
-        logger.error('PATCH /api/admin/debt-counsellors error:', error);
+        logger.error('PATCH /api/admin/debt-counsellors', { error });
         return NextResponse.json({ error: 'Failed to update debt counsellor' }, { status: 500 });
     }
 }

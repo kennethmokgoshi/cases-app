@@ -268,21 +268,38 @@ export async function POST(request: Request) {
         
         const data = parsed.data;
         
-        // 0. Check for existing active case for this ID number to prevent duplicates
+        // 0. Check for existing active case for this ID number to prevent accidental duplicates
+        const nonActiveCodes = WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED' || s.category === 'LOST').map(s => s.code);
         const activeCase = await prisma.case.findFirst({
             where: {
                 client: { idNumber: data.client.idNumber.trim() },
-                status: { notIn: [...WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED' || s.category === 'LOST').map(s => s.code)] }
+                status: { notIn: nonActiveCodes }
             },
-            select: { fileNumber: true }
+            select: {
+                fileNumber: true,
+                client: { select: { firstName: true, lastName: true } },
+                projects: {
+                    where: { isPrimary: true },
+                    include: { project: { select: { name: true } } },
+                    take: 1
+                }
+            }
         });
 
-        if (activeCase) {
-            logger.warn(`Blocked duplicate case creation for ID ${data.client.idNumber}. Existing case: ${activeCase.fileNumber}`);
-            return NextResponse.json({ 
-                error: 'Duplicate Case', 
-                message: `An active case (${activeCase.fileNumber}) already exists for this ID number. To prevent duplicates, please search for and update the existing case.` 
-            }, { status: 400 });
+        if (activeCase && !data.allowDuplicate) {
+            const existingClientName = activeCase.client
+                ? `${activeCase.client.firstName} ${activeCase.client.lastName}`
+                : 'Unknown';
+            const existingProjectName = activeCase.projects[0]?.project?.name || 'Unknown Project';
+            logger.warn(`Duplicate case alert for ID ${data.client.idNumber}. Existing case: ${activeCase.fileNumber} (${existingClientName})`);
+            return NextResponse.json({
+                error: 'Duplicate Case',
+                code: 'DUPLICATE_CASE',
+                existingClientName,
+                existingFileNumber: activeCase.fileNumber,
+                existingProjectName,
+                message: `ID ${data.client.idNumber} is already on file as ${existingClientName} — case ${activeCase.fileNumber} in project "${existingProjectName}".`
+            }, { status: 409 });
         }
 
         const count = await prisma.case.count();

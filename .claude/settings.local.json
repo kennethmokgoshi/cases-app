@@ -154,7 +154,11 @@
       "Bash(node scripts/fix-alerts.cjs)",
       "Bash(node -e \"const path=require\\('path'\\); console.log\\(path.join\\(__dirname,'..','apps'\\)\\); console.log\\(require\\('fs'\\).existsSync\\(path.join\\(__dirname,'..','apps'\\)\\)\\)\")",
       "Bash(node -e \"process.chdir\\('scripts'\\); const path=require\\('path'\\); console.log\\(__dirname\\)\")",
-      "Bash(node scripts/fix-alerts.cjs --debug)"
+      "Bash(node scripts/fix-alerts.cjs --debug)",
+      "Bash(xargs wc -l)",
+      "Bash(grep -E \"route\\\\.ts$\")",
+      "Bash(mkdir -p \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\cases\\\\app\\\\api\\\\admin\\\\debt-counsellors\\\\[id]\" 2>/dev/null; mkdir -p \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\cases\\\\app\\\\api\\\\admin\\\\debt-counsellors\\\\backfill\" 2>/dev/null; echo done)",
+      "Bash(pnpm --filter @zenowethu/shared-lib tsc --noEmit)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

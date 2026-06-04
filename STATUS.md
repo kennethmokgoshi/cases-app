@@ -1,7 +1,52 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-03 (Tier 1 Steps 1–3 complete · 690 tests passing)
+> Last updated: 2026-06-04 (Debt Counsellor records, stats, drill-down · 690 tests passing)
+
+---
+
+### Debt Counsellor Records — Full Feature (2026-06-04)
+
+**What was done:**
+- [x] Added `DebtCounsellor` model (keyed by `ncrdcNo`, staff-editable) + `DebtCounsellorEmailHistory` model to Prisma schema
+- [x] Added `debtCounsellordId` FK on `Case` model linking to `DebtCounsellor`
+- [x] Pushed schema changes to DB (`prisma db push` — shadow DB blocked `migrate dev` due to prior `db push` usage)
+- [x] `GET /api/admin/debt-counsellors` — returns all DC records with per-DC stats: total, this year, this month, last month, accepted, declined, top decline category
+- [x] `PATCH /api/admin/debt-counsellors` — staff-editable; syncs contact fields back to all linked cases; records email changes in history
+- [x] `GET /api/admin/debt-counsellors/[id]` — full drill-down: stats, decline reason breakdown (bar chart %), email history with source, full case timeline with expandable decline details
+- [x] `POST /api/admin/debt-counsellors/backfill` — one-time safe backfill: creates `DebtCounsellor` records from existing Case data grouped by `ncrdcNo`, links all cases
+- [x] Updated `/admin/debt-counsellors` list page — stats pills per row (total/year/month/last month/accepted/declined/accept rate %), top decline category, View + Edit actions
+- [x] New `/admin/debt-counsellors/[id]` detail page — 8-stat grid, decline breakdown with progress bars, email history log with source labels, filterable case timeline with expandable decline reason + category + "Attended" flag
+
+**Known gap:** Prisma client types not yet regenerated (server lock on DLL). Run `pnpm --filter @zenowethu/database generate` after restarting the dev server. Until then the API uses `(prisma as any)` casts for the new models.
+
+**Files changed:**
+- `packages/database/prisma/schema.prisma` — DebtCounsellor + DebtCounsellorEmailHistory models; Case FK
+- `apps/cases/app/api/admin/debt-counsellors/route.ts` — full rewrite with stats
+- `apps/cases/app/api/admin/debt-counsellors/[id]/route.ts` — new
+- `apps/cases/app/api/admin/debt-counsellors/backfill/route.ts` — new
+- `apps/cases/app/(authenticated)/admin/debt-counsellors/page.tsx` — full rewrite
+- `apps/cases/app/(authenticated)/admin/debt-counsellors/[id]/page.tsx` — new
+
+---
+
+### ID Number Protection + DHS Name Comparison (2026-06-04)
+
+**What was done:**
+- [x] AI re-analysis (`apply-updates`) CAN still update ID numbers — `idNumber` remains in `CLIENT_FIELDS`
+- [x] Removed the "Create with Prefixed ID" option from all 3 case creation forms (B2B, staff, partner) — no more fake IDs like `DRL8801015009087`
+- [x] Replaced with proper duplicate alert: shows existing client name, case file number, and project — B2B partner/staff can click "Record Anyway" or "Merge into Existing Record" and the real ID is used throughout
+- [x] `cases/route.ts` POST: duplicate check now returns 409 code `DUPLICATE_CASE` with `existingClientName`, `existingFileNumber`, `existingProjectName`; accepts `allowDuplicate: true` to proceed
+- [x] `cases/[id]/route.ts`: `DUPLICATE_ID_NUMBER` 409 now also returns `existingFileNumber` and `existingProjectName`; `allowPrefixedId` removed
+- [x] Added DHS name comparison in the `validate_and_request` action: before submitting a transfer request, `searchConsumer` is called to retrieve the DHS-held name; if names differ, a `⚠️ NAME MISMATCH DETECTED` warning is written as a case comment and returned in the API response — the request still proceeds
+
+**Files changed:**
+- `apps/cases/app/api/cases/[id]/apply-updates/route.ts` — `idNumber` removed from `CLIENT_FIELDS`
+- `apps/cases/app/api/cases/[id]/route.ts` — `allowPrefixedId` and `suggestedIdNumber` removed from 409 response
+- `apps/cases/app/b2b-dashboard/cases/new/page.tsx` — prefixed ID modal removed; 409 handled with plain toast
+- `apps/cases/app/(authenticated)/cases/new/page.tsx` — "Option 2: Prefixed ID" removed from duplicate modal
+- `apps/cases/app/(authenticated)/partner/cases/new/page.tsx` — same
+- `apps/cases/app/api/dhs/lookup/route.ts` — name pre-check before `requestTransfer`; `nameWarning` in response
 
 ---
 
