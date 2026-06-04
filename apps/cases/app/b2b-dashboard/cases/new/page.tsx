@@ -1351,7 +1351,7 @@ function PartnerNewCaseComponent() {
                             Back
                         </button>
                         <button
-                            onClick={handleCreateCase}
+                            onClick={() => handleCreateCase()}
                             disabled={submitting}
                             className="flex-1 bg-zeno-cyan hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-zeno-navy font-bold px-8 py-3 rounded-lg transition-all"
                         >
