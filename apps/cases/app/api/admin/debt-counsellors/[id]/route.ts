@@ -11,16 +11,17 @@ const logger = createLogger('api/admin/debt-counsellors/[id]');
  */
 export async function GET(
     _request: Request,
-    { params }: { params: { id: string } },
+    { params }: { params: Promise<{ id: string }> },
 ) {
     try {
+        const { id } = await params;
         const session = await auth();
         if (!session?.user?.isAdmin) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
 
         const dc = await (prisma as any).debtCounsellor.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 emailHistory: { orderBy: { recordedAt: 'desc' } },
                 updatedBy: { select: { firstName: true, lastName: true } },
