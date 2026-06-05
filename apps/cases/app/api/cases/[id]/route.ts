@@ -262,6 +262,7 @@ export async function PATCH(
             description,
             assignments,
             category,
+            legalFeesStatus,
             ...otherCaseData
         } = body;
 
@@ -627,6 +628,7 @@ export async function PATCH(
         if (serviceFee !== undefined) caseUpdateData.serviceFee = serviceFee ? parseFloat(String(serviceFee).replace(/[^0-9.]/g, '')) : null;
         if (instalments !== undefined) caseUpdateData.instalments = instalments || 1;
         if (category !== undefined) caseUpdateData.category = category || 'Standard';
+        if (legalFeesStatus !== undefined) caseUpdateData.legalFeesStatus = legalFeesStatus || null;
         if (affordabilityStatus !== undefined) caseUpdateData.affordabilityStatus = affordabilityStatus || null;
         // B2B/B2C fields - only update if provided
         if (acquisitionType !== undefined) caseUpdateData.acquisitionType = acquisitionType;

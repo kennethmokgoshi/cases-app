@@ -236,6 +236,7 @@ function NewCaseWithAIComponent() {
         salaryPayDate: '',
         affordabilityStatus: '',
         category: 'Standard',
+        legalFeesStatus: '',
         closedAccounts: 0,
         openAccounts: 0,
         prescribedAccounts: 0,
@@ -651,7 +652,7 @@ function NewCaseWithAIComponent() {
                 surname: '', names: '', idNumber: '', cellNumber: '', whatsappNumber: '',
                 email: '', alternativeEmail: '', alternativePhone: '', address: '', employer: '',
                 employeeNo: '', grossSalary: '', netSalary: '', salaryPayDate: '',
-                affordabilityStatus: '', category: 'Standard', closedAccounts: 0,
+                affordabilityStatus: '', category: 'Standard', legalFeesStatus: '', closedAccounts: 0,
                 openAccounts: 0, prescribedAccounts: 0, ncrdcNo: '', serviceFee: '',
                 instalments: 1, totalDebtAmount: '', totalMonthlyInstallment: '',
                 cb_ncrdcNo: '', cb_debtCounsellor: '', cb_contactNo: '',
@@ -1024,6 +1025,7 @@ function NewCaseWithAIComponent() {
                 salaryPayDate: result.extractedData?.bankStatement?.latestSalaryDeposit?.date || result.extractedData?.payslip?.payDate || '',
                 affordabilityStatus: result.extractedData?.creditReport?.income?.affordability || result.extractedData?.affordability?.status || '',
                 category: detectedCategory,
+                legalFeesStatus: '',
                 closedAccounts: result.extractedData?.creditReport?.summary?.closedAccounts || result.extractedData?.creditReport?.closedAccounts || 0,
                 openAccounts: result.extractedData?.creditReport?.summary?.activeAccounts || result.extractedData?.creditReport?.openAccounts || 0,
                 prescribedAccounts: result.extractedData?.creditReport?.prescribedAccounts || 0,
@@ -1118,6 +1120,7 @@ function NewCaseWithAIComponent() {
                 salaryPayDate: '',
                 affordabilityStatus: '',
                 category: 'Standard',
+                legalFeesStatus: '',
                 closedAccounts: 0,
                 openAccounts: 0,
                 prescribedAccounts: 0,
@@ -1575,12 +1578,38 @@ function NewCaseWithAIComponent() {
                         </div>
                     )}
 
+                    {/* 6. Category */}
+                    {selectedMonth && (
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                                6. Category <span className="text-red-400">*</span>
+                            </label>
+                            <div className="flex gap-3">
+                                {['Payroll', 'Non-Payroll'].map(cat => (
+                                    <button
+                                        key={cat}
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({ ...prev, category: cat === 'Payroll' ? 'Payroll Single' : 'Non-Payroll Single' }))}
+                                        className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all font-semibold text-sm ${
+                                            (cat === 'Payroll' && formData.category === 'Payroll Single') ||
+                                            (cat === 'Non-Payroll' && formData.category === 'Non-Payroll Single')
+                                                ? 'bg-indigo-600/30 border-indigo-500 text-white'
+                                                : 'bg-zeno-navy border-white/10 text-gray-400 hover:border-white/30'
+                                        }`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Services Selection */}
                     {selectedMonth && (
                         <div className="mb-6">
                             <div className="flex items-center justify-between mb-3">
                                 <label className="block text-sm font-medium text-gray-400">
-                                    6. Services Required <span className="text-red-400">*</span>
+                                    7. Services Required <span className="text-red-400">*</span>
                                 </label>
                                 <button
                                     type="button"
@@ -1621,7 +1650,7 @@ function NewCaseWithAIComponent() {
                     {selectedMonth && selectedServices.length > 0 && isDebtReviewSelected(selectedServices) && (
                         <div className="mb-6">
                             <label className="block text-sm font-medium text-gray-400 mb-3">
-                                7. Application Type
+                                8. Application Type
                             </label>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                 <button
@@ -1667,6 +1696,36 @@ function NewCaseWithAIComponent() {
                                     Services: <span className="text-zeno-cyan">{selectedServices.length} selected</span>
                                 </p>
                             </div>
+                        </div>
+                    )}
+
+                    {/* 9. Legal Fees Status */}
+                    {selectedMonth && (selectedServices.includes('debt_review_application') || selectedServices.includes('debt_review_flag_removal') || selectedServices.includes('credit_profile_enquiry')) && (
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                                9. Legal Fees Status
+                            </label>
+                            <select
+                                value={formData.legalFeesStatus}
+                                onChange={(e) => setFormData(prev => ({ ...prev, legalFeesStatus: e.target.value }))}
+                                className="w-full px-4 py-3 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                            >
+                                <option value="">Select status...</option>
+                                <option value="No Legal Fees">No Legal Fees</option>
+                                <option value="No Arrangement yet">No Arrangement yet</option>
+                                <option value="Arrangement in progress">Arrangement in progress</option>
+                                <option value="NPR Consent">NPR Consent</option>
+                                <option value="PR Fees Consent">PR Fees Consent</option>
+                                <option value="Paying">Paying</option>
+                                <option value="Authorised & Pending">Authorised &amp; Pending</option>
+                                <option value="Cash Focus">Cash Focus</option>
+                                <option value="Fees Paid Cash">Fees Paid Cash</option>
+                                <option value="Debiting">Debiting</option>
+                                <option value="Debited">Debited</option>
+                                <option value="Refused to Pay">Refused to Pay</option>
+                                <option value="Invoiced & Pending">Invoiced &amp; Pending</option>
+                                <option value="Settled">Settled</option>
+                            </select>
                         </div>
                     )}
 

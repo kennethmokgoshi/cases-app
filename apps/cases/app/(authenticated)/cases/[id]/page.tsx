@@ -131,6 +131,7 @@ type CaseDetail = {
     } | null;
     nextUpdate: string | null;
     category: string;
+    legalFeesStatus: string | null;
 
     // Tasks & Issues
     todos: string | null; // JSON
@@ -264,6 +265,7 @@ type EditFormData = {
     cb_statusDate: string;
     idNumber: string;
     category: string;
+    legalFeesStatus: string;
     // Joint Client fields
     jointFirstName: string;
     jointLastName: string;
@@ -354,6 +356,7 @@ export default function CaseDetailPage() {
         cb_statusDate: '',
         idNumber: '',
         category: '',
+        legalFeesStatus: '',
         jointFirstName: '',
         jointLastName: '',
         jointIdNumber: '',
@@ -961,6 +964,7 @@ export default function CaseDetailPage() {
             cb_statusDate: caseData.cb_statusDate || '',
             idNumber: caseData.client.idNumber || '',
             category: caseData.category || '',
+            legalFeesStatus: caseData.legalFeesStatus || '',
             jointFirstName: caseData.jointClient?.firstName || '',
             jointLastName: caseData.jointClient?.lastName || '',
             jointIdNumber: caseData.jointClient?.idNumber || '',
@@ -1353,6 +1357,7 @@ export default function CaseDetailPage() {
                     partnerBranch: editForm.partnerBranch || null,
                     partnerSplitPercent: editForm.partnerSplitPercent ? parseInt(editForm.partnerSplitPercent) : 0,
                     category: editForm.category || null,
+                    legalFeesStatus: editForm.legalFeesStatus || null,
                     // DHS fields
                     ncrdcNo: editForm.ncrdcNo || null,
                     dhsStatus: editForm.dhsStatus || null,
@@ -1977,6 +1982,31 @@ export default function CaseDetailPage() {
                                     </select>
                                 </div>
                                 <div>
+                                    <label className="text-xs text-gray-500 uppercase">Legal Fees Status</label>
+                                    <p className="text-[10px] text-gray-500 mt-0.5 mb-1">Current legal fees arrangement</p>
+                                    <select
+                                        value={editForm.legalFeesStatus}
+                                        onChange={(e) => setEditForm({ ...editForm, legalFeesStatus: e.target.value })}
+                                        className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                    >
+                                        <option value="">Select status...</option>
+                                        <option value="No Legal Fees">No Legal Fees</option>
+                                        <option value="No Arrangement yet">No Arrangement yet</option>
+                                        <option value="Arrangement in progress">Arrangement in progress</option>
+                                        <option value="NPR Consent">NPR Consent</option>
+                                        <option value="PR Fees Consent">PR Fees Consent</option>
+                                        <option value="Paying">Paying</option>
+                                        <option value="Authorised & Pending">Authorised &amp; Pending</option>
+                                        <option value="Cash Focus">Cash Focus</option>
+                                        <option value="Fees Paid Cash">Fees Paid Cash</option>
+                                        <option value="Debiting">Debiting</option>
+                                        <option value="Debited">Debited</option>
+                                        <option value="Refused to Pay">Refused to Pay</option>
+                                        <option value="Invoiced & Pending">Invoiced &amp; Pending</option>
+                                        <option value="Settled">Settled</option>
+                                    </select>
+                                </div>
+                                <div>
                                     <label className="text-xs text-gray-500 uppercase">
                                         {(editForm.partnerName || '').toLowerCase().includes('letsatsi') ? 'Service Fee' : 'Quote'}
                                     </label>
@@ -2417,6 +2447,16 @@ export default function CaseDetailPage() {
                                     </span>
                                 </p>
                             </div>
+                            {caseData.legalFeesStatus && (
+                                <div>
+                                    <label className="text-xs text-gray-500 uppercase font-semibold text-zeno-cyan/70">Legal Fees Status</label>
+                                    <p className="text-white mt-1">
+                                        <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                                            {caseData.legalFeesStatus}
+                                        </span>
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -2511,6 +2551,25 @@ export default function CaseDetailPage() {
                         </div>
                     </div>
 
+                    {/* Category & Legal Fees Status */}
+                    <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6 mt-6 space-y-4">
+                        <div>
+                            <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1">Case Category</p>
+                            <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold bg-zeno-cyan/10 text-zeno-cyan border border-zeno-cyan/30">
+                                {caseData.category || 'Not Categorized'}
+                            </span>
+                        </div>
+                        <div>
+                            <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1">Legal Fees Status</p>
+                            {caseData.legalFeesStatus ? (
+                                <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                                    {caseData.legalFeesStatus}
+                                </span>
+                            ) : (
+                                <span className="text-xs text-gray-600 italic">Not set</span>
+                            )}
+                        </div>
+                    </div>
 
 
 

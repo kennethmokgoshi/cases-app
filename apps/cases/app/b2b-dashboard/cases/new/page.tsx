@@ -111,6 +111,10 @@ function PartnerNewCaseComponent() {
         optional: File[];
     }>({ optional: [] });
 
+    // Category & Legal Fees Status
+    const [category, setCategory] = useState<'Payroll Single' | 'Non-Payroll Single' | ''>('');
+    const [legalFeesStatus, setLegalFeesStatus] = useState('');
+
     // Joint Application State
     const [isJointApplication, setIsJointApplication] = useState(false);
     const [jointSurname, setJointSurname] = useState('');
@@ -640,10 +644,35 @@ function PartnerNewCaseComponent() {
                             </div>
                         )}
 
+                        {/* 6. Category */}
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">6</span>
+                                Category <span className="text-red-400">*</span>
+                            </label>
+                            <div className="flex gap-3">
+                                {(['Payroll', 'Non-Payroll'] as const).map(cat => (
+                                    <button
+                                        key={cat}
+                                        type="button"
+                                        onClick={() => setCategory(cat === 'Payroll' ? 'Payroll Single' : 'Non-Payroll Single')}
+                                        className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all font-semibold text-sm ${
+                                            (cat === 'Payroll' && category === 'Payroll Single') ||
+                                            (cat === 'Non-Payroll' && category === 'Non-Payroll Single')
+                                                ? 'bg-indigo-600/30 border-indigo-500 text-white'
+                                                : 'bg-zeno-navy border-white/10 text-gray-400 hover:border-white/30'
+                                        }`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div>
                             <div className="flex justify-between items-center mb-3">
                                 <label className="block text-sm font-medium text-gray-300 flex items-center gap-2">
-                                    <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">6</span>
+                                    <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] text-gray-400">7</span>
                                     Services Required <span className="text-red-400">*</span>
                                 </label>
                                 <button
@@ -672,7 +701,7 @@ function PartnerNewCaseComponent() {
                         {isDebtReviewSelected(selectedServices) && (
                             <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <label className="block text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-full bg-zeno-cyan text-zeno-navy flex items-center justify-center text-xs font-bold">7</span>
+                                    <span className="w-6 h-6 rounded-full bg-zeno-cyan text-zeno-navy flex items-center justify-center text-xs font-bold">8</span>
                                     Application Type <span className="text-red-400">*</span>
                                 </label>
                                 <div className="grid grid-cols-2 gap-4">
@@ -714,6 +743,37 @@ function PartnerNewCaseComponent() {
                                         <p className="text-sm text-gray-400 mt-1">Capture data for two applicants (e.g. Spouse)</p>
                                     </button>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* 9. Legal Fees Status */}
+                        {(selectedServices.includes('debt_review_application') || selectedServices.includes('debt_review_flag_removal') || selectedServices.includes('credit_profile_enquiry')) && (
+                            <div className="mt-8 pt-8 border-t border-white/5">
+                                <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-zeno-cyan text-zeno-navy flex items-center justify-center text-xs font-bold">9</span>
+                                    Legal Fees Status
+                                </label>
+                                <select
+                                    value={legalFeesStatus}
+                                    onChange={(e) => setLegalFeesStatus(e.target.value)}
+                                    className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
+                                >
+                                    <option value="">Select status...</option>
+                                    <option value="No Legal Fees">No Legal Fees</option>
+                                    <option value="No Arrangement yet">No Arrangement yet</option>
+                                    <option value="Arrangement in progress">Arrangement in progress</option>
+                                    <option value="NPR Consent">NPR Consent</option>
+                                    <option value="PR Fees Consent">PR Fees Consent</option>
+                                    <option value="Paying">Paying</option>
+                                    <option value="Authorised & Pending">Authorised &amp; Pending</option>
+                                    <option value="Cash Focus">Cash Focus</option>
+                                    <option value="Fees Paid Cash">Fees Paid Cash</option>
+                                    <option value="Debiting">Debiting</option>
+                                    <option value="Debited">Debited</option>
+                                    <option value="Refused to Pay">Refused to Pay</option>
+                                    <option value="Invoiced & Pending">Invoiced &amp; Pending</option>
+                                    <option value="Settled">Settled</option>
+                                </select>
                             </div>
                         )}
 
