@@ -144,6 +144,7 @@ export function WorkflowTimeline({ caseId }: { caseId: string }) {
     if (!data) return null;
 
     const { case: c, logs, payments, paymentTotal } = data;
+    const daysOpen = Math.floor((Date.now() - new Date(c.createdAt as string).getTime()) / 86400000);
     const currentMeta = getStatusMeta(c.status);
     const currentDotColor = DOT_COLOR[currentMeta?.category ?? ''] ?? 'bg-gray-400';
 
@@ -232,7 +233,7 @@ export function WorkflowTimeline({ caseId }: { caseId: string }) {
                 </div>
                 <div className="bg-white/[0.03] border border-white/5 rounded-xl p-3">
                     <p className="text-2xl font-bold text-white">
-                        {Math.floor((Date.now() - new Date(c.createdAt).getTime()) / 86400000)}
+                        {daysOpen}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">Days since open</p>
                 </div>
