@@ -65,6 +65,7 @@ const eslintConfig = defineConfig([
       "react-hooks/rules-of-hooks": "warn",
       "react-hooks/exhaustive-deps": "warn",
       "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/purity": "warn",
       // @next/next error-level rules → warn
       "@next/next/no-html-link-for-pages": "warn",
       "@next/next/no-sync-scripts": "warn",
