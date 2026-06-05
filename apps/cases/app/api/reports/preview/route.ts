@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         const to = searchParams.get('to');
         const projectId = searchParams.get('projectId');
 
-        const where: any = {};
+        const where: any = { deletedAt: null };
 
         // Date range filter
         if (from && to) {

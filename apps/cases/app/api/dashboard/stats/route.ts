@@ -20,11 +20,11 @@ export async function GET(request: Request) {
         const isStaff = session.user.userType === 'STAFF';
         const isPartner = session.user.userType === 'B2B_PARTNER';
 
-        let projectFilter: any = {};
+        let projectFilter: any = { deletedAt: null };
 
         // 1. Admins and Staff see everything
         if (isAdmin || isStaff) {
-            projectFilter = {}; // No filter
+            projectFilter = { deletedAt: null }; // Exclude soft-deleted cases
         } else {
             // 2. Others (Partners/Members) are restricted
             // Get explicit memberships

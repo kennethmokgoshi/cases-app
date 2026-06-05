@@ -78,7 +78,7 @@ export async function GET(request: Request) {
         const isStaff = session.user.userType === 'STAFF';
         const isRestricted = !isAdmin && !isStaff;
 
-        const where: any = {};
+        const where: any = { deletedAt: null };
         if (!isAdmin) where.isAdminOnly = false;
 
         // 1. Scoping for B2B/Restricted

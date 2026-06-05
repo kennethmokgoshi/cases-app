@@ -158,7 +158,12 @@
       "Bash(xargs wc -l)",
       "Bash(grep -E \"route\\\\.ts$\")",
       "Bash(mkdir -p \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\cases\\\\app\\\\api\\\\admin\\\\debt-counsellors\\\\[id]\" 2>/dev/null; mkdir -p \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\cases\\\\app\\\\api\\\\admin\\\\debt-counsellors\\\\backfill\" 2>/dev/null; echo done)",
-      "Bash(pnpm --filter @zenowethu/shared-lib tsc --noEmit)"
+      "Bash(pnpm --filter @zenowethu/shared-lib tsc --noEmit)",
+      "Bash(git commit -m 'fix\\(build\\): await params Promise in debt-counsellors [id] route for Next.js 16 *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Read(//tmp/**)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=6144\" pnpm --filter cases typecheck)",
+      "Bash(git commit -m 'fix\\(build\\): wrap handleCreateCase in arrow for onClick handler type *)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

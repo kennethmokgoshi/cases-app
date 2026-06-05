@@ -15,7 +15,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const projectId = searchParams.get('projectId');
 
-        const whereClause: any = {};
+        const whereClause: any = { deletedAt: null };
         if (projectId && projectId !== 'all') {
             whereClause.projects = { some: { projectId } };
         }
