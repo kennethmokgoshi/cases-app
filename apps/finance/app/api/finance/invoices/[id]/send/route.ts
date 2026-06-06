@@ -72,7 +72,7 @@ export async function POST(
     const invoice = await prisma.invoice.findUnique({
       where: { id },
       include: {
-        client:    { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true, accountNumber: true } },
+        client:    { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true } },
         case:      { select: { fileNumber: true } },
         bankAccount: true,
         createdBy: { select: { firstName: true, lastName: true } },
@@ -102,7 +102,6 @@ export async function POST(
       clientEmail:         invoice.client?.email         ?? undefined,
       clientPhone:         invoice.client?.phone         ?? undefined,
       clientIdNumber:      invoice.client?.idNumber      ?? undefined,
-      clientAccountNumber: invoice.client?.accountNumber ?? undefined,
       caseFileNumber:      invoice.case?.fileNumber      ?? undefined,
       lineItems,
       subtotal:            Number(invoice.subtotal),
