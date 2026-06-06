@@ -47,7 +47,7 @@ const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: stri
     'BANK_STATEMENT': { label: 'Bank Statement', color: 'bg-indigo-500/20 text-indigo-300', icon: '🏦' },
     'PROOF_OF_RESIDENCE': { label: 'Proof of Residence', color: 'bg-teal-500/20 text-teal-300', icon: '🏠' },
     'COMBINED': { label: 'Combined File', color: 'bg-orange-500/20 text-orange-300', icon: '📦' },
-    'DHS_SUMMARY_REPORT': { label: 'DHS Summary Report', color: 'bg-rose-500/20 text-rose-300', icon: '📋' },
+    'PAID_UP_LETTER': { label: 'Paid Up Letter', color: 'bg-green-500/20 text-green-300', icon: '✅' },
     'OTHER': { label: 'Other Document', color: 'bg-gray-500/20 text-gray-300', icon: '📄' } };
 
 const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: string }[] = [
@@ -67,7 +67,6 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     const [extractingDhs, setExtractingDhs] = useState(false);
     const [reanalyzing, setReanalyzing] = useState<string | null>(null); // Track specific doc ID being re-analyzed
     const [uploadType, setUploadType] = useState('OTHER');
-    const [dhsAnalyzing, setDhsAnalyzing] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [extractionProgress, setExtractionProgress] = useState(0);
@@ -127,28 +126,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
 
             const { document: uploadedDoc } = await res.json();
 
-            // DHS Summary Reports: auto-trigger AI analysis immediately after upload
-            if (effectiveType === 'DHS_SUMMARY_REPORT' && uploadedDoc?.id) {
-                setDhsAnalyzing(true);
-                setSuccess('DHS file uploaded — running AI extraction...');
-                try {
-                    const analyzeRes = await fetch(`/api/documents/${uploadedDoc.id}/analyze`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ analysisType: 'DHS_SUMMARY_REPORT' })
-                    });
-                    const analyzeData = await analyzeRes.json();
-                    if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Analysis failed');
-                    const count = analyzeData.data?.records?.length ?? 0;
-                    setSuccess(`DHS extraction complete — ${count} consumer record${count !== 1 ? 's' : ''} extracted.`);
-                } catch (analyzeErr: any) {
-                    setError(`Upload succeeded but AI analysis failed: ${analyzeErr.message}`);
-                } finally {
-                    setDhsAnalyzing(false);
-                }
-            } else {
-                setSuccess('Document uploaded successfully');
-            }
+            setSuccess('Document uploaded successfully');
 
             fetchDocuments();
         } catch (e) {
@@ -740,18 +718,18 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                         <option value="PAYSLIP" className="bg-zeno-navy text-white">Payslip</option>
                         <option value="BANK_STATEMENT" className="bg-zeno-navy text-white">Bank Statement</option>
                         <option value="PROOF_OF_RESIDENCE" className="bg-zeno-navy text-white">Proof of Residence</option>
-                        <option value="DHS_SUMMARY_REPORT" className="bg-zeno-navy text-white">DHS Summary Report (XLS/PDF)</option>
+                        <option value="PAID_UP_LETTER" className="bg-zeno-navy text-white">Paid Up Letter</option>
                         <option value="OTHER" className="bg-zeno-navy text-white">Other Document</option>
                     </select>
                     <label className="flex-1">
                         <span className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-sm cursor-pointer transition-colors inline-flex items-center gap-2">
-                            {dhsAnalyzing ? '🤖 Extracting records...' : uploading ? '⏳ Uploading...' : '📤 Choose File'}
+                            {uploading ? '⏳ Uploading...' : '📤 Choose File'}
                         </span>
                         <input
                             type="file"
-                            accept={uploadType === 'DHS_SUMMARY_REPORT' ? '.pdf,.xls,.xlsx' : '.pdf,image/*'}
+                            accept=".pdf,image/*"
                             onChange={handleUpload}
-                            disabled={uploading || dhsAnalyzing}
+                            disabled={uploading}
                             className="sr-only"
                         />
                     </label>

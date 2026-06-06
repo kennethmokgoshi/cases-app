@@ -12,9 +12,10 @@ const LineItemSchema = z.object({
   serviceKey:   z.string().optional(),
   serviceLabel: z.string().optional(),
   description:  z.string().optional(),
+  balance:      z.number().optional(),
+  discount:     z.number().optional(),
   quantity:     z.number(),
   unitPrice:    z.number(),
-  discount:     z.number().optional(),
 })
 
 export async function GET(

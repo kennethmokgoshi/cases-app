@@ -9,7 +9,8 @@ export const SERVICES_MAP: Record<string, string> = {
     'prescription_of_accounts': 'Prescription of Accounts',
     'paid_judgments': 'Paid Judgments',
     'paid_defaults': 'Paid Defaults',
-    'rescission_unpaid_judgments': 'Rescission of Not Paid Judgments'
+    'rescission_unpaid_judgments': 'Rescission of Judgment',
+    'legal_fees': 'Legal Fees',
 };
 
 export const SERVICE_DESCRIPTIONS: Record<string, string> = {
@@ -17,7 +18,9 @@ export const SERVICE_DESCRIPTIONS: Record<string, string> = {
     'credit_profile_enquiry': 'Comprehensive credit report and analysis from major bureaus.',
     'admin_order_removal': 'Legal process to rescind and remove an administration order from your credit profile.',
     'paid_judgments': 'Removal of paid judgment listings from all credit bureau records.',
-    'paid_defaults': 'Update and removal of settled default listings.'
+    'paid_defaults': 'Update and removal of settled default listings.',
+    'rescission_unpaid_judgments': 'Rescission and removal of judgment listing from all major credit bureaus.',
+    'legal_fees': 'Legal fees for formal debt review removal — applicable to consent order cases (D3/D4 status). Covers attorney and court filing costs required to lift the debt review flag.',
 };
 
 export const BRANDING = {

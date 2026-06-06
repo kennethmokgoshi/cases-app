@@ -81,7 +81,7 @@ export default function SendQuoteModal({
   const [dueAt, setDueAt]       = useState(in30days())
   const [reference, setReference] = useState('')
   const [notes, setNotes]       = useState('')
-  const [vatRate, setVatRate]   = useState(0.15)
+  const [vatRate, setVatRate]   = useState(0)
   const [lines, setLines]       = useState<AccountLine[]>([])
 
   const [bankAccounts, setBankAccounts]   = useState<BankAccount[]>([])
@@ -106,7 +106,7 @@ export default function SendQuoteModal({
     setDueAt(in30days())
     setReference('')
     setNotes('')
-    setVatRate(0.15)
+    setVatRate(0)
     setSendTo(clientEmail ?? '')
 
     // Pre-fill lines from case services
@@ -162,7 +162,7 @@ export default function SendQuoteModal({
           autoDesc = 'Remove debt review flag from all major credit bureaus (TransUnion, Experian, XDS, etc)'
         } else if (sKey === 'prescription_of_accounts') {
           const savings = (bal || 0) - (quoted || 0)
-          autoDesc = `Remove ${cred || 'Account'} ${acc ? `(${acc})` : ''} from all major credit bureaus that has a balance of ${formatZAR(bal || 0)}. ${savings > 0 ? `Saving you ${formatZAR(savings)}!` : ''}`
+          autoDesc = `Remove ${cred || 'Account'}${acc ? ` (${acc})` : ''} that has a balance of '${formatZAR(bal || 0)}' from all Major Credit bureaus${savings > 0 ? `. Saving you ${formatZAR(savings)}! Plus extra discounts that you may qualify for` : ''}`
         } else if (sKey === 'rescission_unpaid_judgments' || sKey === 'paid_judgments') {
           autoDesc = `Rescission and removal of Court Order Judgment ${caseNo ? `(Case: ${caseNo})` : ''} from all major credit bureaus.`
         } else if (field === 'serviceKey') {
@@ -237,6 +237,7 @@ export default function SendQuoteModal({
             serviceKey:   l.serviceKey,
             serviceLabel: l.serviceLabel,
             description:  l.description.trim() || undefined,
+            balance:      l.balance || undefined,
             quantity:     l.quantity,
             unitPrice:    l.unitPrice,
             discount:     l.discount,
@@ -257,6 +258,16 @@ export default function SendQuoteModal({
       setCreatedId(invoice.id)
       setCreatedNumber(invoice.invoiceNumber)
 
+      // Save PDF to the case document vault immediately on creation.
+      // Runs fire-and-forget so it never blocks the UI flow.
+      if (caseId) {
+        fetch(`/api/finance/invoices/${invoice.id}/attach-to-case`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ caseId }),
+        }).catch(() => {/* non-critical */})
+      }
+
       if (andSend && sendTo) {
         await sendDoc(invoice.id)
       } else {
@@ -267,6 +278,19 @@ export default function SendQuoteModal({
     } finally {
       setSaving(false)
     }
+  }
+
+  // Go back to the form — delete the draft if it hasn't been sent yet
+  const handleGoBack = async () => {
+    if (createdId && step === 'created') {
+      try {
+        await fetch(`/api/finance/invoices/${createdId}`, { method: 'DELETE' })
+      } catch { /* if delete fails, still go back */ }
+      setCreatedId('')
+      setCreatedNumber('')
+    }
+    setError('')
+    setStep('form')
   }
 
   const sendDoc = async (id: string) => {
@@ -322,9 +346,9 @@ export default function SendQuoteModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-          {/* Success — created */}
+          {/* Success — created (not yet sent) */}
           {step === 'created' && (
-            <div className="text-center py-8 space-y-4">
+            <div className="text-center py-6 space-y-4">
               <div className="w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
                 <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -334,6 +358,18 @@ export default function SendQuoteModal({
                 <p className="text-white font-semibold">{docLabel} created!</p>
                 <p className="text-gray-500 text-sm mt-1 font-mono">{createdNumber}</p>
               </div>
+
+              {/* Go back to edit — deletes the draft and returns to form */}
+              <button
+                onClick={handleGoBack}
+                className="flex items-center gap-1.5 mx-auto text-xs text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Something missing? Edit &amp; recreate
+              </button>
+
               {clientEmail && (
                 <div className="space-y-2">
                   <p className="text-xs text-gray-500">Send to client now?</p>
@@ -381,7 +417,7 @@ export default function SendQuoteModal({
 
           {/* Success — sent */}
           {step === 'sent' && (
-            <div className="text-center py-8 space-y-3">
+            <div className="text-center py-6 space-y-3">
               <div className="w-14 h-14 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto">
                 <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -389,14 +425,27 @@ export default function SendQuoteModal({
               </div>
               <p className="text-white font-semibold">{docLabel} sent!</p>
               <p className="text-gray-500 text-sm">Sent to {sendTo}</p>
-              <a
-                href={`/invoices/${createdId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block mt-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-sm rounded-lg transition-colors"
-              >
-                View {docLabel} →
-              </a>
+
+              <div className="flex gap-2 justify-center pt-1">
+                <a
+                  href={`/invoices/${createdId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-sm rounded-lg transition-colors"
+                >
+                  View {docLabel}
+                </a>
+                {/* Create a revised version — the form still has all line items in state */}
+                <button
+                  onClick={() => { setError(''); setStep('form') }}
+                  className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-sm rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Create Revision
+                </button>
+              </div>
             </div>
           )}
 
@@ -608,8 +657,8 @@ export default function SendQuoteModal({
                         className="bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-white focus:outline-none appearance-none"
                         style={{ backgroundColor: '#1a1d23' }}
                       >
-                        <option value={0.15} className="bg-[#1a1d23] text-white">15%</option>
                         <option value={0} className="bg-[#1a1d23] text-white">0%</option>
+                        <option value={0.15} className="bg-[#1a1d23] text-white">15%</option>
                       </select>
                     </span>
                     <span>{formatZAR(vatAmount)}</span>

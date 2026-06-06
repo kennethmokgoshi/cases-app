@@ -28,15 +28,23 @@ type LineItem = {
   creditor?: string
   serviceKey?: string
   serviceLabel?: string
+  balance?: number
   quantity: number
   unitPrice: number
   discount?: number
 }
 
 function lineItemLabel(item: LineItem): string {
+  // Prefer the description saved from the modal — it already contains the formatted text
+  if (item.description) return item.description
+  // Fallback: auto-format using balance when available
+  if (item.creditor && item.balance != null) {
+    const bal = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(item.balance)
+    return `Remove ${item.creditor} that has a balance of '${bal}' from all Major Credit bureaus`
+  }
   if (item.creditor && item.serviceLabel) return `${item.creditor} — ${item.serviceLabel}`
   if (item.creditor) return item.creditor
-  return item.description ?? ''
+  return ''
 }
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {

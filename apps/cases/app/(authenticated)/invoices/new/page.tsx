@@ -9,6 +9,7 @@ type AccountLine = {
   creditor:     string
   serviceKey:   string
   serviceLabel: string
+  balance:      number | ''
   quantity:     number
   unitPrice:    number
   discount:     number
@@ -43,7 +44,7 @@ function today()    { return new Date().toISOString().split('T')[0] }
 function in30days() { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().split('T')[0] }
 
 function emptyLine(): AccountLine {
-  return { creditor: '', serviceKey: SERVICES_LIST[0]?.key ?? '', serviceLabel: SERVICES_LIST[0]?.label ?? '', quantity: 1, unitPrice: 0, discount: 0 }
+  return { creditor: '', serviceKey: SERVICES_LIST[0]?.key ?? '', serviceLabel: SERVICES_LIST[0]?.label ?? '', balance: '', quantity: 1, unitPrice: 0, discount: 0 }
 }
 
 export default function NewInvoicePage() {
@@ -154,6 +155,7 @@ export default function NewInvoicePage() {
             creditor:     l.creditor.trim(),
             serviceKey:   l.serviceKey,
             serviceLabel: l.serviceLabel,
+            balance:      l.balance !== '' ? l.balance : undefined,
             quantity:     l.quantity,
             unitPrice:    l.unitPrice,
             discount:     l.discount,
@@ -393,8 +395,9 @@ export default function NewInvoicePage() {
 
             {/* Column headers */}
             <div className="grid grid-cols-12 gap-2 text-xs text-gray-500 uppercase tracking-wider mb-2 px-1">
-              <span className="col-span-3">Creditor / Account</span>
-              <span className="col-span-3">Service</span>
+              <span className="col-span-2">Creditor / Account</span>
+              <span className="col-span-2">Service</span>
+              <span className="col-span-2 text-right">Balance (R)</span>
               <span className="col-span-2 text-right">Unit (Excl)</span>
               <span className="col-span-2 text-right">Disc (R)</span>
               <span className="col-span-2 text-right">Total</span>
@@ -404,13 +407,13 @@ export default function NewInvoicePage() {
               {lines.map((line, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center group">
                   <input
-                    className="col-span-3 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
+                    className="col-span-2 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
                     placeholder="e.g. Nedbank"
                     value={line.creditor}
                     onChange={e => updateLine(i, 'creditor', e.target.value)}
                   />
                   <select
-                    className="col-span-3 bg-[var(--color-bg-primary)] border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                    className="col-span-2 bg-[var(--color-bg-primary)] border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
                     value={line.serviceKey}
                     onChange={e => updateLine(i, 'serviceKey', e.target.value)}
                   >
@@ -418,6 +421,15 @@ export default function NewInvoicePage() {
                       <option key={s.key} value={s.key} className="bg-gray-900">{s.label}</option>
                     ))}
                   </select>
+                  <input
+                    className="col-span-2 bg-blue-500/5 border border-blue-500/20 rounded px-2 py-1.5 text-sm text-blue-300 text-right focus:outline-none focus:border-blue-500/50"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={line.balance}
+                    placeholder="0.00"
+                    onChange={e => updateLine(i, 'balance', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  />
                   <input
                     className="col-span-2 bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white text-right focus:outline-none focus:border-emerald-500/50"
                     type="number"
