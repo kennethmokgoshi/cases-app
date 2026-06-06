@@ -17,6 +17,10 @@ export interface InvoiceData {
   status: string
   clientName?: string
   clientEmail?: string
+  clientPhone?: string
+  clientIdNumber?: string
+  clientAccountNumber?: string
+  clientCurrentBalance?: number
   caseFileNumber?: string
   lineItems: InvoiceLineItem[]
   subtotal: number
@@ -25,6 +29,7 @@ export interface InvoiceData {
   total: number
   notes?: string
   reference?: string
+  createdByName?: string
   bankName?: string
   bankAccountName?: string
   bankAccountNumber?: string
@@ -37,8 +42,9 @@ function lineItemDescription(item: InvoiceLineItem): string {
   return item.description ?? ''
 }
 
-const EMERALD   = rgb(0.039, 0.722, 0.510)
-const DARK_BG   = rgb(0.118, 0.118, 0.118)
+// Zenowethu brand colours
+const NAVY      = rgb(0.043, 0.114, 0.208)  // #0B1D35
+const ORANGE    = rgb(0.769, 0.584, 0.227)  // #C4953A
 const DARK_TEXT = rgb(0.15, 0.15, 0.15)
 const GRAY_TEXT = rgb(0.45, 0.45, 0.45)
 const WHITE     = rgb(1, 1, 1)
@@ -97,24 +103,38 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
 
   let cursor = H
 
-  // 1. HEADER BAND
-  const HEADER_H = 90
+  // ─────────────────────────────────────────────
+  // 1. LETTERHEAD HEADER BAND (Zenowethu brand)
+  // ─────────────────────────────────────────────
+  const HEADER_H = 100
   cursor -= HEADER_H
 
-  page.drawRectangle({ x: 0, y: cursor, width: W, height: HEADER_H, color: DARK_BG })
+  page.drawRectangle({ x: 0, y: cursor, width: W, height: HEADER_H, color: NAVY })
 
-  drawText(page, 'ZENOWETHU', MARGIN, cursor + 58, bold, 20, WHITE)
-  drawText(page, 'DEBT MANAGEMENT', MARGIN, cursor + 40, regular, 10, rgb(0.7, 0.7, 0.7))
-  drawText(page, 'notifications@zenowethu.co.za', MARGIN, cursor + 24, regular, 8, rgb(0.6, 0.6, 0.6))
+  // Accent bar on right edge
+  page.drawRectangle({ x: W - 6, y: cursor, width: 6, height: HEADER_H, color: ORANGE })
 
+  // Company identity
+  drawText(page, 'ZENOWETHU', MARGIN, cursor + 68, bold, 22, WHITE)
+  drawText(page, 'DEBT MANAGEMENT (PTY) LTD', MARGIN, cursor + 48, regular, 9, rgb(0.75, 0.75, 0.75))
+  drawText(page, 'NCR Reg: NCRDC3693  |  DCASA Member', MARGIN, cursor + 32, regular, 7.5, rgb(0.65, 0.65, 0.65))
+  drawText(page, 'Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190', MARGIN, cursor + 18, regular, 7, rgb(0.60, 0.60, 0.60))
+  drawText(page, 'Tel: +27 12 035 1824  |  info@zenowethu.co.za  |  www.zenowethu.co.za', MARGIN, cursor + 6, regular, 7, rgb(0.60, 0.60, 0.60))
+
+  // Document type label (right side)
   const docLabel = data.documentType === 'QUOTE' ? 'QUOTATION' : 'INVOICE'
-  drawRightAlignedText(page, docLabel, RIGHT, cursor + 58, bold, 26, EMERALD)
-  drawRightAlignedText(page, data.invoiceNumber, RIGHT, cursor + 40, regular, 10, WHITE)
-  drawRightAlignedText(page, `Status: ${data.status}`, RIGHT, cursor + 24, regular, 8, rgb(0.7, 0.7, 0.7))
+  drawRightAlignedText(page, docLabel, RIGHT - 12, cursor + 68, bold, 24, ORANGE)
+  drawRightAlignedText(page, data.invoiceNumber, RIGHT - 12, cursor + 46, regular, 10, WHITE)
+  drawRightAlignedText(page, `Status: ${data.status}`, RIGHT - 12, cursor + 28, regular, 8, rgb(0.70, 0.70, 0.70))
+  if (data.createdByName) {
+    drawRightAlignedText(page, `Prepared by: ${data.createdByName}`, RIGHT - 12, cursor + 12, regular, 7, rgb(0.60, 0.60, 0.60))
+  }
 
-  cursor -= 24
+  cursor -= 20
 
-  // 2. META BLOCK
+  // ─────────────────────────────────────────────
+  // 2. META BLOCK — Bill To (left) | Dates (right)
+  // ─────────────────────────────────────────────
   const metaTop = cursor
 
   drawText(page, 'BILL TO', MARGIN, metaTop - 12, bold, 8, GRAY_TEXT)
@@ -127,10 +147,34 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     drawText(page, 'No client specified', MARGIN, leftY, regular, 10, GRAY_TEXT)
     leftY -= 16
   }
-
-  if (data.clientEmail) { drawText(page, data.clientEmail, MARGIN, leftY, regular, 9, GRAY_TEXT); leftY -= 14 }
-  if (data.caseFileNumber) { drawText(page, `Case: ${data.caseFileNumber}`, MARGIN, leftY, regular, 9, GRAY_TEXT); leftY -= 14 }
-  if (data.reference) { drawText(page, `Ref: ${data.reference}`, MARGIN, leftY, regular, 9, GRAY_TEXT) }
+  if (data.clientIdNumber) {
+    drawText(page, `ID Number: ${data.clientIdNumber}`, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+    leftY -= 13
+  }
+  if (data.clientEmail) {
+    drawText(page, data.clientEmail, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+    leftY -= 13
+  }
+  if (data.clientPhone) {
+    drawText(page, `Tel: ${data.clientPhone}`, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+    leftY -= 13
+  }
+  if (data.caseFileNumber) {
+    drawText(page, `Case: ${data.caseFileNumber}`, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+    leftY -= 13
+  }
+  if (data.clientAccountNumber) {
+    drawText(page, `Account No: ${data.clientAccountNumber}`, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+    leftY -= 13
+  }
+  if (data.clientCurrentBalance !== undefined) {
+    drawText(page, `Current Balance:`, MARGIN, leftY, bold, 8.5, GRAY_TEXT)
+    drawText(page, formatZAR(data.clientCurrentBalance), MARGIN + 82, leftY, bold, 8.5, NAVY)
+    leftY -= 13
+  }
+  if (data.reference) {
+    drawText(page, `Ref: ${data.reference}`, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+  }
 
   const rightColX = W / 2 + 30
   const detailsLabel = data.documentType === 'QUOTE' ? 'QUOTATION DETAILS' : 'INVOICE DETAILS'
@@ -146,19 +190,21 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     rightY -= 16
   }
 
-  cursor = Math.min(leftY, rightY) - 20
+  cursor = Math.min(leftY, rightY) - 16
 
   page.drawLine({ start: { x: MARGIN, y: cursor + 8 }, end: { x: RIGHT, y: cursor + 8 }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) })
   cursor -= 16
 
+  // ─────────────────────────────────────────────
   // 3. LINE ITEMS TABLE
+  // ─────────────────────────────────────────────
   const COL_QTY   = 70
   const COL_PRICE = 100
   const COL_AMT   = 100
   const COL_DESC  = CONTENT_W - COL_QTY - COL_PRICE - COL_AMT
   const TABLE_ROW_H = 22
 
-  page.drawRectangle({ x: MARGIN, y: cursor - TABLE_ROW_H, width: CONTENT_W, height: TABLE_ROW_H, color: EMERALD })
+  page.drawRectangle({ x: MARGIN, y: cursor - TABLE_ROW_H, width: CONTENT_W, height: TABLE_ROW_H, color: NAVY })
 
   const headerY = cursor - TABLE_ROW_H + 7
   drawText(page, 'DESCRIPTION', MARGIN + 6, headerY, bold, 8, WHITE)
@@ -191,7 +237,9 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   page.drawLine({ start: { x: MARGIN, y: cursor }, end: { x: RIGHT, y: cursor }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) })
   cursor -= 20
 
+  // ─────────────────────────────────────────────
   // 4. TOTALS
+  // ─────────────────────────────────────────────
   const TOTALS_X = W - MARGIN - 220
   const totalsRows: [string, string][] = [
     ['Subtotal', formatZAR(data.subtotal)],
@@ -205,35 +253,41 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   page.drawLine({ start: { x: TOTALS_X, y: cursor + 4 }, end: { x: RIGHT, y: cursor + 4 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) })
   cursor -= 12
   drawText(page, 'TOTAL DUE', TOTALS_X, cursor, bold, 11, DARK_TEXT)
-  drawRightAlignedText(page, formatZAR(data.total), RIGHT, cursor, bold, 13, EMERALD)
+  drawRightAlignedText(page, formatZAR(data.total), RIGHT, cursor, bold, 13, ORANGE)
   cursor -= 40
 
+  // ─────────────────────────────────────────────
   // 5. PAYMENT INSTRUCTIONS
-  const bankName    = data.bankName    || process.env.COMPANY_BANK_NAME    || 'First National Bank'
-  const bankAccount = data.bankAccountNumber || process.env.COMPANY_BANK_ACCOUNT || '— contact us for banking details —'
-  const branchCode  = data.branchCode  || process.env.COMPANY_BRANCH_CODE  || ''
-  const accountName = data.bankAccountName || 'Zenowethu Debt Management (Pty) Ltd'
+  // ─────────────────────────────────────────────
+  const bankName    = data.bankName         || process.env.COMPANY_BANK_NAME    || 'CAPITEC BUSINESS'
+  const bankAccount = data.bankAccountNumber || process.env.COMPANY_BANK_ACCOUNT || '105 181 8346'
+  const branchCode  = data.branchCode       || process.env.COMPANY_BRANCH_CODE  || '450105'
+  const accountName = data.bankAccountName   || 'Zenowethu Debt Management (Pty) Ltd'
 
   const bankRows: [string, string][] = [
     ['Bank',           bankName],
     ['Account Name',   accountName],
     ['Account Number', bankAccount],
     ...(branchCode ? [['Branch Code', branchCode] as [string, string]] : []),
+    ['VAT Number',     process.env.COMPANY_VAT_NUMBER || '4590307072'],
     ['Reference',      data.invoiceNumber],
   ]
 
-  page.drawRectangle({ x: MARGIN, y: cursor - 82, width: CONTENT_W, height: 82, color: rgb(0.97, 0.97, 0.97), borderColor: rgb(0.88, 0.88, 0.88), borderWidth: 0.5 })
-  drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, cursor - 14, bold, 8, GRAY_TEXT)
+  const bankBlockH = 14 + bankRows.length * 13
+  page.drawRectangle({ x: MARGIN, y: cursor - bankBlockH, width: CONTENT_W, height: bankBlockH, color: rgb(0.97, 0.97, 0.97), borderColor: rgb(0.88, 0.88, 0.88), borderWidth: 0.5 })
+  drawText(page, 'PAYMENT INSTRUCTIONS', MARGIN + 10, cursor - 12, bold, 8, GRAY_TEXT)
 
-  let bankY = cursor - 28
+  let bankY = cursor - 26
   for (const [label, value] of bankRows) {
     drawText(page, `${label}:`, MARGIN + 10, bankY, bold, 8, GRAY_TEXT)
-    drawText(page, value, MARGIN + 90, bankY, regular, 8, DARK_TEXT)
+    drawText(page, value, MARGIN + 100, bankY, regular, 8, DARK_TEXT)
     bankY -= 13
   }
-  cursor -= 90
+  cursor -= bankBlockH + 8
 
+  // ─────────────────────────────────────────────
   // 6. NOTES
+  // ─────────────────────────────────────────────
   if (data.notes) {
     cursor -= 12
     drawText(page, 'NOTES', MARGIN, cursor, bold, 8, GRAY_TEXT)
@@ -252,11 +306,14 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     if (line.trim()) { drawText(page, line.trim(), MARGIN, cursor, regular, 8, GRAY_TEXT); cursor -= 12 }
   }
 
-  // 7. FOOTER
-  const FOOTER_Y = 28
-  page.drawLine({ start: { x: MARGIN, y: FOOTER_Y + 12 }, end: { x: RIGHT, y: FOOTER_Y + 12 }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) })
-  drawText(page, 'Zenowethu Debt Management (Pty) Ltd', MARGIN, FOOTER_Y, regular, 7, GRAY_TEXT)
-  drawRightAlignedText(page, 'Page 1 of 1', RIGHT, FOOTER_Y, regular, 7, GRAY_TEXT)
+  // ─────────────────────────────────────────────
+  // 7. FOOTER — Zenowethu signature block
+  // ─────────────────────────────────────────────
+  const FOOTER_Y = 40
+  page.drawLine({ start: { x: MARGIN, y: FOOTER_Y + 28 }, end: { x: RIGHT, y: FOOTER_Y + 28 }, thickness: 0.5, color: ORANGE })
+  drawText(page, 'Aaron Nzotho | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190', MARGIN, FOOTER_Y + 16, regular, 6.5, GRAY_TEXT)
+  drawText(page, 'Tel: +27 12 035 1824  |  Cell: 082 363 8207  |  info@zenowethu.co.za  |  www.zenowethu.co.za  |  Member of DCASA', MARGIN, FOOTER_Y + 4, regular, 6.5, GRAY_TEXT)
+  drawRightAlignedText(page, 'Page 1 of 1', RIGHT, FOOTER_Y + 4, regular, 7, GRAY_TEXT)
 
   return pdfDoc.save()
 }

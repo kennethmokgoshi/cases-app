@@ -6,6 +6,10 @@ import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments'
 import { z } from 'zod'
 
+function formatZAR(n: number): string {
+  return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(n)
+}
+
 const SendSchema = z.object({
   to:      z.string().email(),
   subject: z.string().min(1).max(200).optional(),
@@ -67,9 +71,10 @@ export async function POST(
     const invoice = await prisma.invoice.findUnique({
       where: { id },
       include: {
-        client:      { select: { firstName: true, lastName: true, email: true } },
+        client:      { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true, accountNumber: true } },
         case:        { select: { fileNumber: true } },
         bankAccount: { select: { bankName: true, accountName: true, accountNumber: true, branchCode: true } },
+        createdBy:   { select: { firstName: true, lastName: true } },
       },
     })
 
@@ -89,26 +94,34 @@ export async function POST(
 
     const lineItems = invoice.lineItems as unknown as InvoiceLineItem[]
 
+    const createdByName = invoice.createdBy
+      ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
+      : undefined
+
     const invoiceData: InvoiceData = {
-      documentType:      invoice.type as 'INVOICE' | 'QUOTE',
-      invoiceNumber:     invoice.invoiceNumber,
-      issuedAt:          invoice.issuedAt,
-      dueAt:             invoice.dueAt,
-      status:            invoice.status,
-      clientName:        invoice.client ? `${invoice.client.firstName} ${invoice.client.lastName}` : undefined,
-      clientEmail:       invoice.client?.email ?? undefined,
-      caseFileNumber:    invoice.case?.fileNumber ?? undefined,
+      documentType:         invoice.type as 'INVOICE' | 'QUOTE',
+      invoiceNumber:        invoice.invoiceNumber,
+      issuedAt:             invoice.issuedAt,
+      dueAt:                invoice.dueAt,
+      status:               invoice.status,
+      clientName:           invoice.client ? `${invoice.client.firstName} ${invoice.client.lastName}` : undefined,
+      clientEmail:          invoice.client?.email       ?? undefined,
+      clientPhone:          invoice.client?.phone       ?? undefined,
+      clientIdNumber:       invoice.client?.idNumber    ?? undefined,
+      clientAccountNumber:  invoice.client?.accountNumber ?? undefined,
+      caseFileNumber:       invoice.case?.fileNumber    ?? undefined,
       lineItems,
-      subtotal:          Number(invoice.subtotal),
-      vatRate:           Number(invoice.vatRate),
-      vatAmount:         Number(invoice.vatAmount),
-      total:             Number(invoice.total),
-      notes:             invoice.notes     ?? undefined,
-      reference:         invoice.reference ?? undefined,
-      bankName:          invoice.bankAccount?.bankName,
-      bankAccountName:   invoice.bankAccount?.accountName,
-      bankAccountNumber: invoice.bankAccount?.accountNumber,
-      branchCode:        invoice.bankAccount?.branchCode ?? undefined,
+      subtotal:             Number(invoice.subtotal),
+      vatRate:              Number(invoice.vatRate),
+      vatAmount:            Number(invoice.vatAmount),
+      total:                Number(invoice.total),
+      notes:                invoice.notes     ?? undefined,
+      reference:            invoice.reference ?? undefined,
+      createdByName,
+      bankName:             invoice.bankAccount?.bankName,
+      bankAccountName:      invoice.bankAccount?.accountName,
+      bankAccountNumber:    invoice.bankAccount?.accountNumber,
+      branchCode:           invoice.bankAccount?.branchCode ?? undefined,
     }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)
@@ -133,10 +146,45 @@ export async function POST(
       return NextResponse.json({ error: 'Email delivery failed: ' + emailResult.error }, { status: 502 })
     }
 
+    const sentAt = new Date()
+
     await prisma.invoice.update({
       where: { id },
-      data:  { status: 'SENT', sentAt: new Date(), sentTo: input.to },
+      data:  { status: 'SENT', sentAt, sentTo: input.to },
     })
+
+    // Log the communication on the linked case so the timeline shows the send
+    if (invoice.caseId) {
+      const docLabel = invoice.type === 'QUOTE' ? 'Quotation' : 'Invoice'
+      const logMsg = `${docLabel} ${invoice.invoiceNumber} sent via email to ${input.to}` +
+        (createdByName ? ` — prepared by ${createdByName}` : '') +
+        ` — sent by ${session.user.name ?? session.user.email ?? session.user.id}`
+
+      await Promise.allSettled([
+        prisma.notificationLog.create({
+          data: {
+            caseId:        invoice.caseId,
+            channel:       'EMAIL',
+            recipient:     input.to,
+            recipientType: 'CLIENT',
+            message:       logMsg,
+            success:       true,
+            provider:      'SMTP',
+            senderId:      session.user.id,
+            htmlBody:      `${docLabel} ${invoice.invoiceNumber} — total: ${formatZAR(Number(invoice.total))}`,
+          },
+        }),
+        prisma.workflowLog.create({
+          data: {
+            caseId:  invoice.caseId,
+            action:  `${invoice.type}_SENT`,
+            toStatus: 'SENT',
+            notes:   logMsg,
+            userId:  session.user.id,
+          },
+        }),
+      ])
+    }
 
     return NextResponse.json({ success: true, sentTo: input.to })
   } catch (err) {

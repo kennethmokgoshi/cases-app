@@ -1,7 +1,28 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-04 (Debt Counsellor records, stats, drill-down · 690 tests passing)
+> Last updated: 2026-06-06 (Invoice/Quote PDF letterhead, account info, communication logging)
+
+---
+
+### Invoice & Quotation — PDF Letterhead, Account Info & Communication Logging (2026-06-06)
+
+**What was done:**
+- [x] Updated `apps/cases/lib/invoice-pdf.ts` and `apps/finance/lib/invoice-pdf.ts` — Zenowethu brand colours (Navy `#0B1D35` + Orange `#C4953A`), full letterhead header with NCRDC/address/phone/email, signature block footer
+- [x] Added `clientIdNumber`, `clientPhone`, `clientAccountNumber`, `clientCurrentBalance`, `createdByName` to `InvoiceData` interface — all appear in the BILL TO block on the PDF
+- [x] Updated PDF routes in both apps to query and pass the new client fields + `createdBy` user
+- [x] Updated send routes in both apps to log to `NotificationLog` and `WorkflowLog` when `invoice.caseId` is set — email sends now appear in the case timeline
+- [x] Replaced `console.info` with `logger.info` in finance send route
+- [x] Cleared cached PDFs from DB (`pdfPath = NULL`) so all invoices regenerate with the new design on next download
+- [x] Both `cases` and `finance` typechecks pass (exit 0)
+
+**Files changed:**
+- `apps/cases/lib/invoice-pdf.ts`
+- `apps/cases/app/api/finance/invoices/[id]/pdf/route.ts`
+- `apps/cases/app/api/finance/invoices/[id]/send/route.ts`
+- `apps/finance/lib/invoice-pdf.ts`
+- `apps/finance/app/api/finance/invoices/[id]/pdf/route.ts`
+- `apps/finance/app/api/finance/invoices/[id]/send/route.ts`
 
 ---
 

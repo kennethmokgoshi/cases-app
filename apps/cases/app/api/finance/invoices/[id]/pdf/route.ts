@@ -29,9 +29,10 @@ export async function GET(
     const invoice = await prisma.invoice.findUnique({
       where: { id },
       include: {
-        client:      { select: { firstName: true, lastName: true, email: true } },
+        client:      { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true, accountNumber: true } },
         case:        { select: { fileNumber: true } },
         bankAccount: { select: { bankName: true, accountName: true, accountNumber: true, branchCode: true } },
+        createdBy:   { select: { firstName: true, lastName: true } },
       },
     })
 
@@ -67,25 +68,29 @@ export async function GET(
       : undefined
 
     const pdfBytes = await generateInvoicePdf({
-      documentType:      invoice.type as 'INVOICE' | 'QUOTE',
-      invoiceNumber:     invoice.invoiceNumber,
-      issuedAt:          invoice.issuedAt,
-      dueAt:             invoice.dueAt,
-      status:            invoice.status,
+      documentType:         invoice.type as 'INVOICE' | 'QUOTE',
+      invoiceNumber:        invoice.invoiceNumber,
+      issuedAt:             invoice.issuedAt,
+      dueAt:                invoice.dueAt,
+      status:               invoice.status,
       clientName,
-      clientEmail:       invoice.client?.email ?? undefined,
-      caseFileNumber:    invoice.case?.fileNumber ?? undefined,
+      clientEmail:          invoice.client?.email       ?? undefined,
+      clientPhone:          invoice.client?.phone       ?? undefined,
+      clientIdNumber:       invoice.client?.idNumber    ?? undefined,
+      clientAccountNumber:  invoice.client?.accountNumber ?? undefined,
+      caseFileNumber:       invoice.case?.fileNumber    ?? undefined,
       lineItems,
-      subtotal:          Number(invoice.subtotal),
-      vatRate:           Number(invoice.vatRate),
-      vatAmount:         Number(invoice.vatAmount),
-      total:             Number(invoice.total),
-      notes:             invoice.notes     ?? undefined,
-      reference:         invoice.reference ?? undefined,
-      bankName:          invoice.bankAccount?.bankName          ?? undefined,
-      bankAccountName:   invoice.bankAccount?.accountName       ?? undefined,
-      bankAccountNumber: invoice.bankAccount?.accountNumber     ?? undefined,
-      branchCode:        invoice.bankAccount?.branchCode        ?? undefined,
+      subtotal:             Number(invoice.subtotal),
+      vatRate:              Number(invoice.vatRate),
+      vatAmount:            Number(invoice.vatAmount),
+      total:                Number(invoice.total),
+      notes:                invoice.notes     ?? undefined,
+      reference:            invoice.reference ?? undefined,
+      createdByName:        invoice.createdBy ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}` : undefined,
+      bankName:             invoice.bankAccount?.bankName          ?? undefined,
+      bankAccountName:      invoice.bankAccount?.accountName       ?? undefined,
+      bankAccountNumber:    invoice.bankAccount?.accountNumber     ?? undefined,
+      branchCode:           invoice.bankAccount?.branchCode        ?? undefined,
     })
 
     // Cache to disk
