@@ -252,6 +252,23 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                     } else if (update.type === 'result') {
                         setSuccess(update.data.message || 'DHS Extraction complete');
                         fetchDocuments();
+                        // Auto-request via DHS immediately after extraction
+                        setExtractionMessage('Submitting DHS transfer request...');
+                        try {
+                            const dhsRes = await fetch('/api/dhs/lookup', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ caseId, action: 'validate_and_request' }),
+                            });
+                            const dhsData = await dhsRes.json();
+                            if (dhsData.success) {
+                                setSuccess('DHS Extraction complete — Transfer requested via DHS successfully!');
+                            } else {
+                                setSuccess(`DHS Extraction complete. DHS request: ${dhsData.message || 'could not submit — check DHS tab.'}`);
+                            }
+                        } catch {
+                            setSuccess('DHS Extraction complete. Could not auto-submit DHS request — use the DHS tab to request manually.');
+                        }
                     }
                 }
             }

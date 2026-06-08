@@ -87,10 +87,15 @@ export default function AutomationsManagement() {
         }
     };
 
-    const runCron = async (type: string, endpoint: string) => {
+    const runCron = async (type: string) => {
         setCronRunning(type);
         try {
-            const res = await fetch(endpoint, { method: 'POST' });
+            // Use the server-side proxy so CRON_SECRET is never exposed to the browser
+            const res = await fetch('/api/admin/automation/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type }),
+            });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Cron failed');
             toast.success(`${type.replace(/_/g, ' ')} complete`);
@@ -192,14 +197,16 @@ export default function AutomationsManagement() {
                 {/* Manual cron triggers */}
                 <div className="flex flex-wrap gap-2 mt-3">
                     {[
-                        { type: 'DHS_RECHECK', label: 'DHS Re-check', endpoint: '/api/cron/dhs-recheck', color: 'blue' },
-                        { type: 'STALE_CASE_SCAN', label: 'Stale Cases', endpoint: '/api/cron/stale-cases', color: 'purple' },
-                        { type: 'DOCUMENT_EXPIRY_SCAN', label: 'Doc Expiry', endpoint: '/api/cron/document-expiry', color: 'cyan' },
-                        { type: 'R350_REMINDER', label: 'R350 Reminders', endpoint: '/api/cron/r350-reminder', color: 'pink' },
-                    ].map(({ type, label, endpoint, color }) => (
+                        { type: 'WORKFLOW_AUTOMATION', label: '⚡ Workflow Automation', color: 'green' },
+                        { type: 'DHS_RECHECK', label: 'DHS Re-check', color: 'blue' },
+                        { type: 'CHECK_NOT_REQUESTED', label: 'DHS Not Requested', color: 'indigo' },
+                        { type: 'STALE_CASE_SCAN', label: 'Stale Cases', color: 'purple' },
+                        { type: 'DOCUMENT_EXPIRY_SCAN', label: 'Doc Expiry', color: 'cyan' },
+                        { type: 'R350_REMINDER', label: 'R350 Reminders', color: 'pink' },
+                    ].map(({ type, label, color }) => (
                         <button
                             key={type}
-                            onClick={() => runCron(type, endpoint)}
+                            onClick={() => runCron(type)}
                             disabled={cronRunning === type}
                             className={`px-3 py-1.5 text-xs rounded-lg border flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-${color}-500/10 text-${color}-300 border-${color}-500/30 hover:bg-${color}-500/20`}
                         >

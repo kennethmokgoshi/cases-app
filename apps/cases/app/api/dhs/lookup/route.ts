@@ -32,11 +32,21 @@ export async function POST(request: Request) {
         const actingUserId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
         const attribution = actingUserId ? { connect: { id: actingUserId } } : undefined;
 
-        const { idNumber, caseId, action, useAiExtraction = false } = await request.json();
+        const { idNumber: rawIdNumber, caseId, action, useAiExtraction = false } = await request.json();
+
+        let result;
+        // Fetch full case data if available to get documents for auto-request
+        const caseData = caseId ? await prisma.case.findUnique({
+            where: { id: caseId },
+            include: { documents: true, client: true, jointClient: true }
+        }) : null;
+
+        // Allow omitting idNumber when caseId is supplied — derive it from the case client
+        const idNumber: string = rawIdNumber || caseData?.client?.idNumber || '';
 
         if (!idNumber) {
             return NextResponse.json(
-                { error: 'ID number is required' },
+                { error: 'ID number is required (or provide a caseId so it can be derived)' },
                 { status: 400 }
             );
         }
@@ -48,13 +58,6 @@ export async function POST(request: Request) {
                 { status: 400 }
             );
         }
-
-        let result;
-        // Fetch full case data if available to get documents for auto-request
-        const caseData = caseId ? await prisma.case.findUnique({
-            where: { id: caseId },
-            include: { documents: true, client: true, jointClient: true }
-        }) : null;
 
         if (action === 'check_status' || !action) {
             // Check existing transfer status with timeout protection
