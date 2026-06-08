@@ -101,10 +101,11 @@ export async function POST(
       branchCode:        invoice.bankAccount?.branchCode      ?? undefined,
     })
 
-    // Write PDF to the case documents folder
+    // Write PDF to the case documents folder (served by /uploads/[...path]/route.ts)
     const fileName = `${invoice.invoiceNumber}.pdf`
+    // Storage path matches the file-server route: process.cwd()/storage/uploads/...
     const relPath  = path.posix.join('uploads', 'documents', caseId, fileName)
-    const absPath  = path.join(process.cwd(), 'public', relPath)
+    const absPath  = path.join(process.cwd(), 'storage', relPath)
     await fs.mkdir(path.dirname(absPath), { recursive: true })
     await fs.writeFile(absPath, pdfBytes)
 
