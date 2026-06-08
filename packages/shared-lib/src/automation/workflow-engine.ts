@@ -38,6 +38,34 @@ export interface OverdueCase {
 // ─── Query Helpers ────────────────────────────────────────────────────────────
 
 /**
+ * Get ALL cases in a given workflow status, regardless of nextUpdate.
+ * Use for statuses that should be retried on every cron run until resolved.
+ */
+export async function getAllCasesByStatus(status: string, take = 200): Promise<OverdueCase[]> {
+    return prisma.case.findMany({
+        where: { status, deletedAt: null },
+        include: {
+            client: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    idNumber: true,
+                    email: true,
+                    phone: true,
+                    whatsappNumber: true,
+                },
+            },
+            documents: {
+                select: { type: true, fileName: true, fileUrl: true, uploadedAt: true },
+            },
+        },
+        orderBy: { createdAt: 'asc' },
+        take,
+    }) as unknown as OverdueCase[];
+}
+
+/**
  * Get all overdue cases in a given workflow status.
  * Overdue = nextUpdate is in the past OR null.
  */
@@ -319,4 +347,41 @@ export function getDHSDocuments(c: OverdueCase): { idPath: string | null; poaPat
         idPath: idPath && existsSync(idPath) ? idPath : null,
         poaPath: poaPath && existsSync(poaPath) ? poaPath : null,
     };
+}
+
+/**
+ * Return the public-facing URLs for ID and POA documents (used for email attachments).
+ */
+export function getDHSDocumentUrls(
+    c: OverdueCase,
+    appUrl: string
+): { idUrl: string | null; poaUrl: string | null; idFileName: string | null; poaFileName: string | null } {
+    const idDoc = c.documents.find(d => d.type === 'ID');
+    const poaDoc = c.documents.find(d => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
+
+    const toAbsolute = (fileUrl: string) =>
+        fileUrl.startsWith('http') ? fileUrl : `${appUrl.replace(/\/$/, '')}${fileUrl}`;
+
+    return {
+        idUrl:       idDoc  ? toAbsolute(idDoc.fileUrl)  : null,
+        poaUrl:      poaDoc ? toAbsolute(poaDoc.fileUrl) : null,
+        idFileName:  idDoc  ? idDoc.fileName             : null,
+        poaFileName: poaDoc ? poaDoc.fileName            : null,
+    };
+}
+
+/**
+ * Returns true if a DHS transfer request has already been attempted for this case
+ * (detected by the presence of an [AUTO] system comment mentioning a DHS request).
+ * Used to suppress the initial DC email on retries.
+ */
+export async function hasPriorDHSAttempt(caseId: string): Promise<boolean> {
+    const comment = await prisma.caseComment.findFirst({
+        where: {
+            caseId,
+            content: { contains: '[AUTO] Not Requested via DHS:' },
+        },
+        select: { id: true },
+    });
+    return !!comment;
 }

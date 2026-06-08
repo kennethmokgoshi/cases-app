@@ -29,6 +29,7 @@ import { createLogger } from '@zenowethu/shared-lib';
 import { logAutomationRun } from '@zenowethu/shared-lib/src/automation/run-logger';
 import {
     getOverdueCases,
+    getAllCasesByStatus,
     getOverdueLetsatsiCompleted,
     hasDocument,
     hasInboundKeyword,
@@ -40,6 +41,8 @@ import {
     sendDCEmail,
     notifyManagers,
     getDHSDocuments,
+    getDHSDocumentUrls,
+    hasPriorDHSAttempt,
     type OverdueCase,
 } from '@zenowethu/shared-lib/src/automation/workflow-engine';
 import { checkTransferStatus, requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
@@ -92,12 +95,11 @@ export async function POST(request: Request) {
             }
 
             await updateCaseStatus(c.id, newStatus, adminId);
-            // For B2B cases landing on NOT_REQUESTED_VIA_DHS, null out nextUpdate so step 4
-            // of this same cron run picks them up immediately and requests via DHS.
-            if (c.acquisitionType === 'B2B' && newStatus === 'NOT_REQUESTED_VIA_DHS') {
+            // Null out nextUpdate so step 4 of this same cron run picks them up immediately.
+            if (newStatus === 'NOT_REQUESTED_VIA_DHS') {
                 await prisma.case.update({ where: { id: c.id }, data: { nextUpdate: null } });
             }
-            await addSystemComment(c.id, `[AUTO] New Lead DHS Check. ${comment}.${c.acquisitionType === 'B2B' && newStatus === 'NOT_REQUESTED_VIA_DHS' ? ' B2B — proceeding to DHS request immediately.' : ' Next update +3 working days.'}`, adminId);
+            await addSystemComment(c.id, `[AUTO] New Lead DHS Check. ${comment}.${newStatus === 'NOT_REQUESTED_VIA_DHS' ? ' Proceeding to DHS request immediately.' : ' Next update +3 working days.'}`, adminId);
             return { actioned: true, comment };
         });
 
@@ -168,6 +170,7 @@ export async function POST(request: Request) {
         });
 
         // ── 4. NOT_REQUESTED_VIA_DHS → Check docs → Request via DHS ──────────
+        // Use getAllCasesByStatus so every case is retried on every cron run, not just overdue ones.
         await handleWithDHS('NOT_REQUESTED_VIA_DHS', 'Check docs and request via DHS', adminId, log, async (c) => {
             const { idPath, poaPath } = getDHSDocuments(c);
 
@@ -181,20 +184,39 @@ export async function POST(request: Request) {
                 return { actioned: true, comment: `Missing docs: ${missing.join(', ')}` };
             }
 
-            // Docs present — request via DHS
+            // First attempt only: send email to DC with POA + ID attached
+            const isFirstAttempt = !(await hasPriorDHSAttempt(c.id));
+            if (isFirstAttempt && c.dcEmail) {
+                const { idUrl, poaUrl, idFileName, poaFileName } = getDHSDocumentUrls(c, APP_URL);
+                const clientName = `${c.client.firstName} ${c.client.lastName}`.trim();
+                const dcName = c.debtCounsellorName || c.dcTradingName || 'Debt Counsellor';
+                const subject = `Transfer Request — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
+                const body = `Dear ${dcName},\n\nWe hereby request the transfer of the above-mentioned consumer's debt review file to Zenowethu Debt Management (NCRDC3693).\n\nPlease find attached:\n- Signed Power of Attorney / Consumer Consent\n- Copy of Consumer Identity Document\n\nKindly process this transfer request via the NCR Debt Help System (ncrdebthelp.co.za) at your earliest convenience.\n\nShould you require any additional documentation, please do not hesitate to contact us.\n\nThank you,\nAaron Nzotho | NCRDC3693\nSuite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190\nTel: +27 12 035 1824 | Cell: 082 363 8207\ninfo@zenowethu.co.za | www.zenowethu.co.za`;
+                const attachments: string[] = [];
+                if (poaUrl) attachments.push(poaUrl);
+                if (idUrl) attachments.push(idUrl);
+                try {
+                    await sendManualMessage(c.id, 'EMAIL', c.dcEmail, body, subject, { attachments });
+                    logger.info(`[NOT_REQUESTED_VIA_DHS] DC email sent to ${c.dcEmail} for ${c.fileNumber} with ${attachments.length} attachment(s)`);
+                } catch (emailErr) {
+                    logger.warn(`[NOT_REQUESTED_VIA_DHS] DC email failed for ${c.fileNumber}:`, emailErr);
+                }
+            }
+
+            // Submit request via DHS portal (Puppeteer)
             const result = await withDHSTimeout(() => requestTransfer(c.client.idNumber, poaPath, idPath));
             if (!result) return { actioned: false, comment: 'DHS request timed out' };
 
             if (result.success) {
                 await updateCaseStatus(c.id, 'REQUESTED_VIA_DHS', adminId);
-                await addSystemComment(c.id, `[AUTO] Not Requested via DHS: Documents verified (ID + POA). Transfer requested via DHS successfully. Status → REQUESTED_VIA_DHS. Next update +3 working days.`, adminId);
-                return { actioned: true, comment: 'DHS request submitted' };
+                await addSystemComment(c.id, `[AUTO] Not Requested via DHS: Documents verified (ID + POA). Transfer requested via DHS successfully.${isFirstAttempt && c.dcEmail ? ` DC email sent to ${c.dcEmail} with documents attached.` : ''} Status → REQUESTED_VIA_DHS. Next update +3 working days.`, adminId);
+                return { actioned: true, comment: `DHS request submitted${isFirstAttempt && c.dcEmail ? ', DC emailed' : ''}` };
             } else {
                 await setNextUpdate(c.id, 3, adminId);
-                await addSystemComment(c.id, `[AUTO] Not Requested via DHS: DHS request failed — ${result.message || 'unknown error'}. Will retry. Next update +3 working days.`, adminId);
+                await addSystemComment(c.id, `[AUTO] Not Requested via DHS: DHS request failed — ${result.message || 'unknown error'}.${isFirstAttempt && c.dcEmail ? ` DC email sent to ${c.dcEmail}.` : ''} Will retry. Next update +3 working days.`, adminId);
                 return { actioned: false, comment: result.message || 'DHS request failed' };
             }
-        });
+        }, () => getAllCasesByStatus('NOT_REQUESTED_VIA_DHS'));
 
         // ── 5. DOCUMENTS_EMAILED → Check for Form 17.7 → Request via DHS ─────
         await handleWithDHS('DOCUMENTS_EMAILED', 'Check for Form 17.7 and request via DHS', adminId, log, async (c) => {
@@ -658,16 +680,18 @@ async function withDHSTimeout<T>(fn: () => Promise<T>): Promise<T | null> {
 
 /**
  * Generic handler for statuses that include DHS checks.
- * Iterates overdue cases, runs the provided action, handles errors.
+ * Iterates cases, runs the provided action, handles errors.
+ * Pass a custom fetcher to override the default getOverdueCases behaviour.
  */
 async function handleWithDHS(
     status: string,
     description: string,
     adminId: string | undefined,
     log: (handler: string, processed: number, actioned: number, errors: number) => void,
-    action: (c: OverdueCase) => Promise<{ actioned: boolean; comment: string }>
+    action: (c: OverdueCase) => Promise<{ actioned: boolean; comment: string }>,
+    fetcher?: () => Promise<OverdueCase[]>
 ): Promise<void> {
-    const cases = await getOverdueCases(status);
+    const cases = await (fetcher ? fetcher() : getOverdueCases(status));
     let processed = 0, actioned = 0, errors = 0;
     for (const c of cases) {
         try {

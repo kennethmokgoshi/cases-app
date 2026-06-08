@@ -304,8 +304,8 @@ export async function POST(request: Request) {
 
         const count = await prisma.case.count();
         const fileNumber = `ZDM-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
-        // B2B cases are processed immediately — no SLA wait on creation.
-        const deadline = data.acquisitionType === 'B2B' ? new Date() : calculateSlaDeadline(new Date());
+        // All cases start with null nextUpdate so the automation picks them up on the first cron run.
+        const deadline = null;
 
         // 1. Handle Primary Client
         const client = await prisma.client.upsert({
