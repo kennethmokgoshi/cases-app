@@ -92,7 +92,12 @@ export async function POST(request: Request) {
             }
 
             await updateCaseStatus(c.id, newStatus, adminId);
-            await addSystemComment(c.id, `[AUTO] New Lead DHS Check. ${comment}. Next update +3 working days.`, adminId);
+            // For B2B cases landing on NOT_REQUESTED_VIA_DHS, null out nextUpdate so step 4
+            // of this same cron run picks them up immediately and requests via DHS.
+            if (c.acquisitionType === 'B2B' && newStatus === 'NOT_REQUESTED_VIA_DHS') {
+                await prisma.case.update({ where: { id: c.id }, data: { nextUpdate: null } });
+            }
+            await addSystemComment(c.id, `[AUTO] New Lead DHS Check. ${comment}.${c.acquisitionType === 'B2B' && newStatus === 'NOT_REQUESTED_VIA_DHS' ? ' B2B — proceeding to DHS request immediately.' : ' Next update +3 working days.'}`, adminId);
             return { actioned: true, comment };
         });
 

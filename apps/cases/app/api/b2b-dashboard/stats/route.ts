@@ -134,6 +134,7 @@ export async function GET() {
                     fileNumber: true,
                     status: true,
                     createdAt: true,
+                    updatedAt: true,
                     client: { select: { firstName: true, lastName: true } },
                 },
                 orderBy: { createdAt: 'desc' },
@@ -155,6 +156,7 @@ export async function GET() {
                 fileNumber: c.fileNumber,
                 status: c.status,
                 createdAt: c.createdAt.toISOString(),
+                updatedAt: c.updatedAt.toISOString(),
                 clientName: `${c.client.firstName} ${c.client.lastName}`,
             })),
         });

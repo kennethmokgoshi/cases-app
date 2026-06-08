@@ -24,7 +24,13 @@ type PartnerCase = {
     clientName: string;
     status: string;
     createdAt: string;
+    updatedAt: string;
 };
+
+function formatDate(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 type PartnerStats = {
     totalCases: number;
@@ -470,6 +476,12 @@ export default function B2BDashboard() {
                                     <div>
                                         <p className="font-medium text-white">{c.clientName}</p>
                                         <p className="text-sm text-gray-400">{c.fileNumber}</p>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            Created {c.createdAt ? formatDate(c.createdAt) : '—'}
+                                            {c.updatedAt && c.updatedAt !== c.createdAt && (
+                                                <span> · Updated {formatDate(c.updatedAt)}</span>
+                                            )}
+                                        </p>
                                     </div>
                                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(c.status)}`}>
                                         {formatStatus(c.status)}

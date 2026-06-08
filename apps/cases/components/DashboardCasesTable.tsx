@@ -7,6 +7,8 @@ type Case = {
     id: string;
     fileNumber: string;
     status: string;
+    createdAt: string;
+    updatedAt: string;
     client: {
         firstName: string;
         lastName: string;
@@ -19,6 +21,11 @@ type Case = {
         };
     }>;
 };
+
+function formatDate(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 export function DashboardCasesTable() {
     const [cases, setCases] = useState<Case[]>([]);
@@ -116,12 +123,18 @@ export function DashboardCasesTable() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 Services Required
                             </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                Created
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                Last Updated
+                            </th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {filteredCases.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                                     No cases found.
                                 </td>
                             </tr>
@@ -154,6 +167,12 @@ export function DashboardCasesTable() {
                                     </td>
                                     <td className="px-4 py-3 text-gray-400 text-sm">
                                         {c.services || '-'}
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
+                                        {c.createdAt ? formatDate(c.createdAt) : '-'}
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
+                                        {c.updatedAt ? formatDate(c.updatedAt) : '-'}
                                     </td>
                                 </tr>
                             ))
