@@ -27,6 +27,7 @@ import { sendStatusChangeNotification } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
 import { scrapeDetailedConsumerInfo } from '../dhs/search';
 import { checkTransferStatus } from '../dhs/status';
+import { requestTransfer } from '../dhs/transfer';
 import { delay } from '../dhs/browser';
 import { extractDhsDocuments } from '../openai/extraction';
 import { readFile, writeFile, mkdir } from 'fs/promises';
@@ -598,16 +599,87 @@ async function performAutoDhsTransferRequest(
     const dhsStatusLabel = wasPreviouslyRequested ? 'Requested Again via DHS' : 'Requested via DHS';
     const actionVerb = wasPreviouslyRequested ? 'Re-requesting' : 'Requesting';
 
-    // Step 6a: Wait 30 seconds then verify the DHS portal actually shows PENDING
-    // This prevents marking a case as REQUESTED_VIA_DHS when the portal didn't register the request.
-    logger.info(`[CASE_AUTOMATION] Documents confirmed for ${caseData.fileNumber}. Waiting 30s before verifying DHS portal...`);
+    // Step 6a: Fetch the latest POA and ID documents and resolve their file paths
+    const latestDocs = await prisma.document.findMany({ where: { caseId } });
+    const poaDoc = latestDocs.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
+    const idDoc  = latestDocs.find(d => d.type === 'ID');
+
+    if (!poaDoc || !idDoc) {
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: 'DHS transfer aborted — required documents not found in database.',
+            action: 'Please upload the POA and ID documents and re-trigger automation.'
+        });
+        return { action: 'MISSING_DOCS', message: 'POA or ID document missing at transfer-request stage' };
+    }
+
+    const resolveFilePath = (fileUrl: string) => {
+        if (fileUrl.startsWith('/uploads/')) {
+            return join(process.cwd(), 'storage', 'uploads', fileUrl.replace('/uploads/', ''));
+        }
+        const rel = fileUrl.startsWith('/') ? fileUrl.slice(1) : fileUrl;
+        return join(process.cwd(), 'public', rel);
+    };
+
+    const poaFilePath = resolveFilePath(poaDoc.fileUrl);
+    const idFilePath  = resolveFilePath(idDoc.fileUrl);
+
+    if (!existsSync(poaFilePath) || !existsSync(idFilePath)) {
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: 'DHS transfer aborted — document files not found on disk.',
+            action: `POA path: ${poaFilePath} | ID path: ${idFilePath}. Please re-upload documents.`
+        });
+        return { action: 'MISSING_DOCS', message: 'Document files not found on disk at transfer-request stage' };
+    }
+
+    // Step 6b: Submit the actual DHS transfer request via Puppeteer
+    logger.info(`[CASE_AUTOMATION] Submitting DHS transfer request for ${caseData.fileNumber} (ID: ${idNumber})...`);
 
     await saveAIComment(caseId, adminId, {
         service: serviceLabels,
         triggeredBy,
-        assessment: 'Required documents confirmed (POA + ID). Waiting 30 seconds to verify the DHS portal shows a PENDING request before updating status or emailing the DC.',
-        action: 'DHS portal verification in progress — do not manually change the status yet.'
+        assessment: `Required documents confirmed (POA + ID). ${actionVerb} transfer from DC on NCR Debt Help System now...`,
+        action: 'DHS Puppeteer automation running — do not manually change the status yet.'
     });
+
+    try {
+        const transferResult = await requestTransfer(idNumber, poaFilePath, idFilePath);
+        if (!transferResult.success) {
+            logger.warn(`[CASE_AUTOMATION] DHS transfer submission failed for ${caseData.fileNumber}: ${transferResult.message}`);
+            await saveAIComment(caseId, adminId, {
+                service: serviceLabels,
+                triggeredBy,
+                assessment: `DHS transfer submission failed: ${transferResult.message}`,
+                action: 'Automation could not submit the DHS transfer request. Please submit manually via the DHS portal.'
+            });
+            await prisma.case.update({
+                where: { id: caseId },
+                data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS' }
+            });
+            return { action: 'DHS_NOT_CONFIRMED', message: `DHS submission failed: ${transferResult.message}` };
+        }
+        logger.info(`[CASE_AUTOMATION] DHS transfer submitted for ${caseData.fileNumber}. Waiting 30s for portal to register...`);
+    } catch (submitErr) {
+        logger.error(`[CASE_AUTOMATION] DHS transfer submission threw error for ${caseData.fileNumber}:`, submitErr);
+        await saveAIComment(caseId, adminId, {
+            service: serviceLabels,
+            triggeredBy,
+            assessment: `DHS transfer submission error: ${submitErr instanceof Error ? submitErr.message : String(submitErr)}`,
+            action: 'Automation error during DHS portal submission. Please submit manually via the DHS portal.'
+        });
+        await prisma.case.update({
+            where: { id: caseId },
+            data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS' }
+        });
+        return { action: 'DHS_NOT_CONFIRMED', message: `DHS submission error: ${submitErr instanceof Error ? submitErr.message : String(submitErr)}` };
+    }
+
+    // Step 6c: Wait 30 seconds then verify the DHS portal actually shows PENDING
+    // This prevents marking a case as REQUESTED_VIA_DHS when the portal didn't register the request.
+    logger.info(`[CASE_AUTOMATION] Waiting 30s before verifying DHS portal for ${caseData.fileNumber}...`);
 
     await delay(30000);
 
