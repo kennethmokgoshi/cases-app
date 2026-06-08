@@ -32,6 +32,7 @@ type CaseType = {
     } | null;
     status: string;
     createdAt: string;
+    updatedAt: string;
     createdById: string;
     projects: Array<{
         project: {
@@ -41,6 +42,13 @@ type CaseType = {
         };
     }>;
 };
+
+function formatDateTime(iso: string): string {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+    const time = d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${date} ${time}`;
+}
 
 export default function B2BMyCasesPage() {
     return (
@@ -303,7 +311,7 @@ function B2BMyCasesComponent() {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div className="grid grid-cols-4 gap-4 text-sm">
                                     <div>
                                         <p className="text-gray-400 mb-1">ID Number</p>
                                         <p className="text-white font-medium">{caseItem.client.idNumber}</p>
@@ -313,9 +321,15 @@ function B2BMyCasesComponent() {
                                         <p className="text-white font-medium">{caseItem.client.phone || 'N/A'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-gray-400 mb-1">Submitted</p>
+                                        <p className="text-gray-400 mb-1">Created</p>
                                         <p className="text-white font-medium">
-                                            {new Date(caseItem.createdAt).toLocaleDateString()}
+                                            {caseItem.createdAt ? formatDateTime(caseItem.createdAt) : '-'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-400 mb-1">Last Updated</p>
+                                        <p className="text-white font-medium">
+                                            {caseItem.updatedAt ? formatDateTime(caseItem.updatedAt) : '-'}
                                         </p>
                                     </div>
                                 </div>

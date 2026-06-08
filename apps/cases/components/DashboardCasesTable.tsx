@@ -24,7 +24,9 @@ type Case = {
 
 function formatDate(iso: string): string {
     const d = new Date(iso);
-    return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+    const date = d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+    const time = d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${date} ${time}`;
 }
 
 export function DashboardCasesTable() {
@@ -105,28 +107,28 @@ export function DashboardCasesTable() {
 
             {/* Cases Table */}
             <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-xs">
                     <thead className="bg-zeno-blue/30 border-b border-white/5">
                         <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">
                                 File #
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 Client
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 Status
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 Project
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                                Services Required
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                Services
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">
                                 Created
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">
                                 Last Updated
                             </th>
                         </tr>
@@ -134,14 +136,14 @@ export function DashboardCasesTable() {
                     <tbody className="divide-y divide-white/5">
                         {filteredCases.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                                <td colSpan={7} className="px-2 py-8 text-center text-gray-500">
                                     No cases found.
                                 </td>
                             </tr>
                         ) : (
                             filteredCases.map((c: any) => (
                                 <tr key={c.id} className="hover:bg-white/5 transition-colors">
-                                    <td className="px-4 py-3 whitespace-nowrap">
+                                    <td className="px-2 py-2 whitespace-nowrap">
                                         <Link
                                             href={`/cases/${c.id}`}
                                             className="text-zeno-cyan hover:text-cyan-300 font-medium"
@@ -149,7 +151,7 @@ export function DashboardCasesTable() {
                                             {c.fileNumber}
                                         </Link>
                                     </td>
-                                    <td className="px-4 py-3">
+                                    <td className="px-2 py-2 whitespace-nowrap">
                                         <Link
                                             href={`/cases/${c.id}`}
                                             className="text-white hover:text-zeno-cyan transition-colors"
@@ -157,21 +159,21 @@ export function DashboardCasesTable() {
                                             {c.client.firstName} {c.client.lastName}
                                         </Link>
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                    <td className="px-2 py-2 whitespace-nowrap">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
                                             {c.status}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-gray-400 text-sm">
+                                    <td className="px-2 py-2 text-gray-400 whitespace-nowrap">
                                         {c.projects.find((p: any) => p.isPrimary)?.project.name || 'None'}
                                     </td>
-                                    <td className="px-4 py-3 text-gray-400 text-sm">
+                                    <td className="px-2 py-2 text-gray-400 max-w-[160px] truncate" title={c.services || '-'}>
                                         {c.services || '-'}
                                     </td>
-                                    <td className="px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
+                                    <td className="px-2 py-2 text-gray-400 whitespace-nowrap">
                                         {c.createdAt ? formatDate(c.createdAt) : '-'}
                                     </td>
-                                    <td className="px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
+                                    <td className="px-2 py-2 text-gray-400 whitespace-nowrap">
                                         {c.updatedAt ? formatDate(c.updatedAt) : '-'}
                                     </td>
                                 </tr>

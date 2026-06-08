@@ -29,7 +29,9 @@ type PartnerCase = {
 
 function formatDate(iso: string): string {
     const d = new Date(iso);
-    return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+    const date = d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+    const time = d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${date} ${time}`;
 }
 
 type PartnerStats = {
