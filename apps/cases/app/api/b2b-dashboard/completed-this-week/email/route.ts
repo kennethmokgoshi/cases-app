@@ -93,7 +93,7 @@ export async function POST() {
                     },
                 },
                 projects: {
-                    select: { project: { select: { name: true, fullPath: true } } },
+                    select: { project: { select: { name: true } } },
                     take: 1,
                 },
             },
@@ -112,7 +112,7 @@ export async function POST() {
             'Email': c.client.email || '',
             'Status': c.status.replace(/_/g, ' '),
             'Completed Date': c.updatedAt.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }),
-            'Project / Group': c.projects[0]?.project.fullPath || c.projects[0]?.project.name || '',
+            'Project / Group': c.projects[0]?.project.name || '',
         }));
 
         const wb = XLSX.utils.book_new();

@@ -99,7 +99,7 @@ export async function GET(request: Request) {
                 },
                 projects: {
                     select: {
-                        project: { select: { name: true, fullPath: true } },
+                        project: { select: { name: true } },
                     },
                     take: 1,
                 },
@@ -118,7 +118,7 @@ export async function GET(request: Request) {
             email: c.client.email || '',
             status: c.status.replace(/_/g, ' '),
             completedAt: c.updatedAt.toISOString(),
-            project: c.projects[0]?.project.fullPath || c.projects[0]?.project.name || '',
+            project: c.projects[0]?.project.name || '',
         }));
 
         if (format === 'xlsx') {
