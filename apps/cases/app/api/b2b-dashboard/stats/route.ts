@@ -62,7 +62,14 @@ export async function GET() {
             }
         }
 
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        // Week runs Saturday → Friday. Find the most recent Saturday at 00:00:00 SAST (UTC+2).
+        const nowLocal = new Date(Date.now() + 2 * 60 * 60 * 1000); // approximate SAST
+        const dayOfWeek = nowLocal.getUTCDay(); // 0=Sun,1=Mon,...,6=Sat
+        const daysSinceSaturday = dayOfWeek === 6 ? 0 : dayOfWeek + 1; // Sat=0, Sun=1, ..., Fri=6
+        const startOfWeek = new Date(Date.now() - daysSinceSaturday * 24 * 60 * 60 * 1000);
+        startOfWeek.setUTCHours(0, 0, 0, 0);
+        // Adjust back from SAST offset so the boundary lands at Saturday 00:00 SAST = Friday 22:00 UTC
+        const weekStart = new Date(startOfWeek.getTime() - 2 * 60 * 60 * 1000);
 
         const completedCodes = WORKFLOW_STATUSES.filter(s => s.category === 'COMPLETED' || s.category === 'SETTLED').map(s => s.code);
         const beginningCodes = WORKFLOW_STATUSES.filter(s => s.category === 'BEGINNING').map(s => s.code);
@@ -110,7 +117,7 @@ export async function GET() {
                 where: {
                     ...projectWhere,
                     status: { in: beginningCodes },
-                    createdAt: { gte: sevenDaysAgo },
+                    createdAt: { gte: weekStart },
                 },
             }),
 
@@ -118,7 +125,7 @@ export async function GET() {
                 where: {
                     ...projectWhere,
                     status: { in: completedCodes },
-                    updatedAt: { gte: sevenDaysAgo },
+                    updatedAt: { gte: weekStart },
                 },
             }),
 

@@ -123,7 +123,7 @@ export function DashboardCasesTable() {
                                 Project
                             </th>
                             <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                                Services
+                                Type
                             </th>
                             <th className="px-2 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">
                                 Created
@@ -164,11 +164,34 @@ export function DashboardCasesTable() {
                                             {c.status}
                                         </span>
                                     </td>
-                                    <td className="px-2 py-2 text-gray-400 whitespace-nowrap">
-                                        {c.projects.find((p: any) => p.isPrimary)?.project.name || 'None'}
+                                    <td className="px-2 py-2 text-gray-400 text-xs">
+                                        {(() => {
+                                            const primary = c.projects?.find((p: any) => p.isPrimary) || c.projects?.[0];
+                                            if (!primary) return <span className="text-gray-600 italic">—</span>;
+                                            const label = primary.project.fullPath || primary.project.name;
+                                            return label;
+                                        })()}
                                     </td>
-                                    <td className="px-2 py-2 text-gray-400 max-w-[160px] truncate" title={c.services || '-'}>
-                                        {c.services || '-'}
+                                    <td className="px-2 py-2">
+                                        {(() => {
+                                            let items: string[] = [];
+                                            try {
+                                                const parsed = typeof c.services === 'string' ? JSON.parse(c.services) : c.services;
+                                                items = Array.isArray(parsed) ? parsed : [];
+                                            } catch {
+                                                items = c.services ? [c.services] : [];
+                                            }
+                                            if (items.length === 0) return <span className="text-gray-500">—</span>;
+                                            return (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {items.map((s: string) => (
+                                                        <span key={s} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 whitespace-nowrap">
+                                                            {s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
                                     </td>
                                     <td className="px-2 py-2 text-gray-400 whitespace-nowrap">
                                         {c.createdAt ? formatDate(c.createdAt) : '-'}

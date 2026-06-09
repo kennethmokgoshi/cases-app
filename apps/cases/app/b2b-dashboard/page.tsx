@@ -27,11 +27,26 @@ type PartnerCase = {
     updatedAt: string;
 };
 
+type CompletedWeekCase = {
+    fileNumber: string;
+    clientName: string;
+    idNumber: string;
+    phone: string;
+    email: string;
+    status: string;
+    completedAt: string;
+    project: string;
+};
+
 function formatDate(iso: string): string {
     const d = new Date(iso);
     const date = d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
     const time = d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
     return `${date} ${time}`;
+}
+
+function formatShortDate(iso: string): string {
+    return new Date(iso).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 type PartnerStats = {
@@ -62,6 +77,14 @@ export default function B2BDashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
+
+    // Completed this week modal
+    const [showCompletedModal, setShowCompletedModal] = useState(false);
+    const [completedCases, setCompletedCases] = useState<CompletedWeekCase[]>([]);
+    const [completedLoading, setCompletedLoading] = useState(false);
+    const [completedWeekStart, setCompletedWeekStart] = useState<string | null>(null);
+    const [emailSending, setEmailSending] = useState(false);
+    const [emailResult, setEmailResult] = useState<{ success: boolean; message: string } | null>(null);
 
     useEffect(() => {
         // Check for success message
@@ -99,6 +122,46 @@ export default function B2BDashboard() {
             setError(error.message || 'Connection Failure');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const openCompletedModal = async () => {
+        setShowCompletedModal(true);
+        setEmailResult(null);
+        if (completedCases.length === 0) {
+            setCompletedLoading(true);
+            try {
+                const res = await fetch('/api/b2b-dashboard/completed-this-week');
+                const data = await res.json();
+                setCompletedCases(data.cases || []);
+                setCompletedWeekStart(data.weekStart || null);
+            } catch {
+                logger.error('Failed to load completed cases');
+            } finally {
+                setCompletedLoading(false);
+            }
+        }
+    };
+
+    const downloadExcel = () => {
+        window.location.href = '/api/b2b-dashboard/completed-this-week?format=xlsx';
+    };
+
+    const sendEmail = async () => {
+        setEmailSending(true);
+        setEmailResult(null);
+        try {
+            const res = await fetch('/api/b2b-dashboard/completed-this-week/email', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                setEmailResult({ success: true, message: `Sent to ${data.sentTo}` });
+            } else {
+                setEmailResult({ success: false, message: data.error || 'Failed to send email' });
+            }
+        } catch {
+            setEmailResult({ success: false, message: 'Network error — please try again' });
+        } finally {
+            setEmailSending(false);
         }
     };
 
@@ -336,7 +399,7 @@ export default function B2BDashboard() {
                 {/* New Leads Last 7 Days */}
                 <div className="bg-zeno-gray border border-white/10 rounded-xl p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-medium text-gray-400">New (Past 7 Days)</h3>
+                        <h3 className="text-sm font-medium text-gray-400">New (This Week)</h3>
                         <div className="w-12 h-12 bg-indigo-500/10 rounded-lg flex items-center justify-center">
                             <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -346,19 +409,143 @@ export default function B2BDashboard() {
                     <p className="text-4xl font-bold text-white">{stats.newLeadsLast7Days}</p>
                 </div>
 
-                {/* Completed Last 7 Days */}
-                <div className="bg-zeno-gray border border-white/10 rounded-xl p-6">
+                {/* Completed This Week — clickable */}
+                <button
+                    type="button"
+                    onClick={openCompletedModal}
+                    className="bg-zeno-gray border border-white/10 rounded-xl p-6 text-left hover:border-teal-500/40 hover:bg-teal-500/5 transition-all group"
+                >
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-medium text-gray-400">Completed (Past 7 Days)</h3>
-                        <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center">
+                        <h3 className="text-sm font-medium text-gray-400 group-hover:text-teal-300 transition-colors">Completed (This Week)</h3>
+                        <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center group-hover:bg-teal-500/20 transition-colors">
                             <svg className="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.6 1.4A8.967 8.967 0 0121 12c0 5-4 9-9 9s-9-4-9-9 4-9 9-9c2.5 0 4.75 1 6.4 2.6" />
                             </svg>
                         </div>
                     </div>
                     <p className="text-4xl font-bold text-white">{stats.completedLast7Days}</p>
-                </div>
+                    <p className="text-xs text-teal-400 mt-2 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Click to view &amp; export
+                    </p>
+                </button>
             </div>
+
+            {/* Completed This Week Modal */}
+            {showCompletedModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-[#0f1923] border border-white/10 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
+                        {/* Modal header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+                            <div>
+                                <h2 className="text-lg font-semibold text-white">Completed Cases — This Week</h2>
+                                {completedWeekStart && (
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        From {formatShortDate(completedWeekStart)} to today (Sat–Fri week)
+                                    </p>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { setShowCompletedModal(false); setEmailResult(null); }}
+                                className="text-gray-400 hover:text-white transition-colors"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Export actions */}
+                        <div className="px-6 py-3 border-b border-white/10 flex items-center gap-3 flex-wrap shrink-0">
+                            <button
+                                type="button"
+                                onClick={downloadExcel}
+                                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Download Excel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={sendEmail}
+                                disabled={emailSending}
+                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                            >
+                                {emailSending ? (
+                                    <>
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                        </svg>
+                                        Sending…
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        Email to Me
+                                    </>
+                                )}
+                            </button>
+                            {emailResult && (
+                                <span className={`text-sm ${emailResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                    {emailResult.success ? '✓ ' : '✗ '}{emailResult.message}
+                                </span>
+                            )}
+                            <span className="ml-auto text-sm text-gray-400">
+                                {completedLoading ? 'Loading…' : `${completedCases.length} case${completedCases.length !== 1 ? 's' : ''}`}
+                            </span>
+                        </div>
+
+                        {/* Table */}
+                        <div className="overflow-auto flex-1">
+                            {completedLoading ? (
+                                <div className="flex items-center justify-center py-20 text-gray-400">Loading cases…</div>
+                            ) : completedCases.length === 0 ? (
+                                <div className="flex items-center justify-center py-20 text-gray-400">No completed cases this week.</div>
+                            ) : (
+                                <table className="w-full text-sm">
+                                    <thead className="sticky top-0 bg-[#0f1923]">
+                                        <tr className="border-b border-white/10">
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">File No.</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Client</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">ID Number</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Phone</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Completed</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Group</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {completedCases.map((c, i) => (
+                                            <tr key={i} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-4 py-3 font-mono text-teal-300 text-xs">{c.fileNumber}</td>
+                                                <td className="px-4 py-3 text-white font-medium">{c.clientName}</td>
+                                                <td className="px-4 py-3 text-gray-300 font-mono text-xs">{c.idNumber || '—'}</td>
+                                                <td className="px-4 py-3 text-gray-300 text-xs">{c.phone || '—'}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 px-2 py-0.5 rounded text-xs">
+                                                        {c.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">{formatShortDate(c.completedAt)}</td>
+                                                <td className="px-4 py-3 text-gray-400 text-xs">{c.project || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Reporting Buttons - For Managers */}
             {(session?.user?.isManager || session?.user?.isAdmin) && (
