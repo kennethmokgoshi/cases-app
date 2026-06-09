@@ -48,6 +48,16 @@ const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: stri
     'PROOF_OF_RESIDENCE': { label: 'Proof of Residence', color: 'bg-teal-500/20 text-teal-300', icon: '🏠' },
     'COMBINED': { label: 'Combined File', color: 'bg-orange-500/20 text-orange-300', icon: '📦' },
     'PAID_UP_LETTER': { label: 'Paid Up Letter', color: 'bg-green-500/20 text-green-300', icon: '✅' },
+    'FORM_17W': { label: 'Form 17.W', color: 'bg-violet-500/20 text-violet-300', icon: '📜' },
+    'FORM_16': { label: 'Form 16', color: 'bg-violet-400/20 text-violet-200', icon: '📜' },
+    'FORM_17_1': { label: 'Form 17.1', color: 'bg-violet-600/20 text-violet-400', icon: '📜' },
+    'SECTION_86': { label: 'Section 86 Notice', color: 'bg-rose-500/20 text-rose-300', icon: '⚖️' },
+    'COURT_ORDER': { label: 'Court Order', color: 'bg-rose-600/20 text-rose-400', icon: '🏛️' },
+    'DEBT_RESTRUCTURING_PROPOSAL': { label: 'Debt Restructuring Proposal', color: 'bg-amber-500/20 text-amber-300', icon: '📋' },
+    'INSURANCE_POLICY': { label: 'Insurance Policy', color: 'bg-sky-500/20 text-sky-300', icon: '🛡️' },
+    'CONSENT_FORM': { label: 'Consent Form', color: 'bg-teal-400/20 text-teal-200', icon: '✍️' },
+    'AFFIDAVIT': { label: 'Affidavit', color: 'bg-orange-600/20 text-orange-300', icon: '📃' },
+    'DHS_SUMMARY_REPORT': { label: 'DHS Summary Report', color: 'bg-cyan-600/20 text-cyan-300', icon: '🖥️' },
     'OTHER': { label: 'Other Document', color: 'bg-gray-500/20 text-gray-300', icon: '📄' } };
 
 const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: string }[] = [
@@ -122,15 +132,23 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                 method: 'POST',
                 body: formData });
 
-            if (!res.ok) throw new Error('Upload failed');
+            if (!res.ok) {
+                let detail = `Server error ${res.status}`;
+                try {
+                    const errBody = await res.json();
+                    detail = errBody.details || errBody.error || detail;
+                } catch { /* ignore JSON parse error */ }
+                throw new Error(detail);
+            }
 
             const { document: uploadedDoc } = await res.json();
 
             setSuccess('Document uploaded successfully');
 
             fetchDocuments();
-        } catch (e) {
-            setError('Failed to upload document');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to upload document';
+            setError(`Failed to upload document: ${msg}`);
         } finally {
             setUploading(false);
             e.target.value = '';
@@ -736,6 +754,18 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                         <option value="BANK_STATEMENT" className="bg-zeno-navy text-white">Bank Statement</option>
                         <option value="PROOF_OF_RESIDENCE" className="bg-zeno-navy text-white">Proof of Residence</option>
                         <option value="PAID_UP_LETTER" className="bg-zeno-navy text-white">Paid Up Letter</option>
+                        <optgroup label="NCR / Legal Forms" className="bg-zeno-navy text-gray-400">
+                            <option value="FORM_17W" className="bg-zeno-navy text-white">Form 17.W</option>
+                            <option value="FORM_16" className="bg-zeno-navy text-white">Form 16</option>
+                            <option value="FORM_17_1" className="bg-zeno-navy text-white">Form 17.1</option>
+                            <option value="SECTION_86" className="bg-zeno-navy text-white">Section 86 Notice</option>
+                            <option value="COURT_ORDER" className="bg-zeno-navy text-white">Court Order</option>
+                            <option value="DEBT_RESTRUCTURING_PROPOSAL" className="bg-zeno-navy text-white">Debt Restructuring Proposal</option>
+                        </optgroup>
+                        <option value="INSURANCE_POLICY" className="bg-zeno-navy text-white">Insurance Policy</option>
+                        <option value="CONSENT_FORM" className="bg-zeno-navy text-white">Consent Form</option>
+                        <option value="AFFIDAVIT" className="bg-zeno-navy text-white">Affidavit</option>
+                        <option value="COMBINED" className="bg-zeno-navy text-white">Combined File</option>
                         <option value="OTHER" className="bg-zeno-navy text-white">Other Document</option>
                     </select>
                     <label className="flex-1">
