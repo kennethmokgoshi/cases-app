@@ -19,6 +19,7 @@ vi.mock('../logger', () => ({
 
 vi.mock('../integrations', () => ({
     getGHLCredentials: vi.fn().mockResolvedValue({ apiKey: null, locationId: null }),
+    getSMTPCredentials: vi.fn().mockResolvedValue({ host: '', port: 587, secure: false, username: '', password: '', fromEmail: '' }),
 }));
 
 // Mock the providers module to control email sending

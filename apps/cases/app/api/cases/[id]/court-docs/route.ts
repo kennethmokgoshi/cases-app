@@ -4,7 +4,7 @@ import { auth } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
 import { generateCourtDoc, CourtDocType, COURT_DOC_LABELS } from '@zenowethu/shared-lib/src/court-docs';
-import { SmtpEmailProvider, ResendEmailProvider } from '@zenowethu/shared-lib';
+import { SmtpEmailProvider, ResendEmailProvider, getSMTPCredentials } from '@zenowethu/shared-lib';
 
 const logger = createLogger('court-docs-api');
 const FIRM_NAME = 'Zenowethu Debt Management (PTY) LTD';
@@ -152,15 +152,15 @@ export async function POST(
         const attachment = { filename, content: Buffer.from(pdfBytes), contentType: 'application/pdf' as const };
 
         // Use SMTP if configured, otherwise Resend
-        const smtpHost = process.env.SMTP_HOST;
+        const smtp = await getSMTPCredentials();
         let emailResult: { success: boolean; error?: string };
-        if (smtpHost) {
+        if (smtp.host) {
             const provider = new SmtpEmailProvider({
-                host: smtpHost,
-                port: Number(process.env.SMTP_PORT ?? 587),
-                secure: Number(process.env.SMTP_PORT ?? 587) === 465,
-                auth: { user: process.env.SMTP_USER ?? '', pass: process.env.SMTP_PASS ?? '' },
-                fromEmail: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? '',
+                host: smtp.host,
+                port: smtp.port,
+                secure: smtp.secure,
+                auth: { user: smtp.username, pass: smtp.password },
+                fromEmail: smtp.fromEmail || smtp.username,
             });
             emailResult = await provider.send(emailTo, subject, htmlBody, textBody, { attachments: [attachment] });
         } else if (process.env.RESEND_API_KEY) {

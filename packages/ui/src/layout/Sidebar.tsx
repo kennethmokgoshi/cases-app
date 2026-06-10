@@ -11,7 +11,11 @@ import { logger } from './sidebar/sidebar-types';
 import { buildSourceTree, buildTimeTree, calculateTotalCases } from './sidebar/sidebar-tree-utils';
 import { ProjectTreeItem } from './sidebar/ProjectTreeItem';
 import { SidebarNav } from './sidebar/SidebarNav';
+import { FinanceSidebarNav } from './sidebar/FinanceSidebarNav';
 import { UserProfileFooter } from './sidebar/UserProfileFooter';
+
+/** Which app the sidebar is rendered in. Defaults to the cases-style nav. */
+export type SidebarApp = 'cases' | 'finance';
 
 /**
  * Error boundary that silently catches useSession errors caused by
@@ -34,7 +38,7 @@ class SessionErrorBoundary extends Component<
     }
 }
 
-export function Sidebar() {
+export function Sidebar({ app = 'cases' }: { app?: SidebarApp }) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -46,16 +50,17 @@ export function Sidebar() {
 
     return (
         <SessionErrorBoundary>
-            <SidebarInner />
+            <SidebarInner app={app} />
         </SessionErrorBoundary>
     );
 }
 
-function SidebarInner() {
+function SidebarInner({ app }: { app: SidebarApp }) {
     const { data: session } = useSession();
     const router = useRouter();
     const [projectTree, setProjectTree] = useState<ProjectNode[]>([]);
-    const [loading, setLoading] = useState(true);
+    // The case-project tree only applies to the cases-style nav
+    const [loading, setLoading] = useState(app === 'cases');
     const [error, setError] = useState<string | null>(null);
     const pathname = usePathname();
     const [viewMode, setViewMode] = useState<'SOURCE' | 'TIME'>('TIME');
@@ -146,8 +151,9 @@ function SidebarInner() {
         };
     }, [isMobileOpen]);
 
-    // Fetch projects
+    // Fetch projects (cases-style nav only — finance has no case-project tree)
     useEffect(() => {
+        if (app !== 'cases') return;
         async function fetchProjects() {
             try {
                 const [statsResult, projectsResult] = await Promise.allSettled([
@@ -217,7 +223,7 @@ function SidebarInner() {
             }
         }
         fetchProjects();
-    }, [viewMode]);
+    }, [viewMode, app]);
 
     // Shared aside styles
     const asideClassName = (extra: string = '') =>
@@ -283,40 +289,48 @@ function SidebarInner() {
 
                 <nav className="flex-1 p-4 space-y-6">
                     {/* Main Navigation */}
-                    <SidebarNav
-                        session={session}
-                        casesUrl={process.env.NEXT_PUBLIC_CASES_URL ?? ''}
-                        insuranceUrl={process.env.NEXT_PUBLIC_INSURANCE_URL ?? ''}
-                        financeUrl={process.env.NEXT_PUBLIC_FINANCE_URL ?? ''}
-                    />
-
-                    {/* Projects Header with View Toggle */}
-                    <div className="flex items-center justify-between px-2 mb-3">
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            {viewMode === 'TIME' ? 'Timeline' : 'Structure'}
-                        </h3>
-                        <button
-                            onClick={() => setViewMode(viewMode === 'TIME' ? 'SOURCE' : 'TIME')}
-                            className="text-[10px] text-zeno-cyan hover:text-white transition-colors border border-zeno-cyan/30 rounded px-1.5 py-0.5 bg-zeno-cyan/5"
-                            title={viewMode === 'TIME' ? 'Switch to Source View' : 'Switch to Timeline View'}
-                        >
-                            {viewMode === 'TIME' ? 'Sort by Source' : 'Sort by Date'}
-                        </button>
-                    </div>
-
-                    {/* Project Tree */}
-                    {projectTree.length > 0 ? (
-                        <ul className="space-y-1">
-                            {projectTree.map((node) => (
-                                <ProjectTreeItem
-                                    key={node.id}
-                                    project={node}
-                                    autoExpandDate={viewMode === 'TIME' ? autoExpandDate : undefined}
-                                />
-                            ))}
-                        </ul>
+                    {app === 'finance' ? (
+                        <FinanceSidebarNav session={session} />
                     ) : (
-                        <div className="text-xs text-gray-500 px-2 italic">No projects found.</div>
+                        <SidebarNav
+                            session={session}
+                            casesUrl={process.env.NEXT_PUBLIC_CASES_URL ?? ''}
+                            insuranceUrl={process.env.NEXT_PUBLIC_INSURANCE_URL ?? ''}
+                            financeUrl={process.env.NEXT_PUBLIC_FINANCE_URL ?? ''}
+                        />
+                    )}
+
+                    {app === 'cases' && (
+                        <>
+                            {/* Projects Header with View Toggle */}
+                            <div className="flex items-center justify-between px-2 mb-3">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    {viewMode === 'TIME' ? 'Timeline' : 'Structure'}
+                                </h3>
+                                <button
+                                    onClick={() => setViewMode(viewMode === 'TIME' ? 'SOURCE' : 'TIME')}
+                                    className="text-[10px] text-zeno-cyan hover:text-white transition-colors border border-zeno-cyan/30 rounded px-1.5 py-0.5 bg-zeno-cyan/5"
+                                    title={viewMode === 'TIME' ? 'Switch to Source View' : 'Switch to Timeline View'}
+                                >
+                                    {viewMode === 'TIME' ? 'Sort by Source' : 'Sort by Date'}
+                                </button>
+                            </div>
+
+                            {/* Project Tree */}
+                            {projectTree.length > 0 ? (
+                                <ul className="space-y-1">
+                                    {projectTree.map((node) => (
+                                        <ProjectTreeItem
+                                            key={node.id}
+                                            project={node}
+                                            autoExpandDate={viewMode === 'TIME' ? autoExpandDate : undefined}
+                                        />
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className="text-xs text-gray-500 px-2 italic">No projects found.</div>
+                            )}
+                        </>
                     )}
                 </nav>
 

@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { getSMTPCredentials } from '@zenowethu/shared-lib';
 
 export interface EmailAttachment {
     filename: string;
@@ -30,21 +31,22 @@ export interface SendEmailResult {
  *   3. Mock  — dev/test only; logs to console and returns success
  */
 export async function sendEmailWithAttachments(opts: SendEmailOptions): Promise<SendEmailResult> {
-    // --- 1. SMTP ---
-    if (process.env.SMTP_HOST) {
+    // --- 1. SMTP (DB-backed admin settings, env fallback) ---
+    const smtp = await getSMTPCredentials();
+    if (smtp.host) {
         const transporter = nodemailer.createTransport({
-            host:   process.env.SMTP_HOST,
-            port:   parseInt(process.env.SMTP_PORT || '587'),
-            secure: process.env.SMTP_SECURE === 'true',
+            host:   smtp.host,
+            port:   smtp.port,
+            secure: smtp.secure,
             auth: {
-                user: process.env.SMTP_USER || '',
-                pass: process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '',
+                user: smtp.username,
+                pass: smtp.password,
             },
             tls: { rejectUnauthorized: false },
         });
 
         try {
-            const configuredFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER;
+            const configuredFrom = smtp.fromEmail || smtp.username;
             const senderAddress  = opts.fromEmail || configuredFrom;
             const fromHeader     = opts.fromName
                 ? `"${opts.fromName}" <${configuredFrom}>`
@@ -71,7 +73,7 @@ export async function sendEmailWithAttachments(opts: SendEmailOptions): Promise<
 
     // --- 2. Resend (supports base64 attachments) ---
     if (process.env.RESEND_API_KEY) {
-        const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_FROM || 'notifications@zenowethu.co.za';
+        const fromAddress = smtp.fromEmail || 'notifications@zenowethu.co.za';
         const toAddresses = Array.isArray(opts.to) ? opts.to : [opts.to];
 
         const body: Record<string, unknown> = {

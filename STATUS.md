@@ -1,7 +1,83 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-10 (Kenny Mokgoshi system automation user — "Last Updated By" attribution)
+> Last updated: 2026-06-10 (Finance case detail page rebuilt as a financial pane)
+
+---
+
+### Finance App — Case Detail Rebuilt as Financial Pane (2026-06-10)
+
+**What was done:**
+- [x] `apps/finance/app/(authenticated)/cases/[id]/page.tsx` was a 2,492-line copy of the Cases app case detail (case description editor, DHS lookup, re-analyze, tasks). Replaced with a finance-focused pane: financial summary cards (Service Fee / Collected with progress bar / Outstanding / Invoiced), **over-collection warning banner** when payments exceed the agreed fee, Fee & Billing panel (B2B/B2C source, partner split, Zenowethu share, R350 status, debt totals), payments table with "+ Record Payment" (prefills client ID number), invoices table with links to invoice detail, and an "Open in Cases app ↗" link for the full operational view
+- [x] New API `GET /api/finance/cases/[id]/summary` — case + client + payments (case-linked **and** unlinked client payments) + invoices + computed summary in one call
+- [x] New pure lib `apps/finance/lib/case-financials.ts` — `summariseCaseFinancials` (totalPaid, outstanding, overCollected, percentCollected, invoicedTotal; ignores UNALLOCATED payments and CANCELLED invoices) + `formatRand` (en-ZA ZAR via Intl)
+- [x] Loading / error / empty states throughout; no alert()/confirm()
+- [x] Tests: `case-financials.test.ts` (6) + `summary/route.test.ts` (4 — 401/404/success shape + payment-query coverage/500) — finance suite **25/25 pass**; `tsc --noEmit` exit 0; live route verified compiling (401 unauthenticated)
+
+**Note:** this page is the first UI surface of the over-collection detection planned in the Finance payment-collection audit (see entry below) — the import-time flagging and exception queue are still to be built.
+
+---
+
+### Email (SMTP) Account — Admin-Editable Credentials + Test Connection (2026-06-10)
+
+**Why:** POA email send failed in production with `535 Incorrect authentication data` — the SMTP password in the env (`transfer@zenowethu.co.za`) is stale and only fixable by redeploying. Email credentials are now editable in Admin → Settings, exactly like DHS/XDS/GHL.
+
+**What was done:**
+- [x] New `packages/shared-lib/src/integrations/smtp-config.ts` — `getSMTPCredentials()` / `invalidateSMTPCredentialsCache()`: DB-backed (`SystemSettings` category `smtp`, keys `smtp_host/port/secure/user/password/from`) with env fallback (`SMTP_HOST/PORT/SECURE/USER/PASSWORD|PASS/FROM`, `EMAIL_FROM`), 60 s cache. Exported from shared-lib index
+- [x] New API `apps/cases/app/api/admin/settings/smtp/route.ts` — GET (password masked) / POST (Zod-validated; masked password skipped) / DELETE (reset to env). Admin & Executive only
+- [x] New API `apps/cases/app/api/admin/settings/smtp/test/route.ts` — verifies SMTP login (EHLO+AUTH only, **no email sent**); accepts unsaved form values so admins can test a new password before saving
+- [x] New "Email (SMTP) Account" section in Admin → Settings (`apps/cases/app/(authenticated)/admin/settings/page.tsx`) — host, port, SSL toggle, login email, password (masked, show/hide), from address, Save / **Test Connection** / Reset, inline success/failure result
+- [x] All SMTP consumers now read the shared config instead of raw env: `apps/cases/lib/email-with-attachments.ts` (POA, invoices, debt-review docs, B2B, commissions), `cases` mandate route, `cases` court-docs route (also fixed latent `SMTP_PASS` vs `SMTP_PASSWORD` bug there), shared-lib `notifications/service.ts` provider chain
+- [x] Tests: `smtp-config.test.ts` (6), `settings/smtp/route.test.ts` (16), `settings/smtp/test/route.test.ts` (7) — all pass. Full suites green: shared-lib 328/328, cases 331/331. `tsc --noEmit` exit 0 in both
+
+**Manual step for the current outage:** reset the `transfer@zenowethu.co.za` mailbox password in the mail host (cPanel), then enter it in Admin → Settings → Email (SMTP) Account and press Test Connection — no redeploy needed once this feature is deployed.
+
+**Decision (2026-06-10, same day):** standardised on **one address for everything** — `notifications@zenowethu.co.za` is now both the SMTP login and the From address (avoids 550 from-mismatch rejections, cleaner SPF/DKIM alignment, one password to manage). `SMTP_USER` switched from `transfer@` to `notifications@` in all six apps' local `.env` files and all `.env.example` files; settings UI login placeholder updated. ⚠️ **Blocked on user:** the `notifications@zenowethu.co.za` mailbox password must be set/reset in the mail host (cPanel) and entered in Dokploy env (`SMTP_PASSWORD`) and/or the new admin settings UI — a login-only verification against `mail.zenowethu.co.za` confirmed the old password is not valid for this mailbox either.
+
+---
+
+### Finance App — Dedicated Finance Sidebar (2026-06-10)
+
+**What was done:**
+- [x] The shared `Sidebar` in `@zenowethu/ui` rendered the same Cases-first nav in every app — Finance (port 3004) showed "New Case / All Cases / Website Leads / Shosholoza" with finance links buried below the fold
+- [x] New `packages/ui/src/layout/sidebar/finance-nav-items.ts` — pure, testable nav builder: **Finance** (Dashboard, Record Payment, Payments, Import Batch, Payment Batches, Reconciliation, Invoices, Revenue, Financial Reports), **Operations** (Cases, Credit Accounts, Insurance Assessments, Legal Matters, Forensic Audits, B2B Portal, Projects, Documents), **Admin** (gated by isAdmin/isExecutive/isSeniorManager: Admin Dashboard, Partners, Rate Tables, Users, Audit Trail, Compliance, Banking Settings). All links relative — every page exists in apps/finance
+- [x] New `FinanceSidebarNav.tsx` component; `findActiveHref` highlights only the most specific match (`/payments/record` doesn't also light up `/payments`)
+- [x] `Sidebar` now accepts `app?: 'cases' | 'finance'` (default `'cases'` — cases/insurance/legal/forensic unchanged). Finance mode skips the case-project tree and its `/api/projects` fetch
+- [x] `apps/finance/app/(authenticated)/layout.tsx` passes `app="finance"`
+- [x] Added Vitest to `@zenowethu/ui` (first test setup in this package): `finance-nav-items.test.ts` (10 tests) + `FinanceSidebarNav.test.tsx` SSR smoke tests with mocked next/link + next/navigation (3 tests) — **13/13 pass**
+- [x] `apps/finance` and `apps/cases` `tsc --noEmit` both exit 0
+
+**Note:** visual verification in an authenticated browser session still pending — preview browser can't log in (SSO redirects to cases login; no dev credentials). Staff should refresh localhost:3004 to confirm.
+
+---
+
+### Finance Audit — Payment Collection vs Work Done (2026-06-10)
+
+**Audit only — no code changed. Plan approved direction: "plan only first".**
+
+**Problem reported:** payments keep being collected (external ALLPS/Debicheck debit orders) on cases where they shouldn't be — leading to manual overcharge refunds.
+
+**Findings (classification: partially implemented / not yet in use):**
+- Payment module (batch upload, matching, reconciliation, refund form) is **built but unused** — production DB has **0 Payment records, 0 PaymentBatch records** (verified 2026-06-10 against 213.199.57.111)
+- Only **1 of 208 cases** has `serviceFee` set — over-collection cannot be computed without it
+- `apps/finance/app/api/finance/batches/route.ts` file-number matching links payments to cases **regardless of case status** — payment on a finished case records silently as `COMPLETED`
+- No code anywhere compares cumulative payments vs `Case.serviceFee`
+- Reconciliation exceptions only surface `UNALLOCATED` payments — over-collections would be invisible
+- Status exclusion list `['COMPLETED','CLOSED','CANCELLED']` is semantically wrong: in `statuses.ts`, `CLOSED` = "ready for collection" (collection should START), and ~10 other COMPLETED-category `CL_*` statuses are unchecked
+
+**Planned fix (pending user go-ahead):** populate `serviceFee` on all cases → start recording collections via batch upload → flag `OVER_COLLECTED` at import → over-collection exception queue + stop-collection staff alerts → wire pre-filled refund form. See session plan dated 2026-06-10.
+
+---
+
+### DHS Re-check Rewrite — NOT_LINKED + AI ID Re-analysis (2026-06-10)
+
+**What was done:**
+- [x] Rewrote `apps/cases/app/api/cron/dhs-recheck/route.ts` per operator spec. Old behaviour (re-trigger `/api/dhs/lookup` for `PENDING_VIA_DHS` cases) always found 0 cases because waiting cases live in `REQUESTED_VIA_DHS`, not `PENDING_VIA_DHS`
+- [x] New behaviour: scans all `NOT_LINKED` ("Not Linked on DHS") cases whose `nextUpdate` is due/null (max 25/run) → runs DHS `checkTransferStatus` once → if found, maps to the right status (`REQUESTED_VIA_DHS` / `NOT_REQUESTED_VIA_DHS` / `ACCEPTED_VIA_DHS` / `DECLINED_VIA_DHS`); if still NOT_LINKED → AI re-analyses the latest ID document (`analyzeDocument`) to re-extract the ID number
+- [x] Extracted ID **differs** from DB → client `idNumber` corrected (P2002 duplicate collision → staff-review comment instead) → DHS re-checked with corrected ID
+- [x] Extracted ID **matches** DB → case stays NOT_LINKED, `nextUpdate` +5 working days
+- [x] All actions attributed to Kenny Mokgoshi automation user; `[AUTO]` system comments on every touched case; per-case outcome details in `AutomationRun.logs`
+- [x] Tests: `route.test.ts` — 16 tests (auth, helpers, no-op, skip-not-due, status change, ID match, ID correction + re-check, duplicate collision, missing ID doc) — all pass; cases app `tsc --noEmit` exit 0
 
 ---
 

@@ -14,7 +14,7 @@ export default function AuthenticatedLayout({
     return (
         <LayoutProvider>
             <TopBar />
-            <Sidebar />
+            <Sidebar app="finance" />
             {/* Main content area with responsive margin/padding */}
             <main
                 className="flex-1 min-h-screen bg-[var(--color-bg-primary)] transition-all duration-300

@@ -44,6 +44,15 @@ interface XdsSettings {
     xds_portal_url: string;
 }
 
+interface SmtpSettings {
+    smtp_host: string;
+    smtp_port: string;
+    smtp_secure: boolean;
+    smtp_user: string;
+    smtp_password: string;
+    smtp_from: string;
+}
+
 interface XdsSyncSummary {
     processed: number;
     newFilesCreated: number;
@@ -101,6 +110,15 @@ export default function SettingsPage() {
     const [xdsSyncResult, setXdsSyncResult] = useState<XdsSyncSummary | null>(null);
     const [xdsSyncError, setXdsSyncError] = useState<string | null>(null);
 
+    // Email (SMTP) state
+    const [smtpSettings, setSmtpSettings] = useState<SmtpSettings>({ smtp_host: '', smtp_port: '587', smtp_secure: false, smtp_user: '', smtp_password: '', smtp_from: '' });
+    const [hasSmtpPassword, setHasSmtpPassword] = useState(false);
+    const [smtpLastUpdated, setSmtpLastUpdated] = useState<Date | null>(null);
+    const [smtpSaving, setSmtpSaving] = useState(false);
+    const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+    const [smtpTesting, setSmtpTesting] = useState(false);
+    const [smtpTestResult, setSmtpTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+
     // DC Profile state
     const [dcProfile, setDcProfile] = useState({ ncrdcNo: '', dcName: '', dcOrganisation: '' });
     const [dcProfileSaving, setDcProfileSaving] = useState(false);
@@ -131,7 +149,7 @@ export default function SettingsPage() {
     const fetchSettings = async () => {
         setLoading(true);
         try {
-            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings(), fetchBureauSettings(), fetchDcProfile(), fetchXdsSettings()]);
+            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings(), fetchBureauSettings(), fetchDcProfile(), fetchXdsSettings(), fetchSmtpSettings()]);
         } catch (error) {
             logger.error('Error fetching settings:', error);
         } finally {
@@ -248,6 +266,109 @@ export default function SettingsPage() {
             }
         } catch (error) {
             logger.error('Error fetching XDS settings:', error);
+        }
+    };
+
+    const fetchSmtpSettings = async () => {
+        try {
+            const res = await fetch('/api/admin/settings/smtp');
+            if (res.ok) {
+                const data = await res.json();
+                setHasSmtpPassword(!!(data.settings.smtp_password && data.settings.smtp_password.includes('•')));
+                setSmtpSettings({
+                    smtp_host: data.settings.smtp_host || '',
+                    smtp_port: data.settings.smtp_port || '587',
+                    smtp_secure: data.settings.smtp_secure === 'true',
+                    smtp_user: data.settings.smtp_user || '',
+                    smtp_password: '',
+                    smtp_from: data.settings.smtp_from || '',
+                });
+                if (data.lastUpdated) setSmtpLastUpdated(new Date(data.lastUpdated));
+            }
+        } catch (error) {
+            logger.error('Error fetching SMTP settings:', error);
+        }
+    };
+
+    const handleSaveSmtp = async () => {
+        setSmtpSaving(true);
+        setMessage(null);
+        setSmtpTestResult(null);
+        try {
+            const res = await fetch('/api/admin/settings/smtp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    host: smtpSettings.smtp_host,
+                    port: Number(smtpSettings.smtp_port) || 587,
+                    secure: smtpSettings.smtp_secure,
+                    username: smtpSettings.smtp_user,
+                    password: smtpSettings.smtp_password || '••••••••',
+                    fromEmail: smtpSettings.smtp_from || smtpSettings.smtp_user,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'Email (SMTP) settings saved successfully!' });
+                fetchSmtpSettings();
+            } else {
+                setMessage({ type: 'error', text: data.error || 'Failed to save email settings' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while saving email settings' });
+        } finally {
+            setSmtpSaving(false);
+        }
+    };
+
+    const handleResetSmtp = async () => {
+        if (!await confirm('Reset email settings? The server will fall back to the credentials configured in the environment.')) return;
+        setSmtpSaving(true);
+        setMessage(null);
+        setSmtpTestResult(null);
+        try {
+            const res = await fetch('/api/admin/settings/smtp', { method: 'DELETE' });
+            if (res.ok) {
+                setMessage({ type: 'success', text: 'Email settings reset to environment defaults' });
+                setSmtpLastUpdated(null);
+                setHasSmtpPassword(false);
+                fetchSmtpSettings();
+            } else {
+                const data = await res.json();
+                setMessage({ type: 'error', text: data.error || 'Failed to reset email settings' });
+            }
+        } catch {
+            setMessage({ type: 'error', text: 'An error occurred while resetting email settings' });
+        } finally {
+            setSmtpSaving(false);
+        }
+    };
+
+    const handleTestSmtp = async () => {
+        setSmtpTesting(true);
+        setSmtpTestResult(null);
+        try {
+            const res = await fetch('/api/admin/settings/smtp/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    host: smtpSettings.smtp_host || undefined,
+                    port: Number(smtpSettings.smtp_port) || undefined,
+                    secure: smtpSettings.smtp_secure,
+                    username: smtpSettings.smtp_user || undefined,
+                    password: smtpSettings.smtp_password || undefined,
+                }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSmtpTestResult({ ok: true, text: data.message || 'Login successful' });
+            } else {
+                setSmtpTestResult({ ok: false, text: data.error || 'Login failed' });
+            }
+        } catch {
+            setSmtpTestResult({ ok: false, text: 'Could not reach the server to run the test' });
+        } finally {
+            setSmtpTesting(false);
         }
     };
 
@@ -1526,6 +1647,185 @@ export default function SettingsPage() {
                                     </div>
                                 );
                             })()}
+                        </div>
+                    </section>
+                )}
+
+                {/* Email (SMTP) Account Section — Admin & Executive only */}
+                {(session?.user?.isAdmin || (session?.user as any)?.isExecutive) && (
+                    <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white text-2xl">
+                                ✉️
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-bold text-white">Email (SMTP) Account</h2>
+                                    <span className="px-2 py-0.5 text-xs font-semibold bg-sky-500/20 text-sky-400 border border-sky-500/40 rounded-full">
+                                        Admin &amp; Executive only
+                                    </span>
+                                </div>
+                                <p className="text-gray-400 text-sm mt-0.5">
+                                    The mailbox used to send POAs, mandates, invoices, court documents and notifications.
+                                    If the mailbox password changes, update it here — otherwise sends fail with &ldquo;535 Incorrect authentication data&rdquo;.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Host */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        SMTP Server Host
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={smtpSettings.smtp_host}
+                                        onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_host: e.target.value })}
+                                        className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                        placeholder="mail.zenowethu.co.za"
+                                    />
+                                </div>
+
+                                {/* Port */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Port
+                                    </label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={smtpSettings.smtp_port}
+                                        onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_port: e.target.value.replace(/\D/g, '') })}
+                                        className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                        placeholder="587"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Login email address */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Email Address (login)
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={smtpSettings.smtp_user}
+                                        onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_user: e.target.value })}
+                                        className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                        placeholder="notifications@zenowethu.co.za"
+                                    />
+                                </div>
+
+                                {/* Password */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        Email Password
+                                        {hasSmtpPassword && (
+                                            <span className="ml-2 text-xs text-green-400">(Password saved)</span>
+                                        )}
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type={showSmtpPassword ? 'text' : 'password'}
+                                            value={smtpSettings.smtp_password}
+                                            onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_password: e.target.value })}
+                                            className="w-full px-4 py-3 pr-12 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                            placeholder={hasSmtpPassword ? 'Enter new password to change' : 'Enter password'}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                        >
+                                            {showSmtpPassword ? '🙈' : '👁️'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* From address */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        From Address (shown to recipients)
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={smtpSettings.smtp_from}
+                                        onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_from: e.target.value })}
+                                        className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
+                                        placeholder="notifications@zenowethu.co.za"
+                                    />
+                                </div>
+
+                                {/* Secure toggle */}
+                                <div className="flex items-end pb-1">
+                                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={smtpSettings.smtp_secure}
+                                            onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_secure: e.target.checked })}
+                                            className="w-5 h-5 rounded border-zeno-blue/50 bg-zeno-dark/50 accent-sky-500"
+                                        />
+                                        <span className="text-sm text-gray-300">
+                                            Use SSL/TLS connection <span className="text-gray-500">(tick for port 465; leave off for 587)</span>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {mounted && smtpLastUpdated && (
+                                <p className="text-sm text-gray-500 pt-2">
+                                    Last updated: {smtpLastUpdated.toLocaleDateString()} {smtpLastUpdated.toLocaleTimeString()}
+                                </p>
+                            )}
+
+                            {/* Test result */}
+                            {smtpTestResult && (
+                                <div className={`flex items-start gap-2 text-sm rounded-lg px-3 py-2 border ${
+                                    smtpTestResult.ok
+                                        ? 'bg-green-500/10 border-green-500/40 text-green-400'
+                                        : 'bg-red-500/10 border-red-500/40 text-red-400'
+                                }`}>
+                                    <span>{smtpTestResult.ok ? '✅' : '❌'}</span>
+                                    <span>{smtpTestResult.text}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Save / Test / Reset */}
+                        <div className="flex flex-wrap items-center gap-4 mt-6 pt-6 border-t border-zeno-blue/30">
+                            <button
+                                onClick={handleSaveSmtp}
+                                disabled={smtpSaving || smtpTesting}
+                                className="px-6 py-3 bg-gradient-to-r from-sky-600 to-blue-600 text-white font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {smtpSaving ? 'Saving...' : 'Save Email Settings'}
+                            </button>
+                            <button
+                                onClick={handleTestSmtp}
+                                disabled={smtpSaving || smtpTesting}
+                                className="flex items-center gap-2 px-6 py-3 bg-sky-600/20 border border-sky-500/50 text-sky-400 font-semibold rounded-lg hover:bg-sky-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {smtpTesting ? (
+                                    <>
+                                        <span className="w-4 h-4 border-2 border-sky-400/40 border-t-sky-400 rounded-full animate-spin" />
+                                        Testing…
+                                    </>
+                                ) : (
+                                    <>🔌 Test Connection</>
+                                )}
+                            </button>
+                            <button
+                                onClick={handleResetSmtp}
+                                disabled={smtpSaving || smtpTesting}
+                                className="px-6 py-3 bg-zeno-dark/50 border border-red-500/50 text-red-400 font-semibold rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Reset
+                            </button>
                         </div>
                     </section>
                 )}

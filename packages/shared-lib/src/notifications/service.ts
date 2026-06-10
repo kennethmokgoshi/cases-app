@@ -26,7 +26,7 @@ import {
     renderTemplate,
     renderBrandedEmail
 } from './templates';
-import { getGHLCredentials } from '../integrations';
+import { getGHLCredentials, getSMTPCredentials } from '../integrations';
 import { logger } from '../logger';
 import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
@@ -63,15 +63,16 @@ async function getEmailProvider(): Promise<EmailProvider> {
     // Wrapped with SMTP fallback so professional emails to DCs/bureaus still deliver when
     // GHL cannot find or create a contact for the recipient.
     const ghl = await getGHLCredentials();
+    const smtp = await getSMTPCredentials();
     if (ghl.apiKey && ghl.locationId) {
         const ghlProvider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
-        if (process.env.SMTP_HOST) {
+        if (smtp.host) {
             const smtpFallback = new SmtpEmailProvider({
-                host:      process.env.SMTP_HOST,
-                port:      parseInt(process.env.SMTP_PORT || '587'),
-                secure:    process.env.SMTP_SECURE === 'true',
-                auth:      { user: process.env.SMTP_USER || '', pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '' },
-                fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM,
+                host:      smtp.host,
+                port:      smtp.port,
+                secure:    smtp.secure,
+                auth:      { user: smtp.username, pass: smtp.password },
+                fromEmail: smtp.fromEmail || undefined,
             });
             return new FallbackEmailProvider(ghlProvider, smtpFallback);
         }
@@ -84,13 +85,13 @@ async function getEmailProvider(): Promise<EmailProvider> {
     }
 
     // Priority 3: SMTP — direct delivery for environments without GHL
-    if (process.env.SMTP_HOST) {
+    if (smtp.host) {
         return new SmtpEmailProvider({
-            host:      process.env.SMTP_HOST,
-            port:      parseInt(process.env.SMTP_PORT || '587'),
-            secure:    process.env.SMTP_SECURE === 'true',
-            auth:      { user: process.env.SMTP_USER || '', pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '' },
-            fromEmail: process.env.EMAIL_FROM || process.env.SMTP_FROM,
+            host:      smtp.host,
+            port:      smtp.port,
+            secure:    smtp.secure,
+            auth:      { user: smtp.username, pass: smtp.password },
+            fromEmail: smtp.fromEmail || undefined,
         });
     }
 
@@ -98,7 +99,7 @@ async function getEmailProvider(): Promise<EmailProvider> {
     if (process.env.RESEND_API_KEY) {
         return new ResendEmailProvider(
             process.env.RESEND_API_KEY,
-            process.env.EMAIL_FROM || process.env.SMTP_FROM || 'notifications@zenowethu.co.za'
+            smtp.fromEmail || 'notifications@zenowethu.co.za'
         );
     }
 
