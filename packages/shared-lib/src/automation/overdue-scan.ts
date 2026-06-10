@@ -16,6 +16,7 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { WORKFLOW_STATUSES, getStatusByCode } from '../statuses/statuses';
 import { sendStatusChangeNotification } from '../notifications/service';
+import { getAutomationUserId } from './automation-user';
 
 const logger = createLogger('automation/overdue-scan');
 
@@ -227,9 +228,13 @@ export async function runOverdueScan(): Promise<OverdueScanResult> {
         ranAt: startedAt.toISOString(),
     };
 
-    // Get admin user id for system comments
-    const admin = await prisma.user.findFirst({ where: { isAdmin: true }, select: { id: true } });
-    const adminId = admin?.id ?? null;
+    // Attribute scan actions to the Kenny Mokgoshi system automation user,
+    // falling back to the first admin if it cannot be resolved
+    let adminId: string | null = await getAutomationUserId();
+    if (!adminId) {
+        const admin = await prisma.user.findFirst({ where: { isAdmin: true }, select: { id: true } });
+        adminId = admin?.id ?? null;
+    }
 
     // Get all admins for in-app notifications
     const adminUsers = await prisma.user.findMany({

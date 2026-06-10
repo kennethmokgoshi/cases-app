@@ -38,6 +38,7 @@ export * from './referrer-commission';
 // Automation
 // Note: Node-only (uses prisma) — import directly when needed in server contexts
 // export * from './automation/overdue-scan';
+export * from './automation/automation-user';
 export * from './automation/run-logger';
 export * from './automation/workflow-engine';
 export * from './debt-review-removal/removal-paths';

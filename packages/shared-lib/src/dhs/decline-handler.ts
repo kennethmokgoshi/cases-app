@@ -16,6 +16,7 @@ import { prisma } from '@zenowethu/database';
 import { sendManualMessage } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
 import { logger } from '../logger';
+import { getAutomationUserId } from '../automation/automation-user';
 
 export type DeclineCategory =
     | 'SEND_DOCS'
@@ -170,7 +171,10 @@ export async function handleDHSDecline(params: {
     declineReason: string;
     triggeredByUserId?: string;
 }): Promise<DeclineHandlerResult> {
-    const { caseId, declineReason, triggeredByUserId } = params;
+    // When not triggered by a staff member, attribute actions to the
+    // Kenny Mokgoshi system automation user so updates show a name in the UI
+    const { caseId, declineReason } = params;
+    const triggeredByUserId = params.triggeredByUserId ?? (await getAutomationUserId()) ?? undefined;
     const log = logger.child ? logger.child({ module: 'decline-handler', caseId }) : logger;
 
     const result: DeclineHandlerResult = {

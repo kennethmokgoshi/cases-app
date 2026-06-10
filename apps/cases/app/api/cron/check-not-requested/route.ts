@@ -4,6 +4,7 @@ import { createLogger } from '@zenowethu/shared-lib';
 import { checkTransferStatus, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { logAutomationRun } from '@zenowethu/shared-lib/src/automation/run-logger';
+import { getAutomationUserId } from '@zenowethu/shared-lib/src/automation/automation-user';
 
 const logger = createLogger('cron/check-not-requested');
 
@@ -52,8 +53,12 @@ export async function POST(request: Request) {
         stats.total = cases.length;
         logger.info(`[CRON] Found ${cases.length} overdue NOT_REQUESTED_VIA_DHS cases`);
 
-        // Get first admin user for attribution
-        const adminUser = await prisma.user.findFirst({ where: { isAdmin: true } });
+        // Attribute automation updates to the Kenny Mokgoshi system user,
+        // falling back to the first admin if it cannot be resolved
+        const automationUserId = await getAutomationUserId();
+        const adminUser = automationUserId
+            ? { id: automationUserId }
+            : await prisma.user.findFirst({ where: { isAdmin: true } });
 
         for (const c of cases) {
             const idNumber = c.client.idNumber;

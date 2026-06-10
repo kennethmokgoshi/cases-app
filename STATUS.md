@@ -1,7 +1,22 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-06 (Invoice/Quote PDF letterhead, account info, communication logging)
+> Last updated: 2026-06-10 (Kenny Mokgoshi system automation user — "Last Updated By" attribution)
+
+---
+
+### Automation Attribution — "Kenny Mokgoshi" System User (2026-06-10)
+
+**What was done:**
+- [x] New `packages/shared-lib/src/automation/automation-user.ts` — `getAutomationUserId()` find-or-creates a dedicated system user **Kenny Mokgoshi** (`automation@zenowethu.co.za`, `userType: SYSTEM`, `isLocked: true` so it can never log in, random unrecoverable password). Result cached in-process; handles concurrent-creation races; returns `null` on DB errors so automation never fails on attribution
+- [x] `case-automation-trigger.ts` — automation actor is now Kenny Mokgoshi (admin fallback); **all 9 `prisma.case.update` calls now set `updatedById`** so the cases list "Last Updated By" column shows the name + timestamp instead of "—"
+- [x] `apps/cases/app/api/cron/check-not-requested/route.ts` — cron DHS checks now attribute case updates and system comments to Kenny Mokgoshi (was: first admin)
+- [x] `overdue-scan.ts` — scan actions attributed to Kenny Mokgoshi (admin in-app notifications unchanged)
+- [x] `dhs/decline-handler.ts` — when no staff `triggeredByUserId` provided, falls back to Kenny Mokgoshi
+- [x] Exported from `@zenowethu/shared-lib` index
+- [x] Tests: `automation-user.test.ts` (4 tests — existing-user cache, creation shape, race recovery, DB-error null) — all pass; existing overdue-scan + decline-handler suites (33 tests) still pass; shared-lib `tsc --noEmit` exit 0
+
+**Note:** existing cases updated by automation before this change still show "—" until next touched — no backfill was run (cannot reliably distinguish automation updates from manual ones historically).
 
 ---
 

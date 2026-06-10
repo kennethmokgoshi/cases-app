@@ -34,6 +34,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { GhlService } from '../integrations/ghl-service';
+import { getAutomationUserId } from '../automation/automation-user';
 
 const logger = createLogger('ai/case-automation-trigger');
 
@@ -110,9 +111,14 @@ export async function runCaseAutomationTrigger(
         ? services.map(s => SERVICE_LABELS[s] ?? s).join(', ')
         : 'Not specified';
 
-    // ── 4. Get admin user for system comments ─────────────────────────────────
-    const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
-    const adminId = admin?.id ?? '';
+    // ── 4. Resolve the automation actor (Kenny Mokgoshi system user) ──────────
+    // Used for comments, workflow logs, and Case.updatedById so the UI shows
+    // who/when the Puppeteer automation last touched the case.
+    let adminId = (await getAutomationUserId()) ?? '';
+    if (!adminId) {
+        const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
+        adminId = admin?.id ?? '';
+    }
 
     // All cases get a DHS consumer lookup regardless of service type.
     // Transfer request (REQUESTED_VIA_DHS) is only submitted for debt review services.
@@ -140,6 +146,7 @@ export async function runCaseAutomationTrigger(
                     data: {
                         status:             isZdmClient ? 'ZDM_CLIENT' : 'NOT_REQUESTED_VIA_DHS',
                         dhsStatus:          isZdmClient ? 'ZDM Client' : 'Not Requested via DHS',
+                        ...(adminId ? { updatedById: adminId } : {}),
                         ncrdcNo:            d.ncrdcNo,
                         debtCounsellorName: d.dcFullName || d.debtCounsellorName,
                         dcTradingName:      d.dcTradingName,
@@ -232,6 +239,7 @@ export async function runCaseAutomationTrigger(
                                         data: {
                                             status:             'NOT_REQUESTED_VIA_DHS',
                                             dhsStatus:          'Not Requested via DHS',
+                                            ...(adminId ? { updatedById: adminId } : {}),
                                             ncrdcNo:            d.ncrdcNo,
                                             debtCounsellorName: d.dcFullName || d.debtCounsellorName,
                                             dcTradingName:      d.dcTradingName,
@@ -268,7 +276,8 @@ export async function runCaseAutomationTrigger(
                     where: { id: caseId },
                     data: {
                         status: 'NOT_LINKED',
-                        dhsStatus: 'NOT_LINKED'
+                        dhsStatus: 'NOT_LINKED',
+                        ...(adminId ? { updatedById: adminId } : {})
                     }
                 });
 
@@ -353,6 +362,7 @@ export async function runCaseAutomationTrigger(
                 status: 'REQUESTED_VIA_DHS',
                 dhsStatus: 'Requested via DHS',
                 nextUpdate: addWorkingDays(new Date(), 3),
+                ...(adminId ? { updatedById: adminId } : {}),
             }
         });
         await prisma.workflowLog.create({
@@ -381,7 +391,7 @@ export async function runCaseAutomationTrigger(
     if (existingDhsStatus === 'ACCEPTED') {
         await prisma.case.update({
             where: { id: caseId },
-            data: { status: 'ACCEPTED_VIA_DHS', dhsStatus: 'Accepted', nextUpdate: addWorkingDays(new Date(), 5) }
+            data: { status: 'ACCEPTED_VIA_DHS', dhsStatus: 'Accepted', nextUpdate: addWorkingDays(new Date(), 5), ...(adminId ? { updatedById: adminId } : {}) }
         });
         await prisma.workflowLog.create({
             data: {
@@ -657,7 +667,7 @@ async function performAutoDhsTransferRequest(
             });
             await prisma.case.update({
                 where: { id: caseId },
-                data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS' }
+                data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS', ...(adminId ? { updatedById: adminId } : {}) }
             });
             return { action: 'DHS_NOT_CONFIRMED', message: `DHS submission failed: ${transferResult.message}` };
         }
@@ -672,7 +682,7 @@ async function performAutoDhsTransferRequest(
         });
         await prisma.case.update({
             where: { id: caseId },
-            data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS' }
+            data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS', ...(adminId ? { updatedById: adminId } : {}) }
         });
         return { action: 'DHS_NOT_CONFIRMED', message: `DHS submission error: ${submitErr instanceof Error ? submitErr.message : String(submitErr)}` };
     }
@@ -699,7 +709,7 @@ async function performAutoDhsTransferRequest(
     if (!dhsVerification || dhsPortalStatus === 'NOT_REQUESTED') {
         await prisma.case.update({
             where: { id: caseId },
-            data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS' }
+            data: { status: 'NOT_REQUESTED_VIA_DHS', dhsStatus: 'Not Requested via DHS', ...(adminId ? { updatedById: adminId } : {}) }
         });
 
         await saveAIComment(caseId, adminId, {
@@ -724,7 +734,8 @@ async function performAutoDhsTransferRequest(
             data: {
                 status: 'REQUESTED_VIA_DHS',
                 dhsStatus: dhsStatusLabel,
-                nextUpdate: addWorkingDays(new Date(), 3)
+                nextUpdate: addWorkingDays(new Date(), 3),
+                ...(adminId ? { updatedById: adminId } : {})
             }
         });
 
