@@ -10,7 +10,7 @@ const LineItemSchema = z.object({
   unitPrice: z.number().nonnegative() })
 
 const UpdateInvoiceSchema = z.object({
-  status:    z.enum(['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED']).optional(),
+  status:    z.enum(['DRAFT', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED']).optional(),
   lineItems: z.array(LineItemSchema).min(1).max(100).optional(),
   dueAt:     z.string().datetime().optional(),
   notes:     z.string().max(2000).optional(),
@@ -104,6 +104,15 @@ export async function PATCH(
   }
 }
 
+/**
+ * Delete a quote or invoice.
+ *
+ * Permissions:
+ *  - QUOTE   — any authenticated staff member may delete (unless already
+ *              converted into an invoice).
+ *  - INVOICE — only administrators and executives may delete, and never once
+ *              payments have been recorded against it (cancel instead).
+ */
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -113,14 +122,50 @@ export async function DELETE(
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
 
   try {
-    const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true } })
+    const existing = await prisma.invoice.findUnique({
+      where: { id },
+      select: {
+        type: true,
+        invoiceNumber: true,
+        convertedToInvoiceId: true,
+        _count: { select: { payments: true } },
+      },
+    })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    if (existing.status !== 'DRAFT') {
-      return NextResponse.json({ error: 'Only DRAFT invoices can be deleted' }, { status: 409 })
+    const isAdmin = session.user.isAdmin === true
+    const isExecutive = session.user.isExecutive === true
+
+    if (existing.type === 'INVOICE') {
+      if (!isAdmin && !isExecutive) {
+        return NextResponse.json(
+          { error: 'Only administrators and executives can delete invoices.' },
+          { status: 403 },
+        )
+      }
+      if (existing._count.payments > 0) {
+        return NextResponse.json(
+          { error: 'This invoice has recorded payments and cannot be deleted. Cancel it instead.' },
+          { status: 409 },
+        )
+      }
+    } else {
+      // QUOTE — any authenticated staff member may delete it
+      if (existing.convertedToInvoiceId) {
+        return NextResponse.json(
+          { error: 'This quote has been converted to an invoice and can no longer be deleted.' },
+          { status: 409 },
+        )
+      }
     }
 
     await prisma.invoice.delete({ where: { id } })
+    logger.info('[DELETE /api/finance/invoices/[id]] deleted', {
+      id,
+      type: existing.type,
+      number: existing.invoiceNumber,
+      by: session.user.id,
+    })
     return new NextResponse(null, { status: 204 })
   } catch (err) {
     logger.error('[DELETE /api/finance/invoices/[id]]', err)

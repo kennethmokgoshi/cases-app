@@ -48,8 +48,11 @@ export async function GET(request: Request) {
 
   const where: Prisma.InvoiceWhereInput = {}
 
-  if (status && ['DRAFT','SENT','PAID','OVERDUE','CANCELLED'].includes(status)) {
-    where.status = status as Prisma.EnumInvoiceStatusFilter
+  const VALID_STATUSES = ['DRAFT','SENT','ACCEPTED','REJECTED','CONVERTED','PARTIALLY_PAID','PAID','OVERDUE','CANCELLED']
+  if (status) {
+    const statuses = status.split(',').filter(s => VALID_STATUSES.includes(s))
+    if (statuses.length === 1) where.status = statuses[0] as Prisma.EnumInvoiceStatusFilter
+    else if (statuses.length > 1) where.status = { in: statuses } as Prisma.EnumInvoiceStatusFilter
   }
   if (type && ['INVOICE','QUOTE'].includes(type)) {
     where.type = type as Prisma.EnumDocumentTypeFilter
@@ -77,18 +80,32 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [invoices, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       prisma.invoice.findMany({
         where,
         orderBy: { issuedAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          client:    { select: { firstName: true, lastName: true, email: true, idNumber: true } },
+          client:    { select: { id: true, firstName: true, lastName: true, email: true, idNumber: true } },
           case:      { select: { fileNumber: true } },
-          createdBy: { select: { firstName: true, lastName: true } } } }),
+          createdBy: { select: { firstName: true, lastName: true } },
+          decidedBy: { select: { firstName: true, lastName: true } },
+          payments:  { select: { amount: true }, where: { status: { not: 'CANCELLED' } } } } }),
       prisma.invoice.count({ where }),
     ])
+
+    const invoices = rows.map(({ payments, ...inv }) => {
+      const recorded = payments.reduce((s, p) => s + Number(p.amount), 0)
+      // Legacy invoices marked PAID before payment allocation existed have no
+      // linked payments — treat them as fully collected.
+      const amountPaid = inv.status === 'PAID' && recorded === 0 ? Number(inv.total) : recorded
+      return {
+        ...inv,
+        amountPaid,
+        balanceDue: inv.status === 'PAID' ? 0 : Math.max(0, Number(inv.total) - amountPaid),
+      }
+    })
 
     return NextResponse.json({ invoices, total, page, pages: Math.ceil(total / limit) })
   } catch (err) {

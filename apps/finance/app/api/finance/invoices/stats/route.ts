@@ -3,6 +3,12 @@ import { auth } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 
+/**
+ * Invoice register stats. Quotations (type = QUOTE) are excluded everywhere —
+ * a quote is an offer, not a receivable. Collection figures come from payments
+ * allocated to invoices; invoices marked PAID before payment allocation
+ * existed (no linked payments) count as collected in full.
+ */
 export async function GET() {
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
@@ -14,49 +20,47 @@ export async function GET() {
     const endOfLast     = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
 
     const [
-      totalInvoicedAgg,
-      totalCollectedAgg,
-      outstandingAgg,
-      overdueCount,
+      activeInvoices,
+      paymentSums,
       thisMonthAgg,
       lastMonthAgg,
       monthly,
       revenueByType,
     ] = await Promise.all([
-      // Total ever invoiced (all non-CANCELLED)
-      prisma.invoice.aggregate({
-        where: { status: { not: 'CANCELLED' } },
-        _sum:  { total: true } }),
-      // Total collected (PAID)
-      prisma.invoice.aggregate({
-        where: { status: 'PAID' },
-        _sum:  { total: true } }),
-      // Outstanding = SENT + OVERDUE
-      prisma.invoice.aggregate({
-        where: { status: { in: ['SENT', 'OVERDUE'] } },
-        _sum:  { total: true } }),
-      // Overdue count
-      prisma.invoice.count({ where: { status: 'OVERDUE' } }),
+      prisma.invoice.findMany({
+        where:  { type: 'INVOICE', status: { not: 'CANCELLED' } },
+        select: { id: true, total: true, status: true } }),
+      prisma.payment.groupBy({
+        by:    ['invoiceId'],
+        where: { invoiceId: { not: null }, status: { not: 'CANCELLED' } },
+        _sum:  { amount: true } }),
       // This month invoiced
       prisma.invoice.aggregate({
-        where: { issuedAt: { gte: startOfMonth }, status: { not: 'CANCELLED' } },
+        where: { type: 'INVOICE', issuedAt: { gte: startOfMonth }, status: { not: 'CANCELLED' } },
         _sum:  { total: true } }),
       // Last month invoiced (for % change)
       prisma.invoice.aggregate({
-        where: { issuedAt: { gte: startOfLast, lte: endOfLast }, status: { not: 'CANCELLED' } },
+        where: { type: 'INVOICE', issuedAt: { gte: startOfLast, lte: endOfLast }, status: { not: 'CANCELLED' } },
         _sum:  { total: true } }),
       // Monthly breakdown (last 12 months) — raw SQL for date_trunc grouping
       prisma.$queryRaw<Array<{ month: string; invoiced: number; collected: number; count: number }>>`
         SELECT
-          TO_CHAR(DATE_TRUNC('month', "issuedAt"), 'Mon YYYY') AS month,
-          SUM(total)::float AS invoiced,
-          SUM(CASE WHEN status = 'PAID' THEN total ELSE 0 END)::float AS collected,
+          TO_CHAR(DATE_TRUNC('month', i."issuedAt"), 'Mon YYYY') AS month,
+          SUM(i.total)::float AS invoiced,
+          SUM(CASE WHEN i.status = 'PAID' THEN i.total ELSE COALESCE(p.paid, 0) END)::float AS collected,
           COUNT(*)::int AS count
-        FROM "Invoice"
-        WHERE "issuedAt" >= NOW() - INTERVAL '12 months'
-          AND status != 'CANCELLED'
-        GROUP BY DATE_TRUNC('month', "issuedAt")
-        ORDER BY DATE_TRUNC('month', "issuedAt") ASC
+        FROM "Invoice" i
+        LEFT JOIN (
+          SELECT "invoiceId", SUM(amount) AS paid
+          FROM "Payment"
+          WHERE "invoiceId" IS NOT NULL AND status != 'CANCELLED'
+          GROUP BY "invoiceId"
+        ) p ON p."invoiceId" = i.id
+        WHERE i."issuedAt" >= NOW() - INTERVAL '12 months'
+          AND i.status != 'CANCELLED'
+          AND i.type = 'INVOICE'
+        GROUP BY DATE_TRUNC('month', i."issuedAt")
+        ORDER BY DATE_TRUNC('month', i."issuedAt") ASC
       `,
       // Revenue by acquisition type
       prisma.$queryRaw<Array<{ type: string; total: number; count: number }>>`
@@ -67,10 +71,34 @@ export async function GET() {
         FROM "Invoice" i
         LEFT JOIN "Case" c ON i."caseId" = c.id
         WHERE i.status != 'CANCELLED'
+          AND i.type = 'INVOICE'
         GROUP BY COALESCE(c."acquisitionType", 'DIRECT')
         ORDER BY total DESC
       `,
     ])
+
+    const paidByInvoice = new Map(
+      paymentSums.map(p => [p.invoiceId as string, Number(p._sum.amount ?? 0)])
+    )
+
+    let totalInvoiced  = 0
+    let totalCollected = 0
+    let outstanding    = 0
+    let overdueCount   = 0
+
+    for (const inv of activeInvoices) {
+      const total    = Number(inv.total)
+      const recorded = paidByInvoice.get(inv.id) ?? 0
+      // Legacy PAID invoices without allocated payments count as fully collected
+      const paid = inv.status === 'PAID' ? Math.max(total, recorded) : recorded
+
+      totalInvoiced  += total
+      totalCollected += paid
+      if (inv.status !== 'PAID' && inv.status !== 'DRAFT') {
+        outstanding += Math.max(0, total - paid)
+      }
+      if (inv.status === 'OVERDUE') overdueCount += 1
+    }
 
     const thisMonth   = Number(thisMonthAgg._sum.total  ?? 0)
     const lastMonth   = Number(lastMonthAgg._sum.total  ?? 0)
@@ -79,9 +107,9 @@ export async function GET() {
       : Math.round(((thisMonth - lastMonth) / lastMonth) * 100)
 
     return NextResponse.json({
-      totalInvoiced:  Number(totalInvoicedAgg._sum.total  ?? 0),
-      totalCollected: Number(totalCollectedAgg._sum.total ?? 0),
-      outstanding:    Number(outstandingAgg._sum.total    ?? 0),
+      totalInvoiced,
+      totalCollected,
+      outstanding,
       overdueCount,
       thisMonth,
       lastMonth,

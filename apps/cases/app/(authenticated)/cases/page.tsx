@@ -9,6 +9,7 @@ import { useSession } from '@zenowethu/ui';
 import { WORKFLOW_STATUSES, STATUS_CATEGORIES, type StatusCategory } from '@zenowethu/shared-lib';
 import { SearchWithSuggestions, Pagination } from '@zenowethu/ui';
 import { SERVICES_MAP } from '@zenowethu/config';
+import { SortColumn, SortState, nextSortState, sortCases } from '../../../lib/case-table-sort';
 
 // Client-side logger
 const logger = {
@@ -154,9 +155,8 @@ function CasesContent() {
     const [bulkDhsDone, setBulkDhsDone] = useState(false);
     const bulkDhsCancelRef = useRef(false);
 
-    // Sorting state
-    const [sortBy, setSortBy] = useState<'fileNumber' | 'client' | 'status' | 'nextUpdate' | 'updated' | 'updatedBy' | 'services'>('updated');
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    // Sorting state — null = default order from the API (most recently updated first)
+    const [sort, setSort] = useState<SortState>(null);
 
     // Track hydration
     useEffect(() => {
@@ -277,25 +277,14 @@ function CasesContent() {
         router.push('/cases');
     };
 
-    const handleSort = (column: any) => {
-        if (sortBy === column) setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-        else { setSortBy(column); setSortDirection('asc'); }
+    const handleSort = (column: SortColumn) => {
+        setSort(current => nextSortState(current, column));
     };
 
     if (!mounted) return null;
     if (loading) return <div className="flex items-center justify-center min-h-[400px]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zeno-cyan"></div></div>;
 
-    const sortedCases = [...filteredCases].sort((a, b) => {
-        let comp = 0;
-        if (sortBy === 'fileNumber') comp = a.fileNumber.localeCompare(b.fileNumber);
-        else if (sortBy === 'client') comp = `${a.client.firstName} ${a.client.lastName}`.localeCompare(`${b.client.firstName} ${b.client.lastName}`);
-        else if (sortBy === 'status') comp = a.status.localeCompare(b.status);
-        else if (sortBy === 'services') comp = (a.services || '').localeCompare(b.services || '');
-        else if (sortBy === 'nextUpdate') comp = (a.nextUpdate ? new Date(a.nextUpdate).getTime() : 0) - (b.nextUpdate ? new Date(b.nextUpdate).getTime() : 0);
-        else if (sortBy === 'updatedBy') comp = `${a.updatedBy?.firstName || ''} ${a.updatedBy?.lastName || ''}`.localeCompare(`${b.updatedBy?.firstName || ''} ${b.updatedBy?.lastName || ''}`);
-        else comp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-        return sortDirection === 'asc' ? comp : -comp;
-    });
+    const sortedCases = sortCases(filteredCases, sort);
 
     const paginated = sortedCases.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
     const totalPages = Math.ceil(sortedCases.length / ITEMS_PER_PAGE);
@@ -584,9 +573,38 @@ function CasesContent() {
                                     />
                                 </th>
                                 <th className="px-4 py-3 w-10">#</th>
-                                {['fileNumber', 'client', 'status', 'services', 'updatedBy', 'project', 'nextUpdate'].map(col => {
-                                    const labels:any = {fileNumber: 'File #', client: 'Client', status: 'Process Status', services: 'Type', updatedBy: 'Last Updated By', project: 'Project', nextUpdate: 'Next Update'};
-                                    return <th key={col} className="px-4 py-3 cursor-pointer hover:text-white" onClick={() => handleSort(col as any)}>{labels[col]} {sortBy === col && (sortDirection === 'asc' ? '↑' : '↓')}</th>;
+                                {([
+                                    { key: 'fileNumber', label: 'File #' },
+                                    { key: 'client', label: 'Client' },
+                                    { key: 'status', label: 'Process Status' },
+                                    { key: 'type', label: 'Type' },
+                                    { key: 'updatedBy', label: 'Last Updated By' },
+                                    { key: 'project', label: 'Project' },
+                                    { key: 'nextUpdate', label: 'Next Update' },
+                                ] satisfies Array<{ key: SortColumn; label: string }>).map(({ key, label }) => {
+                                    const isSorted = sort?.column === key;
+                                    const direction = isSorted ? sort.direction : undefined;
+                                    return (
+                                        <th
+                                            key={key}
+                                            aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}
+                                            className="px-4 py-3"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSort(key)}
+                                                title={`Sort by ${label}`}
+                                                className={`inline-flex items-center gap-1 uppercase text-[10px] font-bold tracking-wider transition-colors ${
+                                                    isSorted ? 'text-zeno-cyan' : 'text-gray-400 hover:text-white'
+                                                }`}
+                                            >
+                                                {label}
+                                                <span className="text-[10px] leading-none">
+                                                    {direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '⇅'}
+                                                </span>
+                                            </button>
+                                        </th>
+                                    );
                                 })}
                             </tr>
                         </thead>

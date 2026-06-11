@@ -2,18 +2,21 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import DeleteDocumentButton from '@/components/finance/DeleteDocumentButton'
 
 type Invoice = {
   id: string
   invoiceNumber: string
-  status: 'DRAFT' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED'
+  status: 'DRAFT' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED'
   issuedAt: string
   dueAt: string
   total: number
   subtotal: number
   vatAmount: number
+  amountPaid: number
+  balanceDue: number
   reference?: string | null
-  client: { firstName: string; lastName: string; email?: string | null } | null
+  client: { id: string; firstName: string; lastName: string; email?: string | null } | null
   case: { fileNumber: string } | null
   createdBy: { firstName: string; lastName: string } | null
 }
@@ -28,11 +31,16 @@ type Stats = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT:     'bg-gray-500/20 text-gray-400 border border-gray-500/30',
-  SENT:      'bg-blue-500/20 text-blue-400 border border-blue-500/30',
-  PAID:      'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-  OVERDUE:   'bg-red-500/20 text-red-400 border border-red-500/30',
-  CANCELLED: 'bg-gray-500/10 text-gray-500 border border-gray-500/20' }
+  DRAFT:          'bg-gray-500/20 text-gray-400 border border-gray-500/30',
+  SENT:           'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+  PARTIALLY_PAID: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+  PAID:           'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+  OVERDUE:        'bg-red-500/20 text-red-400 border border-red-500/30',
+  CANCELLED:      'bg-gray-500/10 text-gray-500 border border-gray-500/20' }
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft', SENT: 'Sent', PARTIALLY_PAID: 'Partially Paid',
+  PAID: 'Paid', OVERDUE: 'Overdue', CANCELLED: 'Cancelled' }
 
 function formatZAR(amount: number) {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount)
@@ -60,7 +68,8 @@ export default function InvoicesPage() {
   const fetchInvoices = useCallback(async (p = page) => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ page: String(p), limit: '50' })
+      // Quotations live on the Quotes page — this register is invoices only
+      const params = new URLSearchParams({ page: String(p), limit: '50', type: 'INVOICE' })
       if (search) params.set('search', search)
       if (status) params.set('status', status)
       if (from)   params.set('from', from)
@@ -188,8 +197,8 @@ export default function InvoicesPage() {
               className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
             >
               <option value="">All Statuses</option>
-              {['DRAFT','SENT','PAID','OVERDUE','CANCELLED'].map(s => (
-                <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
+              {['DRAFT','SENT','PARTIALLY_PAID','PAID','OVERDUE','CANCELLED'].map(s => (
+                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
               ))}
             </select>
           </div>
@@ -247,6 +256,8 @@ export default function InvoicesPage() {
                   <th className="px-4 py-3 text-left">Issued</th>
                   <th className="px-4 py-3 text-left">Due</th>
                   <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3 text-right">Collected</th>
+                  <th className="px-4 py-3 text-right">Balance Due</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -257,7 +268,9 @@ export default function InvoicesPage() {
                     <td className="px-4 py-3 font-mono text-gray-300 text-xs">{inv.invoiceNumber}</td>
                     <td className="px-4 py-3">
                       {inv.client ? (
-                        <span className="text-white">{inv.client.firstName} {inv.client.lastName}</span>
+                        <Link href={`/clients/${inv.client.id}`} className="text-white hover:text-emerald-400 hover:underline">
+                          {inv.client.firstName} {inv.client.lastName}
+                        </Link>
                       ) : (
                         <span className="text-gray-600 italic">No client</span>
                       )}
@@ -266,9 +279,13 @@ export default function InvoicesPage() {
                     <td className="px-4 py-3 text-gray-400">{formatDate(inv.issuedAt)}</td>
                     <td className="px-4 py-3 text-gray-400">{formatDate(inv.dueAt)}</td>
                     <td className="px-4 py-3 text-right font-medium text-white">{formatZAR(Number(inv.total))}</td>
+                    <td className="px-4 py-3 text-right text-emerald-400">{formatZAR(Number(inv.amountPaid ?? 0))}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${Number(inv.balanceDue) > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                      {formatZAR(Number(inv.balanceDue ?? 0))}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[inv.status] ?? STATUS_COLORS.DRAFT}`}>
-                        {inv.status.charAt(0) + inv.status.slice(1).toLowerCase()}
+                        {STATUS_LABELS[inv.status] ?? inv.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -282,6 +299,13 @@ export default function InvoicesPage() {
                         >
                           PDF
                         </a>
+                        <DeleteDocumentButton
+                          documentId={inv.id}
+                          documentNumber={inv.invoiceNumber}
+                          type="INVOICE"
+                          onDeleted={() => fetchInvoices(page)}
+                          className="text-xs text-red-400 hover:text-red-300 hover:underline disabled:opacity-50"
+                        />
                       </div>
                     </td>
                   </tr>

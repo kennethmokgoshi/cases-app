@@ -138,6 +138,13 @@ model Client {
   alternativeEmail  String?
   alternativePhone  String?
   alternativePhone2 String?
+  // Banking details for debit order collection
+  bankName          String?
+  accountHolderName String?
+  accountNumber     String?
+  accountType       String?
+  branchCode        String?
+  debitOrderDay     Int?
   cases             Case[]            @relation("PrimaryClient")
   jointCases        Case[]            @relation("JointClient")
   consumerAccount   ConsumerAccount?
@@ -147,6 +154,7 @@ model Client {
   payments          Payment[]
   automationRuns    AutomationRun[]
   poaSigningRequests PoaSigningRequest[]
+  debitOrderMandates DebitOrderMandate[]
 }
 
 model AuditLog {
@@ -311,6 +319,7 @@ model Case {
   automationRuns          AutomationRun[]
   notificationQueue       NotificationQueue[]
   poaSigningRequests      PoaSigningRequest[]
+  debitOrderMandates      DebitOrderMandate[]
 
   debtCounsellordId       String?
   debtCounsellor          DebtCounsellor?       @relation(fields: [debtCounsellordId], references: [id])
@@ -462,6 +471,7 @@ model User {
   ForensicAudit             ForensicAudit[]
   inAppNotifications        InAppNotification[]
   invoicesCreated           Invoice[]             @relation("InvoiceCreator")
+  invoicesDecided           Invoice[]             @relation("InvoiceDecider")
   sentNotifications         NotificationLog[]     @relation("SentNotifications")
   recordedPayments          Payment[]             @relation("PaymentRecorder")
   uploadedBatches           PaymentBatch[]
@@ -477,6 +487,51 @@ model User {
   automationRuns            AutomationRun[]
   triggeredAutomations      AutomationRun[]   @relation("AutomationTrigger")
   debtCounsellorsUpdated    DebtCounsellor[]  @relation("DCUpdatedBy")
+  debitOrderMandates        DebitOrderMandate[] @relation("MandateRecorder")
+}
+
+// Debit order mandate lifecycle — capture, send, sign-back, NuPay registration
+model DebitOrderMandate {
+  id                 String    @id @default(cuid())
+  caseId             String?
+  clientId           String
+  // Whether the consumer has requested / consented to a debit order mandate
+  requested          Boolean   @default(false)
+  // Snapshot of banking details at the time the mandate was raised
+  bankName           String?
+  accountHolderName  String?
+  accountNumber      String?
+  accountType        String?
+  branchCode         String?
+  // Mandate terms
+  amount             Decimal?
+  frequency          String    @default("MONTHLY") // MONTHLY | WEEKLY
+  numInstalments     Int?
+  debitOrderDay      Int?
+  firstCollectionDate DateTime?
+  lastCollectionDate  DateTime?
+  // Lifecycle status
+  status             String    @default("DRAFT") // DRAFT | SENT | SIGNED | REGISTERED | ACTIVE | CANCELLED | REJECTED
+  // Send / sign-back tracking
+  sentAt             DateTime?
+  sentTo             String?
+  signedReturnedAt   DateTime?
+  // Document linkage (uploaded to the case document vault)
+  signedDocumentId   String?
+  nupayDocumentId    String?
+  nupayReference     String?
+  nupayRegisteredAt  DateTime?
+  notes              String?
+  recordedById       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  case               Case?     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  client             Client    @relation(fields: [clientId], references: [id])
+  recordedBy         User?     @relation("MandateRecorder", fields: [recordedById], references: [id])
+
+  @@index([caseId])
+  @@index([clientId])
+  @@index([status])
 }
 
 model CaseAssignment {
@@ -680,17 +735,20 @@ model Payment {
   caseId       String?
   batchId      String?
   unmatchedId  String?
+  invoiceId    String?
   recordedById String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   batch        PaymentBatch? @relation(fields: [batchId], references: [id])
   case         Case?         @relation(fields: [caseId], references: [id])
   client       Client?       @relation(fields: [clientId], references: [id])
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
   recordedBy   User?         @relation("PaymentRecorder", fields: [recordedById], references: [id])
 
   @@index([clientId])
   @@index([caseId])
   @@index([batchId])
+  @@index([invoiceId])
   @@index([date])
   @@index([status])
 }
@@ -735,13 +793,25 @@ model Invoice {
   bankAccountId String?
   type          DocumentType  @default(INVOICE)
   publicToken   String?       @unique
+  // Quote lifecycle — set when a client accepts/rejects a quotation
+  acceptedAt    DateTime?
+  rejectedAt    DateTime?
+  decisionNote  String?
+  decidedById   String?
+  // Set when an ACCEPTED quote is converted into an invoice
+  convertedToInvoiceId String? @unique
   bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
   case          Case?         @relation(fields: [caseId], references: [id])
   client        Client?       @relation(fields: [clientId], references: [id])
   createdBy     User?         @relation("InvoiceCreator", fields: [createdById], references: [id])
+  decidedBy     User?         @relation("InvoiceDecider", fields: [decidedById], references: [id])
   project       Project?      @relation(fields: [projectId], references: [id])
+  convertedToInvoice   Invoice? @relation("QuoteConversion", fields: [convertedToInvoiceId], references: [id])
+  convertedFromQuote   Invoice? @relation("QuoteConversion")
+  payments      Payment[]
 
   @@index([status])
+  @@index([type])
   @@index([clientId])
   @@index([caseId])
   @@index([issuedAt])
@@ -1503,6 +1573,10 @@ enum DocumentType {
 enum InvoiceStatus {
   DRAFT
   SENT
+  ACCEPTED
+  REJECTED
+  CONVERTED
+  PARTIALLY_PAID
   PAID
   OVERDUE
   CANCELLED

@@ -1,7 +1,92 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-10 (Finance case detail page rebuilt as a financial pane)
+> Last updated: 2026-06-11 (Sortable headers: dashboard Recent Cases + All Cases)
+
+---
+
+### Cases App — All Cases Page Wired to Shared Sortable Headers (2026-06-11)
+
+**Requirement:** Same click-to-sort headers as the dashboard Recent Cases table (entry below) on the All Cases page.
+
+**Pre-existing state:** `apps/cases/app/(authenticated)/cases/page.tsx` already had partial header sorting, but with real defects: clicking **Project** silently sorted by `updatedAt` (no comparator branch existed), **Type** compared raw `services` JSON strings rather than display labels, header keys were typed `any`, and there was no asc → desc → default cycle or clear indicator language.
+
+**What was done:**
+- [x] Extended `apps/cases/lib/case-table-sort.ts` with the two extra columns this table has: `updatedBy` (last-updated-by full name) and `nextUpdate` (chronological); null users/dates always sort last in either direction (generalised the empty-last rule to null values)
+- [x] Replaced the page's local `sortBy`/`sortDirection` state and inline comparator with the shared `sortCases`/`nextSortState`; Project and Type now sort correctly; headers use the same ▲/▼/⇅ buttons, cyan active highlight, `aria-sort`, and unsorted → asc → desc → unsorted cycle (unsorted = API's recent-first order, matching the previous default); removed the `any`-typed header map
+- [x] Tests: `case-table-sort.test.ts` extended to 20 (updatedBy ordering with missing users, nextUpdate chronology with null-last both directions). All pass; `tsc --noEmit` exit 0
+
+---
+
+### Cases App — Dashboard "Recent Cases" Sortable Column Headers (2026-06-11)
+
+**Requirement (corrected mid-task):** All headers on the dashboard Recent Cases table must sort lowest→highest / highest→lowest on click. (First iteration built per-column filter inputs; user clarified they wanted sorting, so the filter row was removed and replaced.)
+
+**What was done:**
+- [x] New pure, testable lib `apps/cases/lib/case-table-sort.ts` — `sortCases()` (text columns via natural `localeCompare`, Created/Last Updated chronologically by timestamp; empty project/type values always sort last in either direction; non-mutating), `nextSortState()` click cycle (unsorted → asc → desc → unsorted; new column starts at asc), `searchCases()` for the existing global search, plus the previously inline helpers `parseServices`, `formatServiceLabel`, `getPrimaryProjectLabel`, `formatCaseDate`
+- [x] `apps/cases/components/DashboardCasesTable.tsx` — all 7 headers (File #, Client, Status, Project, Type, Created, Last Updated) are now buttons with ▲/▼/⇅ indicators, active sort highlighted in cyan, `aria-sort` set for accessibility; headers driven from a `COLUMNS` config array. Removed the component's `any` usage (row render was `(c: any)`) — now typed via `SortableCase`
+- [x] Tests: `case-table-sort.test.ts` (18) — service parsing, label fallbacks, search matching incl. null `idNumber`, sort-state cycling, asc/desc per column, date chronology, empty-last semantics, input immutability. All pass; `tsc --noEmit` on the cases app: exit 0, zero errors
+
+**Remaining:** in-browser check not exercised here — port 3000 was already held by the user's running dev server (HMR will pick the change up); logic is fully unit-tested and the app typechecks clean.
+
+---
+
+### Finance App — Role-Gated Quote & Invoice Deletion (2026-06-11)
+
+**Requirement:** Staff must be able to delete **quotes** but not invoices; **admins and executives** can delete **both** quotes and invoices.
+
+**What was done:**
+- [x] Reworked `DELETE /api/finance/invoices/[id]` (quotes and invoices share the `Invoice` model via the `type` field):
+  - **QUOTE** — any authenticated staff member may delete; blocked (409) once converted into an invoice (`convertedToInvoiceId` set)
+  - **INVOICE** — only `isAdmin`/`isExecutive` (else 403); blocked (409) when payments have been recorded against it (avoids orphaning `Payment` rows via the `onDelete: SET NULL` FK — cancel instead)
+  - Replaced the previous role-agnostic "DRAFT-only" rule with these role rules; logs deletions with actor + document type
+- [x] New reusable client component `apps/finance/components/finance/DeleteDocumentButton.tsx` — reads role from `useSession()` (`@zenowethu/ui`) and **renders nothing** when the user can't delete the document (regular staff never see a delete affordance on invoices); confirmation via the `@zenowethu/ui` `confirm` danger modal (no `window.confirm`); error feedback via modal; supports either `onDeleted` callback (lists) or `redirectTo` (detail page)
+- [x] Wired delete into four surfaces: finance **case detail** Invoices & Quotes table (the reported screen), **Quotes** list, **Invoices** list, and the **invoice/quote detail** page header
+- [x] Tests: `app/api/finance/invoices/[id]/route.test.ts` (8) — 401/404, staff deletes quote, converted-quote block, staff forbidden on invoice (403), admin + executive delete invoice, payments-present block. **Finance suite 88/88 pass**; `tsc --noEmit` 0 errors
+
+**Remaining:** in-browser verification of the buttons needs the authenticated finance stack (DB + SSO) running — not exercised here; API logic is fully unit-tested and the live route compiles/responds (401 unauth).
+
+---
+
+### Finance App — Payments Page Silently Hid Load Failures (2026-06-11)
+
+**Reported symptom:** "Payments not recorded" — the Payments page showed `0 total records` / "No payments found" after a payment was recorded.
+
+**Investigation — data side is healthy:** Direct DB/query checks confirmed the payment **was** recorded correctly (PIET CHAUKE, R1,000 EFT, case ZDM-2026-137, recorded 2026-06-11 11:09 SAST, status COMPLETED). `payment.count() = 1`; the exact `GET /api/finance/payments` query returns it with all relations; migrations applied, generated Prisma client current (`invoiceId` present); finance app and DB share the same `DATABASE_URL`; route + `proxy.ts` auth logic correct.
+
+**Root cause — display side:** `apps/finance/app/(authenticated)/payments/page.tsx` only updated state on `res.ok`. Any non-OK response (401 expired session, 5xx, network) left `payments=[]` / `total=0`, rendering the **same** "No payments found" empty state as a genuinely empty list — making a transient/auth/cache error look like data loss.
+
+**Fix:** Added a distinct error state (`loadError`) with a Retry button; the fetch now reads `cache: 'no-store'` so a stale browser/router cache can't mask freshly recorded payments; 401 vs other errors get tailored, reassuring copy ("recorded payments are safe — this is a display error"). `tsc --noEmit` clean for the page.
+
+**For the user:** a hard refresh of `/payments` now displays the PIET CHAUKE payment; future load failures are visible and retryable instead of silent.
+
+---
+
+### Cases App — "Last Updated By" Column Showed "—" for Automation Updates (2026-06-11)
+
+**Bug:** The Cases list "Last Updated By" column rendered `—` on every row, even after commit 5c5dd7e wired Puppeteer/DHS automation to attribute case updates to the "Kenny Mokgoshi" system user.
+
+**Root cause — read side, not write side:** The automation correctly persists `updatedById` (via `getAutomationUserId()` → `updateCaseStatus`/`setNextUpdate` in `workflow-engine.ts`). But the cases-list query in `apps/cases/app/api/cases/route.ts` (GET) only `include`d `client` and `projects` — it never selected the `updatedBy` relation, so the UI's `c.updatedBy` was always `undefined` → `—` for **all** rows (human and automation alike).
+
+**Fix:** Added `updatedBy: { select: { firstName: true, lastName: true } }` to the list `include`. The frontend type (`page.tsx`) already expected this shape.
+
+**Note:** Cases last touched before the automation-user attribution existed (pre-5c5dd7e) have `updatedById = null` and will still show `—` — expected; they'll populate on the next automation or manual update.
+
+---
+
+### Finance App — Dynamic Debit-Order Mandate Form (2026-06-11)
+
+**What was done:**
+- [x] The debit-order mandate had a complete backend (schema `DebitOrderMandate`, `GET/POST/PATCH /api/finance/cases/[id]/mandate`, lifecycle helpers in `lib/mandate-status.ts`, PDF generator `lib/mandate-pdf.ts`) but **no UI and no calculation logic** — staff would have had to fill everything by hand
+- [x] New pure, testable calc engine `apps/finance/lib/mandate-calc.ts`:
+  - `SA_BANKS` + `lookupBranchCode()` — bank name → SA universal branch code (FNB 250655, Standard 051001, ABSA 632005, Nedbank 198765, Capitec 470010, Investec 580105, Discovery 679000, African 430000, Bidvest 462005, Postbank 460005); alias + loose-contains matching
+  - `calcNumInstalments` (total ÷ monthly, rounded up), `calcTotalFromInstalments` (count × monthly), `calcMonthlyFromTotal`, `calcLastCollectionDate` (first date + count + frequency, clamps short months, supports weekly)
+  - `deriveMandateTerms()` — reconciliation engine: enter any two of {total, monthly, count} and it derives the third without overwriting the field just edited; always recomputes the last collection date
+- [x] New client component `apps/finance/app/(authenticated)/cases/[id]/MandateForm.tsx` — bank dropdown auto-fills branch code (with manual override), live triangle calculations as you type, auto last-date, lifecycle checklist + progress bar + next-action hint (from `mandate-status.ts`), loading/saving/error/success states, no alert()/confirm(). Mounted on the finance case detail page
+- [x] New `GET /api/finance/cases/[id]/mandate/pdf` — renders the authority & mandate PDF via the existing generator (computes contract total from count × instalment)
+- [x] Tests: `mandate-calc.test.ts` (24) — branch lookup, all three calc rules, month-end/weekly date edges, reconciliation. Finance suite **80/80 pass**; `tsc --noEmit` exit 0; lint 0 errors
+
+**Remaining:** browser verification needs the authenticated finance stack (DB + SSO) running against a real case ID — not exercised here; the calculation logic is fully unit-tested.
 
 ---
 

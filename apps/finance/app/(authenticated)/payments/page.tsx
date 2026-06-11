@@ -55,6 +55,7 @@ function PaymentsContent() {
     const [page, setPage] = useState(1);
     const [pages, setPages] = useState(1);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const [search, setSearch] = useState(searchParams.get('search') || '');
     const [method, setMethod] = useState(searchParams.get('method') || '');
@@ -63,6 +64,7 @@ function PaymentsContent() {
 
     const fetchPayments = useCallback(async (pg = 1) => {
         setLoading(true);
+        setLoadError(null);
         try {
             const params = new URLSearchParams();
             params.set('page', String(pg));
@@ -71,16 +73,25 @@ function PaymentsContent() {
             if (from) params.set('from', from);
             if (to) params.set('to', to);
 
-            const res = await fetch(`/api/finance/payments?${params}`);
-            if (res.ok) {
-                const data = await res.json();
-                setPayments(data.payments);
-                setTotal(data.total);
-                setPages(data.pages);
-                setPage(pg);
+            // no-store so a stale browser/router cache can never mask freshly
+            // recorded payments with an outdated empty result
+            const res = await fetch(`/api/finance/payments?${params}`, { cache: 'no-store' });
+            if (!res.ok) {
+                const message = res.status === 401
+                    ? 'Your session has expired. Please sign in again to view payments.'
+                    : `Could not load payments (error ${res.status}). Recorded payments are safe — this is a display error.`;
+                logger.error('[Payments] load failed', res.status);
+                setLoadError(message);
+                return;
             }
+            const data = await res.json();
+            setPayments(data.payments);
+            setTotal(data.total);
+            setPages(data.pages);
+            setPage(pg);
         } catch (err) {
             logger.error(err);
+            setLoadError('Could not reach the server. Recorded payments are safe — check your connection and retry.');
         } finally {
             setLoading(false);
         }
@@ -189,6 +200,21 @@ function PaymentsContent() {
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400" />
+                    </div>
+                ) : loadError ? (
+                    <div className="text-center py-16 px-6">
+                        <svg className="w-10 h-10 mx-auto mb-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <p className="text-amber-400 text-lg mb-2">Couldn’t load payments</p>
+                        <p className="text-gray-400 text-sm mb-4 max-w-md mx-auto">{loadError}</p>
+                        <button
+                            onClick={() => fetchPayments(page)}
+                            className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-white rounded-lg text-sm font-medium transition-colors"
+                        >
+                            Retry
+                        </button>
                     </div>
                 ) : payments.length === 0 ? (
                     <div className="text-center py-16 text-gray-500">

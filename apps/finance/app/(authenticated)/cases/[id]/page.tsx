@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getStatusByCode } from '@zenowethu/shared-lib';
 import { formatRand, type CaseFinancialSummary } from '../../../../lib/case-financials';
+import MandateForm from './MandateForm';
+import DeleteDocumentButton from '@/components/finance/DeleteDocumentButton';
 
 // ─── Types (shape of /api/finance/cases/[id]/summary) ────────────────────────
 
@@ -383,6 +385,7 @@ export default function FinanceCaseDetailPage() {
                                             <th className="px-5 py-2 font-medium">Status</th>
                                             <th className="px-5 py-2 font-medium">Issued</th>
                                             <th className="px-5 py-2 font-medium">Due</th>
+                                            <th className="px-5 py-2 font-medium text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -402,6 +405,14 @@ export default function FinanceCaseDetailPage() {
                                                 </td>
                                                 <td className="px-5 py-2.5 whitespace-nowrap">{formatDate(inv.issuedAt)}</td>
                                                 <td className="px-5 py-2.5 whitespace-nowrap">{formatDate(inv.dueAt)}</td>
+                                                <td className="px-5 py-2.5 text-right">
+                                                    <DeleteDocumentButton
+                                                        documentId={inv.id}
+                                                        documentNumber={inv.invoiceNumber}
+                                                        type={inv.type === 'QUOTE' ? 'QUOTE' : 'INVOICE'}
+                                                        onDeleted={load}
+                                                    />
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -410,6 +421,11 @@ export default function FinanceCaseDetailPage() {
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Debit order mandate */}
+            <div className="mt-6">
+                <MandateForm caseId={caseInfo.id} />
             </div>
         </div>
     );

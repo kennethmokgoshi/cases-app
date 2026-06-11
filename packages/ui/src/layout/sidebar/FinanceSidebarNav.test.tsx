@@ -18,7 +18,7 @@ describe('FinanceSidebarNav', () => {
         const html = renderToStaticMarkup(
             React.createElement(FinanceSidebarNav, { session: { user: { isAdmin: true } } })
         );
-        for (const label of ['Record Payment', 'Payments', 'Import Batch', 'Reconciliation', 'Invoices', 'Revenue', 'Financial Reports', 'Banking Settings']) {
+        for (const label of ['Record Payment', 'Payments', 'Import Batch', 'Reconciliation', 'Quotes', 'Invoices', 'Revenue', 'Financial Reports', 'Banking Settings']) {
             expect(html).toContain(label);
         }
         expect(html).toContain('Admin');

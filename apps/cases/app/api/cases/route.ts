@@ -193,7 +193,11 @@ export async function GET(request: Request) {
         const [cases, totalCount] = await Promise.all([
             prisma.case.findMany({
                 where,
-                include: { client: true, projects: { include: { project: true } } },
+                include: {
+                    client: true,
+                    projects: { include: { project: true } },
+                    updatedBy: { select: { firstName: true, lastName: true } },
+                },
                 take: isNaN(take) ? 10000 : take,
                 skip: isNaN(skip) ? 0 : skip,
                 orderBy: { createdAt: 'desc' }
