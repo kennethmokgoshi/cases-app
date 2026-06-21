@@ -1,7 +1,25 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-21 (DHS — remove hardcoded credential fallback)
+> Last updated: 2026-06-21 (DHS Import — fix fileNumber collision + orphan clients)
+
+---
+
+### Cases App — DHS Import: fix fileNumber-past-999 collision + orphan clients (2026-06-21)
+
+**Symptom:** A 3,536-record import reported **783 created / 57 updated / 2,687 errors**, every error `Unique constraint failed on the fields: (fileNumber)`. The importer showed "3,536 Matched in DB / 0 Not in DB" yet "All Cases" listed only ~960.
+
+**Root cause (two bugs in `apply/route.ts`, both pre-existing):**
+1. `generateFileNumber()` found the max via `orderBy: { fileNumber: 'desc' }` — a **text sort**. Once `ZDM-2026-1000` existed, `"999"` outranked `"1000"` lexicographically, so the generator kept returning 1000 → unique-constraint collision on every create past 999. (Live DB confirmed: numeric max 1000, but the text-sort query returned 999.)
+2. The create path made the **Client first, then the Case, with no transaction** — so a failed case left an orphan client. Result: 2,726 clients with no case. Because the importer matches on `Client.idNumber`, all 3,536 showed as "Matched" even though only ~995 cases existed.
+
+**What was done:**
+- [x] New `apps/cases/lib/file-number.ts` — `maxZdmSequence()` (numeric, not lexicographic) + `buildZdmFileNumber()`. Tests in `file-number.test.ts` incl. the 999→1000 regression (9 cases).
+- [x] `apply/route.ts`: replaced `generateFileNumber` with a numeric `currentFileSequence()` seeded once per request and incremented in memory (re-synced from DB on P2002). Create now runs Client+Case in a single `prisma.$transaction` (no more orphans). An `update` with no `caseId` falls back to `create`.
+- [x] `dhs-import/page.tsx`: default action is now `create` when a client exists **but has no case** (was defaulting orphans to a no-op `update`); the "Update Status" option is hidden unless a case exists.
+- [x] Verified: `pnpm --filter cases test` **366/366 pass**, `typecheck` exit 0. Live dry-run: next file number is now `ZDM-2026-1001` (no collision).
+
+**Remediation (user action — preserves DHS statuses):** the 2,726 orphan clients' DHS statuses (F2/G/H/…) exist only in the uploaded `.xlsx`, not on the client rows, so a blind DB script can't rebuild them correctly. **Re-upload the same DHS report and Apply**: with the fixes, the 2,726 now default to "Create New File", reuse the existing client records (no duplicate clients), and create cases from `ZDM-2026-1001` onward with correct statuses. Orphan clients are safe to leave in place — they are reused, not duplicated.
 
 ---
 

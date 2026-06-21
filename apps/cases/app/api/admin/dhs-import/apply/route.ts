@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { maxZdmSequence, buildZdmFileNumber } from '../../../../../lib/file-number';
 
 const logger = createLogger('api/admin/dhs-import/apply');
 export const runtime = 'nodejs';
@@ -46,20 +47,13 @@ type ApplyAction = {
     clientId?: string;
 };
 
-async function generateFileNumber(): Promise<string> {
-    const year = new Date().getFullYear();
-    const lastCase = await prisma.case.findFirst({
+/** Reads every ZDM-{year} file number and returns the highest sequence (numeric). */
+async function currentFileSequence(year: number): Promise<number> {
+    const cases = await prisma.case.findMany({
         where: { fileNumber: { startsWith: `ZDM-${year}-` } },
-        orderBy: { fileNumber: 'desc' },
         select: { fileNumber: true }
     });
-    let nextNumber = 1;
-    if (lastCase) {
-        const parts = lastCase.fileNumber.split('-');
-        const lastNum = parseInt(parts[2] || '0', 10);
-        nextNumber = (isNaN(lastNum) ? 0 : lastNum) + 1;
-    }
-    return `ZDM-${year}-${String(nextNumber).padStart(3, '0')}`;
+    return maxZdmSequence(cases.map((c) => c.fileNumber), year);
 }
 
 async function getOrCreateDhsProject(): Promise<{ id: string; name: string }> {
@@ -131,11 +125,25 @@ export async function POST(request: Request) {
         const dhsProjectId = dhsProject?.id ?? null;
         const dhsProjectName = dhsProject?.name ?? null;
 
+        // Seed the file-number sequence once (numeric max), then increment in
+        // memory across creates. Re-synced from the DB only on a collision.
+        // Seeded whenever a create is possible — including "update" actions that
+        // may fall back to create when their case is missing.
+        const fileYear = now.getFullYear();
+        const mayCreate = hasCreates || actions.some((a) => a.action === 'update');
+        let fileSeq = mayCreate ? await currentFileSequence(fileYear) : 0;
+
         for (const item of actions) {
             try {
                 if (item.action === 'skip') {
                     results.skipped++;
                     continue;
+                }
+
+                // An "update" with no case to update (e.g. a client left behind by a
+                // previously-failed import) is really a create — build the missing case.
+                if (item.action === 'update' && !item.caseId) {
+                    item.action = 'create';
                 }
 
                 const services = STATUS_SERVICES[item.status_code] ?? ['debt_review_application'];
@@ -184,67 +192,71 @@ export async function POST(request: Request) {
                     const firstName = item.first_name?.trim() || 'Unknown';
                     const lastName = item.surname?.trim() || 'Unknown';
 
-                    let client = rsaId
-                        ? await prisma.client.findUnique({ where: { idNumber: rsaId } })
-                        : null;
-
-                    if (!client && rsaId) {
-                        client = await prisma.client.create({
-                            data: { firstName, lastName, idNumber: rsaId }
-                        });
-                        logger.info(`👤 Created client ${client.id} — ${firstName} ${lastName}`);
-                    }
-
-                    if (!client) {
-                        results.errors.push(`Could not create client for RSA ID "${rsaId}" — ID missing or invalid`);
+                    if (!rsaId) {
+                        results.errors.push(`Could not create file for "${firstName} ${lastName}" — RSA ID missing or invalid`);
                         continue;
                     }
 
                     const isAcceptedViaPortalCreate = isPortalOwner && PORTAL_OWNER_ACCEPTED_STATUSES.has(item.status_code);
 
                     let created = false;
-                    for (let attempt = 0; attempt < 3; attempt++) {
-                        const fileNumber = await generateFileNumber();
+                    let lastErr: any = null;
+                    for (let attempt = 0; attempt < 4 && !created; attempt++) {
+                        const fileNumber = buildZdmFileNumber(fileYear, ++fileSeq);
                         try {
-                            await prisma.case.create({
-                                data: {
-                                    fileNumber,
-                                    clientId: client.id,
-                                    status: isAcceptedViaPortalCreate ? 'ACCEPTED_VIA_DHS' : 'NEW_LEAD',
-                                    // DHS data
-                                    dhsStatus: item.status_code,
-                                    dhsStatusDate: now,
-                                    ncrSysRef: item.ncr_ref || null,
-                                    // Portal owner accepted statuses — mark as accepted via DHS
-                                    ...(isAcceptedViaPortalCreate ? {
-                                        requestedDhsStatus: item.status_code,
-                                        consumerDhsStatus: item.status_code,
-                                    } : {}),
-                                    // Services derived from status
-                                    services: JSON.stringify(services),
-                                    // DC on record
-                                    ncrdcNo: dc.ncrdcNo,
-                                    debtCounsellorName: dc.debtCounsellorName,
-                                    dcTradingName: dc.dcTradingName,
-                                    createdById: user.id ?? null,
-                                    // Assign to DHS import project
-                                    projects: dhsProjectId ? {
-                                        create: [{ projectId: dhsProjectId }]
-                                    } : undefined,
+                            // Client + Case in ONE transaction so a failed case never
+                            // leaves an orphan client behind (the previous code created
+                            // the client first, outside any transaction).
+                            await prisma.$transaction(async (tx) => {
+                                let client = await tx.client.findUnique({ where: { idNumber: rsaId } });
+                                if (!client) {
+                                    client = await tx.client.create({ data: { firstName, lastName, idNumber: rsaId } });
                                 }
+                                await tx.case.create({
+                                    data: {
+                                        fileNumber,
+                                        clientId: client.id,
+                                        status: isAcceptedViaPortalCreate ? 'ACCEPTED_VIA_DHS' : 'NEW_LEAD',
+                                        // DHS data
+                                        dhsStatus: item.status_code,
+                                        dhsStatusDate: now,
+                                        ncrSysRef: item.ncr_ref || null,
+                                        // Portal owner accepted statuses — mark as accepted via DHS
+                                        ...(isAcceptedViaPortalCreate ? {
+                                            requestedDhsStatus: item.status_code,
+                                            consumerDhsStatus: item.status_code,
+                                        } : {}),
+                                        // Services derived from status
+                                        services: JSON.stringify(services),
+                                        // DC on record
+                                        ncrdcNo: dc.ncrdcNo,
+                                        debtCounsellorName: dc.debtCounsellorName,
+                                        dcTradingName: dc.dcTradingName,
+                                        createdById: user.id ?? null,
+                                        // Assign to DHS import project
+                                        projects: dhsProjectId ? {
+                                            create: [{ projectId: dhsProjectId }]
+                                        } : undefined,
+                                    }
+                                });
                             });
                             logger.info(`📁 Created case ${fileNumber} — ${firstName} ${lastName}, DHS ${item.status_code}${isAcceptedViaPortalCreate ? ' (accepted via DHS)' : ''}, services: ${services.join(', ')}`);
                             results.created++;
                             created = true;
-                            break;
                         } catch (err: any) {
-                            if (err?.code === 'P2002' && attempt < 2) continue;
+                            lastErr = err;
+                            // fileNumber collided (e.g. a concurrent create) — re-sync the
+                            // sequence from the DB and retry with the next number.
+                            if (err?.code === 'P2002') {
+                                fileSeq = await currentFileSequence(fileYear);
+                                continue;
+                            }
                             throw err;
                         }
                     }
 
                     if (!created) {
-                        results.errors.push(`Failed to create case for ${firstName} ${lastName} after retries`);
+                        results.errors.push(`Failed to create case for ${firstName} ${lastName}: ${lastErr?.message ?? 'unknown error'}`);
                     }
                 }
             } catch (err: any) {

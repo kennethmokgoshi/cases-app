@@ -206,10 +206,13 @@ export default function DhsImportPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Import failed');
 
-            // Set default selectedAction based on db match
+            // Set default selectedAction based on db match.
+            // "Update" only makes sense when an actual CASE exists. A client that
+            // exists with no case (e.g. left behind by a failed earlier import)
+            // must default to "create" so its missing case gets built.
             const withAction: DhsRecord[] = (data.records ?? []).map((r: any) => ({
                 ...r,
-                selectedAction: r.dbMatch.found ? 'update' : 'create',
+                selectedAction: (r.dbMatch.found && r.dbMatch.caseId) ? 'update' : 'create',
             }));
             setRecords(withAction);
             setStats(data.stats);
@@ -837,7 +840,7 @@ export default function DhsImportPage() {
                                                     onChange={(e) => setRecordAction(rec.rsa_id, e.target.value as any)}
                                                     className="px-2 py-1 bg-black/30 border border-white/10 rounded text-xs text-white focus:outline-none focus:border-zeno-orange [color-scheme:dark] cursor-pointer"
                                                 >
-                                                    {rec.dbMatch.found && <option value="update">Update Status</option>}
+                                                    {rec.dbMatch.found && rec.dbMatch.caseId && <option value="update">Update Status</option>}
                                                     <option value="create">Create New File</option>
                                                     <option value="skip">Skip</option>
                                                 </select>
