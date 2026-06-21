@@ -92,6 +92,27 @@ function StatusBadge({ code }: { code: string | null }) {
     );
 }
 
+/** Formats a duration in seconds as a compact "Xm Ys" / "Xs" label. */
+function formatDuration(seconds: number): string {
+    if (seconds < 1) return '<1s';
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+// How many records to send per Apply request. Small enough to keep each request
+// fast (so progress updates feel live) and resilient to a single batch failing.
+const APPLY_BATCH_SIZE = 50;
+
+type ApplyProgress = {
+    done: number;
+    total: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    etaSeconds: number | null;
+};
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DhsImportPage() {
@@ -147,6 +168,7 @@ export default function DhsImportPage() {
     // Apply state
     const [applying, setApplying] = useState(false);
     const [applyResult, setApplyResult] = useState<{ updated: number; created: number; skipped: number; errors: string[] } | null>(null);
+    const [applyProgress, setApplyProgress] = useState<ApplyProgress | null>(null);
     const [dhsProjectName, setDhsProjectName] = useState<string | null>(null);
     const [showResultModal, setShowResultModal] = useState(false);
 
@@ -239,6 +261,7 @@ export default function DhsImportPage() {
 
         setApplying(true);
         setApplyResult(null);
+        setError('');
 
         const actions = records
             .filter((r) => selected.has(r.rsa_id))
@@ -255,22 +278,51 @@ export default function DhsImportPage() {
                 clientId: r.dbMatch.clientId ?? undefined,
             }));
 
+        // Process in sequential batches so we can report live progress + ETA.
+        const total = actions.length;
+        const totals = { updated: 0, created: 0, skipped: 0, errors: [] as string[] };
+        let projectName: string | null = null;
+        const startedAt = Date.now();
+
+        setApplyProgress({ done: 0, total, created: 0, updated: 0, skipped: 0, etaSeconds: null });
+
         try {
-            const res = await fetch('/api/admin/dhs-import/apply', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ actions, dc: isPortalOwner ? portalDc : dc, isPortalOwner }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Apply failed');
-            setApplyResult(data.results);
-            setDhsProjectName(data.dhsProjectName ?? null);
+            for (let i = 0; i < total; i += APPLY_BATCH_SIZE) {
+                const batch = actions.slice(i, i + APPLY_BATCH_SIZE);
+                try {
+                    const res = await fetch('/api/admin/dhs-import/apply', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ actions: batch, dc: isPortalOwner ? portalDc : dc, isPortalOwner }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Apply failed');
+                    totals.updated += data.results?.updated ?? 0;
+                    totals.created += data.results?.created ?? 0;
+                    totals.skipped += data.results?.skipped ?? 0;
+                    if (data.results?.errors?.length) totals.errors.push(...data.results.errors);
+                    if (data.dhsProjectName) projectName = data.dhsProjectName;
+                } catch (batchErr: any) {
+                    // Record the failure but keep going so one bad batch doesn't abort the run.
+                    totals.errors.push(`Batch ${Math.floor(i / APPLY_BATCH_SIZE) + 1}: ${batchErr.message ?? 'request failed'}`);
+                }
+
+                const done = Math.min(i + APPLY_BATCH_SIZE, total);
+                const elapsed = (Date.now() - startedAt) / 1000;
+                const remaining = total - done;
+                const etaSeconds = done > 0 && elapsed > 0 ? Math.round((elapsed / done) * remaining) : null;
+                setApplyProgress({ done, total, created: totals.created, updated: totals.updated, skipped: totals.skipped, etaSeconds });
+            }
+
+            setApplyResult(totals);
+            setDhsProjectName(projectName);
             setShowResultModal(true);
             setSelected(new Set());
         } catch (err: any) {
             setError(err.message);
         } finally {
             setApplying(false);
+            setApplyProgress(null);
         }
     };
 
@@ -644,6 +696,55 @@ export default function DhsImportPage() {
                             </div>
                         </div>
                     )}
+
+                    {/* Apply progress bar — shown while batches are being processed */}
+                    {applying && applyProgress && (() => {
+                        const { done, total, created, updated, skipped, etaSeconds } = applyProgress;
+                        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                        const remaining = total - done;
+                        return (
+                            <div className="px-4 py-4 bg-zeno-blue/40 border-b border-zeno-orange/20">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-zeno-orange border-t-transparent rounded-full animate-spin" />
+                                        <span className="text-sm font-medium text-white">Applying actions to case files…</span>
+                                    </div>
+                                    <span className="text-sm font-bold text-zeno-orange tabular-nums">{pct}%</span>
+                                </div>
+
+                                {/* Bar */}
+                                <div
+                                    className="h-2.5 w-full bg-black/40 rounded-full overflow-hidden"
+                                    role="progressbar"
+                                    aria-valuenow={pct}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                >
+                                    <div
+                                        className="h-full bg-gradient-to-r from-zeno-orange to-amber-400 transition-all duration-300 ease-out"
+                                        style={{ width: `${pct}%` }}
+                                    />
+                                </div>
+
+                                {/* Counts + ETA */}
+                                <div className="flex items-center justify-between mt-2 text-xs text-gray-400 flex-wrap gap-y-1">
+                                    <span className="tabular-nums">
+                                        <span className="text-white font-medium">{done.toLocaleString()}</span> of {total.toLocaleString()} done
+                                        <span className="text-gray-600"> · </span>
+                                        {remaining.toLocaleString()} remaining
+                                    </span>
+                                    <span className="flex items-center gap-3 tabular-nums">
+                                        <span className="text-green-300">Created {created.toLocaleString()}</span>
+                                        <span className="text-amber-300">Updated {updated.toLocaleString()}</span>
+                                        {skipped > 0 && <span className="text-gray-500">Skipped {skipped.toLocaleString()}</span>}
+                                        <span className="text-gray-300">
+                                            {etaSeconds == null ? 'Estimating…' : `~${formatDuration(etaSeconds)} left`}
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Table */}
                     <div className="overflow-x-auto">

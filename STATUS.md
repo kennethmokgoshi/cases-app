@@ -1,7 +1,22 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-21 (DHS Summary Report Import — remove OpenAI dependency for XLS)
+> Last updated: 2026-06-21 (DHS Import — batched Apply with live progress bar)
+
+---
+
+### Cases App — DHS Import: batched Apply with live progress bar + ETA (2026-06-21)
+
+**Requirement:** Applying ~3,500 selected records showed only a dead "Applying…" spinner. User asked for a progress bar with percentage, work done vs remaining, and estimated time.
+
+**What was done (UI only — `apps/cases/app/(authenticated)/admin/dhs-import/page.tsx`):**
+- [x] `handleApply` now POSTs the selected actions to `/api/admin/dhs-import/apply` in **sequential batches of 50** instead of one giant request, accumulating `created/updated/skipped/errors` across batches. A failed batch is recorded and the run continues.
+- [x] Added a live progress bar between the bulk-action bar and the table: **percentage**, gradient fill, `done / total / remaining` counts, running **Created/Updated/Skipped** tallies, and a rolling **ETA** (`elapsed / done × remaining`).
+- [x] No server change needed — the apply route is stateless per call (`getOrCreateDhsProject` is idempotent, `generateFileNumber` re-reads max each create with P2002 retry), so batching is safe.
+
+**Verification:** `pnpm --filter cases typecheck` → exit 0. Not exercised in a live browser because triggering the bar requires real DB writes (case creation) against production data; logic verified by types + review.
+
+**Remaining:** Progress is client-driven (batch granularity = 50). If a future need arises for per-record streaming, switch the apply route to SSE.
 
 ---
 
