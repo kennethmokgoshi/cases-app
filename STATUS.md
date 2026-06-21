@@ -1,7 +1,22 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-21 (DHS Import — batched Apply with live progress bar)
+> Last updated: 2026-06-21 (DHS — remove hardcoded credential fallback)
+
+---
+
+### Shared-lib — DHS credentials: removed hardcoded plaintext fallback (2026-06-21)
+
+**Requirement:** A hardcoded DHS portal password was committed in `dhs-config.ts`. The DHS password is rotated **monthly and never reused**, so the baked-in default was both a credential leak in source control and always stale.
+
+**What was done (`packages/shared-lib/src/integrations/dhs-config.ts`):**
+- [x] Removed the hardcoded `username`/`password` defaults. Credentials now come from the DB (`SystemSettings` category `dhs`) first, then `DHS_USERNAME`/`DHS_PASSWORD` env vars.
+- [x] When neither source provides credentials, the function now **throws a clear, actionable error** instead of attempting a doomed login. All call sites (`dhs/search.ts`, `status.ts`, `transfer.ts`) already wrap it in try/catch and surface the failure.
+- [x] Switched the prisma access from runtime `require('@zenowethu/database')` to a top-level `import` (matches `dccp-config.ts`). This also stopped tests from accidentally hitting the **live production DB**.
+- [x] Tests: new `packages/shared-lib/src/integrations/dhs-config.test.ts` (5 cases: DB source, env fallback, throw-when-missing, throw-on-DB-error, exact-value/no-fallback). `@zenowethu/shared-lib` suite **344/344 pass**; `tsc --noEmit` exit 0.
+- [x] `DHS_USERNAME`/`DHS_PASSWORD` already documented in `apps/cases/.env.example`.
+
+**⚠️ Manual action still required by user:** the old password lives in git history. **Rotate the DHS portal password** (the monthly rotation effectively does this) and ensure the current value is stored in `SystemSettings` / env — the code no longer carries any fallback.
 
 ---
 
