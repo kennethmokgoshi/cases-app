@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, createLogger } from '@zenowethu/shared-lib';
-import { getAiClientForTask } from '@zenowethu/shared-lib/src/ai/provider-client';
+import { getAiClientChainForTask, describeAiError } from '@zenowethu/shared-lib/src/ai/provider-client';
+import type OpenAI from 'openai';
 import { z } from 'zod';
 
 const logger = createLogger('api/cases/[id]/ai-chat');
@@ -201,20 +202,39 @@ export async function POST(
         description: caseRecord.description,
     };
 
+    const chatMessages = [
+        { role: 'system' as const, content: SYSTEM_PROMPT(ctx) },
+        ...parsed.data.messages,
+    ];
+
+    // Try each configured provider in order — the request only fails if every
+    // provider fails, and the client gets the real reason (quota, auth, etc.).
+    let stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> | null = null;
+    let lastError: unknown = null;
+
+    const chain = await getAiClientChainForTask('case_strategy');
+    for (const { client, model, providerName } of chain) {
+        try {
+            stream = await client.chat.completions.create({
+                model,
+                stream: true,
+                temperature: 0.5,
+                max_tokens: 2048,
+                messages: chatMessages,
+            });
+            break;
+        } catch (err) {
+            lastError = err;
+            logger.warn('AI provider failed, trying next', { caseId: id, providerName, model, reason: describeAiError(err) });
+        }
+    }
+
+    if (!stream) {
+        logger.error('AI chat error — all providers failed', { caseId: id, err: lastError });
+        return NextResponse.json({ error: describeAiError(lastError) }, { status: 502 });
+    }
+
     try {
-        const { client, model } = await getAiClientForTask('case_strategy');
-
-        const stream = await client.chat.completions.create({
-            model,
-            stream: true,
-            temperature: 0.5,
-            max_tokens: 2048,
-            messages: [
-                { role: 'system', content: SYSTEM_PROMPT(ctx) },
-                ...parsed.data.messages,
-            ],
-        });
-
         const encoder = new TextEncoder();
         const readable = new ReadableStream({
             async start(controller) {

@@ -9,6 +9,78 @@ export interface DhsRawRow {
 }
 
 /**
+ * A fully structured DHS record — the same shape the AI extraction returns,
+ * so the import route can use either path interchangeably.
+ */
+export interface DhsExtractedRecord {
+    ncr_ref: string;
+    surname: string;
+    first_name: string;
+    additional_names: string;
+    rsa_id: string;
+    status_code: string;
+    status_label: string;
+    action: 'create' | 'update';
+    flag: string | null;
+}
+
+/** DHS case status code → human-readable label (mirrors PROMPTS.DHS_SUMMARY_REPORT). */
+const STATUS_LABELS: Record<string, string> = {
+    F1: 'Awaiting Proposal Acceptance',
+    F2: 'Under Debt Review (Active)',
+    G: 'Court Order Granted',
+    G1: 'Conditional Court Order',
+    H: 'Clearance Certificate Issued',
+    B: 'Rejected / Withdrawn',
+    C: 'Transferred to Another DC',
+    D3: 'Debt Review Removed (Paid Up)',
+    D4: 'Debt Review Removed (Other)',
+    A: 'Application Received',
+    A1: 'Awaiting Credit Provider Response',
+};
+
+/**
+ * Converts deterministically-parsed rows into the structured record shape
+ * WITHOUT calling the AI. Applies the same rules the DHS_SUMMARY_REPORT prompt
+ * describes: split first/additional names, map status labels, and flag missing,
+ * malformed, or duplicate RSA IDs.
+ *
+ * This keeps consumer PII in-house and avoids an OpenAI dependency for the XLS
+ * path, where every field is already available from the sheet.
+ */
+export function dhsRowsToRecords(rows: DhsRawRow[]): DhsExtractedRecord[] {
+    // Count RSA IDs so duplicates can be flagged
+    const idCounts = new Map<string, number>();
+    for (const r of rows) {
+        const id = r.rsaId.trim();
+        if (id) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+    }
+
+    return rows.map((r) => {
+        const nameParts = r.firstNames.trim().split(/\s+/).filter(Boolean);
+        const rsaId = r.rsaId.trim();
+
+        let flag: string | null = null;
+        if (!rsaId) flag = 'Missing RSA ID';
+        else if (!/^\d{13}$/.test(rsaId)) flag = 'Malformed RSA ID';
+        else if ((idCounts.get(rsaId) ?? 0) > 1) flag = 'Duplicate ID - verify';
+
+        return {
+            ncr_ref: r.ncrRef,
+            surname: r.surname,
+            first_name: nameParts[0] ?? '',
+            additional_names: nameParts.slice(1).join(' '),
+            rsa_id: rsaId,
+            status_code: r.statusCode,
+            status_label: STATUS_LABELS[r.statusCode] ?? r.statusCode,
+            // The DB-comparison step refines this; default to 'create' until matched.
+            action: 'create',
+            flag,
+        };
+    });
+}
+
+/**
  * Parses a DHS Debt Counsellor Summary Report XLS/XLSX buffer.
  * Extracts rows from the fixed column positions used by the NCR DHS export.
  *

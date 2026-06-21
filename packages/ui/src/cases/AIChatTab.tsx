@@ -188,7 +188,7 @@ export function AIChatTab({ caseId }: { caseId: string }) {
             </div>
 
             {/* Messages area */}
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1 mb-4">
+            <div className="flex-1 overflow-y-auto pr-1 mb-4 flex flex-col">
                 {isEmpty ? (
                     <div className="flex flex-col items-center justify-center h-full gap-6 text-center">
                         <div>
@@ -213,10 +213,10 @@ export function AIChatTab({ caseId }: { caseId: string }) {
                         </p>
                     </div>
                 ) : (
-                    <>
+                    <div className="mt-auto space-y-4">
                         {messages.map(m => <MessageBubble key={m.id} message={m} />)}
                         <div ref={bottomRef} />
-                    </>
+                    </div>
                 )}
             </div>
 

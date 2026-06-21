@@ -4,7 +4,7 @@ import { analyzeDocument, PROMPTS } from '@zenowethu/shared-lib/src/openai';
 import { getOpenAI } from '@zenowethu/shared-lib/src/openai/client';
 import { prisma } from '@zenowethu/database';
 import busboy from 'busboy';
-import { parseDhsXls, dhsRowsToCsv, dumpXlsAsText } from '../../../../lib/dhs-xls-parser';
+import { parseDhsXls, dhsRowsToRecords, dumpXlsAsText } from '../../../../lib/dhs-xls-parser';
 
 const logger = createLogger('api/admin/dhs-import');
 export const maxDuration = 300;
@@ -61,39 +61,42 @@ export async function POST(request: Request) {
             const fixedRows = parseDhsXls(file.buffer);
             logger.info(`   Fixed-column parse: ${fixedRows.length} rows`);
 
-            let sheetText: string;
             if (fixedRows.length > 0) {
-                sheetText = dhsRowsToCsv(fixedRows);
-                logger.info('   Using pre-parsed CSV (fixed columns matched)');
+                // Deterministic path — build records locally. No AI call, so consumer
+                // PII stays in-house and there's no OpenAI quota/billing dependency.
+                records = dhsRowsToRecords(fixedRows);
+                logger.info(`   ✓ Parsed ${records.length} records locally (no AI needed)`);
             } else {
-                sheetText = dumpXlsAsText(file.buffer);
-                logger.info(`   Falling back to raw sheet dump (${sheetText.split('\n').length} lines)`);
+                // Fallback: fixed columns didn't match (unexpected export format) —
+                // let the AI infer the layout from a raw sheet dump.
+                const sheetText = dumpXlsAsText(file.buffer);
+                logger.info(`   Falling back to AI extraction from raw sheet dump (${sheetText.split('\n').length} lines)`);
+
+                const nonEmptyLines = sheetText.split('\n').filter((l) => l.trim()).length;
+                if (nonEmptyLines <= 1) {
+                    return NextResponse.json(
+                        { error: 'The uploaded XLS file appears to be empty or could not be read.' },
+                        { status: 422 }
+                    );
+                }
+
+                const response = await getOpenAI().chat.completions.create({
+                    model: 'gpt-4o',
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: PROMPTS.DHS_SUMMARY_REPORT },
+                            { type: 'text', text: `[SHEET DATA]\n\n${sheetText}` }
+                        ]
+                    }],
+                    max_tokens: 8000,
+                    temperature: 0,
+                    response_format: { type: 'json_object' }
+                });
+
+                const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
+                records = parsed.records ?? [];
             }
-
-            const nonEmptyLines = sheetText.split('\n').filter((l) => l.trim()).length;
-            if (nonEmptyLines <= 1) {
-                return NextResponse.json(
-                    { error: 'The uploaded XLS file appears to be empty or could not be read.' },
-                    { status: 422 }
-                );
-            }
-
-            const response = await getOpenAI().chat.completions.create({
-                model: 'gpt-4o',
-                messages: [{
-                    role: 'user',
-                    content: [
-                        { type: 'text', text: PROMPTS.DHS_SUMMARY_REPORT },
-                        { type: 'text', text: `[SHEET DATA]\n\n${sheetText}` }
-                    ]
-                }],
-                max_tokens: 8000,
-                temperature: 0,
-                response_format: { type: 'json_object' }
-            });
-
-            const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
-            records = parsed.records ?? [];
         } else {
             logger.info('📄 Processing PDF via AI vision...');
             const result = await analyzeDocument(file.buffer.toString('base64'), 'DHS_SUMMARY_REPORT' as any, file.mimeType);

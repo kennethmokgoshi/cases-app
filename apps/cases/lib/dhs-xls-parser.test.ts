@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseDhsXls, dhsRowsToCsv } from './dhs-xls-parser';
+import { parseDhsXls, dhsRowsToCsv, dhsRowsToRecords } from './dhs-xls-parser';
 
 /**
  * Builds an in-memory XLS buffer from a 2D array.
@@ -114,5 +114,62 @@ describe('dhsRowsToCsv', () => {
         expect(lines).toHaveLength(3); // header + 2 data rows
         expect(lines[1]).toContain('615');
         expect(lines[2]).toContain('4285');
+    });
+});
+
+describe('dhsRowsToRecords', () => {
+    it('maps a parsed row to the structured record shape (no AI needed)', () => {
+        const [rec] = dhsRowsToRecords([
+            { ncrRef: '615', surname: 'MOKOENA', firstNames: 'THABO SIPHO', rsaId: '8305195459081', statusCode: 'F2' },
+        ]);
+
+        expect(rec).toMatchObject({
+            ncr_ref: '615',
+            surname: 'MOKOENA',
+            first_name: 'THABO',
+            additional_names: 'SIPHO',
+            rsa_id: '8305195459081',
+            status_code: 'F2',
+            status_label: 'Under Debt Review (Active)',
+            flag: null,
+        });
+    });
+
+    it('splits first name from additional names', () => {
+        const [rec] = dhsRowsToRecords([
+            { ncrRef: '1', surname: 'NKOSI', firstNames: 'JACOB LEHLOHONOLO PETER', rsaId: '7412256904087', statusCode: 'G' },
+        ]);
+        expect(rec.first_name).toBe('JACOB');
+        expect(rec.additional_names).toBe('LEHLOHONOLO PETER');
+    });
+
+    it('flags malformed RSA IDs (not 13 digits)', () => {
+        const [rec] = dhsRowsToRecords([
+            { ncrRef: '2', surname: 'SMITH', firstNames: 'JOHN', rsaId: '12345', statusCode: 'A' },
+        ]);
+        expect(rec.flag).toBe('Malformed RSA ID');
+    });
+
+    it('flags missing RSA IDs', () => {
+        const [rec] = dhsRowsToRecords([
+            { ncrRef: '3', surname: 'DOE', firstNames: 'JANE', rsaId: '', statusCode: 'B' },
+        ]);
+        expect(rec.flag).toBe('Missing RSA ID');
+    });
+
+    it('flags duplicate RSA IDs across rows', () => {
+        const recs = dhsRowsToRecords([
+            { ncrRef: '4', surname: 'A', firstNames: 'X', rsaId: '8305195459081', statusCode: 'F2' },
+            { ncrRef: '5', surname: 'B', firstNames: 'Y', rsaId: '8305195459081', statusCode: 'G' },
+        ]);
+        expect(recs[0].flag).toBe('Duplicate ID - verify');
+        expect(recs[1].flag).toBe('Duplicate ID - verify');
+    });
+
+    it('falls back to the raw code when the status label is unknown', () => {
+        const [rec] = dhsRowsToRecords([
+            { ncrRef: '6', surname: 'C', firstNames: 'Z', rsaId: '8305195459081', statusCode: 'ZZ' },
+        ]);
+        expect(rec.status_label).toBe('ZZ');
     });
 });

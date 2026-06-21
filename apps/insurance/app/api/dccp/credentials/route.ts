@@ -5,6 +5,7 @@ import { auth } from '@zenowethu/shared-lib'
 import { logger } from '@zenowethu/shared-lib/src/logger'
 import { invalidateDCCPCredentialsCache } from '@zenowethu/shared-lib/src/integrations/dccp-config'
 import { dccpService } from '@zenowethu/shared-lib/src/integrations/dccp'
+import { encryptSecret } from '@zenowethu/shared-lib/src/security/encryption'
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -96,19 +97,21 @@ export async function POST(request: Request) {
       }
     }
 
+    const encryptedPassword = encryptSecret(password)
+
     // Upsert: create or update the credential record for this user
     const credential = await prisma.dCCPCredential.upsert({
       where: { userId: session.user.id },
       create: {
         userId: session.user.id,
         username,
-        password, // TODO: Encrypt with AES-256 before storing
+        password: encryptedPassword,
         portalUrl: resolvedPortalUrl,
         isActive: true,
       },
       update: {
         username,
-        password, // TODO: Encrypt with AES-256 before storing
+        password: encryptedPassword,
         portalUrl: resolvedPortalUrl,
         isActive: true,
       },

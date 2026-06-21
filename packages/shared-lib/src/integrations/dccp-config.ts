@@ -1,4 +1,7 @@
+import { prisma } from '@zenowethu/database'
+
 import { logger } from '../logger'
+import { decryptSecret, isEncryptedSecret } from '../security/encryption'
 
 // ============================================================
 // DCCP — DC Credit Protect portal configuration
@@ -34,7 +37,6 @@ export async function getDCCPCredentials(userId: string): Promise<DCCPCredential
   }
 
   try {
-    const { prisma } = require('@zenowethu/database')
     const record = await prisma.dCCPCredential.findUnique({
       where: { userId },
       select: { username: true, password: true, portalUrl: true, isActive: true },
@@ -45,9 +47,13 @@ export async function getDCCPCredentials(userId: string): Promise<DCCPCredential
       return null
     }
 
+    if (!isEncryptedSecret(record.password)) {
+      logger.warn('[DCCP Config] Credential is stored in legacy plaintext format; it will be encrypted on next save', { userId })
+    }
+
     const creds: DCCPCredentials = {
       username: record.username,
-      password: record.password, // Encrypted — decrypted at service layer
+      password: decryptSecret(record.password),
       portalUrl: record.portalUrl ?? DCCP_PORTAL_URL_PRODUCTION,
     }
     userCredentialCache.set(userId, { creds, fetchedAt: now })

@@ -1,7 +1,84 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-11 (Sortable headers: dashboard Recent Cases + All Cases)
+> Last updated: 2026-06-21 (DHS Summary Report Import — remove OpenAI dependency for XLS)
+
+---
+
+### Cases App — DHS Summary Report Import: XLS path no longer needs OpenAI (2026-06-21)
+
+**Requirement:** Uploading the DHS Consumer(s) Summary Report (`CrystalReportViewer1.xls`, 853 KB) at **Admin → DHS Summary Report Import** failed with `429 You exceeded your current quota` from OpenAI.
+
+**Root cause:** The XLS path parsed every row locally with `parseDhsXls` but then **still sent the data to `gpt-4o`** purely to restructure it. With the OpenAI key out of quota (same 429 as the 2026-06-20 AI Assistant issue), the whole import failed — even though the deterministic parser already had every field. It also shipped all consumer PII (names + RSA IDs) to OpenAI unnecessarily.
+
+**What was done:**
+- [x] `apps/cases/lib/dhs-xls-parser.ts`: added `dhsRowsToRecords()` + `DhsExtractedRecord` — builds the exact AI output shape locally (first/additional name split, status-label map mirroring `PROMPTS.DHS_SUMMARY_REPORT`, and missing/malformed/duplicate RSA-ID flags).
+- [x] `apps/cases/app/api/admin/dhs-import/route.ts`: XLS path now uses `dhsRowsToRecords()` when fixed-column parsing yields rows (no AI call, PII stays in-house). OpenAI is used **only as a fallback** when the column layout doesn't match.
+- [x] Tests: `apps/cases/lib/dhs-xls-parser.test.ts` extended (+6 cases). `pnpm --filter cases test` → **357/357 pass**; `pnpm --filter cases typecheck` → exit 0.
+
+**Remaining:** PDF imports still require AI vision (no deterministic path). The `/apply` step is unchanged. Source report files are still not persisted for audit (pre-existing gap).
+
+---
+
+### Cases App — AI Case Assistant Resilience & Chat UI Gap (2026-06-20)
+
+**Requirement:** "AI assistance not working well" + "reduce the gap between the question and the answer."
+
+**Root cause found (diagnosed live against the configured keys):**
+- `OPENAI_API_KEY` is valid but **out of quota** (`429 insufficient_quota`) — this is what surfaced as the opaque "AI generation failed".
+- `OPENROUTER_API_KEY` actually contains an OpenAI `sk-proj` key → OpenRouter rejects it (401).
+- `GOOGLE_AI_API_KEY` is invalid (400 "Please pass a valid API key").
+- `ANTHROPIC_API_KEY` is empty.
+- ⚠️ **Action required by user:** restore OpenAI billing, OR put a real OpenRouter key (`sk-or-v1-…`) in `OPENROUTER_API_KEY`, OR a real Google AI key. No code change can serve AI without one funded/valid provider.
+
+**What was done:**
+- [x] `packages/shared-lib/src/ai/provider-client.ts`: added `getAiClientChainForTask()` (ordered provider fallback across every configured key) and `describeAiError()` (maps quota/auth/rate-limit errors to a clear staff-facing message).
+- [x] `apps/cases/app/api/cases/[id]/ai-chat/route.ts`: now tries each provider in the chain and, if all fail, returns the **real reason** (502) instead of a generic "AI generation failed".
+- [x] `packages/ui/src/cases/AIChatTab.tsx`: conversation now anchors to the bottom of the messages area (`mt-auto`) so the Q&A sits next to the input — removes the large empty gap.
+- [x] Tests: `packages/shared-lib/src/ai/provider-client.test.ts` (6 cases). Full shared-lib suite **339/339 pass**.
+
+**Remaining:** AI stays down until a valid, funded provider key is supplied (see action required above).
+
+---
+
+### Insurance App — DCCP Credentials Encrypted at Rest (2026-06-16)
+
+**Requirement:** Proceed from the application analysis by addressing the urgent DCCP credential-storage gap.
+
+**What was done:**
+- [x] Added shared AES-256-GCM secret encryption helpers in `packages/shared-lib/src/security/encryption.ts`; key material is derived from `DCCP_CREDENTIAL_ENCRYPTION_KEY`, `CREDENTIAL_ENCRYPTION_KEY`, `AUTH_SECRET`, or `NEXTAUTH_SECRET`
+- [x] Updated `apps/insurance/app/api/dccp/credentials/route.ts` so saved DCCP portal passwords are encrypted before the `DCCPCredential` upsert
+- [x] Updated `packages/shared-lib/src/integrations/dccp-config.ts` so the DCCP service receives decrypted passwords, while legacy plaintext records continue to work during rollout and log a warning until next save
+- [x] Tests added:
+  - `packages/shared-lib/src/security/encryption.test.ts`
+  - `packages/shared-lib/src/integrations/dccp-config.test.ts`
+  - `apps/insurance/app/api/dccp/credentials/route.test.ts`
+- [x] Verification:
+  - `packages/shared-lib`: Vitest 333/333 pass; `tsc --noEmit` exit 0
+  - `apps/insurance`: Vitest 28/28 pass; `tsc --noEmit` exit 0
+
+**Remaining:** Existing DCCP credential rows stay plaintext until each user re-saves credentials; the read path supports them safely in the interim.
+
+---
+
+### Application Analysis Snapshot (2026-06-16)
+
+**Scope:** Broad repository review only; no application code changed.
+
+**What was found:**
+- [x] The monorepo has progressed beyond older docs: shared packages are now present (`database`, `shared-lib`, `ui`, `plan-engine`, etc.) and the Finance app has meaningful recent feature/test work.
+- [x] Test coverage now exists (73 test files found), but the local one-command test pipeline could not run in this shell because `pnpm`/`node` are not on PATH; direct Turbo run with bundled Node failed with `Unable to find package manager binary`.
+- [x] The biggest architectural debt remains incomplete consolidation: app-local Prisma schemas still exist in `apps/cases`, `apps/finance`, `apps/insurance`, `apps/legal`, and `apps/forensic-audit`, alongside the canonical `packages/database` schema.
+- [x] High-complexity files remain a delivery risk, especially `apps/cases/app/(authenticated)/cases/[id]/page.tsx` (~4,306 lines), `apps/cases/app/(authenticated)/cases/new/page.tsx` (~2,900 lines), and several 700+ line route/component files.
+- [x] Security posture is improving (central auth, Zod schemas, migrations, security headers), but there is an urgent credential-storage gap: DCCP credentials are currently saved to DB with a TODO to encrypt before storage.
+- [x] Documentation is partially stale: older architecture/codebase-analysis docs still describe "zero tests" and pre-package duplication, while the current repo has packages, migrations, and tests.
+
+**New next steps discovered:**
+- [ ] Fix local/tooling bootstrap so `pnpm test`, `pnpm lint`, and `pnpm build` run from a clean shell without manual PATH work.
+- [x] Encrypt DCCP stored credentials at rest and add tests around save/read/cache invalidation.
+- [ ] Decide whether app-local Prisma schemas are still needed; if not, remove or formally deprecate them so `packages/database/prisma/schema.prisma` is the only active schema.
+- [ ] Refactor the largest case pages into smaller feature components/hooks/libs, starting with the 4,306-line case detail page.
+- [ ] Refresh `docs/CODEBASE_ANALYSIS.md`, `docs/ARCHITECTURE.md`, and README to match the current package/test/migration reality.
 
 ---
 

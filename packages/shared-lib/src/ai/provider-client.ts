@@ -144,6 +144,52 @@ export async function getAiClientForTask(task: AiTask, customModelId?: string): 
     };
 }
 
+// ─── Ordered fallback chain for a task ───────────────────────────────────────
+// Returns the primary client/model first, then every *other* provider that has a
+// usable API key configured, so a transient failure (quota, auth, rate-limit) on
+// one provider can be retried on the next instead of failing the whole request.
+export async function getAiClientChainForTask(task: AiTask): Promise<AiClientConfig[]> {
+    const primary = await getAiClientForTask(task);
+    const chain: AiClientConfig[] = [primary];
+    const seen = new Set<string>([primary.providerName]);
+
+    const candidates: Array<{ enabled: boolean; model: string }> = [
+        { enabled: !!process.env.OPENAI_API_KEY,     model: 'gpt-4o-mini' },
+        { enabled: !!process.env.OPENROUTER_API_KEY, model: 'openai/gpt-4o-mini' },
+        { enabled: !!process.env.GOOGLE_AI_API_KEY,  model: 'google/gemini-1.5-flash' },
+        { enabled: !!process.env.ANTHROPIC_API_KEY,  model: 'anthropic/claude-3.5-sonnet' },
+    ];
+
+    for (const c of candidates) {
+        if (!c.enabled) continue;
+        const { client, name } = buildClientFromEnv(c.model);
+        if (seen.has(name)) continue;
+        seen.add(name);
+        chain.push({ client, model: c.model, providerName: name });
+    }
+
+    return chain;
+}
+
+// ─── Human-readable reason for an AI provider failure ────────────────────────
+export function describeAiError(err: unknown): string {
+    const e = err as { status?: number; code?: string; error?: { code?: string; message?: string }; message?: string };
+    const code = e?.code ?? e?.error?.code;
+    const status = e?.status;
+
+    if (code === 'insufficient_quota' || (status === 429 && code !== 'rate_limit_exceeded')) {
+        return 'The AI provider account has no remaining quota (billing exhausted). Top up the provider or configure another one.';
+    }
+    if (status === 429) {
+        return 'The AI provider is rate-limited right now. Please try again in a moment.';
+    }
+    if (status === 401 || status === 403) {
+        return 'The AI provider rejected the API key (authentication failed). Check the configured key.';
+    }
+    const msg = e?.error?.message ?? e?.message;
+    return msg ? `AI provider error: ${msg}` : 'AI generation failed.';
+}
+
 // ─── Convenience ─────────────────────────────────────────────────────────────
 export async function getClientForTask(task: AiTask): Promise<OpenAI> {
     return (await getAiClientForTask(task)).client;
