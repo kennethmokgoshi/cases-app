@@ -1,7 +1,20 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-23 (Email BCC for Audit Trail)
+> Last updated: 2026-06-23 (Auto-run DB migrations on container startup)
+
+---
+
+### Auto-run DB migrations on deploy — Dockerfile now applies pending migrations (2026-06-23)
+
+**Problem:** The Dockerfile only ran `prisma generate` at build and started the server directly. Pending migrations were never applied automatically, so every schema change required a manual `prisma migrate deploy` against the production DB before each deploy — easy to forget, and the app would throw at runtime against a stale schema.
+
+**Solution:** The runner stage now installs the Prisma CLI globally (pinned to 5.22.0, engines cached into the image at build time — pnpm symlinks can't be copied from the builder stage), and the container start command runs `prisma migrate deploy --schema=./prisma/schema.prisma` before `node server.js`. If a migration fails, the container exits rather than serving against a stale schema.
+
+**Files Changed:**
+- `Dockerfile` — global Prisma CLI install in runner stage + `migrate deploy` prepended to CMD
+
+**Manual setup:** None going forward. `DATABASE_URL` must be present in the Dokploy **runtime** env (it already is). First deploy after this change applies the pending `20260623_add_decline_dates` and `20260623_add_document_sequence` migrations automatically — watch the container boot log to confirm.
 
 ---
 
