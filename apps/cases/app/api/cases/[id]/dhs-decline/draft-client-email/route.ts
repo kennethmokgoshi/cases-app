@@ -48,7 +48,7 @@ export async function POST(
                 id: true,
                 fileNumber: true,
                 clientId: true,
-                currentDCId: true,
+                debtCounsellordId: true,
                 client: {
                     select: {
                         id: true,
@@ -58,7 +58,7 @@ export async function POST(
                         whatsappNumber: true,
                     },
                 },
-                currentDC: {
+                debtCounsellor: {
                     select: {
                         id: true,
                         ncrdcNo: true,
@@ -73,7 +73,7 @@ export async function POST(
             return NextResponse.json({ error: 'Case or client not found' }, { status: 404 });
         }
 
-        if (!caseData.currentDC) {
+        if (!caseData.debtCounsellor) {
             return NextResponse.json({ error: 'Current DC not found' }, { status: 404 });
         }
 
@@ -83,7 +83,7 @@ export async function POST(
             clientId: caseData.client.id,
             idNumber: caseData.client.idNumber,
             caseId: caseData.id,
-            currentDc: caseData.currentDC.tradingName || caseData.currentDC.fullName || `DC ${caseData.currentDC.ncrdcNo}`,
+            currentDc: caseData.debtCounsellor.tradingName || caseData.debtCounsellor.fullName || `DC ${caseData.debtCounsellor.ncrdcNo}`,
             declineReason,
         });
 
@@ -92,7 +92,7 @@ export async function POST(
             clientId: caseData.client.id,
             idNumber: caseData.client.idNumber,
             caseId: caseData.id,
-            currentDc: caseData.currentDC.tradingName || caseData.currentDC.fullName || `DC ${caseData.currentDC.ncrdcNo}`,
+            currentDc: caseData.debtCounsellor.tradingName || caseData.debtCounsellor.fullName || `DC ${caseData.debtCounsellor.ncrdcNo}`,
             declineReason,
             draftEmail,
             whatsappNumber: caseData.client.whatsappNumber || null,

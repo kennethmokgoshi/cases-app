@@ -30,7 +30,7 @@ describe('POST /api/cases/[id]/dhs-decline/draft-client-email', () => {
             id: 'case-123',
             fileNumber: 'FILE-001',
             clientId: 'client-123',
-            currentDCId: 'dc-123',
+            debtCounsellordId: 'dc-123',
             client: {
                 id: 'client-123',
                 firstName: 'John',
@@ -38,7 +38,7 @@ describe('POST /api/cases/[id]/dhs-decline/draft-client-email', () => {
                 idNumber: '9101011234567',
                 whatsappNumber: '+27821234567',
             },
-            currentDC: {
+            debtCounsellor: {
                 id: 'dc-123',
                 ncrdcNo: 'NCRDC123',
                 tradingName: 'Debt Solutions Inc',

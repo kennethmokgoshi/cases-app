@@ -21,6 +21,7 @@ import {
     GhlWebhookEmailProvider,
     GhlWebhookWhatsAppProvider,
     FallbackEmailProvider } from './providers';
+import type { EmailOptions } from './providers';
 import {
     getTemplateByStatus,
     renderTemplate,
@@ -43,7 +44,7 @@ const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 035 1824';
 const VIRTUAL_ASSISTANT_NAME = process.env.VIRTUAL_ASSISTANT_NAME || 'Thandi';
 
 // Helper: Add BCC to email options if configured
-function addBccToOptions(options?: { cc?: string[]; bcc?: string[] }): { cc?: string[]; bcc?: string[] } {
+function addBccToOptions(options?: EmailOptions): EmailOptions {
     if (!EMAIL_BCC_ADDRESS) return options || {};
     return {
         ...options,
