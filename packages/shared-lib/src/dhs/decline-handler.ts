@@ -75,6 +75,8 @@ export function classifyDeclineReason(reason: string): DeclineCategory {
         r.includes('TRANSFER DOCUMENTS') ||
         r.includes('TRANFER DOCUMENTS') || // real-world typo variant
         r.includes('UPLOAD DOCUMENTS') ||
+        r.includes('FORWARD POA') || // "Kindly forward POA & ID copy to..."
+        (r.includes('FORWARD') && r.includes('POA') && r.includes('ID')) || // various orderings of forward/POA/ID
         (r.includes('ATTACH') && r.includes('POA')) ||
         r.includes('FORM 16') ||
         r.includes('RECENT SIGNED') ||
@@ -154,6 +156,53 @@ export function classifyDeclineReason(reason: string): DeclineCategory {
 export function extractEmailFromReason(reason: string): string | null {
     const match = reason.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
     return match ? match[0] : null;
+}
+
+/**
+ * Get the base waiting period (in working days) for a decline category.
+ * Different decline types have different retry windows:
+ * - RESUBMIT_LATER: 7 days (cases that are temporarily pending/processing)
+ * - CLIENT_CONSENT_NEEDED: 7 days (client needs to confirm directly)
+ * - SEND_DOCS: 3 days (documents being sent, quick turnaround)
+ * - SEND_DOCS_WITH_NCR: 3 days (same, but also sending NCR cert)
+ * - OUTSTANDING_FEES: 5 days (fees need to be settled)
+ * - CONTACT_ATTORNEY: 5 days (legal matters in progress)
+ * - UNKNOWN: 5 days (default conservative estimate)
+ */
+export function getBasePeriodForCategory(category: DeclineCategory): number {
+    switch (category) {
+        case 'RESUBMIT_LATER':
+        case 'CLIENT_CONSENT_NEEDED':
+            return 7;
+        case 'OUTSTANDING_FEES':
+        case 'CONTACT_ATTORNEY':
+            return 5;
+        case 'SEND_DOCS':
+        case 'SEND_DOCS_WITH_NCR':
+        case 'UNKNOWN':
+        default:
+            return 3;
+    }
+}
+
+/**
+ * Calculate the nextUpdate date accounting for time already elapsed since first decline detection.
+ * If decline was detected 2 days ago with a 7-day base, return +5 days from now.
+ * This ensures the total window from first detection is honored.
+ */
+export function calculateNextUpdate(basePeriod: number, declineFirstDetectedAt: Date | null): Date {
+    if (!declineFirstDetectedAt) {
+        // First decline detection — use full base period from now
+        return addWorkingDays(new Date(), basePeriod);
+    }
+
+    // Decline already existed — calculate days elapsed and remaining
+    const now = new Date();
+    const elapsedMs = now.getTime() - declineFirstDetectedAt.getTime();
+    const elapsedDays = Math.ceil(elapsedMs / (1000 * 60 * 60 * 24)); // Simple calendar days for now
+    const remainingDays = Math.max(basePeriod - elapsedDays, 1); // Minimum 1 day
+
+    return addWorkingDays(now, remainingDays);
 }
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
@@ -252,8 +301,21 @@ export async function handleDHSDecline(params: {
 
         const clientCc = caseData.client.email ? [caseData.client.email] : [];
 
+        // Calculate nextUpdate based on category and time elapsed since first decline
+        const basePeriod = getBasePeriodForCategory(category);
+        const nextUpdateDate = calculateNextUpdate(basePeriod, caseData.declineFirstDetectedAt);
+
         if (category === 'SEND_DOCS' || category === 'SEND_DOCS_WITH_NCR') {
-            await safeUpdateCase(caseId, { status: 'REJECTED_EMAIL_DOCS', nextUpdate: addWorkingDays(new Date(), 3) }, triggeredByUserId);
+            const updateData: any = {
+                status: 'REJECTED_EMAIL_DOCS',
+                nextUpdate: nextUpdateDate,
+                declineLastDetectedAt: new Date(),
+            };
+            // Set first detection time if this is the first decline
+            if (!caseData.declineFirstDetectedAt) {
+                updateData.declineFirstDetectedAt = new Date();
+            }
+            await safeUpdateCase(caseId, updateData, triggeredByUserId, false); // false = don't double-set declineLastDetectedAt
             result.statusUpdatedTo = 'REJECTED_EMAIL_DOCS';
 
             if (!dcEmail) {
@@ -314,10 +376,19 @@ export async function handleDHSDecline(params: {
                     const withNCR = ncrCertUrl ? ' (including NCR Certificate)' : '';
                     const ccNote = clientCc.length ? ` (client CC'd on ${clientCc[0]})` : '';
                     result.actionsPerformed.push(`Documents emailed to DC at ${dcEmail}${withNCR}${ccNote}`);
+                    const updateData: any = {
+                        status: 'DOCUMENTS_EMAILED',
+                        nextUpdate: addWorkingDays(new Date(), 5),
+                        declineLastDetectedAt: new Date(),
+                    };
+                    if (!caseData.declineFirstDetectedAt) {
+                        updateData.declineFirstDetectedAt = new Date();
+                    }
                     await safeUpdateCase(
                         caseId,
-                        { status: 'DOCUMENTS_EMAILED', nextUpdate: addWorkingDays(new Date(), 5) },
-                        triggeredByUserId
+                        updateData,
+                        triggeredByUserId,
+                        false
                     );
                     result.statusUpdatedTo = 'DOCUMENTS_EMAILED';
                     await addComment(
@@ -335,10 +406,19 @@ export async function handleDHSDecline(params: {
         }
 
         else if (category === 'CLIENT_CONSENT_NEEDED') {
+            const updateData: any = {
+                status: 'REJECTED_NOT_CONSENT',
+                nextUpdate: nextUpdateDate,
+                declineLastDetectedAt: new Date(),
+            };
+            if (!caseData.declineFirstDetectedAt) {
+                updateData.declineFirstDetectedAt = new Date();
+            }
             await safeUpdateCase(
                 caseId,
-                { status: 'REJECTED_NOT_CONSENT', nextUpdate: addWorkingDays(new Date(), 7) },
-                triggeredByUserId
+                updateData,
+                triggeredByUserId,
+                false
             );
             result.statusUpdatedTo = 'REJECTED_NOT_CONSENT';
 
@@ -365,10 +445,19 @@ export async function handleDHSDecline(params: {
             await notifyClientSmsOrWa(smsBody);
 
             if (result.actionsPerformed.length > 0) {
+                const updateData: any = {
+                    status: 'CONSUMER_CONTACTED_DC',
+                    nextUpdate: nextUpdateDate,
+                    declineLastDetectedAt: new Date(),
+                };
+                if (!caseData.declineFirstDetectedAt) {
+                    updateData.declineFirstDetectedAt = new Date();
+                }
                 await safeUpdateCase(
                     caseId,
-                    { status: 'CONSUMER_CONTACTED_DC', nextUpdate: addWorkingDays(new Date(), 7) },
-                    triggeredByUserId
+                    updateData,
+                    triggeredByUserId,
+                    false
                 );
                 result.statusUpdatedTo = 'CONSUMER_CONTACTED_DC';
             }
@@ -381,10 +470,19 @@ export async function handleDHSDecline(params: {
         }
 
         else if (category === 'OUTSTANDING_FEES') {
+            const updateData: any = {
+                status: 'REJECTED_OWES_FEES',
+                nextUpdate: nextUpdateDate,
+                declineLastDetectedAt: new Date(),
+            };
+            if (!caseData.declineFirstDetectedAt) {
+                updateData.declineFirstDetectedAt = new Date();
+            }
             await safeUpdateCase(
                 caseId,
-                { status: 'REJECTED_OWES_FEES', nextUpdate: addWorkingDays(new Date(), 5) },
-                triggeredByUserId
+                updateData,
+                triggeredByUserId,
+                false
             );
             result.statusUpdatedTo = 'REJECTED_OWES_FEES';
 
@@ -481,12 +579,20 @@ export async function handleDHSDecline(params: {
         }
 
         else if (category === 'RESUBMIT_LATER') {
+            const updateData: any = {
+                nextUpdate: nextUpdateDate,
+                declineLastDetectedAt: new Date(),
+            };
+            if (!caseData.declineFirstDetectedAt) {
+                updateData.declineFirstDetectedAt = new Date();
+            }
             await safeUpdateCase(
                 caseId,
-                { nextUpdate: addWorkingDays(new Date(), 7) },
-                triggeredByUserId
+                updateData,
+                triggeredByUserId,
+                false
             );
-            result.actionsPerformed.push('Next update set to +7 working days — file will be re-checked');
+            result.actionsPerformed.push(`Next update set to +${basePeriod} working days — file will be re-checked`);
 
             // Client update — they deserve to know the file is still being processed
             if (caseData.client.email) {
@@ -554,12 +660,20 @@ export async function handleDHSDecline(params: {
 async function safeUpdateCase(
     caseId: string,
     data: Record<string, unknown>,
-    userId?: string
+    userId?: string,
+    trackDeclineDate: boolean = true
 ): Promise<void> {
+    // Add decline tracking if flagged
+    const updateData = { ...data };
+    if (trackDeclineDate) {
+        updateData.declineLastDetectedAt = new Date(); // Always update last detection time
+        // declineFirstDetectedAt is set separately if this is a first decline
+    }
+
     await prisma.case.update({
         where: { id: caseId },
         data: {
-            ...data,
+            ...updateData,
             ...(userId ? { updatedBy: { connect: { id: userId } } } : {}),
         },
     });

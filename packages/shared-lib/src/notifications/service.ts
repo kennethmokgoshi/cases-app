@@ -36,10 +36,20 @@ const SMS_ENABLED = process.env.SMS_ENABLED !== 'false';
 const EMAIL_ENABLED = process.env.EMAIL_ENABLED !== 'false';
 const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED !== 'false';
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true'; // Telegram off by default (no provider configured)
+const EMAIL_BCC_ADDRESS = process.env.EMAIL_BCC_ADDRESS;
 
 const COMPANY_NAME = process.env.COMPANY_NAME || 'Zenowethu Debt Management';
 const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 035 1824';
 const VIRTUAL_ASSISTANT_NAME = process.env.VIRTUAL_ASSISTANT_NAME || 'Thandi';
+
+// Helper: Add BCC to email options if configured
+function addBccToOptions(options?: { cc?: string[]; bcc?: string[] }): { cc?: string[]; bcc?: string[] } {
+    if (!EMAIL_BCC_ADDRESS) return options || {};
+    return {
+        ...options,
+        bcc: options?.bcc ? [...options.bcc, EMAIL_BCC_ADDRESS] : [EMAIL_BCC_ADDRESS]
+    };
+}
 
 // Initialize providers based on configuration
 async function getSmsProvider(): Promise<SmsProvider> {
@@ -276,7 +286,7 @@ export async function sendManualMessage(
                 subject || 'Message from Zeno',
                 message.replace(/\n/g, '<br>'),
                 message,
-                { attachments: emailAttachments, cc: options?.cc }
+                addBccToOptions({ attachments: emailAttachments, cc: options?.cc })
             );
             result.emailSuccess = res.success;
             result.emailMessageId = res.messageId;
@@ -385,7 +395,7 @@ async function sendNotificationByTemplate(
                 emailSubject,
                 brandedHtml,
                 emailBody, // textBody
-                { fromName: payload.senderName, fromEmail: payload.senderEmail }
+                addBccToOptions({ fromName: payload.senderName, fromEmail: payload.senderEmail })
             );
 
             result.emailSuccess = emailResult.success;
@@ -463,7 +473,8 @@ async function sendNotificationByTemplate(
                 payload.dcEmail,
                 emailSubject,
                 brandedHtml,
-                emailBody
+                emailBody,
+                addBccToOptions({})
             );
 
             if (emailResult.success) {
@@ -607,7 +618,7 @@ export async function sendFileRequestEmails(payload: {
                 companyName: COMPANY_NAME
             });
 
-            const res = await emailProvider.send(bureauEmail, bureauSubject, brandedHtml, bureauBody);
+            const res = await emailProvider.send(bureauEmail, bureauSubject, brandedHtml, bureauBody, addBccToOptions({}));
 
             bureauResults.push({ email: bureauEmail, success: res.success, error: res.error });
 
@@ -683,7 +694,7 @@ export async function sendFileRequestEmails(payload: {
             companyName: COMPANY_NAME
         });
 
-        const res = await emailProvider.send(cp.email, subject, brandedHtml, body);
+        const res = await emailProvider.send(cp.email, subject, brandedHtml, body, addBccToOptions({}));
 
         providerResults.push({ name: cp.name, email: cp.email, success: res.success, error: res.error });
 
@@ -755,7 +766,7 @@ export async function sendDrrRequestEmails(payload: {
                 companyPhone: COMPANY_PHONE,
             });
 
-            const res = await emailProvider.send(payload.dcEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content);
+            const res = await emailProvider.send(payload.dcEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
             dcSent = res.success;
 
             await logNotification({
@@ -792,7 +803,7 @@ export async function sendDrrRequestEmails(payload: {
                 companyPhone: COMPANY_PHONE,
             });
 
-            const res = await emailProvider.send(bureauEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content);
+            const res = await emailProvider.send(bureauEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
             bureauResults.push({ email: bureauEmail, success: res.success, error: res.error });
 
             await logNotification({
@@ -835,7 +846,7 @@ export async function sendDrrRequestEmails(payload: {
                 companyPhone: COMPANY_PHONE,
             });
 
-            const res = await emailProvider.send(cp.email, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content);
+            const res = await emailProvider.send(cp.email, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
             providerResults.push({ name: cp.name, email: cp.email, success: res.success, error: res.error });
 
             await logNotification({
@@ -903,7 +914,7 @@ export async function resendNotification(
         return { ...resultTemplate, smsSuccess: result.success, smsMessageId: result.messageId, errors: result.error ? [result.error] : [] };
     } else if (notification.channel === 'EMAIL') {
         const emailProvider = await getEmailProvider();
-        const result = await emailProvider.send(notification.recipient, "Resend: Notification", notification.message);
+        const result = await emailProvider.send(notification.recipient, "Resend: Notification", notification.message, undefined, addBccToOptions({}));
         await logResend(notification, result, 'EMAIL');
         return { ...resultTemplate, emailSuccess: result.success, emailMessageId: result.messageId, errors: result.error ? [result.error] : [] };
     } else if (notification.channel === 'WHATSAPP') {
@@ -965,7 +976,7 @@ export async function sendInternalNotification(entry: {
     for (const rec of recipients) {
         const subject = renderTemplate(template.emailSubject, variables);
         const body = renderTemplate(template.emailTemplate, variables);
-        const res = await emailProvider.send(rec.email, subject, body.replace(/\n/g, '<br>'), body);
+        const res = await emailProvider.send(rec.email, subject, body.replace(/\n/g, '<br>'), body, addBccToOptions({}));
 
         await logNotification({
             caseId: entry.caseId || 'SYSTEM',
@@ -1089,7 +1100,7 @@ export async function executeNotificationRetry(queueId: string): Promise<Notific
                 queueItem.subject || 'Message from Zeno',
                 queueItem.htmlBody || queueItem.body.replace(/\n/g, '<br>'),
                 queueItem.body,
-                { attachments: emailAttachments, cc: options?.cc }
+                addBccToOptions({ attachments: emailAttachments, cc: options?.cc })
             );
             result.emailSuccess = res.success;
             if (res.error) result.errors.push(res.error);

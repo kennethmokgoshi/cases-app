@@ -25,6 +25,7 @@ import { DebtReviewTab } from './DebtReviewTab';
 import { CourtDocsTab } from './CourtDocsTab';
 import { WorkflowTimeline } from './WorkflowTimeline';
 import { SavingsAuditCard } from './SavingsAuditCard';
+import { AssistClientConsentModal } from './AssistClientConsentModal';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
 import SendQuoteModal from './SendQuoteModal';
 import SendMandateModal from './SendMandateModal';
@@ -137,6 +138,8 @@ type CaseDetail = {
     todos: string | null; // JSON
     declineReason: string | null;
     declineReasonAttended: boolean;
+    declineFirstDetectedAt: string | null; // When decline was first detected
+    declineLastDetectedAt: string | null; // Most recent decline detection
     description: string | null; // Rich text description
 
     client: {
@@ -316,6 +319,15 @@ export default function CaseDetailPage() {
     const [isEditingNct, setIsEditingNct] = useState(false);
     const [isEditingCreditInfo, setIsEditingCreditInfo] = useState(false);
     const [isReferring, setIsReferring] = useState(false);
+    // Convert client to referrer states
+    const [showConvertModal, setShowConvertModal] = useState(false);
+    const [convertForm, setConvertForm] = useState({
+        commissionType: 'FIXED' as 'FIXED' | 'VOLUME_BASED',
+        fixedCommissionAmount: '250',
+        notes: '',
+    });
+    const [converting, setConverting] = useState(false);
+    const [convertError, setConvertError] = useState('');
     const [editForm, setEditForm] = useState<EditFormData>({
         firstName: '',
         lastName: '',
@@ -420,6 +432,7 @@ export default function CaseDetailPage() {
         errors?: string[];
         statusUpdatedTo?: string | null;
     } | null>(null);
+    const [isAssistClientConsentOpen, setIsAssistClientConsentOpen] = useState(false);
 
     const [description, setDescription] = useState('');
     const [originalDescription, setOriginalDescription] = useState(''); // Track original for cancel
@@ -901,11 +914,11 @@ export default function CaseDetailPage() {
                 if (dcSent) parts.push('Debt Counsellor');
                 if (bureausSent > 0) parts.push(`${bureausSent} bureau${bureausSent !== 1 ? 's' : ''}`);
                 if (providersSent > 0) parts.push(`${providersSent} provider${providersSent !== 1 ? 's' : ''}`);
-                
+
                 const message = parts.length > 0
                     ? `DRR files requested from ${parts.join(', ')}${totalFailures > 0 ? ` (${totalFailures} failed)` : ''}`
                     : 'No recipients found.';
-                
+
                 setDrrRequestResult({ bureausSent, providersSent, dcSent, failures: totalFailures, message });
                 setActivityUpdate(prev => prev + 1);
             } else {
@@ -915,6 +928,36 @@ export default function CaseDetailPage() {
             setDrrRequestResult({ bureausSent: 0, providersSent: 0, dcSent: false, failures: 1, message: 'Connection failed. Please try again.' });
         } finally {
             setSendingDrrRequests(false);
+        }
+    };
+
+    const handleConvertToReferrer = async () => {
+        if (!caseData) return;
+        setConverting(true);
+        setConvertError('');
+        try {
+            const payload = {
+                clientId: caseData.client.id,
+                commissionType: convertForm.commissionType,
+                fixedCommissionAmount: convertForm.commissionType === 'FIXED' ? parseFloat(convertForm.fixedCommissionAmount) : null,
+                notes: convertForm.notes.trim() || null,
+            };
+            const res = await fetch('/api/admin/clients/convert-to-referrer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                setConvertError(json.error ?? 'Conversion failed');
+                return;
+            }
+            toast.success(`${caseData.client.firstName} ${caseData.client.lastName} is now a referrer! 🎉`);
+            setShowConvertModal(false);
+        } catch {
+            setConvertError('Network error');
+        } finally {
+            setConverting(false);
         }
     };
 
@@ -1870,6 +1913,18 @@ export default function CaseDetailPage() {
                                     </>
                                 )}
                             </button>
+                            {(isAdmin || isExecutive || (session?.user as any)?.role?.toUpperCase() === 'MANAGER') && (
+                                <button
+                                    onClick={() => setShowConvertModal(true)}
+                                    className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded hover:bg-indigo-500/20 text-sm flex items-center gap-2 transition-colors"
+                                    title="Convert this client to a referrer"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Convert to Referrer
+                                </button>
+                            )}
                             <button
                                 onClick={startEditing}
                                 className="px-3 py-1.5 bg-zeno-navy border border-white/10 text-white rounded hover:bg-zeno-navy/80 text-sm flex items-center gap-2"
@@ -3543,6 +3598,64 @@ export default function CaseDetailPage() {
                                     </div>
                                 )}
 
+                                {/* DHS Decline Date Summary Card */}
+                                {(caseData.declineLastDetectedAt || caseData.declineFirstDetectedAt) && (
+                                    <div className="mt-6 p-4 rounded-lg bg-red-900/20 border border-red-500/30">
+                                        <div className="flex items-start gap-3">
+                                            <span className="text-2xl">🚩</span>
+                                            <div className="flex-1">
+                                                <h4 className="text-sm font-semibold text-red-400 mb-3">DHS Decline Tracking</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {caseData.declineLastDetectedAt && (
+                                                        <div className="p-2.5 bg-red-900/30 rounded border border-red-500/20">
+                                                            <p className="text-xs text-red-300/70 font-medium mb-1">LAST DECLINE</p>
+                                                            <p className="text-sm text-red-100 font-mono">
+                                                                {new Date(caseData.declineLastDetectedAt).toLocaleDateString('en-ZA', {
+                                                                    day: '2-digit',
+                                                                    month: 'short',
+                                                                    year: 'numeric',
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </p>
+                                                            {(() => {
+                                                                const daysAgo = Math.floor((new Date().getTime() - new Date(caseData.declineLastDetectedAt!).getTime()) / (1000 * 60 * 60 * 24));
+                                                                return (
+                                                                    <p className="text-xs text-red-300/60 mt-1">
+                                                                        {daysAgo === 0 ? 'Today' : `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`}
+                                                                    </p>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                    {caseData.declineFirstDetectedAt && caseData.declineFirstDetectedAt !== caseData.declineLastDetectedAt && (
+                                                        <div className="p-2.5 bg-red-900/30 rounded border border-red-500/20">
+                                                            <p className="text-xs text-red-300/70 font-medium mb-1">FIRST DETECTED</p>
+                                                            <p className="text-sm text-red-100 font-mono">
+                                                                {new Date(caseData.declineFirstDetectedAt).toLocaleDateString('en-ZA', {
+                                                                    day: '2-digit',
+                                                                    month: 'short',
+                                                                    year: 'numeric',
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </p>
+                                                            {(() => {
+                                                                const daysAgo = Math.floor((new Date().getTime() - new Date(caseData.declineFirstDetectedAt!).getTime()) / (1000 * 60 * 60 * 24));
+                                                                return (
+                                                                    <p className="text-xs text-red-300/60 mt-1">
+                                                                        {daysAgo === 0 ? 'Today' : `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`}
+                                                                    </p>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* NCT Information Section (Parallel with DHS) */}
                                 <div className="bg-zeno-navy/40 rounded-xl border border-white/5 p-6 mt-6">
                                     <div className="flex items-center justify-between mb-4">
@@ -3640,6 +3753,30 @@ export default function CaseDetailPage() {
 
                                     if (!isDeclined && !hasReason && !isEditingDhs) return null;
 
+                                    // Check if decline reason requires client involvement
+                                    const requiresClientInvolvement = (reason: string): boolean => {
+                                        const r = reason.toUpperCase();
+                                        return (
+                                            r.includes('CLIENT NEEDS TO') ||
+                                            r.includes('UNABLE TO CONFIRM TRANSFER WITH CLIENT') ||
+                                            r.includes('CLIENT HAS NOT CONSENTED') ||
+                                            r.includes('CLIENT MUST CONTACT') ||
+                                            r.includes('CLIENT TO CONTACT') ||
+                                            r.includes('CONFIRM WITH CLIENT') ||
+                                            r.includes('NOT YET CONSENTED') ||
+                                            r.includes('CONSUMER TO CONTACT') ||
+                                            r.includes('NOT CONSENT') ||
+                                            r.includes('CONTACT THE CLIENT') ||
+                                            r.includes('CLIENT CONTACT') ||
+                                            r.includes('CONSUMER CONSENT') ||
+                                            r.includes('KINDLY REQUEST THAT CLIENT CONTACTS') ||
+                                            r.includes('REQUEST THAT CLIENT CONTACT')
+                                        );
+                                    };
+
+                                    const currentReason = caseData.declineReason || declineReason;
+                                    const needsClientAction = hasReason && currentReason && requiresClientInvolvement(currentReason);
+
                                     const handleDecline = async () => {
                                         const reason = caseData.declineReason || declineReason;
                                         if (!reason?.trim()) {
@@ -3670,6 +3807,34 @@ export default function CaseDetailPage() {
                                         }
                                     };
 
+                                    const formatDeclineDate = (dateStr: string | null) => {
+                                        if (!dateStr) return null;
+                                        try {
+                                            const date = new Date(dateStr);
+                                            return date.toLocaleDateString('en-ZA', {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            });
+                                        } catch {
+                                            return dateStr;
+                                        }
+                                    };
+
+                                    const calculateDaysAgo = (dateStr: string | null) => {
+                                        if (!dateStr) return null;
+                                        try {
+                                            const date = new Date(dateStr);
+                                            const now = new Date();
+                                            const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+                                            return diff;
+                                        } catch {
+                                            return null;
+                                        }
+                                    };
+
                                     return (
                                         <div className="mt-6 pt-6 border-t border-white/10">
                                             <div className="flex items-center justify-between mb-3">
@@ -3686,18 +3851,29 @@ export default function CaseDetailPage() {
                                                         </button>
                                                     )}
                                                     {hasReason && !isEditingDhs && (
-                                                        <button
-                                                            onClick={handleDecline}
-                                                            disabled={isHandlingDecline}
-                                                            className="text-xs text-white bg-orange-600/80 border border-orange-500/50 px-2.5 py-1 rounded hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                                                        >
-                                                            {isHandlingDecline ? (
-                                                                <>
-                                                                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                                                    Handling…
-                                                                </>
-                                                            ) : '⚡ Handle Decline'}
-                                                        </button>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={handleDecline}
+                                                                disabled={isHandlingDecline}
+                                                                className="text-xs text-white bg-orange-600/80 border border-orange-500/50 px-2.5 py-1 rounded hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                                            >
+                                                                {isHandlingDecline ? (
+                                                                    <>
+                                                                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                                        Handling…
+                                                                    </>
+                                                                ) : '⚡ Handle Decline'}
+                                                            </button>
+                                                            {needsClientAction && (
+                                                                <button
+                                                                    onClick={() => setIsAssistClientConsentOpen(true)}
+                                                                    disabled={isHandlingDecline}
+                                                                    className="text-xs text-white bg-blue-600/80 border border-blue-500/50 px-2.5 py-1 rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                                                >
+                                                                    💬 Assist client to consent
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     )}
                                                     {(showInput || isEditingDhs) && isEditingDhs && (
                                                         <label className="text-xs text-gray-400 flex items-center gap-1.5 cursor-pointer">
@@ -3712,6 +3888,47 @@ export default function CaseDetailPage() {
                                                     )}
                                                 </div>
                                             </div>
+
+                                            {/* Decline Date Information */}
+                                            {(caseData.declineLastDetectedAt || caseData.declineFirstDetectedAt) && (
+                                                <div className="mb-4 p-3 rounded-lg bg-gray-900/30 border border-white/5 text-xs">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {caseData.declineLastDetectedAt && (
+                                                            <div>
+                                                                <div className="text-gray-400 font-medium mb-1">Last Decline</div>
+                                                                <div className="text-white">
+                                                                    {formatDeclineDate(caseData.declineLastDetectedAt)}
+                                                                </div>
+                                                                {(() => {
+                                                                    const daysAgo = calculateDaysAgo(caseData.declineLastDetectedAt);
+                                                                    return daysAgo !== null ? (
+                                                                        <div className="text-gray-400 text-[10px] mt-1">
+                                                                            {daysAgo === 0 ? 'Today' : `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`}
+                                                                        </div>
+                                                                    ) : null;
+                                                                })()}
+                                                            </div>
+                                                        )}
+                                                        {caseData.declineFirstDetectedAt && caseData.declineFirstDetectedAt !== caseData.declineLastDetectedAt && (
+                                                            <div>
+                                                                <div className="text-gray-400 font-medium mb-1">First Detected</div>
+                                                                <div className="text-white">
+                                                                    {formatDeclineDate(caseData.declineFirstDetectedAt)}
+                                                                </div>
+                                                                {(() => {
+                                                                    const daysAgo = calculateDaysAgo(caseData.declineFirstDetectedAt);
+                                                                    return daysAgo !== null ? (
+                                                                        <div className="text-gray-400 text-[10px] mt-1">
+                                                                            {daysAgo === 0 ? 'Today' : `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago`}
+                                                                        </div>
+                                                                    ) : null;
+                                                                })()}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             {showInput && (
                                                 isEditingDhs ? (
                                                     <textarea
@@ -4193,6 +4410,131 @@ export default function CaseDetailPage() {
                 )
             }
 
+            {/* Convert to Referrer Modal */}
+            {showConvertModal && caseData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-zeno-dark border border-zeno-blue/50 rounded-xl w-full max-w-xl">
+                        <div className="sticky top-0 bg-zeno-dark border-b border-zeno-blue/40 px-6 py-4 flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-white">Convert to Referrer</h2>
+                            <button onClick={() => setShowConvertModal(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {convertError && (
+                                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">{convertError}</div>
+                            )}
+
+                            {/* Summary */}
+                            <div className="bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg p-4 space-y-2">
+                                <div className="text-sm">
+                                    <span className="text-gray-400">Converting: </span>
+                                    <span className="text-white font-medium">{caseData.client.firstName} {caseData.client.lastName}</span>
+                                </div>
+                                <div className="text-sm">
+                                    <span className="text-gray-400">ID Number: </span>
+                                    <span className="text-white font-mono text-xs">{caseData.client.idNumber}</span>
+                                </div>
+                                <div className="text-sm">
+                                    <span className="text-gray-400">Case: </span>
+                                    <span className="text-white font-medium">{caseData.fileNumber}</span>
+                                </div>
+                            </div>
+
+                            {/* Commission Type */}
+                            <section>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Commission Structure</h3>
+                                <div className="space-y-3">
+                                    <div className="flex gap-3">
+                                        {(['FIXED', 'VOLUME_BASED'] as const).map((type) => (
+                                            <button
+                                                key={type}
+                                                type="button"
+                                                onClick={() => setConvertForm((f) => ({ ...f, commissionType: type }))}
+                                                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                                                    convertForm.commissionType === type
+                                                        ? 'bg-zeno-cyan/10 border-zeno-cyan/50 text-zeno-cyan'
+                                                        : 'bg-zeno-blue/20 border-zeno-blue/40 text-gray-400 hover:border-gray-500'
+                                                }`}
+                                            >
+                                                {type === 'FIXED' ? 'Fixed Amount' : 'Volume-Based'}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {convertForm.commissionType === 'FIXED' && (
+                                        <div>
+                                            <label className="block text-xs text-gray-400 mb-2">Commission per Referral (ZAR)</label>
+                                            <div className="flex gap-2 mb-2">
+                                                {[200, 250, 300, 500].map((amt) => (
+                                                    <button
+                                                        key={amt}
+                                                        type="button"
+                                                        onClick={() => setConvertForm((f) => ({ ...f, fixedCommissionAmount: String(amt) }))}
+                                                        className={`px-3 py-1 rounded-full text-xs border font-medium transition-colors ${
+                                                            convertForm.fixedCommissionAmount === String(amt)
+                                                                ? 'bg-zeno-cyan/20 border-zeno-cyan/50 text-zeno-cyan'
+                                                                : 'bg-zeno-blue/20 border-zeno-blue/40 text-gray-400 hover:border-gray-500'
+                                                        }`}
+                                                    >
+                                                        R{amt}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                step={50}
+                                                value={convertForm.fixedCommissionAmount}
+                                                onChange={(e) => setConvertForm((f) => ({ ...f, fixedCommissionAmount: e.target.value }))}
+                                                placeholder="e.g. 250"
+                                                className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-zeno-cyan/50"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {convertForm.commissionType === 'VOLUME_BASED' && (
+                                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-3 text-blue-300 text-xs space-y-1">
+                                            <p className="font-semibold">Commission auto-calculated based on case count:</p>
+                                            <p>• <strong>1 – 9 cases</strong> → <strong>R200</strong> per referral</p>
+                                            <p>• <strong>10 or more cases</strong> → <strong>R300</strong> per referral</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                            {/* Notes */}
+                            <section>
+                                <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">Additional Notes (Optional)</label>
+                                <textarea
+                                    value={convertForm.notes}
+                                    onChange={(e) => setConvertForm((f) => ({ ...f, notes: e.target.value }))}
+                                    rows={2}
+                                    className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-zeno-cyan/50 resize-none"
+                                    placeholder="e.g., 'Excellent referrer, consistent quality'"
+                                />
+                            </section>
+
+                            {/* Preservation Notice */}
+                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3 text-emerald-300 text-xs">
+                                <p className="font-semibold mb-1">✓ All data transferred</p>
+                                <p>Contact details, banking info, and referral chain are automatically preserved.</p>
+                            </div>
+                        </div>
+
+                        <div className="sticky bottom-0 bg-zeno-dark border-t border-zeno-blue/40 px-6 py-4 flex justify-end gap-3">
+                            <button onClick={() => setShowConvertModal(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                            <button
+                                onClick={handleConvertToReferrer}
+                                disabled={converting}
+                                className="bg-zeno-cyan text-zeno-dark font-semibold px-5 py-2 rounded-lg hover:bg-zeno-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                            >
+                                {converting ? 'Converting…' : 'Convert to Referrer'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modals */}
             {
                 viewingProjectMembers && (
@@ -4266,7 +4608,7 @@ export default function CaseDetailPage() {
                     isOpen={isMandateModalOpen}
                     onClose={() => setIsMandateModalOpen(false)}
                     caseId={caseData.id}
-                    clientName={caseData.jointClient 
+                    clientName={caseData.jointClient
                         ? `${caseData.client.firstName} ${caseData.client.lastName} & ${caseData.jointClient.firstName} ${caseData.jointClient.lastName}`
                         : `${caseData.client.firstName} ${caseData.client.lastName}`.trim()
                     }
@@ -4281,6 +4623,16 @@ export default function CaseDetailPage() {
                         instalmentAmount: caseData.totalMonthlyInstallment?.toString(),
                         instalments: (caseData as any).instalments?.toString()
                     }}
+                />
+            )}
+
+            {/* Assist Client to Consent Modal */}
+            {caseData && caseData.declineReason && (
+                <AssistClientConsentModal
+                    isOpen={isAssistClientConsentOpen}
+                    onClose={() => setIsAssistClientConsentOpen(false)}
+                    caseId={caseData.id}
+                    declineReason={caseData.declineReason}
                 />
             )}
 

@@ -235,7 +235,7 @@ function drawAccountsTable(
         page.drawRectangle({ x: MARGIN, y: y - 3, width: CONTENT_WIDTH, height: 14, color: bg });
 
         const statusLabel = acc.hasPaidUpLetter
-            ? 'PAID UP ✓'
+            ? 'PAID UP'
             : acc.status === 'CLOSED' ? 'CLOSED'
             : acc.isPrescribed ? 'PRESCRIBED'
             : 'ACTIVE';
@@ -542,7 +542,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
 
         if (hasPaidUp) {
             y = textBlock(page,
-                `5.2  Accounts marked "PAID UP ✓" are fully settled. Paid-up letters confirming a zero balance have been received from the respective credit providers and are annexed hereto as Annexure "E".`,
+                `5.2  Accounts marked "PAID UP" are fully settled. Paid-up letters confirming a zero balance have been received from the respective credit providers and are annexed hereto as Annexure "E".`,
                 MARGIN + 8, y, CONTENT_WIDTH - 8, bold, reg, { size: 9 });
             y -= 8;
         }

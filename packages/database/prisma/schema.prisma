@@ -266,6 +266,8 @@ model Case {
   todos                   String?
   declineReason           String?
   declineReasonAttended   Boolean               @default(false)
+  declineFirstDetectedAt  DateTime?             // When decline was FIRST detected (never updated, used for window calculation)
+  declineLastDetectedAt   DateTime?             // Most recent decline detection (updated on each new decline, visible in UI)
   description             String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -816,6 +818,18 @@ model Invoice {
   @@index([caseId])
   @@index([issuedAt])
   @@index([dueAt])
+}
+
+model DocumentSequence {
+  id        String   @id @default(cuid())
+  prefix    String   // QUO or INV
+  year      Int
+  nextSeq   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([prefix, year])
+  @@index([prefix, year])
 }
 
 model BankAccount {

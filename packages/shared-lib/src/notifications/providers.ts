@@ -21,6 +21,7 @@ export interface EmailOptions {
     fromEmail?:   string;
     attachments?: EmailAttachment[];
     cc?:          string[];
+    bcc?:         string[];
 }
 
 export interface EmailProvider {
@@ -144,6 +145,7 @@ export class ResendEmailProvider implements EmailProvider {
             };
 
             if (options?.cc?.length) body.cc = options.cc;
+            if (options?.bcc?.length) body.bcc = options.bcc;
 
             if (options?.attachments?.length) {
                 body.attachments = options.attachments.map(a => ({
@@ -236,6 +238,7 @@ export class SmtpEmailProvider implements EmailProvider {
                 from:        options?.fromEmail || this.fromEmail,
                 to:          to,
                 cc:          options?.cc?.join(', '),
+                bcc:         options?.bcc?.join(', '),
                 subject:     subject,
                 html:        htmlBody,
                 text:        textBody || htmlBody.replace(/<[^>]*>/g, ''),
@@ -513,6 +516,8 @@ export class GhlWebhookEmailProvider implements EmailProvider {
                     message: htmlBody,
                     from_name: options?.fromName,
                     from_email: options?.fromEmail,
+                    cc: options?.cc?.length ? options.cc : undefined,
+                    bcc: options?.bcc?.length ? options.bcc : undefined,
                     attachments: attachmentUrls?.length ? attachmentUrls : undefined,
                 })
             });

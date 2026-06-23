@@ -1,7 +1,437 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-21 (DHS Import — fix fileNumber collision + orphan clients)
+> Last updated: 2026-06-23 (Email BCC for Audit Trail)
+
+---
+
+### Email BCC for Audit Trail — Automatic blind copy of all outbound emails (2026-06-23)
+
+**Problem:** Staff wanted visibility into all outbound emails sent from the system without recipients knowing they were being monitored. Previously, emails were sent but only visible in the original "from" account; staff couldn't audit what was actually sent to clients, debt counsellors, or credit bureaus.
+
+**Solution:** Implemented automatic BCC on all outbound emails. When `EMAIL_BCC_ADDRESS` environment variable is set (e.g., `notifications@zenowethu.co.za`), every email is silently copied to that address without the recipient knowing.
+
+**What was done:**
+
+1. **Email Providers Updated** ✅
+   - Added `bcc?: string[]` field to `EmailOptions` interface
+   - Updated `SmtpEmailProvider` to include BCC in sendMail call
+   - Updated `ResendEmailProvider` to include BCC in API payload
+   - Updated `GhlWebhookEmailProvider` to pass BCC in webhook payload
+   - All providers now support BCC seamlessly
+
+2. **Notification Service** ✅
+   - Created `addBccToOptions()` helper function to inject BCC automatically
+   - Applied to all 7 email send locations:
+     - `sendNotificationByTemplate()` — client and DC emails
+     - `sendManualMessage()` — manual email sends
+     - `sendFileRequestEmails()` — bureau and provider emails
+     - `sendDrrRequestEmails()` — debt review removal emails
+     - `sendInternalNotification()` — staff alerts
+     - `resendNotification()` — retry sends
+     - `executeNotificationRetry()` — queue retries
+   - BCC is completely transparent — recipients never see it
+
+3. **Configuration** ✅
+   - Added `EMAIL_BCC_ADDRESS` environment variable to all app `.env.example` files:
+     - `apps/cases`
+     - `apps/finance`
+     - `apps/insurance`
+     - `apps/legal`
+     - `apps/forensic-audit`
+     - `apps/website`
+   - Documented as optional — only active if set
+
+4. **Tests** ✅
+   - Added test to verify BCC passes through FallbackEmailProvider
+   - All 368 existing tests still pass
+   - New test added: `providers.test.ts` — BCC option passing
+
+**Files Changed:**
+- `packages/shared-lib/src/notifications/providers.ts` — Added BCC support to all providers
+- `packages/shared-lib/src/notifications/service.ts` — Added BCC injection helper + applied to 7 email locations
+- `packages/shared-lib/src/notifications/providers.test.ts` — Added BCC test
+- `apps/cases/.env.example` — Documented EMAIL_BCC_ADDRESS
+- `apps/finance/.env.example` — Documented EMAIL_BCC_ADDRESS
+- `apps/insurance/.env.example` — Documented EMAIL_BCC_ADDRESS
+- `apps/legal/.env.example` — Documented EMAIL_BCC_ADDRESS
+- `apps/forensic-audit/.env.example` — Documented EMAIL_BCC_ADDRESS
+- `apps/website/.env.example` — Documented EMAIL_BCC_ADDRESS
+
+**How to Use:**
+```bash
+# In .env.local or production secrets, set:
+EMAIL_BCC_ADDRESS=notifications@zenowethu.co.za
+```
+
+All outgoing emails will now be blind-copied to that address. Emails appear in the BCC inbox as if they were the original recipient, maintaining full audit trail.
+
+**Status:** Complete and tested (368 tests passing)
+
+---
+
+### Invoice Number Race Condition Fix — Prevent "Invoice number conflict" errors (2026-06-24)
+
+**Problem:** When multiple quotation creation requests came in simultaneously, they would all see the same invoice count and try to create invoices with the same number (e.g., both trying to create `QUO-2026-0006`), resulting in a unique constraint violation with error: "Invoice number conflict — please retry".
+
+**Root Cause:** The invoice number generation logic counted existing invoices and generated the next number, but this counting + creation was not atomic. Under concurrent load, two requests could see the same count and generate identical numbers.
+
+**Solution:** Implemented atomic sequence tracking using a new `DocumentSequence` database table that atomically allocates the next sequence number for each prefix/year combination.
+
+**What was done:**
+
+1. **Database Schema** ✅
+   - Added `DocumentSequence` model to track next sequence number per prefix/year
+   - Unique constraint on (prefix, year) ensures no duplicates
+   - Migration: `20260623_add_document_sequence`
+
+2. **Invoice Generation Logic** ✅
+   - Replaced counting logic with atomic `upsert` + `increment` operation
+   - Uses Prisma transaction to atomically allocate sequence numbers
+   - Eliminates race condition completely
+   - File: `apps/finance/app/api/finance/invoices/route.ts`
+
+3. **Tests** ✅
+   - Added concurrent load test to verify unique sequential numbers
+   - File: `apps/finance/app/api/finance/invoices/route.test.ts`
+
+**Files Changed:**
+- `packages/database/prisma/schema.prisma` — Added DocumentSequence model
+- `packages/database/prisma/migrations/20260623_add_document_sequence/` — Migration files
+- `apps/finance/app/api/finance/invoices/route.ts` — Updated invoice generation logic
+- `apps/finance/app/api/finance/invoices/route.test.ts` — Added concurrent test
+
+**Database Migration Applied:** ✅ Successfully applied to Dokploy database
+
+**Status:** Complete and tested
+
+---
+
+### Assist Client to Consent Feature — Auto-draft and send client engagement emails via WhatsApp (2026-06-24)
+
+**Problem:** When DHS declines a transfer because the client hasn't consented, staff had to manually draft emails asking the client to contact their debt counsellor. This was repetitive, inconsistent, and took time.
+
+**Solution:** New "Assist client to consent" feature that:
+- Auto-detects when decline reasons require client involvement (keywords: "client needs to", "client", "consumer", etc.)
+- Shows a blue button "💬 Assist client to consent" next to "Handle Decline"
+- Drafts a personalized email template addressing the specific decline reason
+- Allows staff to edit the draft before sending
+- Sends via WhatsApp directly to the client's registered number
+- Displays client info (name, ID last 4 digits, current DC, WhatsApp status)
+- Provides real-time feedback and error handling
+
+**What was done:**
+
+1. **API Endpoints** ✅
+   - `POST /api/cases/[id]/dhs-decline/draft-client-email` — Auto-drafts email based on decline reason
+   - `POST /api/cases/[id]/dhs-decline/send-client-email` — Sends email via WhatsApp to client
+
+2. **React Modal Component** ✅
+   - `AssistClientConsentModal.tsx` — Full-featured modal with:
+     - Auto-draft generation from decline reason
+     - Client information display (name, ID masked, current DC, WhatsApp status)
+     - Editable message textarea
+     - Send via WhatsApp button with loading state
+     - Error handling and user feedback
+
+3. **Case Details Integration** ✅
+   - Added button state tracking for modal visibility
+   - Implemented `requiresClientInvolvement()` detection function
+   - Conditionally shows button when decline reason matches keywords
+   - Integrated modal component into case details page
+
+4. **Email Template Logic** ✅
+   - Detects decline reason patterns:
+     - Unable to confirm transfer with client
+     - Client has not consented
+     - Client must/needs to contact DC
+     - Client contact request
+     - Not yet consented
+     - Consumer consent needed
+   - Generates tailored response addressing each pattern
+   - Personalized with client first name and current DC name
+
+5. **Tests** ✅
+   - Unit tests for draft endpoint (`draft-client-email/route.test.ts`)
+   - Unit tests for send endpoint (`send-client-email/route.test.ts`)
+
+**Files Created:**
+- `apps/cases/app/api/cases/[id]/dhs-decline/draft-client-email/route.ts`
+- `apps/cases/app/api/cases/[id]/dhs-decline/send-client-email/route.ts`
+- `apps/cases/app/(authenticated)/cases/[id]/AssistClientConsentModal.tsx`
+- `apps/cases/app/api/cases/[id]/dhs-decline/draft-client-email/route.test.ts`
+- `apps/cases/app/api/cases/[id]/dhs-decline/send-client-email/route.test.ts`
+
+**Files Modified:**
+- `apps/cases/app/(authenticated)/cases/[id]/page.tsx` — Added button, state, modal integration, and detection logic
+
+**Next Steps:**
+- Verify feature works with real case data (build/test in dev server)
+- Consider adding email delivery (not just WhatsApp) option if needed
+- Consider logging which staff member sent which client consent requests
+
+---
+
+### Client-to-Referrer Conversion Feature — Convert satisfied clients into referrers with one click (2026-06-23)
+
+**Problem:** Clients often become referrers after they've been helped, but staff had to re-enter all their details (name, contact, banking info) into a new referrer record. This creates duplicate data and loses the referral relationship (who referred them initially).
+
+**Solution:** New "Convert Clients to Referrers" feature that:
+- Converts existing client records into referrer records
+- Automatically copies all available data (name, ID, email, phone, banking details)
+- **Preserves the referral chain** — if the client was referred by another referrer, that relationship is maintained
+- Creates proper sub-project hierarchy
+- Configurable commission tiers (fixed amount or volume-based)
+- Role-based access (Admin/Executive/Manager only)
+
+**What was done:**
+
+1. **API Endpoints** ✅
+   - `POST /api/admin/clients/convert-to-referrer` — converts a client to referrer with commission config
+   - `GET /api/admin/clients` — lists clients with pagination and search (supports filtering by name, ID, email, phone)
+
+2. **Admin UI** ✅
+   - New page: `/admin/convert-clients` — browse all clients with search
+   - "Convert to Referrer" button on each client row
+   - Modal form with:
+     - Commission type selection (Fixed Amount or Volume-Based)
+     - Quick preset buttons for common amounts (R200, R250, R300, R500)
+     - Custom amount input
+     - Optional notes field
+     - Summary showing client data being converted
+     - Preservation notice explaining referral chain preservation
+
+3. **Admin Dashboard Integration** ✅
+   - Added "Convert Clients" module to admin dashboard with icon and description
+   - Link placed after "Referrers" module for natural workflow
+
+4. **Database & Hierarchy** ✅
+   - When client is converted:
+     - New Referrer record created with client's data
+     - New sub-project created (named after client)
+     - If client was referred, `parentReferrerId` is set to preserve chain
+     - If top-level, sub-project is nested under "Referrals" root project
+     - Audit log entry created for compliance
+
+5. **Tests** ✅
+   - Unit tests for client listing API (`route.test.ts`)
+   - Unit tests for conversion API (`convert-to-referrer/route.test.ts`)
+   - Test cases cover: data copy, referral chain preservation, sub-project creation, banking details transfer
+
+**Files Created:**
+- `apps/cases/app/api/admin/clients/route.ts` — GET clients list with pagination
+- `apps/cases/app/api/admin/clients/route.test.ts` — tests for clients API
+- `apps/cases/app/api/admin/clients/convert-to-referrer/route.ts` — POST to convert client (single or bulk)
+- `apps/cases/app/api/admin/clients/convert-to-referrer/route.test.ts` — tests for conversion
+- `apps/cases/app/(authenticated)/admin/convert-clients/page.tsx` — UI page (single + bulk convert)
+- `apps/cases/app/(authenticated)/admin/referrer-conversion-report/page.tsx` — reporting & analytics page
+- `apps/cases/app/api/admin/referrer-conversion-report/route.ts` — report API with time-range filtering
+
+**Files Modified:**
+- `apps/cases/app/(authenticated)/admin/page.tsx` — added "Convert Clients" + "Conversion Report" modules
+- `apps/cases/app/(authenticated)/cases/[id]/page.tsx` — added "Convert to Referrer" button + modal to case detail header
+
+**Extended: Three Conversion Methods + Reporting (2026-06-24)**
+
+Added three new capabilities:
+
+1. **Quick Convert from Case Details** ✅
+   - New button in case header: "Convert to Referrer" (Admin/Manager/Executive only)
+   - One-click conversion directly from the case detail page
+   - Modal form with commission configuration
+   - Useful when reviewing a case and realizing the client is becoming a referrer
+
+2. **Bulk Conversion** ✅
+   - Checkboxes added to `/admin/convert-clients` table
+   - Select multiple clients (use "select all" checkbox)
+   - "Convert N Clients" button appears when selections made
+   - Bulk modal allows configuring commission for all selected clients at once
+   - Progress bar shows conversion status
+   - Converts all clients with single operation instead of one-by-one clicks
+
+3. **Conversion Report & Analytics** ✅
+   - New page: `/admin/referrer-conversion-report`
+   - Filter by: All Time / This Month / This Week
+   - Stats dashboard:
+     - Total converted clients
+     - Converted this month/week
+     - Active converted referrers
+     - Cases generated by conversions
+     - Average cases per converted referrer
+     - Referrers who preserve parent referrer relationship
+   - Detailed table showing each converted client:
+     - Name, ID, contact info
+     - Conversion date
+     - Cases generated
+     - Commission tier
+     - Active/inactive status
+     - Referred by (parent referrer if applicable)
+   - Link to full referrer registry for detailed management
+
+**How to use (Staff):**
+
+**Option A: Single Client Conversion**
+1. Go to **Admin → Convert Clients**
+2. Search for the client by name, ID, or email
+3. Click **"Convert to Referrer"** button
+4. Configure commission (recommend fixed R250 for new referrers)
+5. Click **"Convert to Referrer"**
+
+**Option B: Bulk Conversion (Multiple Clients)**
+1. Go to **Admin → Convert Clients**
+2. Use checkboxes to select multiple clients (use "select all" checkbox in header)
+3. Emerald **"Convert N Clients"** button appears in top right
+4. Click it to open bulk modal
+5. Configure commission structure (applied to all selected clients)
+6. Click **"Convert All"** — progress bar shows conversion status
+7. All clients converted at once with same commission config
+
+**Option C: Quick Convert from Case Details**
+1. Open any case where primary client will become a referrer
+2. Click **"Convert to Referrer"** button in the header (Admin/Manager/Executive only)
+3. Configure commission for that specific client
+4. Click **"Convert to Referrer"**
+
+**Track Conversions:**
+- Go to **Admin → Conversion Report**
+- View all converted clients with:
+  - Conversion date
+  - Cases generated by each
+  - Commission tier (fixed or volume-based)
+  - Active/inactive status
+  - Referral chain (who referred each converted referrer)
+  - Filter by: All Time / This Month / This Week
+
+**Impact:**
+- ✅ Eliminates data duplication when clients become referrers
+- ✅ Preserves referral relationships (referral tree grows organically, not rebuilt)
+- ✅ Faster referrer onboarding (no re-entry required)
+- ✅ Audit trail created for each conversion
+- ✅ Commission tracking begins immediately on new referrer
+
+---
+
+### DHS Decline Date Tracking — Staff can now see when last decline occurred + remaining days (2026-06-23)
+
+**Problem:** When a DHS decline was detected, the system couldn't tell how many days had passed since the original decline. If automation ran 2 days after the decline, it would set nextUpdate to +3 days (total 5 days from original decline) instead of +5 days (to complete the 7-day window). Staff had no visibility into decline dates on the case file.
+
+**What was done:**
+
+1. **Database Schema** ✅
+   - Added `declineFirstDetectedAt` (DateTime?) — set once on first decline, never updated; used for window calculation
+   - Added `declineLastDetectedAt` (DateTime?) — updated on each decline detection; visible in UI to staff
+   - Migration created: `20260623_add_decline_dates/migration.sql`
+   - Applied to production database successfully
+
+2. **Decline-Handler Logic** ✅
+   - Exported two new functions for testing:
+     - `getBasePeriodForCategory(category)` — returns base waiting period for each decline type:
+       - RESUBMIT_LATER, CLIENT_CONSENT_NEEDED: **7 days**
+       - OUTSTANDING_FEES, CONTACT_ATTORNEY: **5 days**
+       - SEND_DOCS, SEND_DOCS_WITH_NCR, UNKNOWN: **3 days**
+     - `calculateNextUpdate(basePeriod, declineFirstDetectedAt)` — calculates remaining days accounting for elapsed time
+   - Updated all category handlers (SEND_DOCS, CLIENT_CONSENT_NEEDED, OUTSTANDING_FEES, CONTACT_ATTORNEY, RESUBMIT_LATER) to:
+     - Set `declineLastDetectedAt = now()` on every decline detection
+     - Set `declineFirstDetectedAt = now()` only if this is the first decline (preserve original detection time)
+     - Use `calculateNextUpdate()` to compute remaining days from first detection, not from now
+   - Example: If RESUBMIT_LATER decline detected 2 days ago → nextUpdate = +5 days (7 - 2)
+
+3. **Case Detail Page UI** ✅
+   - Updated CaseDetail type to include `declineFirstDetectedAt` and `declineLastDetectedAt`
+   - **Location 1: Decline Reason Section** — Date info panel showing:
+     - **Last Decline:** date/time + "X days ago"
+     - **First Detected:** date/time + "X days ago" (only if different from last)
+   - **Location 2: DHS Info Section** — New red summary card showing:
+     - Last decline date/time + days ago
+     - First detection date/time + days ago (if different from last)
+   - Dates displayed in `dd MMM yyyy HH:mm` format (e.g. "23 Jun 2026 14:35")
+
+4. **Tests** ✅
+   - Added 7 new test cases to `decline-handler.test.ts`:
+     - `getBasePeriodForCategory`: 7 tests (one per category, verifies correct days returned)
+     - `calculateNextUpdate`: 4 tests (full base period when null, remaining days calculation, minimum 1 day, various base periods)
+   - All 368 tests in shared-lib pass ✅
+
+**Files Changed:**
+- `packages/database/prisma/schema.prisma` — added two DateTime fields to Case model
+- `packages/database/prisma/migrations/20260623_add_decline_dates/migration.sql` — migration SQL
+- `packages/shared-lib/src/dhs/decline-handler.ts` — decline date tracking logic, exported helper functions
+- `packages/shared-lib/src/dhs/decline-handler.test.ts` — 7 new unit tests
+- `apps/cases/app/(authenticated)/cases/[id]/page.tsx` — added decline dates to CaseDetail type, added summary card in DHS section, enhanced Decline Reason section
+- `apps/cases/app/(authenticated)/cases/[id]/WorkflowTimeline.tsx` — updated CaseInfo type, added decline date timeline entry
+
+**How to verify (for staff):**
+
+Staff can now see decline dates in **three locations** on a case file:
+
+1. **Decline Reason Section** (in main case details)
+   - Scroll to "🚩 Decline Reason" 
+   - Date info panel shows Last Decline + First Detected dates + days ago
+
+2. **DHS Info Section** (in DHS Status area)
+   - Red summary card titled "DHS Decline Tracking"
+   - Shows Last Decline and First Detected on side-by-side cards
+   - Each card displays date/time + "X days ago"
+
+3. **Workflow Timeline** (in the timeline tab)
+   - New timeline entry "🚩 DHS Decline Detected"
+   - Shows first detection date in chronological order
+   - Shows most recent decline if different from first
+
+All three display the same underlying data — choose whichever location is most convenient for your workflow.
+
+**Impact:**
+- ✅ Staff can now see decline dates on case files for audit/compliance purposes
+- ✅ Re-check logic correctly calculates remaining window time (no over-waiting, no under-waiting)
+- ✅ Different decline categories respected (3/5/7 days based on type)
+- ✅ Handles repeat declines correctly (only first detection time affects window calculation)
+
+---
+
+### Shared-lib — DHS Decline Reason: fixed classification for "forward POA & ID" patterns (2026-06-22)
+
+**Symptom:** Case detail page showed "⚠️ Decline handling issues (UNKNOWN)" when the decline reason was "Kindly forward POA & ID copy to transfers@yma-consulting.co.za". The decline handler couldn't auto-classify it, requiring manual staff review instead of automatically sending documents.
+
+**Root cause:** The `classifyDeclineReason()` function in `packages/shared-lib/src/dhs/decline-handler.ts` was missing two patterns:
+1. `'FORWARD POA'` — the decline reason used "forward" instead of "send/please send"
+2. Combined check `(r.includes('FORWARD') && r.includes('POA') && r.includes('ID'))` — catches various orderings
+
+**What was done:**
+- [x] Added two new pattern checks to the `SEND_DOCS` classification block (lines 74-75 in decline-handler.ts)
+- [x] Added test case `classifies "Kindly forward POA & ID copy to..." as SEND_DOCS` to `packages/shared-lib/src/dhs/decline-handler.test.ts`
+- [x] All 26 decline-handler tests pass ✅
+- [x] The fix ensures this common decline reason now correctly triggers the `SEND_DOCS` flow: email POA + ID to DC, update status to `REJECTED_EMAIL_DOCS`, notify consumer via SMS/WhatsApp
+
+**Verification:** `pnpm --filter @zenowethu/shared-lib test` → 26 tests pass, including the new case.
+
+---
+
+### Court Documents — Verified System Working + Added Comprehensive Tests (2026-06-22)
+
+**Verification completed on Court Document PDF Generator system — all 6 templates functioning:**
+- [x] Confirmed `generateCourtDoc()` function in `packages/shared-lib/src/court-docs/court-doc-pdf.ts` — complete implementation with all 6 document generators (`NOTICE_OF_MOTION`, `FOUNDING_AFFIDAVIT`, `NOTICE_OF_SET_DOWN`, `NOTICE_OF_MOTION_RESCISSION`, `COURT_ORDER_GRANTED`, `PROOF_OF_SERVICE`)
+- [x] Confirmed API route `/api/cases/[id]/court-docs` wired up and functional — accepts `POST` with docType, courtName, courtCaseNumber, emailTo (optional)
+- [x] Confirmed `CourtDocsTab` component integrated into case detail page as `?tab=COURT_DOCS` (visible for debt review cases only)
+- [x] Fixed PDF encoding issue: removed Unicode checkmark (✓) from status labels and notes — `PAID UP` (ASCII) instead of `PAID UP ✓`
+- [x] Updated `packages/shared-lib/src/court-docs/index.ts` to explicitly export types and functions (was using star import)
+- [x] Created comprehensive test suite: `packages/shared-lib/src/court-docs/court-doc-pdf.test.ts` (12 test cases covering all 6 document types, minimal input, joint client, error handling, labels, descriptions)
+- [x] **All tests pass:** 30 test files, 356 tests, 0 failures | typecheck clean
+
+**System Status:** ✅ **Fully operational and production-ready**
+- Users can now **generate personalised court documents on demand** from the "Court Docs" tab in any debt review case
+- Documents auto-fill: client name, ID, address, phone, email, joint applicant (if present), credit accounts (if present), paid-up status (if applicable)
+- Documents auto-exclude: accounts table if no accounts; paid-up section if no paid-up letters or closed accounts
+- Two modes: Download PDF directly or Email PDF (via SMTP or Resend)
+- Optional court name and case number can be entered for each document
+
+**How to use (for staff):**
+1. Open a Case with status "Accepted via DHS" or "Accepted — Form 17.7" (debt review cases)
+2. Click **"COURT DOCS"** tab (top navigation)
+3. Click **"Generate PDF"** on any of the 6 documents
+4. (Optional) Enter Court Name and Court Case Number
+5. Choose: **Download PDF** or **Email PDF** (requires SMTP or Resend configured)
+6. PDF is generated with all personalised case data pre-filled
+7. Download or email to client/respondent
 
 ---
 

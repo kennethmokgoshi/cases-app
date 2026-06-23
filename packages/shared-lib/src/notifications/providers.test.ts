@@ -64,4 +64,16 @@ describe('FallbackEmailProvider', () => {
         const provider = new FallbackEmailProvider(primary, fallback);
         expect(provider.name).toBe('GoHighLevel→SMTP');
     });
+
+    it('passes BCC through to primary provider', async () => {
+        const primary  = mockEmailProvider({ success: true, provider: 'GHL' });
+        const fallback = mockEmailProvider({ success: true, provider: 'SMTP' });
+        const provider = new FallbackEmailProvider(primary, fallback);
+
+        const options: EmailOptions = { bcc: ['audit@example.com'] };
+        await provider.send('to@example.com', 'Subj', '<b>html</b>', 'text', options);
+
+        expect(primary.send).toHaveBeenCalledWith('to@example.com', 'Subj', '<b>html</b>', 'text', options);
+        expect(options.bcc).toEqual(['audit@example.com']);
+    });
 });

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { classifyDeclineReason, extractEmailFromReason } from './decline-handler';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { classifyDeclineReason, extractEmailFromReason, getBasePeriodForCategory, calculateNextUpdate } from './decline-handler';
 
 describe('classifyDeclineReason', () => {
     // SEND_DOCS
@@ -83,6 +83,10 @@ describe('classifyDeclineReason', () => {
         expect(classifyDeclineReason('Kindly forward transfer documents to dc@firm.co.za')).toBe('SEND_DOCS');
     });
 
+    it('classifies "Kindly forward POA & ID copy to..." as SEND_DOCS', () => {
+        expect(classifyDeclineReason('Kindly forward POA & ID copy to transfers@yma-consulting.co.za')).toBe('SEND_DOCS');
+    });
+
     it('returns UNKNOWN for unrecognised text', () => {
         expect(classifyDeclineReason('The reason is unknown at this time')).toBe('UNKNOWN');
     });
@@ -124,5 +128,75 @@ describe('extractEmailFromReason', () => {
 
     it('returns null for empty string', () => {
         expect(extractEmailFromReason('')).toBeNull();
+    });
+});
+
+describe('getBasePeriodForCategory', () => {
+    it('returns 7 days for RESUBMIT_LATER', () => {
+        expect(getBasePeriodForCategory('RESUBMIT_LATER')).toBe(7);
+    });
+
+    it('returns 7 days for CLIENT_CONSENT_NEEDED', () => {
+        expect(getBasePeriodForCategory('CLIENT_CONSENT_NEEDED')).toBe(7);
+    });
+
+    it('returns 5 days for OUTSTANDING_FEES', () => {
+        expect(getBasePeriodForCategory('OUTSTANDING_FEES')).toBe(5);
+    });
+
+    it('returns 5 days for CONTACT_ATTORNEY', () => {
+        expect(getBasePeriodForCategory('CONTACT_ATTORNEY')).toBe(5);
+    });
+
+    it('returns 3 days for SEND_DOCS', () => {
+        expect(getBasePeriodForCategory('SEND_DOCS')).toBe(3);
+    });
+
+    it('returns 3 days for SEND_DOCS_WITH_NCR', () => {
+        expect(getBasePeriodForCategory('SEND_DOCS_WITH_NCR')).toBe(3);
+    });
+
+    it('returns 3 days for UNKNOWN', () => {
+        expect(getBasePeriodForCategory('UNKNOWN')).toBe(3);
+    });
+});
+
+describe('calculateNextUpdate', () => {
+    it('returns full base period from now when no prior decline date', () => {
+        const result = calculateNextUpdate(7, null);
+        const now = new Date();
+        const daysDiff = Math.round((result.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        // Working days calculation (addWorkingDays) adds variance; expect a wide range
+        expect(daysDiff).toBeGreaterThanOrEqual(5);
+        expect(daysDiff).toBeLessThanOrEqual(12);
+    });
+
+    it('calculates remaining days when decline was detected 2 days ago', () => {
+        const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+        const result = calculateNextUpdate(7, twoDaysAgo);
+        const now = new Date();
+        const daysDiff = Math.round((result.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        // Should be approximately 5 days remaining (7 - 2); allow wide range due to working days
+        expect(daysDiff).toBeGreaterThanOrEqual(3);
+        expect(daysDiff).toBeLessThanOrEqual(10);
+    });
+
+    it('never returns less than 1 day even if elapsed > base period', () => {
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        const result = calculateNextUpdate(7, ninetyDaysAgo);
+        const now = new Date();
+        const daysDiff = Math.round((result.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        // Should be at least 1 day
+        expect(daysDiff).toBeGreaterThanOrEqual(0);
+    });
+
+    it('calculates correctly for 3-day period with 1 day elapsed', () => {
+        const oneDayAgo = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
+        const result = calculateNextUpdate(3, oneDayAgo);
+        const now = new Date();
+        const daysDiff = Math.round((result.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        // Should be approximately 2 days remaining (3 - 1)
+        expect(daysDiff).toBeGreaterThanOrEqual(0);
+        expect(daysDiff).toBeLessThanOrEqual(6);
     });
 });

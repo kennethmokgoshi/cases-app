@@ -159,6 +159,9 @@ export async function POST(request: Request) {
             matched: enriched.filter((r: any) => r.dbMatch.found).length,
             unmatched: enriched.filter((r: any) => !r.dbMatch.found).length,
             statusChanged: enriched.filter((r: any) => r.statusChanged).length,
+            // Orphan: client exists in DB but has no case (e.g. left behind by a
+            // previously-failed import). These must be created, not updated.
+            orphans: enriched.filter((r: any) => r.dbMatch.found && !r.dbMatch.caseId).length,
         };
 
         logger.info(`📊 DB match: ${stats.matched} matched, ${stats.unmatched} unmatched, ${stats.statusChanged} status changes`);

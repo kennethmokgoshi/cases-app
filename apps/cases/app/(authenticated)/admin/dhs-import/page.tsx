@@ -40,7 +40,7 @@ type DcOwner = {
     dcTradingName: string;
 };
 
-type Stats = { total: number; matched: number; unmatched: number; statusChanged: number };
+type Stats = { total: number; matched: number; unmatched: number; statusChanged: number; orphans: number };
 type SortField = 'ncr_ref' | 'surname' | 'status_code' | 'currentDhsStatus' | 'selectedAction';
 type SortDir = 'asc' | 'desc';
 
@@ -155,7 +155,7 @@ export default function DhsImportPage() {
     // Filters
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
-    const [filterMatch, setFilterMatch] = useState<'all' | 'matched' | 'unmatched'>('all');
+    const [filterMatch, setFilterMatch] = useState<'all' | 'matched' | 'unmatched' | 'orphan'>('all');
     const [filterChanged, setFilterChanged] = useState(false);
 
     // Sort
@@ -351,7 +351,9 @@ export default function DhsImportPage() {
             );
         }
         if (filterStatus !== 'all') list = list.filter((r) => r.status_code === filterStatus);
-        if (filterMatch !== 'all') list = list.filter((r) => filterMatch === 'matched' ? r.dbMatch.found : !r.dbMatch.found);
+        if (filterMatch === 'matched') list = list.filter((r) => r.dbMatch.found);
+        if (filterMatch === 'unmatched') list = list.filter((r) => !r.dbMatch.found);
+        if (filterMatch === 'orphan') list = list.filter((r) => r.dbMatch.found && !r.dbMatch.caseId);
         if (filterChanged) list = list.filter((r) => r.statusChanged);
 
         list.sort((a, b) => {
@@ -616,18 +618,32 @@ export default function DhsImportPage() {
 
             {/* ── Stats bar ─────────────────────────────────────────────── */}
             {stats && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                     {[
-                        { label: 'Total Records', value: stats.total, color: 'text-white' },
-                        { label: 'Matched in DB', value: stats.matched, color: 'text-green-300' },
-                        { label: 'Not in DB', value: stats.unmatched, color: 'text-amber-300' },
-                        { label: 'Status Changed', value: stats.statusChanged, color: 'text-rose-300' },
-                    ].map((s) => (
-                        <div key={s.label} className="bg-zeno-blue/20 rounded-xl border border-white/5 px-4 py-3">
-                            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-                            <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
-                        </div>
-                    ))}
+                        { label: 'Total Records',  value: stats.total,         color: 'text-white',       matchVal: 'all'       as const, changedVal: false },
+                        { label: 'Matched in DB',  value: stats.matched,       color: 'text-green-300',   matchVal: 'matched'   as const, changedVal: false },
+                        { label: 'Not in DB',      value: stats.unmatched,     color: 'text-amber-300',   matchVal: 'unmatched' as const, changedVal: false },
+                        { label: 'Status Changed', value: stats.statusChanged, color: 'text-rose-300',    matchVal: 'all'       as const, changedVal: true  },
+                        { label: 'Orphan Clients', value: stats.orphans,       color: 'text-purple-300',  matchVal: 'orphan'    as const, changedVal: false },
+                    ].map((s) => {
+                        const isActive = filterMatch === s.matchVal && filterChanged === s.changedVal;
+                        return (
+                            <button
+                                key={s.label}
+                                onClick={() => { setFilterMatch(s.matchVal); setFilterChanged(s.changedVal); }}
+                                className={`rounded-xl border px-4 py-3 text-left transition-all cursor-pointer ${
+                                    isActive
+                                        ? 'bg-zeno-orange/20 border-zeno-orange/50 ring-2 ring-zeno-orange/30'
+                                        : 'bg-zeno-blue/20 border-white/5 hover:border-white/10 hover:bg-zeno-blue/30'
+                                }`}
+                            >
+                                <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                                <p className={`text-xs mt-0.5 ${isActive ? 'text-zeno-orange' : 'text-gray-500'}`}>{s.label}</p>
+                                {s.label === 'Orphan Clients' && <p className="text-xs text-gray-600 mt-0.5">client found, no case</p>}
+                                {isActive && <p className="text-xs text-zeno-orange mt-1">✓ Filtered</p>}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 
@@ -667,6 +683,7 @@ export default function DhsImportPage() {
                             <option value="all">All records</option>
                             <option value="matched">Matched in DB</option>
                             <option value="unmatched">Not in DB</option>
+                            <option value="orphan">Orphan clients (no case)</option>
                         </select>
 
                         {/* Changed filter */}

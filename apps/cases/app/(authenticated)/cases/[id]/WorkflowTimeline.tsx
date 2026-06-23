@@ -35,6 +35,9 @@ type CaseInfo = {
     totalMonthlyInstallment: number | null;
     client: { firstName: string; lastName: string };
     createdBy: { firstName: string; lastName: string } | null;
+    declineFirstDetectedAt?: string | null;
+    declineLastDetectedAt?: string | null;
+    dhsStatus?: string | null;
 };
 
 type WorkflowData = {
@@ -264,6 +267,30 @@ export function WorkflowTimeline({ caseId }: { caseId: string }) {
                                 </div>
                             </div>
                         </li>
+
+                        {/* DHS Decline Date (if applicable) */}
+                        {c.declineFirstDetectedAt && (
+                            <li className="mb-6 ml-6">
+                                <span className="absolute -left-2 flex items-center justify-center w-4 h-4 rounded-full bg-red-600 ring-4 ring-[var(--color-bg-primary)]">
+                                    <span className="w-1.5 h-1.5 bg-red-300 rounded-full" />
+                                </span>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-red-500/20 text-red-400 border-red-500/30">
+                                            🚩 DHS Decline Detected
+                                        </span>
+                                    </div>
+                                    <p className="text-gray-500 text-xs">
+                                        {formatDateTime(c.declineFirstDetectedAt)}
+                                    </p>
+                                    {c.declineLastDetectedAt && c.declineLastDetectedAt !== c.declineFirstDetectedAt && (
+                                        <p className="text-gray-500 text-xs mt-1">
+                                            Most recent: {formatDateTime(c.declineLastDetectedAt)}
+                                        </p>
+                                    )}
+                                </div>
+                            </li>
+                        )}
 
                         {timeline.map((item) => {
                             if (item.kind === 'log') {

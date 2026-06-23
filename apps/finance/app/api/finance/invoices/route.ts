@@ -179,9 +179,14 @@ export async function POST(request: Request) {
 
   try {
     const invoice = await prisma.$transaction(async (tx) => {
-      const count = await tx.invoice.count({
-        where: { invoiceNumber: { startsWith: `${prefix}-${year}-` } } })
-      const seq = String(count + 1).padStart(4, '0')
+      // Atomically get and increment the sequence number for this prefix/year
+      const seq_record = await tx.documentSequence.upsert({
+        where: { prefix_year: { prefix, year } },
+        update: { nextSeq: { increment: 1 } },
+        create: { prefix, year, nextSeq: 2 }, // Start at 2 since we're returning 1
+      })
+
+      const seq = String(seq_record.nextSeq).padStart(4, '0')
       const invoiceNumber = `${prefix}-${year}-${seq}`
 
       return tx.invoice.create({
@@ -209,9 +214,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(invoice, { status: 201 })
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
-      return NextResponse.json({ error: 'Number conflict — please retry' }, { status: 409 })
-    }
     logger.error('[POST /api/finance/invoices]', err)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
