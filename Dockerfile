@@ -153,6 +153,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     libssl1.1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Install the Prisma CLI globally (pinned to match @prisma/client) so the
+# container can apply pending migrations at startup. Engines are downloaded
+# here at build time and cached in the image — no per-start network needed.
+# pnpm symlinks can't be copied from the builder stage, hence a fresh install.
+RUN npm install -g prisma@5.22.0
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
@@ -180,4 +186,7 @@ ENV HOSTNAME="0.0.0.0"
 # server.js is at apps/<APP>/server.js, not at root.
 # Use shell form so $APP_NAME is expanded at runtime.
 ENV APP_NAME=${APP}
-CMD node apps/${APP_NAME}/server.js
+# Apply any pending DB migrations before starting the server. If migration
+# fails the container exits (server never starts against a stale schema),
+# which surfaces the problem instead of serving broken code.
+CMD prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP_NAME}/server.js
