@@ -1,7 +1,20 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-25 (William Maesela dropdown fix + Credo authentication)
+> Last updated: 2026-06-25 (Credo OTP build fix + William Maesela dropdown fix + Credo authentication)
+
+---
+
+### Credo — Fixed OTP Login Page Build Error in Dokploy Deployment (2026-06-25)
+
+**Problem:** Dokploy deployment failed during Docker build with error: `useSearchParams() should be wrapped in a suspense boundary at page "/login/otp"`. The OTP login page was using `useSearchParams()` to read the `callbackUrl` from query parameters, but Next.js 16 requires pages using `useSearchParams()` to be rendered dynamically (at request time), not prerendered as static pages.
+
+**Solution:** Added `export const dynamic = "force-dynamic"` to `apps/credo/app/(auth)/login/otp/page.tsx` to tell Next.js to render this page on-demand rather than trying to prerender it statically.
+
+**Files Changed:**
+- `apps/credo/app/(auth)/login/otp/page.tsx` — Added dynamic rendering directive
+
+**Impact:** Dokploy deployment now succeeds. OTP login page works correctly with callback URL parameter handling.
 
 ---
 
