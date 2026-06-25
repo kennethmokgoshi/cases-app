@@ -188,7 +188,7 @@ export default function OtpPageClient() {
                 Enter OTP
               </h2>
               <p style={{ fontSize: "0.9375rem", color: "#64748B", margin: "0 0 28px" }}>
-                We sent a 6-digit code to your registered phone number.
+                We sent a 6-digit code to your registered email address.
               </p>
 
               {error && (

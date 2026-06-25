@@ -1,7 +1,44 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-25 (Credo OTP build fix + William Maesela dropdown fix + Credo authentication)
+> Last updated: 2026-06-25 (Credo OTP now delivered by EMAIL + build fix #2 + William Maesela dropdown fix + Credo authentication)
+
+---
+
+### Credo — OTP Login Codes Now Delivered by Email (2026-06-25)
+
+**Context:** SMS is not set up; per business direction, client notifications go by EMAIL and Credo SMS is deferred to a later stage. The OTP flow previously only `console.log`-ged the code with a `// TODO: Send OTP via SMS` stub, and the page copy implied SMS.
+
+**Solution:**
+- Added `sendOtpEmail()` to `packages/shared-lib/src/notifications/otp-service.ts` — branded transactional email (Zenowethu/Credo styling) using an SMTP-first → Resend → Mock provider chain (deliberately not the GHL-first conversational chain). Existing SMS `sendOtp()` kept as a clearly-marked not-yet-implemented stub.
+- Rewrote `apps/credo/app/api/consumer/generate-otp/route.ts` to look the consumer up by email/ID, require an **email** on file, store + send the 6-digit code by email, and return email-worded messages. No schema migration: the required `CredoOtpSession.phone` column now records the delivery destination (the email); `verify-otp` only matches on `consumerId` + `otpCode`, so nothing reads `phone`.
+- Updated OTP page copy ("...registered phone number" → "...registered email address").
+
+**Files Changed:**
+- `packages/shared-lib/src/notifications/otp-service.ts` — `sendOtpEmail()` + transactional provider chain
+- `apps/credo/app/api/consumer/generate-otp/route.ts` — email delivery
+- `apps/credo/app/(auth)/login/otp/otp-client.tsx` — copy
+
+**Tests:** `packages/shared-lib/src/notifications/otp-service.test.ts` — 5 passing (code format + happy/failure/throw paths for `sendOtpEmail`, provider seam mocked). shared-lib typecheck clean on touched files.
+
+**Env (existing, no new vars):** SMTP via `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASSWORD`/`EMAIL_FROM` (or DB `systemSettings` category `smtp`); optional `RESEND_API_KEY` fallback. If neither is configured, MockEmailProvider is used (dev only).
+
+**Remaining:** SMS/WhatsApp OTP still deferred (later stage). NextAuth credentials provider must accept the verified OTP as password — unchanged here, pre-existing flow.
+
+---
+
+### Credo — Fixed Broken OTP Page Server/Client Split (2026-06-25)
+
+**Problem:** Dokploy build failed again with 4 Turbopack errors on `apps/credo/app/(auth)/login/otp/page.tsx`: `ssr: false is not allowed with next/dynamic in Server Components`, plus `dynamic`, `OtpPage`, and `default` each "defined/exported multiple times". The prior fix attempt left the entire original client-component body pasted into `page.tsx` below a new server wrapper, producing duplicate declarations, and used an illegal `dynamic(() => import(...), { ssr: false })` in a Server Component.
+
+**Solution:** Made `page.tsx` a clean Server Component wrapper that renders the already-existing `./otp-client.tsx` ("use client") inside a `<Suspense>` boundary — the correct Next.js 16 pattern for `useSearchParams()`. Removed the `next/dynamic` import (which collided with `export const dynamic = "force-dynamic"`) and deleted the duplicated client body. `force-dynamic` retained.
+
+**Files Changed:**
+- `apps/credo/app/(auth)/login/otp/page.tsx` — reduced to 11-line server wrapper (Suspense + `<OtpPageClient />`)
+
+**Verification:** Both `page.tsx` and `otp-client.tsx` now have exactly one default export; `page.tsx` references no stray client hooks. Structural fix for a compile error.
+
+**Impact:** Credo Docker build no longer fails on the OTP route.
 
 ---
 
