@@ -1,14 +1,13 @@
-import dynamic from "next/dynamic";
+"use client";
 
-const OtpPageClient = dynamic(() => import("./otp-client"), { ssr: false });
+import Link from "next/link";
+import { useState, useRef, useEffect } from "react";
+import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+type OtpStep = "username" | "otp";
 
-export default function OtpPage() {
-  return <OtpPageClient />;
-}
-
-export default function OtpPage() {
+export default function OtpPageClient() {
   const [step, setStep] = useState<OtpStep>("username");
   const [username, setUsername] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
