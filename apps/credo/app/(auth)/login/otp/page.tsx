@@ -5,6 +5,8 @@ import { useState, useRef, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 type OtpStep = "username" | "otp";
 
 export default function OtpPage() {
