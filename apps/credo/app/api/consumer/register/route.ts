@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = registerSchema.parse(body);
 
-    const existing = await prisma.consumerAccount.findUnique({
+    const existing = await prisma.consumerAccount.findFirst({
       where: { email: data.email },
       select: { id: true },
     });

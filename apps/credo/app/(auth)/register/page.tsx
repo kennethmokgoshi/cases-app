@@ -152,6 +152,9 @@ function Step1({ data, onChange, onNext }: {
               </svg>
             </button>
           </div>
+          <p style={{ fontSize: "0.75rem", color: "#94A3B8", margin: "6px 0 0" }}>
+            You'll use this password to log in alongside your email address
+          </p>
         </div>
 
         <div>
@@ -242,7 +245,7 @@ function Step2({ data, onChange, onNext, onBack }: {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
-          <label className="credo-label">South African ID number</label>
+          <label className="credo-label">South African ID number <span style={{ color: "#94A3B8", fontWeight: 400 }}>(optional)</span></label>
           <input
             className="credo-input"
             placeholder="e.g. 8001015009087"
@@ -252,7 +255,7 @@ function Step2({ data, onChange, onNext, onBack }: {
             onChange={e => onChange("idNumber", e.target.value.replace(/\D/g, ""))}
           />
           <p style={{ fontSize: "0.75rem", color: "#94A3B8", margin: "6px 0 0" }}>
-            13-digit South African identity number
+            13-digit South African identity number. If provided, you can use it to log in instead of your email.
           </p>
         </div>
 

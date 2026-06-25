@@ -98,6 +98,14 @@ const LOG_ACTIONS = {
 
 export type OverdueActionType = 'DC_FOLLOWUP' | 'CONSUMER_FOLLOWUP' | 'STAFF_ALERT' | 'NONE';
 
+export interface OverdueScanFilters {
+    projectId?: string;
+    createdAfter?: Date;
+    createdBefore?: Date;
+    assignedToId?: string;
+    partnerName?: string;
+}
+
 export interface OverdueScanItem {
     caseId: string;
     fileNumber: string;
@@ -167,9 +175,9 @@ function classifyAction(statusCode: string): OverdueActionType {
 // Main scan function
 // ---------------------------------------------------------------------------
 
-export async function runOverdueScan(): Promise<OverdueScanResult> {
+export async function runOverdueScan(filters?: OverdueScanFilters): Promise<OverdueScanResult> {
     const startedAt = new Date();
-    logger.info('[OVERDUE_SCAN] Starting overdue case scan...');
+    logger.info('[OVERDUE_SCAN] Starting overdue case scan...', filters ? `Filters: ${JSON.stringify(filters)}` : '');
 
     // SLA map: statusCode → slaDays
     const slaMap = new Map<string, number>();
@@ -183,12 +191,35 @@ export async function runOverdueScan(): Promise<OverdueScanResult> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - 1); // at least 1 day in current status
 
-    const cases = await prisma.case.findMany({
-        where: {
-            status: {
-                notIn: [...SKIP_CODES],
-            },
+    // Build where clause with optional filters
+    const where: any = {
+        status: {
+            notIn: [...SKIP_CODES],
         },
+    };
+
+    // Apply optional filters
+    if (filters?.projectId) {
+        where.projects = {
+            some: { projectId: filters.projectId },
+        };
+    }
+    if (filters?.createdAfter) {
+        where.createdAt = { gte: filters.createdAfter };
+    }
+    if (filters?.createdBefore) {
+        if (!where.createdAt) where.createdAt = {};
+        where.createdAt.lte = filters.createdBefore;
+    }
+    if (filters?.assignedToId) {
+        where.assignedToId = filters.assignedToId;
+    }
+    if (filters?.partnerName) {
+        where.partnerName = filters.partnerName;
+    }
+
+    const cases = await prisma.case.findMany({
+        where,
         include: {
             client: {
                 select: {
@@ -283,19 +314,40 @@ export async function runOverdueScan(): Promise<OverdueScanResult> {
 
         try {
             // Mark the case as overdue in DB (always, even if rate-limited on follow-up)
+            // Set nextUpdate to the next scheduled action time (cooldown period from now)
+            const nextUpdateDate = new Date();
+            nextUpdateDate.setDate(nextUpdateDate.getDate() +
+                (actionType === 'DC_FOLLOWUP' ? COOLDOWN_DAYS.DC :
+                 actionType === 'CONSUMER_FOLLOWUP' ? COOLDOWN_DAYS.CONSUMER :
+                 actionType === 'STAFF_ALERT' ? COOLDOWN_DAYS.STAFF : 7)
+            );
+
             await prisma.case.update({
                 where: { id: caseData.id },
                 data: {
                     isOverdue: true,
                     daysInStatus,
+                    nextUpdate: nextUpdateDate,
                 },
             });
 
             // ── DC Follow-up ──────────────────────────────────────────────────
             if (actionType === 'DC_FOLLOWUP') {
-                if (wasRecentlyActioned(caseData.workflowLogs, LOG_ACTIONS.DC, COOLDOWN_DAYS.DC)) {
+                const lastDcAction = caseData.workflowLogs.find(l => l.action === LOG_ACTIONS.DC);
+                if (lastDcAction && wasRecentlyActioned(caseData.workflowLogs, LOG_ACTIONS.DC, COOLDOWN_DAYS.DC)) {
                     item.skippedReason = `DC follow-up already sent within last ${COOLDOWN_DAYS.DC} days`;
                     result.skipped++;
+
+                    // Still set nextUpdate to when the next follow-up can be sent
+                    if (lastDcAction) {
+                        const nextRetryDate = new Date(lastDcAction.timestamp);
+                        nextRetryDate.setDate(nextRetryDate.getDate() + COOLDOWN_DAYS.DC);
+                        await prisma.case.update({
+                            where: { id: caseData.id },
+                            data: { nextUpdate: nextRetryDate }
+                        });
+                    }
+
                     result.items.push(item);
                     continue;
                 }
@@ -359,9 +411,21 @@ export async function runOverdueScan(): Promise<OverdueScanResult> {
 
             // ── Consumer Follow-up ────────────────────────────────────────────
             else if (actionType === 'CONSUMER_FOLLOWUP') {
-                if (wasRecentlyActioned(caseData.workflowLogs, LOG_ACTIONS.CONSUMER, COOLDOWN_DAYS.CONSUMER)) {
+                const lastConsumerAction = caseData.workflowLogs.find(l => l.action === LOG_ACTIONS.CONSUMER);
+                if (lastConsumerAction && wasRecentlyActioned(caseData.workflowLogs, LOG_ACTIONS.CONSUMER, COOLDOWN_DAYS.CONSUMER)) {
                     item.skippedReason = `Consumer follow-up already sent within last ${COOLDOWN_DAYS.CONSUMER} days`;
                     result.skipped++;
+
+                    // Still set nextUpdate to when the next follow-up can be sent
+                    if (lastConsumerAction) {
+                        const nextRetryDate = new Date(lastConsumerAction.timestamp);
+                        nextRetryDate.setDate(nextRetryDate.getDate() + COOLDOWN_DAYS.CONSUMER);
+                        await prisma.case.update({
+                            where: { id: caseData.id },
+                            data: { nextUpdate: nextRetryDate }
+                        });
+                    }
+
                     result.items.push(item);
                     continue;
                 }
@@ -427,9 +491,21 @@ export async function runOverdueScan(): Promise<OverdueScanResult> {
 
             // ── Staff Alert ───────────────────────────────────────────────────
             else if (actionType === 'STAFF_ALERT') {
-                if (wasRecentlyActioned(caseData.workflowLogs, LOG_ACTIONS.STAFF, COOLDOWN_DAYS.STAFF)) {
+                const lastStaffAction = caseData.workflowLogs.find(l => l.action === LOG_ACTIONS.STAFF);
+                if (lastStaffAction && wasRecentlyActioned(caseData.workflowLogs, LOG_ACTIONS.STAFF, COOLDOWN_DAYS.STAFF)) {
                     item.skippedReason = `Staff alert already sent within last ${COOLDOWN_DAYS.STAFF} days`;
                     result.skipped++;
+
+                    // Still set nextUpdate to when the next alert can be sent
+                    if (lastStaffAction) {
+                        const nextRetryDate = new Date(lastStaffAction.timestamp);
+                        nextRetryDate.setDate(nextRetryDate.getDate() + COOLDOWN_DAYS.STAFF);
+                        await prisma.case.update({
+                            where: { id: caseData.id },
+                            data: { nextUpdate: nextRetryDate }
+                        });
+                    }
+
                     result.items.push(item);
                     continue;
                 }

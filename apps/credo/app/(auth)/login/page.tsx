@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
 function LoginForm() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -20,13 +20,13 @@ function LoginForm() {
     setError(null);
 
     const result = await signIn("credentials", {
-      email,
+      username,
       password,
       redirect: false,
     });
 
     if (result?.error) {
-      setError("Incorrect email or password. Please try again.");
+      setError("Incorrect username or password. Please try again.");
       setLoading(false);
     } else {
       window.location.href = callbackUrl;
@@ -133,13 +133,16 @@ function LoginForm() {
 
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div>
-              <label className="credo-label" htmlFor="email">Email address</label>
+              <label className="credo-label" htmlFor="username">Email address or ID number</label>
               <input
-                id="email" type="email" className="credo-input"
-                placeholder="you@example.co.za"
-                value={email} onChange={(e) => setEmail(e.target.value)}
-                required autoComplete="email"
+                id="username" type="text" className="credo-input"
+                placeholder="you@example.co.za or 8001015009087"
+                value={username} onChange={(e) => setUsername(e.target.value)}
+                required autoComplete="username"
               />
+              <p style={{ fontSize: "0.75rem", color: "#94A3B8", margin: "6px 0 0" }}>
+                Use your email address or 13-digit SA ID number
+              </p>
             </div>
 
             <div>
@@ -217,7 +220,7 @@ function LoginForm() {
               type="button"
               disabled={loading}
               onClick={() => {
-                setEmail("demo@credo.co.za");
+                setUsername("demo@credo.co.za");
                 setPassword("password123");
                 setTimeout(() => {
                   const form = document.querySelector('form');
@@ -248,7 +251,7 @@ function LoginForm() {
               type="button"
               disabled={loading}
               onClick={() => {
-                setEmail("lindiwe@pilot.credo.co.za");
+                setUsername("lindiwe@pilot.credo.co.za");
                 setPassword("password123");
                 setTimeout(() => {
                   const form = document.querySelector('form');

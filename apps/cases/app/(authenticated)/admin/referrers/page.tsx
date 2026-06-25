@@ -167,10 +167,12 @@ export default function ReferrersPage() {
 
     async function loadAllReferrers() {
         try {
-            const res = await fetch('/api/admin/referrers?page=1');
+            const res = await fetch('/api/admin/referrers/dropdown');
             if (!res.ok) return;
             const data = await res.json();
-            setAllReferrers(data.referrers.map((r: Referrer) => ({ id: r.id, firstName: r.firstName, lastName: r.lastName })));
+            setAllReferrers(data.referrers
+                .filter((r: any) => !r.id.startsWith('project:')) // exclude orphan projects
+                .map((r: any) => ({ id: r.id, firstName: r.name.split(' ')[0], lastName: r.name.split(' ').slice(1).join(' ') })));
         } catch {
             // non-critical — dropdown just stays empty
         }

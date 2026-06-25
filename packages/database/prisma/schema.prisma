@@ -878,7 +878,7 @@ model CredoTenant {
 
 model ConsumerAccount {
   id              String           @id @default(cuid())
-  email           String           @unique
+  email           String
   password        String
   firstName       String
   lastName        String
@@ -903,9 +903,11 @@ model ConsumerAccount {
   subscriptions        CredoSubscription[]
   activeSubscription   CredoSubscription?  @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
   poaSigningRequests   PoaSigningRequest[]
+  otpSession           CredoOtpSession?
 
   @@index([email])
   @@index([tenantId])
+  @@index([idNumber])
 }
 
 model CredoSubscription {
@@ -922,6 +924,22 @@ model CredoSubscription {
 
   @@index([consumerId])
   @@index([status])
+}
+
+model CredoOtpSession {
+  id                String           @id @default(cuid())
+  consumerId        String           @unique // One active OTP per consumer
+  phone             String           // Phone number to send OTP to
+  otpCode           String           // 6-digit OTP code
+  attempts          Int              @default(0) // Login attempts with wrong OTP
+  maxAttempts       Int              @default(3) // Max attempts before locking
+  isVerified        Boolean          @default(false)
+  expiresAt         DateTime         // When OTP expires (typically 15 minutes from creation)
+  createdAt         DateTime         @default(now())
+  consumer          ConsumerAccount  @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+
+  @@index([consumerId])
+  @@index([expiresAt])
 }
 
 model CredoDocument {

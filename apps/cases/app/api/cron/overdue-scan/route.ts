@@ -16,11 +16,33 @@ export async function POST(request: Request) {
         }
     }
 
+    // Parse optional filters from query string
+    const { searchParams } = new URL(request.url);
+    const projectId = searchParams.get('projectId') || undefined;
+    const createdAfter = searchParams.get('createdAfter') ? new Date(searchParams.get('createdAfter')!) : undefined;
+    const createdBefore = searchParams.get('createdBefore') ? new Date(searchParams.get('createdBefore')!) : undefined;
+    const assignedToId = searchParams.get('assignedToId') || undefined;
+    const partnerName = searchParams.get('partnerName') || undefined;
+
     const startedAt = new Date();
-    logger.info('[CRON] Overdue scan starting...');
+    const filterDesc = [
+        projectId ? `project: ${projectId}` : null,
+        createdAfter ? `created after: ${createdAfter.toISOString().split('T')[0]}` : null,
+        createdBefore ? `created before: ${createdBefore.toISOString().split('T')[0]}` : null,
+        assignedToId ? `assigned to: ${assignedToId}` : null,
+        partnerName ? `partner: ${partnerName}` : null,
+    ].filter(Boolean).join(', ');
+
+    logger.info(`[CRON] Overdue scan starting${filterDesc ? ` (${filterDesc})` : ''}...`);
 
     try {
-        const result = await runOverdueScan();
+        const result = await runOverdueScan({
+            projectId,
+            createdAfter,
+            createdBefore,
+            assignedToId,
+            partnerName,
+        });
 
         await logAutomationRun({
             type: 'OVERDUE_SCAN',
@@ -34,11 +56,12 @@ export async function POST(request: Request) {
                 consumerFollowups: result.consumerFollowups,
                 staffAlerts: result.staffAlerts,
                 errors: result.errors,
+                filters: filterDesc || 'none',
             },
         });
 
         logger.info('[CRON] Overdue scan complete:', result);
-        return NextResponse.json({ success: true, result, ranAt: new Date().toISOString() });
+        return NextResponse.json({ success: true, result, ranAt: new Date().toISOString(), filters: filterDesc || 'none' });
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         logger.error('[CRON] Overdue scan failed:', error);

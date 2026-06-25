@@ -6,8 +6,8 @@ import { z } from "zod";
 import { authConfig } from "./auth.config";
 
 const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
 });
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -15,15 +15,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: "Email", type: "email" },
+        username: { label: "Email or ID number", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const consumer = await prisma.consumerAccount.findUnique({
-          where: { email: parsed.data.email },
+        const username = parsed.data.username.trim();
+
+        // Try to find consumer by email first, then by ID number
+        let consumer = await prisma.consumerAccount.findFirst({
+          where: { email: username },
           select: {
             id: true,
             email: true,
@@ -33,8 +36,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             role: true,
             isAdmin: true,
             tenantId: true,
+            idNumber: true,
           },
         });
+
+        // If not found by email, try by ID number
+        if (!consumer && /^\d{13}$/.test(username)) {
+          consumer = await prisma.consumerAccount.findUnique({
+            where: { idNumber: username },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              password: true,
+              role: true,
+              isAdmin: true,
+              tenantId: true,
+              idNumber: true,
+            },
+          });
+        }
 
         if (!consumer) return null;
 

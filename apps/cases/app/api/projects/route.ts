@@ -217,6 +217,49 @@ export async function GET(request: NextRequest) {
                 memberProjectIds.push(session.user.b2bPartnerId);
             }
 
+            // When memberOnly=true, also include ALL REFERRER-type projects and their ancestors
+            // so staff can assign cases to any referrer regardless of membership
+            if (isMemberOnly) {
+                const referrerProjects = await prisma.project.findMany({
+                    where: { type: 'REFERRER' },
+                    select: { id: true, name: true }
+                });
+                const referrerIds = referrerProjects.map(p => p.id);
+                logger.info(`memberOnly=true: Found ${referrerIds.length} REFERRER projects`, {
+                    samples: referrerProjects.slice(0, 3).map(p => p.name)
+                });
+
+                // Include referrer projects and walk up to include their ancestors
+                const allProjectsRaw = await prisma.project.findMany({
+                    select: { id: true, parentId: true, name: true }
+                });
+
+                const getAllowedAncestors = (rootIds: string[]) => {
+                    const results = new Set<string>(rootIds);
+                    const queue = [...rootIds];
+                    while (queue.length > 0) {
+                        const currId = queue.shift()!;
+                        const project = allProjectsRaw.find(p => p.id === currId);
+                        if (project && project.parentId && !results.has(project.parentId)) {
+                            results.add(project.parentId);
+                            queue.push(project.parentId);
+                        }
+                    }
+                    return Array.from(results);
+                };
+
+                const ancestorIds = getAllowedAncestors(referrerIds);
+                const williamProj = referrerProjects.find(p => p.name === 'William Maesela');
+                logger.info(`memberOnly=true referrer inclusion`, {
+                    totalReferrers: referrerIds.length,
+                    totalAncestors: ancestorIds.length,
+                    williamFound: !!williamProj,
+                    memberProjectIdsBefore: memberProjectIds.length,
+                    memberProjectIdsAfter: memberProjectIds.length + referrerIds.length + ancestorIds.length
+                });
+                memberProjectIds.push(...referrerIds, ...ancestorIds);
+            }
+
             const myProjects = await prisma.project.findMany({
                 where: {
                     id: { in: memberProjectIds },

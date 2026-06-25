@@ -398,10 +398,15 @@ function NewCaseWithAIComponent() {
     // Get selected parent project and its children
     const selectedParent = parentProjects.find(p => p.id === selectedParentId);
     const subprojects = selectedParentId
-        ? getDescendants(selectedParentId, allFlatProjects).filter(c =>
-            c.type !== 'YEAR' && c.type !== 'MONTH' &&
-            c.type !== 'ROOT' && c.type !== 'ACQUISITION_SOURCE'
-        )
+        ? Array.from(
+            new Map(
+              getDescendants(selectedParentId, allFlatProjects)
+                .filter(c =>
+                  c.type === 'REFERRER'  // Only show REFERRER-type subprojects, not FOLDER
+                )
+                .map(p => [p.id, p])
+            ).values()
+          ).sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }))
         : [];
 
     // Helper functions to get partner and branch names from selected projects
