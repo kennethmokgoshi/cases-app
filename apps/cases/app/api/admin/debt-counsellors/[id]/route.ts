@@ -26,7 +26,7 @@ export async function GET(
                 emailHistory: { orderBy: { recordedAt: 'desc' } },
                 updatedBy: { select: { firstName: true, lastName: true } },
                 cases: {
-                    where: { deletedAt: null },
+                    where: { deletedAt: { equals: null } },
                     select: {
                         id: true,
                         fileNumber: true,

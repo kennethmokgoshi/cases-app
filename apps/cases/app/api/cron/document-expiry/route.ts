@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         // Find active cases that have at least one document older than threshold
         const casesWithOldDocs = await prisma.case.findMany({
             where: {
-                deletedAt: null,
+                deletedAt: { equals: null },
                 status: { notIn: excludeStatuses },
                 documents: {
                     some: {

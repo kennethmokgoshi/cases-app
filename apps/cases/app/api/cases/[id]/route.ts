@@ -1001,7 +1001,7 @@ export async function DELETE(
         const { id } = await params;
 
         const existingCase = await prisma.case.findUnique({
-            where: { id, deletedAt: null },
+            where: { id, deletedAt: { equals: null } },
             select: { id: true, fileNumber: true }
         });
 

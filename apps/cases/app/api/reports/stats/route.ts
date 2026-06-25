@@ -13,7 +13,7 @@ export async function GET(request: Request) {
         const projectId = searchParams.get('projectId');
         const filterBy = searchParams.get('filterBy') || 'createdAt'; // 'createdAt' or 'fileToBeCompleted'
 
-        const whereClause: any = { deletedAt: null };
+        const whereClause: any = { deletedAt: { equals: null } };
 
         // Date Filter
         if (from && to) {

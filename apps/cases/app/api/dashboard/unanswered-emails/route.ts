@@ -45,7 +45,7 @@ export async function GET(request: Request) {
         // Fetch cases that have at least one inbound message in the lookback window
         const cases = await prisma.case.findMany({
             where: {
-                deletedAt: null,
+                deletedAt: { equals: null },
                 comments: {
                     some: {
                         activityType: 'INBOUND_MESSAGE',

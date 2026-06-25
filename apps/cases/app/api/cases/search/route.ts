@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
         if (!query) {
             cases = await prisma.case.findMany({
-                where: { deletedAt: null },
+                where: { deletedAt: { equals: null } },
                 take: 5,
                 include: {
                     client: true,
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
         } else {
             cases = await prisma.case.findMany({
                 where: {
-                    deletedAt: null,
+                    deletedAt: { equals: null },
                     OR: [
                         { fileNumber: { contains: query, mode: 'insensitive' } },
                         { client: { firstName: { contains: query, mode: 'insensitive' } } },

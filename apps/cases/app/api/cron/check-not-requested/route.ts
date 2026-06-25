@@ -38,7 +38,7 @@ export async function POST(request: Request) {
         const cases = await prisma.case.findMany({
             where: {
                 status: 'NOT_REQUESTED_VIA_DHS',
-                deletedAt: null,
+                deletedAt: { equals: null },
                 OR: [
                     { nextUpdate: { lt: now } },
                     { nextUpdate: null },

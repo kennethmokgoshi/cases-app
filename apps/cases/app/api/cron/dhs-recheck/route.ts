@@ -145,7 +145,7 @@ export async function POST(request: Request) {
 
         const now = new Date();
         const allNotLinked = await prisma.case.findMany({
-            where: { status: 'NOT_LINKED', deletedAt: null },
+            where: { status: 'NOT_LINKED', deletedAt: { equals: null } },
             include: {
                 client: { select: { id: true, firstName: true, lastName: true, idNumber: true } },
             },

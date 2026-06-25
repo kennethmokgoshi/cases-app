@@ -20,11 +20,11 @@ export async function GET(request: Request) {
         const isStaff = session.user.userType === 'STAFF';
         const isPartner = session.user.userType === 'B2B_PARTNER';
 
-        let projectFilter: any = { deletedAt: null };
+        let projectFilter: any = { deletedAt: { equals: null } };
 
         // 1. Admins and Staff see everything
         if (isAdmin || isStaff) {
-            projectFilter = { deletedAt: null }; // Exclude soft-deleted cases
+            projectFilter = { deletedAt: { equals: null } }; // Exclude soft-deleted cases
         } else {
             // 2. Others (Partners/Members) are restricted
             // Get explicit memberships
@@ -169,7 +169,7 @@ export async function GET(request: Request) {
                 });
             }, 'pendingInvoices'),
             prisma.case.findMany({
-                where: { ...projectFilter, deletedAt: null },
+                where: { ...projectFilter, deletedAt: { equals: null } },
                 select: { createdAt: true }
             })
         ]);

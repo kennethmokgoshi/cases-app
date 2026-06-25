@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
         const pendingR350Cases = await prisma.case.findMany({
             where: {
-                deletedAt: null,
+                deletedAt: { equals: null },
                 r350Status: 'PENDING',
                 acquisitionType: { not: 'B2B' },
                 createdAt: { lt: threshold },

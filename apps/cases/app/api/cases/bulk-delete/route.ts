@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
         // Fetch only non-deleted cases from the provided IDs
         const existingCases = await prisma.case.findMany({
-            where: { id: { in: caseIds }, deletedAt: null },
+            where: { id: { in: caseIds }, deletedAt: { equals: null } },
             select: { id: true, fileNumber: true },
         });
 
