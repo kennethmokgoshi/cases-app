@@ -1,7 +1,159 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-25 (Credo OTP now delivered by EMAIL + build fix #2 + William Maesela dropdown fix + Credo authentication)
+> Last updated: 2026-06-26 (GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### GHL suspended — `GHL_ENABLED=false` kill-switch (2026-06-26)
+
+**Goal:** GHL/GoHighLevel is not yet set up. Stop every channel from reaching for it (it was still being *attempted* first for email — the `GoHighLevel→SMTP` in the logs — and was the default for SMS/WhatsApp).
+
+**What changed:**
+- `getGHLCredentials()` ([packages/shared-lib/src/integrations/ghl-config.ts](packages/shared-lib/src/integrations/ghl-config.ts)) returns empty credentials when `GHL_ENABLED=false`, so every channel's auto-detect skips the GHL API. New exported helper `isGhlEnabled()`.
+- The notification service ([service.ts](packages/shared-lib/src/notifications/service.ts)) now guards the GHL **webhook** branches (SMS/email/WhatsApp) with `isGhlEnabled()` too (those read env directly, bypassing the resolver).
+- Net effect when suspended: **email → SMTP**, **SMS → Mock** (no Twilio/Clickatell configured), **WhatsApp → Mock**. No GHL API/webhook calls.
+- `GHL_ENABLED=false` set in `apps/cases/.env.local`; documented in `.env.example`. Fully reversible — remove the var (or set `true`) once GHL is live.
+- NOT touched: `GhlService` / inbound GHL webhook handlers / AI auto-reply — those only fire on inbound GHL events, which won't occur while GHL is unconfigured.
+
+**Tests:** new `GHL_ENABLED` kill-switch tests in `ghl-config.test.ts` (3) + a service suspension test in `service.test.ts` (email avoids GHL API+webhook, uses SMTP). Updated `ghl-service.test.ts` / `service.test.ts` mocks to export `isGhlEnabled`. Full shared-lib suite green: **434 passing**. `tsc --noEmit` clean.
+
+**⚠️ Action needed:** set **`GHL_ENABLED=false`** in the production (Dokploy) env for the Cases app — `.env.local` does not deploy, and the switch defaults to *enabled*, so without it production will still try GHL.
+
+---
+
+### Fixed: consumers not receiving welcome emails — SMTP 550 sender bug (2026-06-26)
+
+**Symptom:** Consumers were not getting the `NEW_LEAD` welcome email on case creation. SMS/WhatsApp worked (GHL webhook), only email failed.
+
+**Root cause (confirmed in production `notificationLog`):** every welcome email failed with
+`550 Account notifications@zenowethu.co.za can not send emails from updates@zenowethu.co.za`.
+The case-creation route passes `senderEmail: 'updates@zenowethu.co.za'` ([apps/cases/app/api/cases/route.ts:409](apps/cases/app/api/cases/route.ts)), which became the SMTP `from`. The mail server only allows sending from the authenticated mailbox (`notifications@`). 21 EMAIL failures total shared this cause.
+
+**Fix:** `SmtpEmailProvider.send()` ([packages/shared-lib/src/notifications/providers.ts](packages/shared-lib/src/notifications/providers.ts)) now **always sends from the authenticated/configured mailbox** and demotes any different caller `fromEmail` to **Reply-To** (caller `fromName` kept as display name). Verified with a live send simulating the welcome email (previously 550, now accepted with messageId).
+
+**Tests:** 3 new SMTP tests in `providers.test.ts` (from-address/Reply-To handling, error path). Full shared-lib suite green: **430 passing**.
+
+**⚠️ Action needed:**
+- **Redeploy** the Cases app / shared-lib for the fix to take effect in production.
+- The **5 stuck welcome emails** in `notificationQueue` (PENDING_RETRY) won't auto-retry — there's no cron runner; retry them manually from `/admin/notifications` after deploy (the retry path doesn't re-send the bad `updates@` from-address, so it will succeed).
+
+---
+
+### Email made primary — `EMAIL_PROVIDER` override (2026-06-26)
+
+**Goal (from the business):** GHL is **not yet set up**, so email (SMTP) must be the primary client-notification channel — without every send first making a failing GHL API call. Client notifications are email-only for now.
+
+**What changed:**
+- `getEmailProvider()` in `packages/shared-lib/src/notifications/service.ts` now honours an `EMAIL_PROVIDER` env override (`smtp | ghl | resend | mock`), mirroring the existing `SMS_PROVIDER` / `WHATSAPP_PROVIDER` pattern. `EMAIL_PROVIDER=smtp` forces direct SMTP even when GHL creds are present. Unset = unchanged GHL-first auto-detect (so this is fully reversible — drop the override when GHL goes live).
+- `EMAIL_PROVIDER=smtp` set in `apps/cases/.env.local` and documented in `apps/cases/.env.example`.
+
+**Verified:**
+- Live SMTP send to `notifications@zenowethu.co.za` succeeded — creds resolve from DB `systemSettings` (host `mail.zenowethu.co.za`, port 587). Server accepted, messageId returned.
+- 2 new Vitest tests in `service.test.ts` (SMTP forced over GHL; unset falls back to GHL-first). Full shared-lib suite green: **427 passing**. `tsc --noEmit` clean on the notifications files.
+
+**Manual setup needed:** set `EMAIL_PROVIDER=smtp` in the production (Dokploy) env for the Cases app — `.env.local` is not deployed.
+
+---
+
+### Per-App "Next Update" Dates + Payment Arrangements (2026-06-26)
+
+**Goal (from the business):** A file shouldn't look "not yet due" just because the Cases side isn't due — each app must track when *its* part of a file needs attention, independently, so collection isn't delayed. Plus: payment arrangements for consumers (B2C primary, available to all) so work can proceed knowing the consumer committed to a plan, and the file flags overdue on the due date to check the arrangement was honoured.
+
+**1 — Per-app Next Update date (isolated per app).** Each app (CASES, FINANCE, LEGAL, INSURANCE, CREDO, FORENSIC) owns its OWN next-update row for a case; a date set in one app never appears in another.
+- New model `CaseAppNextUpdate` (`@@unique([caseId, app])`).
+- Pure helpers `packages/shared-lib/src/payments/next-update.ts` (app keys, labels — Finance shows "Next Payment Date", others "Next Update Date"; overdue/days-until). Prisma service `case-app-next-update-service.ts` (get/set/refresh-overdue/list-overdue).
+- Reusable Next.js route factory `next-update-route.ts` → wired one-line in each app at `app/api/cases/[id]/next-update/route.ts`.
+- Shared UI `@zenowethu/ui` `NextUpdateCard` (loading/empty/error/success + toast) dropped into the left sidebar of every staff case page (Cases, Legal, Insurance, Forensic; Finance uses its own arrangement view). NOTE: the legacy `Case.nextUpdate` field is unchanged and still drives the overdue-scan automation; the new rows are the isolated per-app dates.
+
+**2 — Payment Arrangements.** New models `PaymentArrangement` + `PaymentArrangementInstalment`. Single or multi-instalment; manual OR generated from an approved `DebitOrderMandate` (SIGNED/REGISTERED/ACTIVE).
+- Pure logic `arrangement-logic.ts` (schedule build w/ rounding remainder on last line, monthly/weekly/once + day-of-month clamp, mandate derivation, FIFO payment reconciliation honouring manual PAID/WAIVED, summary → next payment date/amount/balance/status). Prisma service `payment-arrangement-service.ts` auto-matches COMPLETED case payments and pushes the next unpaid instalment date into Finance's per-app next-update (the "Next Payment Date") + keeps arrangement status (ACTIVE/COMPLETED/DEFAULTED) in sync.
+- Finance API: `POST/GET /api/finance/cases/[id]/arrangements`, `POST …/arrangements/from-mandate`, `PATCH /api/finance/instalments/[id]` (honoured/missed).
+- Finance UI: `PaymentArrangements` on the case detail page — Next Payment Date headline (amount due, paid, balance, OVERDUE flag), per-instalment table with paid/balance/status + Honoured/Missed actions, create form (split-total or fixed-per-instalment) + "Generate from approved mandate".
+
+**Migration:** `packages/database/prisma/migrations/20260626_add_per_app_next_update_and_payment_arrangements/` (3 new tables, additive only). ⚠️ **Not yet applied to the DB** — run `npx prisma migrate deploy` from `packages/database`. Also added the missing `migration_lock.toml` (postgresql). Prisma client regenerated.
+
+**Tests:** 24 new Vitest (pure logic) passing — `next-update.test.ts` (8), `arrangement-logic.test.ts` (16). `tsc --noEmit` clean on shared-lib, ui, finance, legal.
+
+**Follow-ups:** Credo has no staff case page (consumer portal) — its `CREDO` next-update key + service exist but no UI yet. Consider a scheduled job calling `refreshAppOverdueFlags(app)` per app, and surfacing per-app overdue lists in each app's case list.
+
+---
+
+### Telegram Case-Assistant Bot — Phase 1 brain built & tested (2026-06-26)
+
+**Goal:** Let consumers ask a Telegram bot about their case file and get AI answers — securely (POPIA).
+
+**Flow (state machine, keyed by Telegram chat id):**
+`AWAITING_ID` → consumer sends 13-digit SA ID → look up Client, email a 6-digit code (reuses `sendOtpEmail`) → `AWAITING_OTP` → code matches → bind chat to Client (`TelegramSession.clientId` + mirror to `Client.telegramNumber`) → `VERIFIED` → questions answered by `generateAutoReply` grounded in the consumer's real case; the AI's existing `shouldSend=false` gate escalates anything needing a human/legal decision. `/logout` unbinds. A chat reveals **no** file detail until verified.
+
+**Files added/changed:**
+- `packages/database/prisma/schema.prisma` — new `TelegramSession` model (⚠️ migration not yet applied — see below).
+- `packages/shared-lib/src/integrations/telegram-bot.ts` — `handleTelegramMessage()` state machine (+ `.test.ts`, 12 tests).
+- `packages/shared-lib/src/ai/auto-reply.ts` — added `'TELEGRAM'` channel (≤600 char replies).
+- `apps/cases/app/api/webhooks/telegram/route.ts` — inbound webhook (secret-token check) → handler → reply via `TelegramBotProvider`.
+- `apps/cases/.env.example` — `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_ENABLED`.
+- NOTE: `telegram-bot` is deliberately NOT on the integrations barrel (avoids a circular import with `notifications/service.ts`); import it by deep path.
+
+**Tests:** shared-lib suite **401 passing** (was 389; +12 telegram-bot). `tsc --noEmit` clean.
+
+**Phase 2 — remaining manual/live steps (not done):**
+1. Create the bot via @BotFather → `TELEGRAM_BOT_TOKEN`; set `TELEGRAM_ENABLED=true` + a `TELEGRAM_WEBHOOK_SECRET`.
+2. Apply the migration: from `packages/database`, `npx prisma migrate dev --name telegram_sessions` (prod: `migrate deploy`).
+3. Register the webhook: `curl "https://api.telegram.org/bot<TOKEN>/setWebhook" -d url="https://app.zenowethu.co.za/api/webhooks/telegram" -d secret_token="<SECRET>"`.
+4. Then live-test: message the bot, verify by ID+OTP, ask a status question.
+
+**Nice-to-have later:** log inbound/outbound Telegram turns to `NotificationLog`; create a staff `InAppNotification` on escalation; richer case context (outstanding docs) for the AI.
+
+---
+
+### Notifications — Alternative SMS / WhatsApp / Telegram Providers (no longer GHL-only) (2026-06-26)
+
+**Context:** Client notifications were effectively GHL-only for SMS/WhatsApp, and Telegram was a mock that was never even called. Goal: be able to send SMS, WhatsApp and Telegram through providers other than GHL. Email/cell stay optional — each channel fires only when that contact detail is present (already the behaviour, unchanged).
+
+**What was added (provider layer is pluggable — `SmsProvider`/`WhatsAppProvider`/`TelegramProvider`):**
+- `TwilioSmsProvider` — Twilio REST SMS (number or Messaging Service SID).
+- `TwilioWhatsAppProvider` — Twilio WhatsApp (`whatsapp:` prefixing).
+- `MetaWhatsAppProvider` — direct Meta WhatsApp Cloud API; sends free text, or an approved **template** when `META_WHATSAPP_TEMPLATE` is set (business-initiated messages require a template / 24h window).
+- `TelegramBotProvider` — real Telegram Bot API (`sendMessage`). Replaces the mock.
+- `ClickatellSmsProvider` — already existed; now selectable.
+- `toZaE164()` helper for SA number normalisation.
+
+**Selection & wiring:**
+- `SMS_PROVIDER` (`ghl|clickatell|twilio|mock`) and `WHATSAPP_PROVIDER` (`ghl|twilio|meta|mock`) force a gateway; blank = auto-detect (GHL first, then Twilio/Meta/Clickatell, then Mock).
+- Telegram send path added to `sendNotificationByTemplate` (gated on `TELEGRAM_ENABLED` + a chat id) and to `executeNotificationRetry`. Case route now passes `clientWhatsApp` (from `Client.whatsappNumber`) and `clientTelegram` (from `Client.telegramNumber`, which must hold the Telegram **chat id**, not a phone).
+
+**Files Changed:**
+- `packages/shared-lib/src/notifications/providers.ts` — 4 new provider classes + `toZaE164`.
+- `packages/shared-lib/src/notifications/service.ts` — `SMS_PROVIDER`/`WHATSAPP_PROVIDER` switches, real Telegram provider, Telegram send + retry paths.
+- `apps/cases/app/api/cases/route.ts` — pass `clientWhatsApp` + `clientTelegram` on new-lead welcome.
+- `apps/cases/.env.example` — documented all new vars.
+
+**Tests:** `providers.test.ts` +12 (Twilio SMS/WA, Meta text+template, Telegram, `toZaE164`). shared-lib suite: **389 passing** (was 377). `tsc --noEmit` clean.
+
+**Manual setup to actually deliver (external accounts):**
+- Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM`, `TWILIO_WHATSAPP_FROM` (+ approved WhatsApp sender).
+- Meta WhatsApp: `META_WHATSAPP_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID` (+ WABA & approved template for business-initiated welcomes).
+- Clickatell: `CLICKATELL_API_KEY`. Telegram: `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN`.
+
+**Remaining:** Telegram needs a per-client **chat-id capture flow** (e.g. a "Connect Telegram" link in Credo that stores `Client.telegramNumber`) before it can send to real consumers — the bot cannot message by phone number.
+
+---
+
+### B2B — "Application Received by Head Office" Email Now Fires for All B2B Referrals (2026-06-26)
+
+**Problem:** When a new B2B referral (e.g. Letsatsi) was captured, the client was often not emailed the "your application was received by {mainSource} Head Office" welcome. Investigation (`apps/cases/app/api/cases/route.ts` → `sendStatusChangeNotification`) found the `NEW_LEAD_B2B` template was only selected when `isB2B && isCreatedByPartner` (i.e. only when an actual `B2B_PARTNER` user was logged in). If Zenowethu staff/admin captured the B2B lead, it fell through to the Zenowethu-branded `NEW_LEAD_STAFF` email instead — and if no client email was captured (the field is optional on the B2B form), nothing went out at all.
+
+**Solution:** Template selection now depends purely on `isB2B`: any B2B referral gets `NEW_LEAD_B2B` ("received by {mainSource} Head Office"), whoever captured it; only direct B2C intake uses the Zenowethu-branded `NEW_LEAD`. `isCreatedByPartner` is retained on the payload for callers but no longer drives the choice.
+
+**Files Changed:**
+- `packages/shared-lib/src/notifications/service.ts` — `sendStatusChangeNotification` NEW_LEAD selection simplified to `isB2B ? 'NEW_LEAD_B2B' : 'NEW_LEAD'`; stale interface comment updated.
+- `packages/shared-lib/src/notifications/service.test.ts` — +3 tests (partner-created, staff-created B2B, and B2C) asserting the correct welcome email is sent.
+
+**Tests:** `service.test.ts` — 10 passing (7 existing + 3 new). Full shared-lib suite: 377 passing.
+
+**Remaining / known gaps (not in scope this change):**
+- The B2B new-case form (`apps/cases/app/b2b-dashboard/cases/new/page.tsx`) makes **client email optional**, so a referral with no email still yields no welcome email — only a phone-channel attempt. Consider making email required, or email-or-phone enforced.
+- `NEW_LEAD_B2B` is flagged `sendToPartner: true`, but `sendNotificationByTemplate` has **no partner-send path** — the partner copy is never sent. Latent gap if a partner CC is ever expected.
 
 ---
 

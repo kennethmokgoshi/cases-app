@@ -13,6 +13,11 @@ export * from './statuses';
 // import { ... } from '@zenowethu/shared-lib/src/xds'
 
 export * from './notifications';
+
+// Payment arrangements + per-app next-update (pure helpers only; Prisma-backed
+// services are Node-only and imported directly from their files)
+export * from './payments';
+
 export * from './schemas';
 export * from './security/rbac';
 export * from './security/audit';

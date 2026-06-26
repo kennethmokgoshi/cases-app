@@ -4,6 +4,21 @@ import { logger } from '../logger';
 // SMS and Email Provider Interfaces
 // Abstraction layer for different notification providers
 
+/**
+ * Normalise a South African (or already-international) mobile number to E.164.
+ *   0821234567   -> +27821234567
+ *   27821234567  -> +27821234567
+ *   +27821234567 -> +27821234567 (unchanged)
+ * Numbers that are already international (+XX) are left as-is.
+ */
+export function toZaE164(raw: string): string {
+    const trimmed = (raw || '').replace(/[\s\-()]/g, '');
+    if (trimmed.startsWith('+')) return trimmed;
+    if (trimmed.startsWith('0')) return '+27' + trimmed.substring(1);
+    if (trimmed.startsWith('27')) return '+' + trimmed;
+    return trimmed;
+}
+
 export interface SmsProvider {
     name: string;
     send(to: string, message: string): Promise<SmsResult>;
@@ -123,6 +138,42 @@ export class ClickatellSmsProvider implements SmsProvider {
     }
 }
 
+// ===== TWILIO SMS PROVIDER =====
+export class TwilioSmsProvider implements SmsProvider {
+    name = 'Twilio';
+    constructor(
+        private accountSid: string,
+        private authToken: string,
+        private from: string,   // Twilio sender — a number (+1...) or a Messaging Service SID (MG...)
+    ) {}
+
+    async send(to: string, message: string): Promise<SmsResult> {
+        try {
+            const auth = Buffer.from(`${this.accountSid}:${this.authToken}`).toString('base64');
+            const params = new URLSearchParams({ To: toZaE164(to), Body: message });
+            // A Messaging Service SID uses MessagingServiceSid; a phone number uses From.
+            if (this.from.startsWith('MG')) params.set('MessagingServiceSid', this.from);
+            else params.set('From', this.from);
+
+            const response = await fetch(
+                `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Messages.json`,
+                {
+                    method: 'POST',
+                    headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                });
+            const data = await response.json();
+
+            if (response.ok && data.sid) {
+                return { success: true, messageId: data.sid, provider: this.name };
+            }
+            return { success: false, error: data.message || `Twilio error ${response.status}`, provider: this.name };
+        } catch (error: any) {
+            return { success: false, error: error.message, provider: this.name };
+        }
+    }
+}
+
 // ===== RESEND EMAIL PROVIDER =====
 export class ResendEmailProvider implements EmailProvider {
     name = 'Resend';
@@ -234,8 +285,20 @@ export class SmtpEmailProvider implements EmailProvider {
                 }
             }
 
+            // SMTP servers only allow sending from the authenticated mailbox. A caller-supplied
+            // fromEmail that differs (e.g. updates@ when authenticated as notifications@) is
+            // rejected with a 550. So we always send from the configured/authenticated address
+            // and demote any different caller address to Reply-To — the email still delivers and
+            // replies route to the intended inbox. A caller fromName is kept as the display name.
+            const fromName = options?.fromName?.trim();
+            const from = fromName ? `"${fromName}" <${this.fromEmail}>` : this.fromEmail;
+            const replyTo = options?.fromEmail && options.fromEmail !== this.fromEmail
+                ? options.fromEmail
+                : undefined;
+
             const info = await this.transporter.sendMail({
-                from:        options?.fromEmail || this.fromEmail,
+                from:        from,
+                replyTo:     replyTo,
                 to:          to,
                 cc:          options?.cc?.join(', '),
                 bcc:         options?.bcc?.join(', '),
@@ -289,6 +352,101 @@ export class MockWhatsAppProvider implements WhatsAppProvider {
     }
 }
 
+// ===== TWILIO WHATSAPP PROVIDER =====
+export class TwilioWhatsAppProvider implements WhatsAppProvider {
+    name = 'Twilio WhatsApp';
+    constructor(
+        private accountSid: string,
+        private authToken: string,
+        private from: string,   // Twilio WhatsApp sender, e.g. +14155238886 (with or without the whatsapp: prefix)
+    ) {}
+
+    async send(to: string, message: string): Promise<WhatsAppResult> {
+        try {
+            const auth = Buffer.from(`${this.accountSid}:${this.authToken}`).toString('base64');
+            const from = this.from.startsWith('whatsapp:') ? this.from : `whatsapp:${this.from}`;
+            const params = new URLSearchParams({
+                To: `whatsapp:${toZaE164(to)}`,
+                From: from,
+                Body: message,
+            });
+
+            const response = await fetch(
+                `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Messages.json`,
+                {
+                    method: 'POST',
+                    headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                });
+            const data = await response.json();
+
+            if (response.ok && data.sid) {
+                return { success: true, messageId: data.sid, provider: this.name };
+            }
+            return { success: false, error: data.message || `Twilio error ${response.status}`, provider: this.name };
+        } catch (error: any) {
+            return { success: false, error: error.message, provider: this.name };
+        }
+    }
+}
+
+// ===== META WHATSAPP CLOUD API PROVIDER =====
+// Direct integration with Meta's Graph API (no GHL/Twilio middleman).
+// NOTE: a free-form text message only delivers inside the 24-hour customer-service window.
+// Business-initiated messages (e.g. a welcome to a brand-new lead) require a pre-approved
+// message template — set META_WHATSAPP_TEMPLATE to send that instead of free text.
+export class MetaWhatsAppProvider implements WhatsAppProvider {
+    name = 'Meta WhatsApp Cloud';
+    constructor(
+        private token: string,
+        private phoneNumberId: string,
+        private apiVersion: string = 'v21.0',
+        private templateName?: string,      // optional approved template for business-initiated sends
+        private templateLang: string = 'en',
+    ) {}
+
+    async send(to: string, message: string): Promise<WhatsAppResult> {
+        try {
+            // Meta expects the number without the leading '+'
+            const recipient = toZaE164(to).replace(/^\+/, '');
+
+            const body: Record<string, any> = this.templateName
+                ? {
+                    messaging_product: 'whatsapp',
+                    to: recipient,
+                    type: 'template',
+                    template: {
+                        name: this.templateName,
+                        language: { code: this.templateLang },
+                        components: [{ type: 'body', parameters: [{ type: 'text', text: message }] }],
+                    },
+                  }
+                : {
+                    messaging_product: 'whatsapp',
+                    to: recipient,
+                    type: 'text',
+                    text: { body: message },
+                  };
+
+            const response = await fetch(
+                `https://graph.facebook.com/${this.apiVersion}/${this.phoneNumberId}/messages`,
+                {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            const data = await response.json();
+
+            if (response.ok && data.messages?.[0]?.id) {
+                return { success: true, messageId: data.messages[0].id, provider: this.name };
+            }
+            return { success: false, error: data.error?.message || `Meta error ${response.status}`, provider: this.name };
+        } catch (error: any) {
+            return { success: false, error: error.message, provider: this.name };
+        }
+    }
+}
+
 // ===== TELEGRAM PROVIDER =====
 export interface TelegramProvider {
     name: string;
@@ -314,6 +472,33 @@ export class MockTelegramProvider implements TelegramProvider {
             provider: this.name };
     }
 }
+// ===== TELEGRAM BOT API PROVIDER =====
+// Direct integration with the Telegram Bot API (free, no third party).
+// `chatId` is the numeric Telegram chat id captured when the consumer starts the bot —
+// Telegram cannot be addressed by phone number.
+export class TelegramBotProvider implements TelegramProvider {
+    name = 'Telegram';
+    constructor(private botToken: string) {}
+
+    async send(chatId: string, message: string): Promise<TelegramResult> {
+        try {
+            const response = await fetch(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: message }),
+            });
+            const data = await response.json();
+
+            if (response.ok && data.ok) {
+                return { success: true, messageId: String(data.result?.message_id ?? ''), provider: this.name };
+            }
+            return { success: false, error: data.description || `Telegram error ${response.status}`, provider: this.name };
+        } catch (error: any) {
+            return { success: false, error: error.message, provider: this.name };
+        }
+    }
+}
+
 // ===== GOHIGHLEVEL (GHL) PROVIDERS — v2 API =====
 
 const GHL_BASE_URL = 'https://services.leadconnectorhq.com';

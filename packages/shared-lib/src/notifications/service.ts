@@ -20,14 +20,18 @@ import {
     GhlWebhookSmsProvider,
     GhlWebhookEmailProvider,
     GhlWebhookWhatsAppProvider,
-    FallbackEmailProvider } from './providers';
+    FallbackEmailProvider,
+    TwilioSmsProvider,
+    TwilioWhatsAppProvider,
+    MetaWhatsAppProvider,
+    TelegramBotProvider } from './providers';
 import type { EmailOptions } from './providers';
 import {
     getTemplateByStatus,
     renderTemplate,
     renderBrandedEmail
 } from './templates';
-import { getGHLCredentials, getSMTPCredentials } from '../integrations';
+import { getGHLCredentials, getSMTPCredentials, isGhlEnabled } from '../integrations';
 import { logger } from '../logger';
 import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
@@ -52,9 +56,26 @@ function addBccToOptions(options?: EmailOptions): EmailOptions {
     };
 }
 
-// Initialize providers based on configuration
+// Initialize providers based on configuration.
+// Set SMS_PROVIDER to force a specific gateway (ghl | clickatell | twilio | mock);
+// when unset, providers are auto-detected in the order below (GHL first, then fallbacks).
 async function getSmsProvider(): Promise<SmsProvider> {
-    if (process.env.GHL_SMS_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL) {
+    const choice = (process.env.SMS_PROVIDER || '').toLowerCase();
+    const twilioReady = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM);
+
+    // Explicit selection
+    if (choice === 'twilio' && twilioReady) {
+        return new TwilioSmsProvider(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!, process.env.TWILIO_SMS_FROM!);
+    }
+    if (choice === 'clickatell' && process.env.CLICKATELL_API_KEY) {
+        return new ClickatellSmsProvider(process.env.CLICKATELL_API_KEY);
+    }
+    if (choice === 'mock') {
+        return new MockSmsProvider();
+    }
+
+    // GHL (explicit 'ghl' or auto-default) — skipped entirely when GHL is suspended
+    if (isGhlEnabled() && (process.env.GHL_SMS_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL)) {
         return new GhlWebhookSmsProvider(process.env.GHL_SMS_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL || '');
     }
     const ghl = await getGHLCredentials();
@@ -62,73 +83,114 @@ async function getSmsProvider(): Promise<SmsProvider> {
         return new GhlSmsProvider(ghl.apiKey, ghl.locationId);
     }
 
+    // Auto-fallbacks when GHL is not configured
+    if (twilioReady) {
+        return new TwilioSmsProvider(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!, process.env.TWILIO_SMS_FROM!);
+    }
     if (process.env.CLICKATELL_API_KEY) {
         return new ClickatellSmsProvider(process.env.CLICKATELL_API_KEY);
     }
     return new MockSmsProvider();
 }
 
+// Set EMAIL_PROVIDER to force a specific email gateway (smtp | ghl | resend | mock);
+// when unset, providers are auto-detected (GHL first when configured, then SMTP, then Resend).
+// ⚠️ GHL is not yet set up in production — EMAIL_PROVIDER=smtp makes direct SMTP the primary
+// path, so emails are not delayed by a failing GHL API call on every send.
 async function getEmailProvider(): Promise<EmailProvider> {
+    const choice = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+    const ghl = await getGHLCredentials();
+    const smtp = await getSMTPCredentials();
+
+    const buildSmtp = () => new SmtpEmailProvider({
+        host:      smtp.host,
+        port:      smtp.port,
+        secure:    smtp.secure,
+        auth:      { user: smtp.username, pass: smtp.password },
+        fromEmail: smtp.fromEmail || undefined,
+    });
+    const buildResend = () => new ResendEmailProvider(
+        process.env.RESEND_API_KEY!,
+        smtp.fromEmail || 'notifications@zenowethu.co.za'
+    );
+
+    // Explicit selection — forces the chosen gateway when it is usable.
+    // An unusable forced choice (e.g. EMAIL_PROVIDER=smtp with no SMTP host) falls through to auto-detect.
+    if (choice === 'smtp' && smtp.host) return buildSmtp();
+    if (choice === 'resend' && process.env.RESEND_API_KEY) return buildResend();
+    if (choice === 'mock') return new MockEmailProvider();
+    // choice === 'ghl' falls through to the GHL-first auto-detect below.
+
     // Priority 1: GHL API — primary channel so all replies route back through the GHL webhook,
     // giving the app full two-way conversation history and enabling AI auto-replies.
     // Wrapped with SMTP fallback so professional emails to DCs/bureaus still deliver when
     // GHL cannot find or create a contact for the recipient.
-    const ghl = await getGHLCredentials();
-    const smtp = await getSMTPCredentials();
     if (ghl.apiKey && ghl.locationId) {
         const ghlProvider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
         if (smtp.host) {
-            const smtpFallback = new SmtpEmailProvider({
-                host:      smtp.host,
-                port:      smtp.port,
-                secure:    smtp.secure,
-                auth:      { user: smtp.username, pass: smtp.password },
-                fromEmail: smtp.fromEmail || undefined,
-            });
-            return new FallbackEmailProvider(ghlProvider, smtpFallback);
+            return new FallbackEmailProvider(ghlProvider, buildSmtp());
         }
         return ghlProvider;
     }
 
     // Priority 2: GHL webhook (fire-and-forget; depends on GHL workflow being configured for email)
-    if (process.env.GHL_EMAIL_WEBHOOK_URL) {
+    if (isGhlEnabled() && process.env.GHL_EMAIL_WEBHOOK_URL) {
         return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL);
     }
 
     // Priority 3: SMTP — direct delivery for environments without GHL
     if (smtp.host) {
-        return new SmtpEmailProvider({
-            host:      smtp.host,
-            port:      smtp.port,
-            secure:    smtp.secure,
-            auth:      { user: smtp.username, pass: smtp.password },
-            fromEmail: smtp.fromEmail || undefined,
-        });
+        return buildSmtp();
     }
 
     // Priority 4: Resend
     if (process.env.RESEND_API_KEY) {
-        return new ResendEmailProvider(
-            process.env.RESEND_API_KEY,
-            smtp.fromEmail || 'notifications@zenowethu.co.za'
-        );
+        return buildResend();
     }
 
     return new MockEmailProvider();
 }
 
+// Set WHATSAPP_PROVIDER to force a specific gateway (ghl | twilio | meta | mock);
+// when unset, providers are auto-detected (GHL first, then Twilio, then Meta).
 async function getWhatsAppProvider(): Promise<WhatsAppProvider> {
-    if (process.env.GHL_WEBHOOK_URL) {
+    const choice = (process.env.WHATSAPP_PROVIDER || '').toLowerCase();
+    const twilioReady = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM);
+    const metaReady = !!(process.env.META_WHATSAPP_TOKEN && process.env.META_WHATSAPP_PHONE_NUMBER_ID);
+
+    const buildTwilio = () => new TwilioWhatsAppProvider(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!, process.env.TWILIO_WHATSAPP_FROM!);
+    const buildMeta = () => new MetaWhatsAppProvider(
+        process.env.META_WHATSAPP_TOKEN!,
+        process.env.META_WHATSAPP_PHONE_NUMBER_ID!,
+        process.env.META_WHATSAPP_API_VERSION || 'v21.0',
+        process.env.META_WHATSAPP_TEMPLATE || undefined,
+        process.env.META_WHATSAPP_TEMPLATE_LANG || 'en',
+    );
+
+    // Explicit selection
+    if (choice === 'twilio' && twilioReady) return buildTwilio();
+    if (choice === 'meta' && metaReady) return buildMeta();
+    if (choice === 'mock') return new MockWhatsAppProvider();
+
+    // GHL (explicit 'ghl' or auto-default) — skipped entirely when GHL is suspended
+    if (isGhlEnabled() && process.env.GHL_WEBHOOK_URL) {
         return new GhlWebhookWhatsAppProvider(process.env.GHL_WEBHOOK_URL);
     }
     const ghl = await getGHLCredentials();
     if (ghl.apiKey && ghl.locationId) {
         return new GhlWhatsAppProvider(ghl.apiKey, ghl.locationId);
     }
+
+    // Auto-fallbacks when GHL is not configured
+    if (twilioReady) return buildTwilio();
+    if (metaReady) return buildMeta();
     return new MockWhatsAppProvider();
 }
 
 async function getTelegramProvider(): Promise<TelegramProvider> {
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+        return new TelegramBotProvider(process.env.TELEGRAM_BOT_TOKEN);
+    }
     return new MockTelegramProvider();
 }
 
@@ -152,7 +214,7 @@ export interface NotificationPayload {
     partnerName?: string | null;
     partnerEmail?: string | null;
     isB2B: boolean;
-    isCreatedByPartner?: boolean;  // true only when a B2B_PARTNER user created the case
+    isCreatedByPartner?: boolean;  // retained for callers; no longer affects NEW_LEAD template choice (isB2B drives it)
     services?: string | null;
     mainSource?: string | null;
     dcName?: string | null;
@@ -197,13 +259,10 @@ export async function sendStatusChangeNotification(
 
     let statusCodeForTemplate = payload.statusCode;
     if (payload.statusCode === 'NEW_LEAD') {
-        if (payload.isB2B && payload.isCreatedByPartner) {
-            statusCodeForTemplate = 'NEW_LEAD_B2B';      // B2B partner user created the case
-        } else if (!payload.isB2B) {
-            statusCodeForTemplate = 'NEW_LEAD';           // Direct B2C intake
-        } else {
-            statusCodeForTemplate = 'NEW_LEAD_STAFF';     // Zenowethu staff captured a B2B lead
-        }
+        // Any B2B referral gets the partner "received by {mainSource} Head Office" welcome,
+        // whether a B2B partner user or Zenowethu staff captured the lead. Only direct
+        // B2C intake uses the Zenowethu-branded welcome.
+        statusCodeForTemplate = payload.isB2B ? 'NEW_LEAD_B2B' : 'NEW_LEAD';
     }
 
     const template = getTemplateByStatus(statusCodeForTemplate);
@@ -451,6 +510,38 @@ async function sendNotificationByTemplate(
                 provider: waResult.provider });
             if (!waResult.success) {
                 await enqueueFailedNotification({ caseId: payload.caseId, channel: 'WHATSAPP', recipient: payload.clientWhatsApp, body: waMessage, error: waResult.error });
+            }
+        }
+    }
+
+    // 4. Send Telegram to client (only when explicitly enabled and a chat id is on file)
+    if (template.sendToClient && payload.clientTelegram && template.smsTemplate && template.smsTemplate !== 'N/A') {
+        const tgMessage = renderTemplate(template.smsTemplate, variables);
+
+        if (TELEGRAM_ENABLED) {
+            const tgProvider = await getTelegramProvider();
+            const tgResult = await tgProvider.send(payload.clientTelegram, tgMessage);
+
+            result.telegramSuccess = tgResult.success;
+            result.telegramMessageId = tgResult.messageId;
+
+            if (!tgResult.success) {
+                result.errors.push(`Telegram failed: ${tgResult.error}`);
+            }
+
+            await logNotification({
+                caseId: payload.caseId,
+                channel: 'TELEGRAM',
+                recipient: payload.clientTelegram,
+                recipientType: 'CLIENT',
+                statusCode: payload.statusCode,
+                message: tgMessage,
+                success: tgResult.success,
+                messageId: tgResult.messageId,
+                error: tgResult.error,
+                provider: tgResult.provider });
+            if (!tgResult.success) {
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'TELEGRAM', recipient: payload.clientTelegram, body: tgMessage, error: tgResult.error });
             }
         }
     }
@@ -1110,12 +1201,17 @@ export async function executeNotificationRetry(queueId: string): Promise<Notific
             const res = await provider.send(queueItem.recipient, queueItem.body);
             result.whatsappSuccess = res.success;
             if (res.error) result.errors.push(res.error);
+        } else if (queueItem.channel === 'TELEGRAM') {
+            const provider = await getTelegramProvider();
+            const res = await provider.send(queueItem.recipient, queueItem.body);
+            result.telegramSuccess = res.success;
+            if (res.error) result.errors.push(res.error);
         }
     } catch (error: any) {
         result.errors.push(error.message);
     }
 
-    const success = result.smsSuccess || result.emailSuccess || result.whatsappSuccess;
+    const success = result.smsSuccess || result.emailSuccess || result.whatsappSuccess || result.telegramSuccess;
     
     if (success) {
         await prisma.notificationQueue.update({

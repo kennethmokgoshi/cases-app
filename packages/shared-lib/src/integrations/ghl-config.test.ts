@@ -18,7 +18,7 @@ vi.mock('../logger', () => ({
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
 
-import { getGHLCredentials, invalidateGHLCredentialsCache } from './ghl-config';
+import { getGHLCredentials, invalidateGHLCredentialsCache, isGhlEnabled } from './ghl-config';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -99,6 +99,43 @@ describe('getGHLCredentials', () => {
 
         // DB should only be called once; subsequent calls return cached value
         expect(mockFindMany).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ─── GHL_ENABLED kill-switch ─────────────────────────────────────────────────
+
+describe('GHL_ENABLED kill-switch', () => {
+    beforeEach(() => {
+        invalidateGHLCredentialsCache();
+        vi.clearAllMocks();
+        delete process.env.GHL_API_KEY;
+        delete process.env.GHL_LOCATION_ID;
+        delete process.env.GHL_ENABLED;
+    });
+
+    it('isGhlEnabled() is true by default and false when GHL_ENABLED=false', () => {
+        expect(isGhlEnabled()).toBe(true);
+        process.env.GHL_ENABLED = 'false';
+        expect(isGhlEnabled()).toBe(false);
+    });
+
+    it('returns empty credentials and never queries the DB when suspended', async () => {
+        process.env.GHL_ENABLED = 'false';
+        process.env.GHL_API_KEY = 'env-key';        // present but must be ignored
+        process.env.GHL_LOCATION_ID = 'env-loc';
+        mockFindMany.mockResolvedValue(dbSettings('db-key', 'db-loc'));
+
+        const creds = await getGHLCredentials();
+
+        expect(creds.apiKey).toBe('');
+        expect(creds.locationId).toBe('');
+        expect(mockFindMany).not.toHaveBeenCalled();
+    });
+
+    it('resumes normal resolution once the switch is removed', async () => {
+        mockFindMany.mockResolvedValue(dbSettings('db-key', 'db-loc'));
+        const creds = await getGHLCredentials();
+        expect(creds.apiKey).toBe('db-key');
     });
 });
 
