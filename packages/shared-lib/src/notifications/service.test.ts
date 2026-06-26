@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─── Mock all external dependencies ──────────────────────────────────────────
 
@@ -58,7 +58,63 @@ vi.mock('./providers', async (importOriginal) => {
     };
 });
 
-import { sendManualMessage } from './service';
+import { sendManualMessage, sendStatusChangeNotification } from './service';
+import type { NotificationPayload } from './service';
+
+// ─── sendStatusChangeNotification: NEW_LEAD template selection ────────────────
+
+describe('sendStatusChangeNotification — NEW_LEAD template selection', () => {
+    let sentEmails: Array<{ to: string; subject: string }>;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        delete process.env.GHL_EMAIL_WEBHOOK_URL;
+        delete process.env.GHL_WEBHOOK_URL;
+        delete process.env.SMTP_HOST;
+        delete process.env.RESEND_API_KEY;
+
+        // Capture every email that the MockEmailProvider is asked to send
+        sentEmails = [];
+        const { MockEmailProvider } = await import('./providers');
+        (MockEmailProvider as any).mockImplementation(() => ({
+            name: 'mock',
+            send: vi.fn().mockImplementation((to: string, subject: string) => {
+                sentEmails.push({ to, subject });
+                return Promise.resolve({ success: true, messageId: 'mock-001', provider: 'mock' });
+            }),
+        }));
+    });
+
+    const basePayload = (overrides: Partial<NotificationPayload>): NotificationPayload => ({
+        caseId: 'case-001',
+        clientName: 'Thabo Mokoena',
+        clientEmail: 'thabo@example.com',
+        fileNumber: 'ZDM-2026-001-ABC',
+        statusCode: 'NEW_LEAD',
+        partnerName: 'Letsatsi',
+        isB2B: true,
+        ...overrides,
+    });
+
+    it('uses the B2B "Head Office" welcome when a partner user created the case', async () => {
+        await sendStatusChangeNotification(basePayload({ isB2B: true, isCreatedByPartner: true }));
+        expect(sentEmails).toHaveLength(1);
+        expect(sentEmails[0].subject).toContain('Letsatsi');
+    });
+
+    it('uses the B2B "Head Office" welcome even when staff captured the B2B lead', async () => {
+        // Regression guard: previously this path used the Zenowethu-branded NEW_LEAD_STAFF email
+        await sendStatusChangeNotification(basePayload({ isB2B: true, isCreatedByPartner: false }));
+        expect(sentEmails).toHaveLength(1);
+        expect(sentEmails[0].subject).toContain('Letsatsi');
+    });
+
+    it('uses the Zenowethu-branded welcome for direct B2C intake', async () => {
+        await sendStatusChangeNotification(basePayload({ isB2B: false, isCreatedByPartner: false }));
+        expect(sentEmails).toHaveLength(1);
+        expect(sentEmails[0].subject).not.toContain('Letsatsi');
+    });
+});
 
 // ─── sendManualMessage ────────────────────────────────────────────────────────
 
@@ -162,5 +218,49 @@ describe('sendManualMessage', () => {
             'Subject'
         );
         expect(result.errors.length).toBeGreaterThan(0);
+    });
+});
+
+// ─── getEmailProvider: EMAIL_PROVIDER override ──────────────────────────────────
+// GHL is not yet set up, so EMAIL_PROVIDER=smtp must force the direct SMTP path even
+// when GHL credentials are present — otherwise every email makes a failing GHL call first.
+
+describe('email provider selection — EMAIL_PROVIDER override', () => {
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        delete process.env.GHL_EMAIL_WEBHOOK_URL;
+        delete process.env.RESEND_API_KEY;
+
+        const { getGHLCredentials, getSMTPCredentials } = await import('../integrations');
+        // Both GHL and SMTP fully configured — selection must come down to EMAIL_PROVIDER.
+        vi.mocked(getGHLCredentials).mockResolvedValue({ apiKey: 'ghl-key', locationId: 'loc-1' } as any);
+        vi.mocked(getSMTPCredentials).mockResolvedValue({
+            host: 'mail.zenowethu.co.za', port: 587, secure: false,
+            username: 'notifications@zenowethu.co.za', password: 'secret',
+            fromEmail: 'notifications@zenowethu.co.za',
+        } as any);
+    });
+
+    afterEach(() => {
+        delete process.env.EMAIL_PROVIDER;
+    });
+
+    it('uses SMTP (not GHL) when EMAIL_PROVIDER=smtp even though GHL is configured', async () => {
+        process.env.EMAIL_PROVIDER = 'smtp';
+        const { SmtpEmailProvider, GhlEmailProvider } = await import('./providers');
+
+        const result = await sendManualMessage('case-001', 'EMAIL', 'user@test.com', 'Body', 'Subject');
+
+        expect(result.emailSuccess).toBe(true);
+        expect(SmtpEmailProvider).toHaveBeenCalled();
+        expect(GhlEmailProvider).not.toHaveBeenCalled();
+    });
+
+    it('falls back to GHL-first auto-detect when EMAIL_PROVIDER is unset', async () => {
+        const { GhlEmailProvider } = await import('./providers');
+
+        await sendManualMessage('case-001', 'EMAIL', 'user@test.com', 'Body', 'Subject');
+
+        expect(GhlEmailProvider).toHaveBeenCalled();
     });
 });

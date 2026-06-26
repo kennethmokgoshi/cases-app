@@ -18,3 +18,7 @@ export { checkDCCPEligibility, checkCliEligibility, checkAipEligibility, checkFu
 export { DCCPService, dccpService } from './dccp'
 export { mapGhlSourceToLeadSource, LEAD_SOURCES } from './ghl-source-map'
 export type { LeadSource } from './ghl-source-map'
+// NOTE: telegram-bot is intentionally NOT re-exported here. It pulls in the OTP /
+// AI / nodemailer chain, and this barrel is imported by notifications/service.ts —
+// re-exporting it would create a circular import. Import it by deep path instead:
+//   import { handleTelegramMessage } from '@zenowethu/shared-lib/src/integrations/telegram-bot'

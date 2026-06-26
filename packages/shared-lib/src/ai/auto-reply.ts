@@ -3,7 +3,7 @@ import { logger } from '../logger';
 
 export interface AutoReplyRequest {
     inboundMessage: string;
-    channel: 'SMS' | 'EMAIL' | 'WHATSAPP';
+    channel: 'SMS' | 'EMAIL' | 'WHATSAPP' | 'TELEGRAM';
     senderType: 'CLIENT' | 'DEBT_COUNSELLOR';
     caseContext: {
         fileNumber: string;
@@ -39,6 +39,8 @@ function buildPrompt(req: AutoReplyRequest): string {
             ? 'This is an SMS reply. Keep the body under 160 characters. No subject needed.'
             : channel === 'WHATSAPP'
             ? 'This is a WhatsApp reply. Keep the body conversational and under 400 characters. No subject needed.'
+            : channel === 'TELEGRAM'
+            ? 'This is a Telegram chat reply. Keep the body conversational and under 600 characters. No subject needed.'
             : 'This is an email reply. Include a short, professional subject line and a full email body.';
 
     const senderNote =

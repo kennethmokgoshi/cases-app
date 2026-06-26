@@ -1,5 +1,5 @@
 'use client';
-import { toast, confirm } from '@zenowethu/ui';
+import { toast, confirm, NextUpdateCard } from '@zenowethu/ui';
 
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -1127,6 +1127,8 @@ export default function CaseDetailPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column - Client Info & Projects */}
                 <div className="lg:col-span-1 space-y-6">
+                    {/* Per-app Next Update Date — isolated to the Legal app */}
+                    <NextUpdateCard app="LEGAL" caseId={String(params.id)} />
                     {/* Client Source - Moved to Top */}
                     <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6">
                         <h3 className="text-lg font-semibold text-white mb-4">Client Source</h3>

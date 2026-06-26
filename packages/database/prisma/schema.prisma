@@ -75,8 +75,8 @@ model Referrer {
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   // Commission tier configuration
-  commissionType        String               @default("FIXED")  // FIXED | VOLUME_BASED
-  fixedCommissionAmount Decimal?                                 // Used when commissionType = FIXED
+  commissionType        String               @default("FIXED") // FIXED | VOLUME_BASED
+  fixedCommissionAmount Decimal? // Used when commissionType = FIXED
   // Referrer hierarchy — who referred this referrer
   parentReferrerId      String?
   cases                 Case[]
@@ -117,54 +117,55 @@ model ReferrerCommission {
 }
 
 model Client {
-  id                String           @id @default(cuid())
-  firstName         String
-  lastName          String
-  idNumber          String           @unique
-  email             String?
-  phone             String?
-  whatsappNumber    String?
-  telegramNumber    String?
-  address           String?
-  employer          String?
-  employeeNo        String?
-  grossSalary       Decimal?
-  netSalary         Decimal?
-  salaryPayDate     Int?
-  type              String           @default("Standard")
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  ghlContactId      String?
-  alternativeEmail  String?
-  alternativePhone  String?
-  alternativePhone2 String?
+  id                  String               @id @default(cuid())
+  firstName           String
+  lastName            String
+  idNumber            String               @unique
+  email               String?
+  phone               String?
+  whatsappNumber      String?
+  telegramNumber      String?
+  address             String?
+  employer            String?
+  employeeNo          String?
+  grossSalary         Decimal?
+  netSalary           Decimal?
+  salaryPayDate       Int?
+  type                String               @default("Standard")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  ghlContactId        String?
+  alternativeEmail    String?
+  alternativePhone    String?
+  alternativePhone2   String?
   // Banking details for debit order collection
-  bankName          String?
-  accountHolderName String?
-  accountNumber     String?
-  accountType       String?
-  branchCode        String?
-  debitOrderDay     Int?
-  cases             Case[]            @relation("PrimaryClient")
-  jointCases        Case[]            @relation("JointClient")
-  consumerAccount   ConsumerAccount?
-  creditAccounts    CreditAccount[]
-  invoices          Invoice[]
-  LegalMatter       LegalMatter[]
-  payments          Payment[]
-  automationRuns    AutomationRun[]
-  poaSigningRequests PoaSigningRequest[]
-  debitOrderMandates DebitOrderMandate[]
+  bankName            String?
+  accountHolderName   String?
+  accountNumber       String?
+  accountType         String?
+  branchCode          String?
+  debitOrderDay       Int?
+  cases               Case[]               @relation("PrimaryClient")
+  jointCases          Case[]               @relation("JointClient")
+  consumerAccount     ConsumerAccount?
+  creditAccounts      CreditAccount[]
+  invoices            Invoice[]
+  LegalMatter         LegalMatter[]
+  payments            Payment[]
+  automationRuns      AutomationRun[]
+  poaSigningRequests  PoaSigningRequest[]
+  debitOrderMandates  DebitOrderMandate[]
+  paymentArrangements PaymentArrangement[]
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String?
-  action      String
-  resource    String
-  resourceId  String?
-  details     Json?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  createdAt  DateTime @default(now())
 
   @@index([userId])
   @@index([resource, resourceId])
@@ -172,22 +173,22 @@ model AuditLog {
 }
 
 model NotificationQueue {
-  id               String   @id @default(cuid())
-  caseId           String
-  channel          String   // SMS, EMAIL, WHATSAPP
-  recipient        String
-  subject          String?
-  body             String
-  htmlBody         String?
-  optionsJson      String?  // For CCs and attachments
-  status           String   @default("PENDING_RETRY") // PENDING_RETRY, SUCCESS, FAILED_FINAL, HUMAN_REVIEW, CANCELLED
-  retryCount       Int      @default(0)
-  nextRetryAt      DateTime?
-  lastError        String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  
-  case             Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  caseId      String
+  channel     String // SMS, EMAIL, WHATSAPP
+  recipient   String
+  subject     String?
+  body        String
+  htmlBody    String?
+  optionsJson String? // For CCs and attachments
+  status      String    @default("PENDING_RETRY") // PENDING_RETRY, SUCCESS, FAILED_FINAL, HUMAN_REVIEW, CANCELLED
+  retryCount  Int       @default(0)
+  nextRetryAt DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId])
   @@index([status])
@@ -266,8 +267,8 @@ model Case {
   todos                   String?
   declineReason           String?
   declineReasonAttended   Boolean               @default(false)
-  declineFirstDetectedAt  DateTime?             // When decline was FIRST detected (never updated, used for window calculation)
-  declineLastDetectedAt   DateTime?             // Most recent decline detection (updated on each new decline, visible in UI)
+  declineFirstDetectedAt  DateTime? // When decline was FIRST detected (never updated, used for window calculation)
+  declineLastDetectedAt   DateTime? // Most recent decline detection (updated on each new decline, visible in UI)
   description             String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -322,9 +323,11 @@ model Case {
   notificationQueue       NotificationQueue[]
   poaSigningRequests      PoaSigningRequest[]
   debitOrderMandates      DebitOrderMandate[]
+  appNextUpdates          CaseAppNextUpdate[]
+  paymentArrangements     PaymentArrangement[]
 
-  debtCounsellordId       String?
-  debtCounsellor          DebtCounsellor?       @relation(fields: [debtCounsellordId], references: [id])
+  debtCounsellordId String?
+  debtCounsellor    DebtCounsellor? @relation(fields: [debtCounsellordId], references: [id])
 
   @@index([status])
   @@index([isOverdue])
@@ -360,13 +363,13 @@ model DebtCounsellor {
 }
 
 model DebtCounsellorEmailHistory {
-  id               String         @id @default(cuid())
+  id                String         @id @default(cuid())
   debtCounsellordId String
-  email            String
-  source           String
-  recordedAt       DateTime       @default(now())
-  notes            String?
-  debtCounsellor   DebtCounsellor @relation(fields: [debtCounsellordId], references: [id], onDelete: Cascade)
+  email             String
+  source            String
+  recordedAt        DateTime       @default(now())
+  notes             String?
+  debtCounsellor    DebtCounsellor @relation(fields: [debtCounsellordId], references: [id], onDelete: Cascade)
 
   @@index([debtCounsellordId])
 }
@@ -434,105 +437,187 @@ model WorkflowLog {
 }
 
 model User {
-  id                        String                @id @default(cuid())
-  username                  String                @unique
-  firstName                 String
-  lastName                  String
-  email                     String                @unique
-  password                  String
-  organization              String                @default("Zenowethu")
-  isAdmin                   Boolean               @default(false)
-  isLocked                  Boolean               @default(false)
-  emailNotificationsEnabled Boolean               @default(true)
-  createdAt                 DateTime              @default(now())
-  lastLogin                 DateTime?
-  b2bPartnerId              String?
-  phone                     String?
-  role                      String                @default("MEMBER")
-  userType                  String                @default("STAFF")
-  avatarUrl                 String?
-  resetPasswordExpires      DateTime?
-  resetPasswordToken        String?               @unique
-  idNumber                  String?
-  address                   String?
-  AuditEvidence             AuditEvidence[]
-  casesAssigned             Case[]                @relation("CaseAssignee")
-  casesCreated              Case[]                @relation("CaseCreator")
-  casesDeleted              Case[]                @relation("CaseDeleter")
-  casesUpdated              Case[]                @relation("CaseUpdater")
-  caseAssignments           CaseAssignment[]
-  comments                  CaseComment[]
-  caseFollows               CaseFollower[]
-  approvedPlans             CasePlan[]            @relation("PlanApprover")
-  mentions                  CommentMention[]
-  dccpCredential            DCCPCredential?
-  approvedDebtReviewDocs    DebtReviewDocument[]  @relation("DebtReviewDocumentApprover")
-  uploadedDocuments         Document[]
-  grantedDocumentAccess     DocumentAccessGrant[] @relation("DocumentAccessGranter")
-  documentAccessGrants      DocumentAccessGrant[] @relation("DocumentAccessGrantee")
-  ForensicAudit             ForensicAudit[]
-  inAppNotifications        InAppNotification[]
-  invoicesCreated           Invoice[]             @relation("InvoiceCreator")
-  invoicesDecided           Invoice[]             @relation("InvoiceDecider")
-  sentNotifications         NotificationLog[]     @relation("SentNotifications")
-  recordedPayments          Payment[]             @relation("PaymentRecorder")
-  uploadedBatches           PaymentBatch[]
-  projectMemberships        ProjectMember[]
-  createdReferrers          Referrer[]            @relation("ReferrerCreator")
-  commissionsPaid           ReferrerCommission[]  @relation("CommissionPaidBy")
-  r350PaymentsRecorded      Case[]                @relation("CaseR350PaidBy")
-  r350WaiversRecorded       Case[]                @relation("CaseR350WaivedBy")
-  b2bPartner                Project?              @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
-  groupMemberships          UserGroupMember[]
-  workflowLogs              WorkflowLog[]
-  assignedLeads             Lead[]            @relation("LeadAssignment")
-  automationRuns            AutomationRun[]
-  triggeredAutomations      AutomationRun[]   @relation("AutomationTrigger")
-  debtCounsellorsUpdated    DebtCounsellor[]  @relation("DCUpdatedBy")
-  debitOrderMandates        DebitOrderMandate[] @relation("MandateRecorder")
+  id                         String                         @id @default(cuid())
+  username                   String                         @unique
+  firstName                  String
+  lastName                   String
+  email                      String                         @unique
+  password                   String
+  organization               String                         @default("Zenowethu")
+  isAdmin                    Boolean                        @default(false)
+  isLocked                   Boolean                        @default(false)
+  emailNotificationsEnabled  Boolean                        @default(true)
+  createdAt                  DateTime                       @default(now())
+  lastLogin                  DateTime?
+  b2bPartnerId               String?
+  phone                      String?
+  role                       String                         @default("MEMBER")
+  userType                   String                         @default("STAFF")
+  avatarUrl                  String?
+  resetPasswordExpires       DateTime?
+  resetPasswordToken         String?                        @unique
+  idNumber                   String?
+  address                    String?
+  AuditEvidence              AuditEvidence[]
+  casesAssigned              Case[]                         @relation("CaseAssignee")
+  casesCreated               Case[]                         @relation("CaseCreator")
+  casesDeleted               Case[]                         @relation("CaseDeleter")
+  casesUpdated               Case[]                         @relation("CaseUpdater")
+  caseAssignments            CaseAssignment[]
+  comments                   CaseComment[]
+  caseFollows                CaseFollower[]
+  approvedPlans              CasePlan[]                     @relation("PlanApprover")
+  mentions                   CommentMention[]
+  dccpCredential             DCCPCredential?
+  approvedDebtReviewDocs     DebtReviewDocument[]           @relation("DebtReviewDocumentApprover")
+  uploadedDocuments          Document[]
+  grantedDocumentAccess      DocumentAccessGrant[]          @relation("DocumentAccessGranter")
+  documentAccessGrants       DocumentAccessGrant[]          @relation("DocumentAccessGrantee")
+  ForensicAudit              ForensicAudit[]
+  inAppNotifications         InAppNotification[]
+  invoicesCreated            Invoice[]                      @relation("InvoiceCreator")
+  invoicesDecided            Invoice[]                      @relation("InvoiceDecider")
+  sentNotifications          NotificationLog[]              @relation("SentNotifications")
+  recordedPayments           Payment[]                      @relation("PaymentRecorder")
+  uploadedBatches            PaymentBatch[]
+  projectMemberships         ProjectMember[]
+  createdReferrers           Referrer[]                     @relation("ReferrerCreator")
+  commissionsPaid            ReferrerCommission[]           @relation("CommissionPaidBy")
+  r350PaymentsRecorded       Case[]                         @relation("CaseR350PaidBy")
+  r350WaiversRecorded        Case[]                         @relation("CaseR350WaivedBy")
+  b2bPartner                 Project?                       @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])
+  groupMemberships           UserGroupMember[]
+  workflowLogs               WorkflowLog[]
+  assignedLeads              Lead[]                         @relation("LeadAssignment")
+  automationRuns             AutomationRun[]
+  triggeredAutomations       AutomationRun[]                @relation("AutomationTrigger")
+  debtCounsellorsUpdated     DebtCounsellor[]               @relation("DCUpdatedBy")
+  debitOrderMandates         DebitOrderMandate[]            @relation("MandateRecorder")
+  caseAppNextUpdates         CaseAppNextUpdate[]            @relation("CaseAppNextUpdateUpdater")
+  paymentArrangementsCreated PaymentArrangement[]           @relation("ArrangementCreator")
+  instalmentsHonoured        PaymentArrangementInstalment[] @relation("InstalmentHonouredBy")
 }
 
 // Debit order mandate lifecycle — capture, send, sign-back, NuPay registration
 model DebitOrderMandate {
-  id                 String    @id @default(cuid())
-  caseId             String?
-  clientId           String
+  id                  String               @id @default(cuid())
+  caseId              String?
+  clientId            String
   // Whether the consumer has requested / consented to a debit order mandate
-  requested          Boolean   @default(false)
+  requested           Boolean              @default(false)
   // Snapshot of banking details at the time the mandate was raised
-  bankName           String?
-  accountHolderName  String?
-  accountNumber      String?
-  accountType        String?
-  branchCode         String?
+  bankName            String?
+  accountHolderName   String?
+  accountNumber       String?
+  accountType         String?
+  branchCode          String?
   // Mandate terms
-  amount             Decimal?
-  frequency          String    @default("MONTHLY") // MONTHLY | WEEKLY
-  numInstalments     Int?
-  debitOrderDay      Int?
+  amount              Decimal?
+  frequency           String               @default("MONTHLY") // MONTHLY | WEEKLY
+  numInstalments      Int?
+  debitOrderDay       Int?
   firstCollectionDate DateTime?
   lastCollectionDate  DateTime?
   // Lifecycle status
-  status             String    @default("DRAFT") // DRAFT | SENT | SIGNED | REGISTERED | ACTIVE | CANCELLED | REJECTED
+  status              String               @default("DRAFT") // DRAFT | SENT | SIGNED | REGISTERED | ACTIVE | CANCELLED | REJECTED
   // Send / sign-back tracking
-  sentAt             DateTime?
-  sentTo             String?
-  signedReturnedAt   DateTime?
+  sentAt              DateTime?
+  sentTo              String?
+  signedReturnedAt    DateTime?
   // Document linkage (uploaded to the case document vault)
-  signedDocumentId   String?
-  nupayDocumentId    String?
-  nupayReference     String?
-  nupayRegisteredAt  DateTime?
-  notes              String?
-  recordedById       String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  case               Case?     @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  client             Client    @relation(fields: [clientId], references: [id])
-  recordedBy         User?     @relation("MandateRecorder", fields: [recordedById], references: [id])
+  signedDocumentId    String?
+  nupayDocumentId     String?
+  nupayReference      String?
+  nupayRegisteredAt   DateTime?
+  notes               String?
+  recordedById        String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  case                Case?                @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  client              Client               @relation(fields: [clientId], references: [id])
+  recordedBy          User?                @relation("MandateRecorder", fields: [recordedById], references: [id])
+  paymentArrangements PaymentArrangement[]
 
   @@index([caseId])
   @@index([clientId])
+  @@index([status])
+}
+
+// Per-app "next update / next action" date for a case.
+// Each app (CASES, FINANCE, LEGAL, INSURANCE, CREDO, FORENSIC) owns its OWN
+// row so a date set in one app NEVER appears in another. This lets each
+// discipline track when its part of a file is due independently — a file is
+// not "not yet due" just because the Cases side isn't due yet.
+model CaseAppNextUpdate {
+  id             String    @id @default(cuid())
+  caseId         String
+  app            String // CASES | FINANCE | LEGAL | INSURANCE | CREDO | FORENSIC
+  nextUpdateDate DateTime?
+  isOverdue      Boolean   @default(false)
+  note           String?
+  updatedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  case           Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  updatedBy      User?     @relation("CaseAppNextUpdateUpdater", fields: [updatedById], references: [id])
+
+  @@unique([caseId, app])
+  @@index([caseId])
+  @@index([app, nextUpdateDate])
+  @@index([app, isOverdue])
+}
+
+// A payment arrangement (promise-to-pay) for a consumer. Available to all
+// clients (B2C primary, also B2B legal-fee files). Can be a single instalment
+// or a multi-instalment schedule. When source = MANDATE it is generated from
+// an approved DebitOrderMandate.
+model PaymentArrangement {
+  id          String                         @id @default(cuid())
+  caseId      String?
+  clientId    String
+  source      String                         @default("MANUAL") // MANUAL | MANDATE
+  mandateId   String?
+  status      String                         @default("ACTIVE") // ACTIVE | COMPLETED | DEFAULTED | CANCELLED
+  totalAmount Decimal                        @default(0)
+  frequency   String                         @default("MONTHLY") // MONTHLY | WEEKLY | ONCE
+  reason      String? // e.g. service fees, legal fees
+  notes       String?
+  createdById String?
+  createdAt   DateTime                       @default(now())
+  updatedAt   DateTime                       @updatedAt
+  case        Case?                          @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  client      Client                         @relation(fields: [clientId], references: [id])
+  mandate     DebitOrderMandate?             @relation(fields: [mandateId], references: [id])
+  createdBy   User?                          @relation("ArrangementCreator", fields: [createdById], references: [id])
+  instalments PaymentArrangementInstalment[]
+
+  @@index([caseId])
+  @@index([clientId])
+  @@index([status])
+  @@index([mandateId])
+}
+
+// A single dated instalment line within a payment arrangement. Its dueDate
+// drives the Finance "Next Payment Date" and the per-app overdue trigger.
+model PaymentArrangementInstalment {
+  id            String             @id @default(cuid())
+  arrangementId String
+  sequence      Int
+  dueDate       DateTime
+  amountDue     Decimal
+  amountPaid    Decimal            @default(0)
+  status        String             @default("PENDING") // PENDING | PAID | PARTIAL | MISSED | WAIVED
+  paidAt        DateTime?
+  honouredById  String? // staff who manually confirmed honoured / missed
+  honouredAt    DateTime?
+  note          String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  arrangement   PaymentArrangement @relation(fields: [arrangementId], references: [id], onDelete: Cascade)
+  honouredBy    User?              @relation("InstalmentHonouredBy", fields: [honouredById], references: [id])
+
+  @@index([arrangementId])
+  @@index([dueDate])
   @@index([status])
 }
 
@@ -771,46 +856,46 @@ model PaymentBatch {
 }
 
 model Invoice {
-  id            String        @id @default(cuid())
-  invoiceNumber String        @unique
-  status        InvoiceStatus @default(DRAFT)
-  clientId      String?
-  caseId        String?
-  projectId     String?
-  lineItems     Json
-  subtotal      Decimal       @default(0)
-  vatRate       Decimal       @default(0.15)
-  vatAmount     Decimal       @default(0)
-  total         Decimal       @default(0)
-  issuedAt      DateTime      @default(now())
-  dueAt         DateTime
-  pdfPath       String?
-  sentAt        DateTime?
-  sentTo        String?
-  notes         String?
-  reference     String?
-  createdById   String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  bankAccountId String?
-  type          DocumentType  @default(INVOICE)
-  publicToken   String?       @unique
+  id                   String        @id @default(cuid())
+  invoiceNumber        String        @unique
+  status               InvoiceStatus @default(DRAFT)
+  clientId             String?
+  caseId               String?
+  projectId            String?
+  lineItems            Json
+  subtotal             Decimal       @default(0)
+  vatRate              Decimal       @default(0.15)
+  vatAmount            Decimal       @default(0)
+  total                Decimal       @default(0)
+  issuedAt             DateTime      @default(now())
+  dueAt                DateTime
+  pdfPath              String?
+  sentAt               DateTime?
+  sentTo               String?
+  notes                String?
+  reference            String?
+  createdById          String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  bankAccountId        String?
+  type                 DocumentType  @default(INVOICE)
+  publicToken          String?       @unique
   // Quote lifecycle — set when a client accepts/rejects a quotation
-  acceptedAt    DateTime?
-  rejectedAt    DateTime?
-  decisionNote  String?
-  decidedById   String?
+  acceptedAt           DateTime?
+  rejectedAt           DateTime?
+  decisionNote         String?
+  decidedById          String?
   // Set when an ACCEPTED quote is converted into an invoice
-  convertedToInvoiceId String? @unique
-  bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
-  case          Case?         @relation(fields: [caseId], references: [id])
-  client        Client?       @relation(fields: [clientId], references: [id])
-  createdBy     User?         @relation("InvoiceCreator", fields: [createdById], references: [id])
-  decidedBy     User?         @relation("InvoiceDecider", fields: [decidedById], references: [id])
-  project       Project?      @relation(fields: [projectId], references: [id])
-  convertedToInvoice   Invoice? @relation("QuoteConversion", fields: [convertedToInvoiceId], references: [id])
-  convertedFromQuote   Invoice? @relation("QuoteConversion")
-  payments      Payment[]
+  convertedToInvoiceId String?       @unique
+  bankAccount          BankAccount?  @relation(fields: [bankAccountId], references: [id])
+  case                 Case?         @relation(fields: [caseId], references: [id])
+  client               Client?       @relation(fields: [clientId], references: [id])
+  createdBy            User?         @relation("InvoiceCreator", fields: [createdById], references: [id])
+  decidedBy            User?         @relation("InvoiceDecider", fields: [decidedById], references: [id])
+  project              Project?      @relation(fields: [projectId], references: [id])
+  convertedToInvoice   Invoice?      @relation("QuoteConversion", fields: [convertedToInvoiceId], references: [id])
+  convertedFromQuote   Invoice?      @relation("QuoteConversion")
+  payments             Payment[]
 
   @@index([status])
   @@index([type])
@@ -822,7 +907,7 @@ model Invoice {
 
 model DocumentSequence {
   id        String   @id @default(cuid())
-  prefix    String   // QUO or INV
+  prefix    String // QUO or INV
   year      Int
   nextSeq   Int      @default(1)
   createdAt DateTime @default(now())
@@ -877,21 +962,21 @@ model CredoTenant {
 }
 
 model ConsumerAccount {
-  id              String           @id @default(cuid())
-  email           String
-  password        String
-  firstName       String
-  lastName        String
-  idNumber        String?          @unique
-  phone           String?
-  province        String?
-  language        String           @default("English")
-  tenantId        String?
-  isVerified      Boolean          @default(false)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  linkedClientId  String?          @unique
-  isAdmin         Boolean          @default(false)
+  id                   String              @id @default(cuid())
+  email                String
+  password             String
+  firstName            String
+  lastName             String
+  idNumber             String?             @unique
+  phone                String?
+  province             String?
+  language             String              @default("English")
+  tenantId             String?
+  isVerified           Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  linkedClientId       String?             @unique
+  isAdmin              Boolean             @default(false)
   projectId            String?
   role                 String              @default("CONSUMER")
   activeSubscriptionId String?             @unique
@@ -913,9 +998,9 @@ model ConsumerAccount {
 model CredoSubscription {
   id               String           @id @default(cuid())
   consumerId       String
-  planId           String           // e.g., 'credo-premium', 'credo-free'
+  planId           String // e.g., 'credo-premium', 'credo-free'
   status           String           @default("TRIALING") // TRIALING, ACTIVE, PAST_DUE, CANCELLED
-  providerRef      String?          // Peach Payments/PayFast reference or token
+  providerRef      String? // Peach Payments/PayFast reference or token
   currentPeriodEnd DateTime?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -927,19 +1012,38 @@ model CredoSubscription {
 }
 
 model CredoOtpSession {
-  id                String           @id @default(cuid())
-  consumerId        String           @unique // One active OTP per consumer
-  phone             String           // Phone number to send OTP to
-  otpCode           String           // 6-digit OTP code
-  attempts          Int              @default(0) // Login attempts with wrong OTP
-  maxAttempts       Int              @default(3) // Max attempts before locking
-  isVerified        Boolean          @default(false)
-  expiresAt         DateTime         // When OTP expires (typically 15 minutes from creation)
-  createdAt         DateTime         @default(now())
-  consumer          ConsumerAccount  @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+  id          String          @id @default(cuid())
+  consumerId  String          @unique // One active OTP per consumer
+  phone       String // Phone number to send OTP to
+  otpCode     String // 6-digit OTP code
+  attempts    Int             @default(0) // Login attempts with wrong OTP
+  maxAttempts Int             @default(3) // Max attempts before locking
+  isVerified  Boolean         @default(false)
+  expiresAt   DateTime // When OTP expires (typically 15 minutes from creation)
+  createdAt   DateTime        @default(now())
+  consumer    ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
 
   @@index([consumerId])
   @@index([expiresAt])
+}
+
+/// Telegram bot conversation + identity-binding state, keyed by Telegram chat id.
+/// A chat is anonymous until the consumer verifies (ID number → email OTP); once
+/// VERIFIED, clientId is bound and the bot answers questions about that client's file.
+model TelegramSession {
+  id                String    @id @default(cuid())
+  chatId            String    @unique // Telegram chat id (the bot's handle on the user)
+  state             String    @default("AWAITING_ID") // AWAITING_ID | AWAITING_OTP | VERIFIED
+  clientId          String? // set once verified & bound to a Client
+  candidateClientId String? // Client matched by ID number, pending OTP confirmation
+  otpCode           String? // active 6-digit verification code
+  otpExpiresAt      DateTime? // when the active OTP expires
+  attempts          Int       @default(0) // wrong-OTP / failed-lookup attempts
+  lastInboundAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([clientId])
 }
 
 model CredoDocument {
@@ -1663,30 +1767,30 @@ model Lead {
 }
 
 model AutomationRun {
-  id              String    @id @default(cuid())
-  type            String    // DHS_SYNC, XDS_SYNC, GHL_WEBHOOK, AI_DOC_ANALYSIS, AI_PLAN_GEN, POPIA_CHECK
-  status          String    @default("QUEUED") // QUEUED, RUNNING, SUCCESS, FAILED, RETRYING, CANCELLED, NEEDS_REVIEW
-  caseId          String?
-  clientId        String?
-  userId          String?
-  startedAt       DateTime  @default(now())
-  completedAt     DateTime?
-  durationMs      Int?
-  errorMessage    String?
-  retryCount      Int       @default(0)
-  nextRetryAt     DateTime?
-  logs            Json?
-  screenshotPath  String?
-  triggeredById   String?
-  environment     String    @default("PRODUCTION") // PRODUCTION, STAGING, DEVELOPMENT
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  type           String // DHS_SYNC, XDS_SYNC, GHL_WEBHOOK, AI_DOC_ANALYSIS, AI_PLAN_GEN, POPIA_CHECK
+  status         String    @default("QUEUED") // QUEUED, RUNNING, SUCCESS, FAILED, RETRYING, CANCELLED, NEEDS_REVIEW
+  caseId         String?
+  clientId       String?
+  userId         String?
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  durationMs     Int?
+  errorMessage   String?
+  retryCount     Int       @default(0)
+  nextRetryAt    DateTime?
+  logs           Json?
+  screenshotPath String?
+  triggeredById  String?
+  environment    String    @default("PRODUCTION") // PRODUCTION, STAGING, DEVELOPMENT
 
-  case            Case?     @relation(fields: [caseId], references: [id])
-  client          Client?   @relation(fields: [clientId], references: [id])
-  user            User?     @relation(fields: [userId], references: [id])
-  triggeredBy     User?     @relation("AutomationTrigger", fields: [triggeredById], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  case        Case?   @relation(fields: [caseId], references: [id])
+  client      Client? @relation(fields: [clientId], references: [id])
+  user        User?   @relation(fields: [userId], references: [id])
+  triggeredBy User?   @relation("AutomationTrigger", fields: [triggeredById], references: [id])
 
   @@index([type])
   @@index([status])
@@ -1703,22 +1807,22 @@ model PoaSigningRequest {
   id            String    @id @default(cuid())
   token         String    @unique @default(cuid())
   status        String    @default("PENDING") // PENDING | SIGNED | EXPIRED | CANCELLED
-  poaType       String    // STANDARD | WESBANK
-  channel       String    // EMAIL | WHATSAPP | CREDO
+  poaType       String // STANDARD | WESBANK
+  channel       String // EMAIL | WHATSAPP | CREDO
   caseId        String?
   clientId      String?
   consumerId    String?
   expiresAt     DateTime
   signedAt      DateTime?
-  signedPdfPath String?   // server path of the signed PDF
-  ipAddress     String?   // captured at signing for ECTA audit trail
+  signedPdfPath String? // server path of the signed PDF
+  ipAddress     String? // captured at signing for ECTA audit trail
   userAgent     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  case          Case?            @relation(fields: [caseId], references: [id])
-  client        Client?          @relation(fields: [clientId], references: [id])
-  consumer      ConsumerAccount? @relation(fields: [consumerId], references: [id])
+  case     Case?            @relation(fields: [caseId], references: [id])
+  client   Client?          @relation(fields: [clientId], references: [id])
+  consumer ConsumerAccount? @relation(fields: [consumerId], references: [id])
 
   @@index([token])
   @@index([caseId])

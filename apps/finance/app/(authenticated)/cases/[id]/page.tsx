@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { getStatusByCode } from '@zenowethu/shared-lib';
 import { formatRand, type CaseFinancialSummary } from '../../../../lib/case-financials';
 import MandateForm from './MandateForm';
+import PaymentArrangements from './PaymentArrangements';
 import DeleteDocumentButton from '@/components/finance/DeleteDocumentButton';
 
 // ─── Types (shape of /api/finance/cases/[id]/summary) ────────────────────────
@@ -421,6 +422,11 @@ export default function FinanceCaseDetailPage() {
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Payment arrangements + Next Payment Date */}
+            <div className="mt-6">
+                <PaymentArrangements caseId={caseInfo.id} />
             </div>
 
             {/* Debit order mandate */}
