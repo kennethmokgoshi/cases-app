@@ -1,7 +1,19 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-26 (GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+> Last updated: 2026-06-26 (Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### Fixed: flaky admin-client integration tests blocking CI/CD deploy (2026-06-26)
+
+**Symptom:** `main` could not deploy — the CI `test` step failed (so the Dokploy deploy job, which `needs: [ci]`, was skipped). Two integration test files failed: `apps/cases/app/api/admin/clients/route.test.ts` and `.../convert-to-referrer/route.test.ts`.
+
+**Root cause:** both created DB records in `beforeEach` with **fixed unique fields** (`username`, `idNumber`) and **no `afterEach`**, so the 2nd test in each file collided (`Unique constraint failed`). Cleanup used `prisma.<model>.deleteMany({})` (whole-table), which both hit FK violations (`WorkflowLog→Case`, `Case→Client`) and — run locally against the prod `DATABASE_URL` — would have wiped real data (the FK errors accidentally prevented that).
+
+**Fix:** create fixtures once in `beforeAll` with **per-run unique** username/email/idNumber (random 13-digit), and clean up **scoped to the created IDs in FK-safe order** — never `deleteMany({})`. Verified: both files green in isolation and in the full suite. **Cases suite: 382 passing (30 files); shared-lib: 434.**
+
+**Note:** these are live-DB integration tests; locally they run against the production DB via `.env.local`. CI uses an ephemeral `zenowethu_test` postgres container. Consider mocking prisma here later (like the other route tests) so they never touch a real DB.
 
 ---
 

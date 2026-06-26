@@ -1,32 +1,34 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@zenowethu/database';
+
+// Unique per run so reruns / parallel test files never collide on unique fields
+// (username, idNumber). Cleanup is scoped to only these records — never deleteMany({}),
+// which would wipe the whole database and hit FK violations.
+const uniq = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const rand13 = () => String(Math.floor(1e12 + Math.random() * 9e12)); // random 13-digit ID
 
 describe('GET /api/admin/clients', () => {
     let testClient: any;
     let testUser: any;
 
     beforeAll(async () => {
-        // Create a test user
         testUser = await prisma.user.create({
             data: {
-                username: 'admin-test',
+                username: `admin-test-${uniq}`,
                 firstName: 'Test',
                 lastName: 'Admin',
-                email: 'admin-test@example.com',
+                email: `admin-test-${uniq}@example.com`,
                 password: 'hashed_password',
                 isAdmin: true,
             },
         });
-    });
 
-    beforeEach(async () => {
-        // Create test client
         testClient = await prisma.client.create({
             data: {
                 firstName: 'John',
                 lastName: 'Doe',
-                idNumber: '9001011234567',
-                email: 'john@example.com',
+                idNumber: rand13(),
+                email: `john-${uniq}@example.com`,
                 phone: '0821234567',
                 employer: 'ABC Corp',
             },
@@ -34,14 +36,13 @@ describe('GET /api/admin/clients', () => {
     });
 
     afterAll(async () => {
-        // Cleanup
-        await prisma.client.deleteMany({});
-        await prisma.user.deleteMany({});
+        // Scoped cleanup — only the records this suite created.
+        await prisma.client.deleteMany({ where: { id: testClient?.id } });
+        await prisma.user.deleteMany({ where: { id: testUser?.id } });
     });
 
     it('should return clients list with pagination', async () => {
-        // This test verifies the API shape but requires auth context
-        // In a real test, you'd mock the auth() function
+        // This test verifies the fixture shape; auth() would be mocked for a full route test.
         expect(testClient).toBeDefined();
         expect(testClient.firstName).toBe('John');
     });

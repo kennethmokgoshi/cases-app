@@ -1,29 +1,34 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@zenowethu/database';
+
+// Unique per run so reruns / parallel test files never collide on unique fields.
+// Cleanup is scoped to only these records, in FK-safe order — never deleteMany({}).
+const uniq = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const rand13 = () => String(Math.floor(1e12 + Math.random() * 9e12)); // random 13-digit ID
 
 describe('POST /api/admin/clients/convert-to-referrer', () => {
     let testClient: any;
     let testReferrer: any;
     let testUser: any;
     let testCase: any;
+    let parentProject: any;
+    const clientIdNumber = rand13();
 
     beforeAll(async () => {
-        // Create a test admin user
         testUser = await prisma.user.create({
             data: {
-                username: 'admin-convert-test',
+                username: `admin-convert-test-${uniq}`,
                 firstName: 'Test',
                 lastName: 'Admin',
-                email: 'admin-convert@example.com',
+                email: `admin-convert-${uniq}@example.com`,
                 password: 'hashed_password',
                 isAdmin: true,
             },
         });
 
-        // Create a parent referrer for referral chain testing
-        const parentProject = await prisma.project.create({
+        parentProject = await prisma.project.create({
             data: {
-                name: 'Parent Referrer Project',
+                name: `Parent Referrer Project ${uniq}`,
                 type: 'REFERRER',
             },
         });
@@ -32,22 +37,19 @@ describe('POST /api/admin/clients/convert-to-referrer', () => {
             data: {
                 firstName: 'Parent',
                 lastName: 'Referrer',
-                idNumber: '9001011111111',
+                idNumber: rand13(),
                 projectId: parentProject.id,
                 createdById: testUser.id,
                 isActive: true,
             },
         });
-    });
 
-    beforeEach(async () => {
-        // Create test client
         testClient = await prisma.client.create({
             data: {
                 firstName: 'Jane',
                 lastName: 'Smith',
-                idNumber: '9001019999999',
-                email: 'jane@example.com',
+                idNumber: clientIdNumber,
+                email: `jane-${uniq}@example.com`,
                 phone: '0829876543',
                 bankName: 'ABSA',
                 accountNumber: '1234567890',
@@ -57,10 +59,9 @@ describe('POST /api/admin/clients/convert-to-referrer', () => {
             },
         });
 
-        // Create a case referred by the parent referrer
         testCase = await prisma.case.create({
             data: {
-                fileNumber: `TST${Date.now()}`,
+                fileNumber: `TST${uniq}`,
                 clientId: testClient.id,
                 status: 'INTAKE_INITIAL',
                 referrerId: testReferrer.id,
@@ -70,25 +71,23 @@ describe('POST /api/admin/clients/convert-to-referrer', () => {
     });
 
     afterAll(async () => {
-        // Cleanup
-        await prisma.case.deleteMany({});
-        await prisma.client.deleteMany({});
-        await prisma.referrer.deleteMany({});
-        await prisma.project.deleteMany({});
-        await prisma.auditLog.deleteMany({});
-        await prisma.user.deleteMany({});
+        // Scoped, FK-safe cleanup — children before parents, only this suite's records.
+        await prisma.case.deleteMany({ where: { id: testCase?.id } });
+        await prisma.client.deleteMany({ where: { id: testClient?.id } });
+        await prisma.referrer.deleteMany({ where: { id: testReferrer?.id } });
+        await prisma.project.deleteMany({ where: { id: parentProject?.id } });
+        await prisma.user.deleteMany({ where: { id: testUser?.id } });
     });
 
     it('should create a referrer from client data', async () => {
         expect(testClient).toBeDefined();
         expect(testClient.firstName).toBe('Jane');
-        expect(testClient.idNumber).toBe('9001019999999');
+        expect(testClient.idNumber).toBe(clientIdNumber);
     });
 
     it('should preserve referral chain (parentReferrerId)', async () => {
         // When a client is referred by a referrer, that relationship should be preserved
         expect(testCase.referrerId).toBe(testReferrer.id);
-        // When converting this client to a referrer, their parentReferrerId should be set
     });
 
     it('should create sub-project for new referrer', async () => {
@@ -102,6 +101,5 @@ describe('POST /api/admin/clients/convert-to-referrer', () => {
     it('should copy banking details from client', async () => {
         expect(testClient.bankName).toBe('ABSA');
         expect(testClient.accountNumber).toBe('1234567890');
-        // These should be copied to the new referrer record
     });
 });
