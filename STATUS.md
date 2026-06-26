@@ -1,7 +1,25 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-26 (Email primary via EMAIL_PROVIDER override; Per-app Next Update dates + Payment Arrangements; Telegram case-assistant bot; messaging providers)
+> Last updated: 2026-06-26 (Fixed 550 welcome-email sender bug; Email primary via EMAIL_PROVIDER override; Per-app Next Update dates + Payment Arrangements; Telegram case-assistant bot)
+
+---
+
+### Fixed: consumers not receiving welcome emails — SMTP 550 sender bug (2026-06-26)
+
+**Symptom:** Consumers were not getting the `NEW_LEAD` welcome email on case creation. SMS/WhatsApp worked (GHL webhook), only email failed.
+
+**Root cause (confirmed in production `notificationLog`):** every welcome email failed with
+`550 Account notifications@zenowethu.co.za can not send emails from updates@zenowethu.co.za`.
+The case-creation route passes `senderEmail: 'updates@zenowethu.co.za'` ([apps/cases/app/api/cases/route.ts:409](apps/cases/app/api/cases/route.ts)), which became the SMTP `from`. The mail server only allows sending from the authenticated mailbox (`notifications@`). 21 EMAIL failures total shared this cause.
+
+**Fix:** `SmtpEmailProvider.send()` ([packages/shared-lib/src/notifications/providers.ts](packages/shared-lib/src/notifications/providers.ts)) now **always sends from the authenticated/configured mailbox** and demotes any different caller `fromEmail` to **Reply-To** (caller `fromName` kept as display name). Verified with a live send simulating the welcome email (previously 550, now accepted with messageId).
+
+**Tests:** 3 new SMTP tests in `providers.test.ts` (from-address/Reply-To handling, error path). Full shared-lib suite green: **430 passing**.
+
+**⚠️ Action needed:**
+- **Redeploy** the Cases app / shared-lib for the fix to take effect in production.
+- The **5 stuck welcome emails** in `notificationQueue` (PENDING_RETRY) won't auto-retry — there's no cron runner; retry them manually from `/admin/notifications` after deploy (the retry path doesn't re-send the bad `updates@` from-address, so it will succeed).
 
 ---
 

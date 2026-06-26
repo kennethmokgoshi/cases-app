@@ -285,8 +285,20 @@ export class SmtpEmailProvider implements EmailProvider {
                 }
             }
 
+            // SMTP servers only allow sending from the authenticated mailbox. A caller-supplied
+            // fromEmail that differs (e.g. updates@ when authenticated as notifications@) is
+            // rejected with a 550. So we always send from the configured/authenticated address
+            // and demote any different caller address to Reply-To — the email still delivers and
+            // replies route to the intended inbox. A caller fromName is kept as the display name.
+            const fromName = options?.fromName?.trim();
+            const from = fromName ? `"${fromName}" <${this.fromEmail}>` : this.fromEmail;
+            const replyTo = options?.fromEmail && options.fromEmail !== this.fromEmail
+                ? options.fromEmail
+                : undefined;
+
             const info = await this.transporter.sendMail({
-                from:        options?.fromEmail || this.fromEmail,
+                from:        from,
+                replyTo:     replyTo,
                 to:          to,
                 cc:          options?.cc?.join(', '),
                 bcc:         options?.bcc?.join(', '),

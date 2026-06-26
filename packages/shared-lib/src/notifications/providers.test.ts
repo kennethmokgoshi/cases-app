@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { EmailProvider, EmailResult, EmailOptions } from './providers';
+
+// Mock nodemailer so SmtpEmailProvider tests capture sendMail args without a real connection.
+const { sendMailMock } = vi.hoisted(() => ({ sendMailMock: vi.fn() }));
+vi.mock('nodemailer', () => ({
+    default: { createTransport: () => ({ sendMail: sendMailMock }) },
+}));
+
 import {
     FallbackEmailProvider,
+    SmtpEmailProvider,
     TwilioSmsProvider,
     TwilioWhatsAppProvider,
     MetaWhatsAppProvider,
@@ -209,5 +217,52 @@ describe('Messaging providers (fetch mocked)', () => {
             expect(res.success).toBe(false);
             expect(res.error).toBe('chat not found');
         });
+    });
+});
+
+describe('SmtpEmailProvider — sender handling', () => {
+    const config = {
+        host: 'mail.zenowethu.co.za', port: 587, secure: false,
+        auth: { user: 'notifications@zenowethu.co.za', pass: 'secret' },
+        fromEmail: 'notifications@zenowethu.co.za',
+    };
+
+    beforeEach(() => {
+        sendMailMock.mockReset();
+        sendMailMock.mockResolvedValue({ messageId: 'smtp-1' });
+    });
+
+    it('always sends from the authenticated mailbox and demotes a different caller fromEmail to Reply-To', async () => {
+        // Regression: caller-supplied updates@ used to become the From and was 550-rejected.
+        const provider = new SmtpEmailProvider(config);
+        const res = await provider.send('client@example.com', 'Subj', '<p>Hi</p>', 'Hi', {
+            fromEmail: 'updates@zenowethu.co.za',
+            fromName: 'Zenowethu Debt Management',
+        });
+
+        expect(res.success).toBe(true);
+        const arg = sendMailMock.mock.calls[0][0];
+        expect(arg.from).toBe('"Zenowethu Debt Management" <notifications@zenowethu.co.za>');
+        expect(arg.replyTo).toBe('updates@zenowethu.co.za');
+    });
+
+    it('sets no Reply-To when the caller fromEmail matches the authenticated mailbox', async () => {
+        const provider = new SmtpEmailProvider(config);
+        await provider.send('client@example.com', 'Subj', '<p>Hi</p>', 'Hi', {
+            fromEmail: 'notifications@zenowethu.co.za',
+        });
+
+        const arg = sendMailMock.mock.calls[0][0];
+        expect(arg.from).toBe('notifications@zenowethu.co.za');
+        expect(arg.replyTo).toBeUndefined();
+    });
+
+    it('returns a failure result with the SMTP error message when sendMail throws', async () => {
+        sendMailMock.mockRejectedValueOnce(new Error('550 can not send'));
+        const provider = new SmtpEmailProvider(config);
+        const res = await provider.send('client@example.com', 'Subj', '<p>Hi</p>');
+
+        expect(res.success).toBe(false);
+        expect(res.error).toContain('550 can not send');
     });
 });
