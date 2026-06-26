@@ -12,7 +12,21 @@ let credentialsCache: GHLCredentials | null = null;
 let lastFetchTime: number = 0;
 const CACHE_TTL = 60000;
 
+/** GHL is not yet set up. Set GHL_ENABLED=false to suspend all GHL usage — the resolver
+ *  returns empty credentials so every channel's auto-detect skips the GHL API and falls
+ *  through to SMTP / other providers. The webhook branches are guarded separately in the
+ *  notification service. Reversible: remove the env var (or set true) to re-enable. */
+export function isGhlEnabled(): boolean {
+    return process.env.GHL_ENABLED !== 'false';
+}
+
+const EMPTY_CREDENTIALS: GHLCredentials = { apiKey: '', locationId: '', email: '', password: '' };
+
 export async function getGHLCredentials(): Promise<GHLCredentials> {
+    if (!isGhlEnabled()) {
+        return EMPTY_CREDENTIALS;
+    }
+
     const now = Date.now();
 
     if (credentialsCache && (now - lastFetchTime) < CACHE_TTL) {

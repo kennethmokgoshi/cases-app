@@ -1,7 +1,24 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-26 (Fixed 550 welcome-email sender bug; Email primary via EMAIL_PROVIDER override; Per-app Next Update dates + Payment Arrangements; Telegram case-assistant bot)
+> Last updated: 2026-06-26 (GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### GHL suspended — `GHL_ENABLED=false` kill-switch (2026-06-26)
+
+**Goal:** GHL/GoHighLevel is not yet set up. Stop every channel from reaching for it (it was still being *attempted* first for email — the `GoHighLevel→SMTP` in the logs — and was the default for SMS/WhatsApp).
+
+**What changed:**
+- `getGHLCredentials()` ([packages/shared-lib/src/integrations/ghl-config.ts](packages/shared-lib/src/integrations/ghl-config.ts)) returns empty credentials when `GHL_ENABLED=false`, so every channel's auto-detect skips the GHL API. New exported helper `isGhlEnabled()`.
+- The notification service ([service.ts](packages/shared-lib/src/notifications/service.ts)) now guards the GHL **webhook** branches (SMS/email/WhatsApp) with `isGhlEnabled()` too (those read env directly, bypassing the resolver).
+- Net effect when suspended: **email → SMTP**, **SMS → Mock** (no Twilio/Clickatell configured), **WhatsApp → Mock**. No GHL API/webhook calls.
+- `GHL_ENABLED=false` set in `apps/cases/.env.local`; documented in `.env.example`. Fully reversible — remove the var (or set `true`) once GHL is live.
+- NOT touched: `GhlService` / inbound GHL webhook handlers / AI auto-reply — those only fire on inbound GHL events, which won't occur while GHL is unconfigured.
+
+**Tests:** new `GHL_ENABLED` kill-switch tests in `ghl-config.test.ts` (3) + a service suspension test in `service.test.ts` (email avoids GHL API+webhook, uses SMTP). Updated `ghl-service.test.ts` / `service.test.ts` mocks to export `isGhlEnabled`. Full shared-lib suite green: **434 passing**. `tsc --noEmit` clean.
+
+**⚠️ Action needed:** set **`GHL_ENABLED=false`** in the production (Dokploy) env for the Cases app — `.env.local` does not deploy, and the switch defaults to *enabled*, so without it production will still try GHL.
 
 ---
 

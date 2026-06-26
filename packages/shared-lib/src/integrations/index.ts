@@ -1,4 +1,4 @@
-export { getGHLCredentials, invalidateGHLCredentialsCache } from './ghl-config'
+export { getGHLCredentials, invalidateGHLCredentialsCache, isGhlEnabled } from './ghl-config'
 export { GhlService } from './ghl-service'
 export { GhlWorkflowService } from './ghl-workflow-service'
 export { RetentionService } from './retention-service'

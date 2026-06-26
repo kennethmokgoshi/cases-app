@@ -31,7 +31,7 @@ import {
     renderTemplate,
     renderBrandedEmail
 } from './templates';
-import { getGHLCredentials, getSMTPCredentials } from '../integrations';
+import { getGHLCredentials, getSMTPCredentials, isGhlEnabled } from '../integrations';
 import { logger } from '../logger';
 import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
@@ -74,8 +74,8 @@ async function getSmsProvider(): Promise<SmsProvider> {
         return new MockSmsProvider();
     }
 
-    // GHL (explicit 'ghl' or auto-default)
-    if (process.env.GHL_SMS_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL) {
+    // GHL (explicit 'ghl' or auto-default) — skipped entirely when GHL is suspended
+    if (isGhlEnabled() && (process.env.GHL_SMS_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL)) {
         return new GhlWebhookSmsProvider(process.env.GHL_SMS_WEBHOOK_URL || process.env.GHL_WEBHOOK_URL || '');
     }
     const ghl = await getGHLCredentials();
@@ -134,7 +134,7 @@ async function getEmailProvider(): Promise<EmailProvider> {
     }
 
     // Priority 2: GHL webhook (fire-and-forget; depends on GHL workflow being configured for email)
-    if (process.env.GHL_EMAIL_WEBHOOK_URL) {
+    if (isGhlEnabled() && process.env.GHL_EMAIL_WEBHOOK_URL) {
         return new GhlWebhookEmailProvider(process.env.GHL_EMAIL_WEBHOOK_URL);
     }
 
@@ -172,8 +172,8 @@ async function getWhatsAppProvider(): Promise<WhatsAppProvider> {
     if (choice === 'meta' && metaReady) return buildMeta();
     if (choice === 'mock') return new MockWhatsAppProvider();
 
-    // GHL (explicit 'ghl' or auto-default)
-    if (process.env.GHL_WEBHOOK_URL) {
+    // GHL (explicit 'ghl' or auto-default) — skipped entirely when GHL is suspended
+    if (isGhlEnabled() && process.env.GHL_WEBHOOK_URL) {
         return new GhlWebhookWhatsAppProvider(process.env.GHL_WEBHOOK_URL);
     }
     const ghl = await getGHLCredentials();

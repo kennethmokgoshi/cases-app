@@ -63,6 +63,7 @@ vi.mock('./ghl-config', () => ({
         apiKey: 'test-api-key',
         locationId: 'test-location-id',
     }),
+    isGhlEnabled: vi.fn(() => true),
 }));
 
 vi.mock('../notifications/providers', () => ({

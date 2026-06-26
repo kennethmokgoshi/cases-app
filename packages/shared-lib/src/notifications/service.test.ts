@@ -20,6 +20,7 @@ vi.mock('../logger', () => ({
 vi.mock('../integrations', () => ({
     getGHLCredentials: vi.fn().mockResolvedValue({ apiKey: null, locationId: null }),
     getSMTPCredentials: vi.fn().mockResolvedValue({ host: '', port: 587, secure: false, username: '', password: '', fromEmail: '' }),
+    isGhlEnabled: vi.fn(() => process.env.GHL_ENABLED !== 'false'),
 }));
 
 // Mock the providers module to control email sending
@@ -262,5 +263,41 @@ describe('email provider selection — EMAIL_PROVIDER override', () => {
         await sendManualMessage('case-001', 'EMAIL', 'user@test.com', 'Body', 'Subject');
 
         expect(GhlEmailProvider).toHaveBeenCalled();
+    });
+});
+
+// ─── GHL_ENABLED=false suspends GHL across the notification service ──────────────
+
+describe('GHL suspension — GHL_ENABLED=false', () => {
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        delete process.env.EMAIL_PROVIDER;
+        process.env.GHL_ENABLED = 'false';
+        // GHL webhook still "configured" in env, yet must not be used when suspended.
+        process.env.GHL_EMAIL_WEBHOOK_URL = 'https://hooks.example.com/email';
+        const { getGHLCredentials, getSMTPCredentials } = await import('../integrations');
+        // The real resolver returns empty creds when suspended — mirror that here.
+        vi.mocked(getGHLCredentials).mockResolvedValue({ apiKey: '', locationId: '' } as any);
+        vi.mocked(getSMTPCredentials).mockResolvedValue({
+            host: 'mail.zenowethu.co.za', port: 587, secure: false,
+            username: 'notifications@zenowethu.co.za', password: 'secret',
+            fromEmail: 'notifications@zenowethu.co.za',
+        } as any);
+    });
+
+    afterEach(() => {
+        delete process.env.GHL_ENABLED;
+        delete process.env.GHL_EMAIL_WEBHOOK_URL;
+    });
+
+    it('does not use GHL API or GHL webhook for email — uses SMTP instead', async () => {
+        const { SmtpEmailProvider, GhlEmailProvider, GhlWebhookEmailProvider } = await import('./providers');
+
+        const result = await sendManualMessage('case-001', 'EMAIL', 'user@test.com', 'Body', 'Subject');
+
+        expect(result.emailSuccess).toBe(true);
+        expect(SmtpEmailProvider).toHaveBeenCalled();
+        expect(GhlEmailProvider).not.toHaveBeenCalled();
+        expect(GhlWebhookEmailProvider).not.toHaveBeenCalled();
     });
 });
