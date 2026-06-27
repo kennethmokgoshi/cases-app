@@ -62,6 +62,70 @@ async function addActiveCaseCounts<T extends { id: string; _count?: any }>(proje
     }));
 }
 
+// ---- Project graph helpers (O(n) tree walks via index maps) ----
+type RawProject = { id: string; parentId: string | null };
+
+function buildChildIndex(all: RawProject[]) {
+    const byId = new Map<string, RawProject>();
+    const childrenByParent = new Map<string, string[]>();
+    for (const p of all) {
+        byId.set(p.id, p);
+        if (p.parentId) {
+            const arr = childrenByParent.get(p.parentId);
+            if (arr) arr.push(p.id);
+            else childrenByParent.set(p.parentId, [p.id]);
+        }
+    }
+    return { byId, childrenByParent };
+}
+
+function addAncestors(rootIds: string[], byId: Map<string, RawProject>, into: Set<string>) {
+    const queue = [...rootIds];
+    while (queue.length > 0) {
+        const node = byId.get(queue.shift()!);
+        if (node?.parentId && !into.has(node.parentId)) {
+            into.add(node.parentId);
+            queue.push(node.parentId);
+        }
+    }
+}
+
+function addDescendants(rootIds: string[], childrenByParent: Map<string, string[]>, into: Set<string>) {
+    const queue = [...rootIds];
+    while (queue.length > 0) {
+        const children = childrenByParent.get(queue.shift()!);
+        if (!children) continue;
+        for (const childId of children) {
+            if (!into.has(childId)) {
+                into.add(childId);
+                queue.push(childId);
+            }
+        }
+    }
+}
+
+// Short-lived per-user cache for the member-scoped project tree. The hierarchy
+// changes infrequently; a 15s TTL absorbs repeat navigations and concurrent
+// staff hitting the same dropdown without risking visibly stale data. Cleared
+// on project creation (POST below).
+const TREE_CACHE_TTL_MS = 15_000;
+const treeCache = new Map<string, { expires: number; payload: unknown }>();
+
+function getCachedTree(key: string): unknown | null {
+    const hit = treeCache.get(key);
+    if (hit && hit.expires > Date.now()) return hit.payload;
+    if (hit) treeCache.delete(key);
+    return null;
+}
+
+function setCachedTree(key: string, payload: unknown) {
+    treeCache.set(key, { expires: Date.now() + TREE_CACHE_TTL_MS, payload });
+}
+
+function clearTreeCache() {
+    treeCache.clear();
+}
+
 export async function GET(request: NextRequest) {
     try {
         const session = await auth();
@@ -87,60 +151,47 @@ export async function GET(request: NextRequest) {
         const shouldFilter = (!isAdmin || isMemberOnly) && !(isStaff && isAllRequested && !isMemberOnly);
         const whereClause: any = {};
 
-        if (shouldFilter) {
-            // 1. Get explicit memberships
-            const memberships = await prisma.projectMember.findMany({
-                where: { userId: session.user.id },
-                select: { projectId: true }
-            });
-            const explicitProjectIds = memberships.map(m => m.projectId);
-
-            // 2. Add assigned B2B partner project for partners
-            if (session.user.b2bPartnerId) {
-                explicitProjectIds.push(session.user.b2bPartnerId);
+        // Shared per-request loaders — each underlying query runs at most once even
+        // when both the membership-filter block and the memberOnly block need it.
+        let cachedIndex: ReturnType<typeof buildChildIndex> | null = null;
+        const loadProjectGraph = async () => {
+            if (!cachedIndex) {
+                const all = await prisma.project.findMany({ select: { id: true, parentId: true } });
+                cachedIndex = buildChildIndex(all);
             }
+            return cachedIndex;
+        };
+
+        let cachedMembershipIds: string[] | null = null;
+        const loadMembershipIds = async () => {
+            if (!cachedMembershipIds) {
+                const memberships = await prisma.projectMember.findMany({
+                    where: { userId: session.user.id },
+                    select: { projectId: true }
+                });
+                const ids = memberships.map(m => m.projectId);
+                if (session.user.b2bPartnerId && !ids.includes(session.user.b2bPartnerId)) {
+                    ids.push(session.user.b2bPartnerId);
+                }
+                cachedMembershipIds = ids;
+            }
+            return cachedMembershipIds;
+        };
+
+        if (shouldFilter) {
+            const explicitProjectIds = await loadMembershipIds();
 
             if (explicitProjectIds.length === 0) {
                 // User has no projects
                 whereClause.id = { in: [] };
             } else {
-                // 3. We need to include all PARENT IDs (to build tree up) and CHILD IDs (to see descendants)
-                const allProjectsRaw = await prisma.project.findMany({
-                    select: { id: true, parentId: true }
-                });
-
-                const getAllowedIds = (rootIds: string[]) => {
-                    const results = new Set<string>(rootIds);
-
-                    // Add ancestors (Up)
-                    const upQueue = [...rootIds];
-                    while (upQueue.length > 0) {
-                        const currId = upQueue.shift()!;
-                        const project = allProjectsRaw.find(p => p.id === currId);
-                        if (project && project.parentId && !results.has(project.parentId)) {
-                            results.add(project.parentId);
-                            upQueue.push(project.parentId);
-                        }
-                    }
-
-                    // Add descendants (Down)
-                    const downQueue = [...rootIds];
-                    while (downQueue.length > 0) {
-                        const currId = downQueue.shift()!;
-                        const children = allProjectsRaw.filter(p => p.parentId === currId);
-                        children.forEach(child => {
-                            if (!results.has(child.id)) {
-                                results.add(child.id);
-                                downQueue.push(child.id);
-                            }
-                        });
-                    }
-
-                    return Array.from(results);
-                };
-
-                const allowedIds = getAllowedIds(explicitProjectIds);
-                whereClause.id = { in: allowedIds };
+                // Include ancestors (to build the tree up) and descendants (to see
+                // everything under a project the user belongs to).
+                const { byId, childrenByParent } = await loadProjectGraph();
+                const allowed = new Set<string>(explicitProjectIds);
+                addAncestors(explicitProjectIds, byId, allowed);
+                addDescendants(explicitProjectIds, childrenByParent, allowed);
+                whereClause.id = { in: Array.from(allowed) };
             }
         }
 
@@ -205,59 +256,27 @@ export async function GET(request: NextRequest) {
         }
 
         if (!isAdmin || isMemberOnly) {
-            // Get the explicit set of project IDs the user is a member of
-            const memberships = await prisma.projectMember.findMany({
-                where: { userId: session.user.id },
-                select: { projectId: true }
-            });
-            const memberProjectIds = memberships.map(m => m.projectId);
+            // Serve the member-scoped tree from a short-lived per-user cache when fresh.
+            const cacheKey = `tree:${session.user.id}:${searchParams.toString()}`;
+            const cached = getCachedTree(cacheKey);
+            if (cached) return NextResponse.json(cached);
 
-            // Also include assigned B2B partner project for partner users
-            if (session.user.b2bPartnerId && !memberProjectIds.includes(session.user.b2bPartnerId)) {
-                memberProjectIds.push(session.user.b2bPartnerId);
-            }
+            // Copy so we don't mutate the memoized membership list.
+            const memberProjectIds = [...(await loadMembershipIds())];
 
-            // When memberOnly=true, also include ALL REFERRER-type projects and their ancestors
-            // so staff can assign cases to any referrer regardless of membership
+            // When memberOnly=true, also include ALL REFERRER-type projects and their
+            // ancestors so staff can assign cases to any referrer regardless of membership.
             if (isMemberOnly) {
                 const referrerProjects = await prisma.project.findMany({
                     where: { type: 'REFERRER' },
-                    select: { id: true, name: true }
+                    select: { id: true }
                 });
                 const referrerIds = referrerProjects.map(p => p.id);
-                logger.info(`memberOnly=true: Found ${referrerIds.length} REFERRER projects`, {
-                    samples: referrerProjects.slice(0, 3).map(p => p.name)
-                });
 
-                // Include referrer projects and walk up to include their ancestors
-                const allProjectsRaw = await prisma.project.findMany({
-                    select: { id: true, parentId: true, name: true }
-                });
-
-                const getAllowedAncestors = (rootIds: string[]) => {
-                    const results = new Set<string>(rootIds);
-                    const queue = [...rootIds];
-                    while (queue.length > 0) {
-                        const currId = queue.shift()!;
-                        const project = allProjectsRaw.find(p => p.id === currId);
-                        if (project && project.parentId && !results.has(project.parentId)) {
-                            results.add(project.parentId);
-                            queue.push(project.parentId);
-                        }
-                    }
-                    return Array.from(results);
-                };
-
-                const ancestorIds = getAllowedAncestors(referrerIds);
-                const williamProj = referrerProjects.find(p => p.name === 'William Maesela');
-                logger.info(`memberOnly=true referrer inclusion`, {
-                    totalReferrers: referrerIds.length,
-                    totalAncestors: ancestorIds.length,
-                    williamFound: !!williamProj,
-                    memberProjectIdsBefore: memberProjectIds.length,
-                    memberProjectIdsAfter: memberProjectIds.length + referrerIds.length + ancestorIds.length
-                });
-                memberProjectIds.push(...referrerIds, ...ancestorIds);
+                const { byId } = await loadProjectGraph();
+                const referrerAndAncestors = new Set<string>(referrerIds);
+                addAncestors(referrerIds, byId, referrerAndAncestors);
+                memberProjectIds.push(...referrerAndAncestors);
             }
 
             const myProjects = await prisma.project.findMany({
@@ -289,7 +308,9 @@ export async function GET(request: NextRequest) {
             });
 
             const myProjectsWithCounts = await addActiveCaseCounts(myProjects);
-            return NextResponse.json({ hierarchy: null, independent: myProjectsWithCounts });
+            const payload = { hierarchy: null, independent: myProjectsWithCounts };
+            setCachedTree(cacheKey, payload);
+            return NextResponse.json(payload);
         }
 
         // Default: return full hierarchy starting from ROOT (Admin only)
@@ -440,6 +461,9 @@ export async function POST(request: NextRequest) {
                 members: true
             }
         });
+
+        // New project changes every user's visible tree — drop the short-lived cache.
+        clearTreeCache();
 
         return NextResponse.json(project, { status: 201 });
     } catch (error) {

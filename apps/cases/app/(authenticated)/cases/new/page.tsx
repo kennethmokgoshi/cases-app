@@ -362,9 +362,6 @@ function NewCaseWithAIComponent() {
 
     // Filter parent projects based on selected acquisition type (B2B/B2C)
     const filteredParentProjects = parentProjects.filter(p => {
-        // Exclude legacy referral sources — they have no related cases
-        if (p.name.toLowerCase().includes('referrals')) return false;
-
         if (acquisitionType === 'B2B') {
             // Strictly show only B2B marked projects, OR projects without clientType (legacy)
             // This ensures we show acquisition sources even if not yet marked
