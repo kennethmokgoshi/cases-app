@@ -29,6 +29,7 @@ import { AssistClientConsentModal } from './AssistClientConsentModal';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
 import SendQuoteModal from './SendQuoteModal';
 import SendMandateModal from './SendMandateModal';
+import { ConsumerPortalPanel } from '@/app/components/ConsumerPortalPanel';
 
 
 // Client-side logger (avoid importing createLogger from shared-lib)
@@ -4240,6 +4241,7 @@ export default function CaseDetailPage() {
                             {activeDetailTab === 'DOCUMENTS' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <DocumentsTab caseId={caseData.id} />
+                                    <ConsumerPortalPanel caseId={caseData.id} />
                                 </div>
                             )}
                             {activeDetailTab === 'COMMUNICATION' && (
