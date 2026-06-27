@@ -336,7 +336,22 @@
       "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=6144'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter insurance dev)",
       "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=6144'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter finance dev)",
       "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=6144'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter forensic-audit dev)",
-      "Bash(grep -nA3 \"select option\")"
+      "Bash(grep -nA3 \"select option\")",
+      "Bash(grep -n '\"@/\\\\*\"\\\\|paths' tsconfig.json)",
+      "Bash(pnpm --filter cases exec vitest run lib/project-graph.test.ts)",
+      "Bash(pnpm --filter @zenowethu/database build)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=8192\" npx tsc --noEmit)",
+      "PowerShell(Get-Process node | Select-Object Name, Id, @{Name='Memory\\(MB\\)';Expression={[math]::Round\\($_.WorkingSet/1MB,2\\)}} | Format-Table -AutoSize)",
+      "Bash(grep -c 'No \\\\$disconnect')",
+      "Bash(grep -l '\"typecheck\"' packages/shared-lib/package.json apps/credo/package.json apps/cases/package.json)",
+      "Bash(node -e \"['packages/shared-lib','apps/credo','apps/cases'].forEach\\(p=>{const s=require\\('./'+p+'/package.json'\\).scripts||{};console.log\\(p, JSON.stringify\\(s.typecheck||s['type-check']||'none'\\)\\)}\\)\")",
+      "Bash(pnpm --filter credo test)",
+      "Bash(pnpm --filter credo test --run)",
+      "Bash(node -e \"let s=require\\('./package.json'\\).scripts;console.log\\(JSON.stringify\\(s,null,2\\)\\)\")",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts.test\\)\\)\")",
+      "Bash(node -e \"console.log\\('test script:', JSON.stringify\\(require\\('./package.json'\\).scripts.test\\)\\)\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"=== exit $? ===\")"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",
