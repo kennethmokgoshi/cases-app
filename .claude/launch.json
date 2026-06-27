@@ -31,6 +31,12 @@
       "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
       "runtimeArgs": ["--filter", "finance", "dev"],
       "port": 3004
+    },
+    {
+      "name": "credo",
+      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeArgs": ["--filter", "credo", "dev"],
+      "port": 3005
     }
   ]
 }
