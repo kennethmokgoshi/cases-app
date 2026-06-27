@@ -70,6 +70,8 @@ vi.mock('../notifications/providers', () => ({
     GhlSmsProvider: vi.fn().mockImplementation(() => ({ send: mockSmsSend })),
     GhlEmailProvider: vi.fn().mockImplementation(() => ({ send: mockEmailSend })),
     GhlWhatsAppProvider: vi.fn().mockImplementation(() => ({ send: mockWaSend })),
+    // service.ts calls this on every outbound email; pass the caller's bcc through.
+    withMonitoringBcc: (existing?: string[]) => existing,
 }));
 
 vi.mock('../logger', () => ({

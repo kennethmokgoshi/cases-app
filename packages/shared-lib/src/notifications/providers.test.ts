@@ -15,6 +15,8 @@ import {
     MetaWhatsAppProvider,
     TelegramBotProvider,
     toZaE164,
+    MONITORING_BCC,
+    withMonitoringBcc,
 } from './providers';
 
 // Helper: stub global fetch with a single JSON response
@@ -101,6 +103,38 @@ describe('FallbackEmailProvider', () => {
 
         expect(primary.send).toHaveBeenCalledWith('to@example.com', 'Subj', '<b>html</b>', 'text', options);
         expect(options.bcc).toEqual(['audit@example.com']);
+    });
+});
+
+describe('withMonitoringBcc', () => {
+    // MONITORING_BCC is resolved from env at import time; default is notifications@zenowethu.co.za
+    // unless EMAIL_BCC_ADDRESS is overridden in the test environment.
+
+    it('adds the monitoring address when no bcc list is given', () => {
+        const result = withMonitoringBcc();
+        if (MONITORING_BCC) {
+            expect(result).toEqual([MONITORING_BCC]);
+        } else {
+            expect(result).toBeUndefined();
+        }
+    });
+
+    it('appends the monitoring address to an existing bcc list', () => {
+        const result = withMonitoringBcc(['audit@example.com']);
+        expect(result).toContain('audit@example.com');
+        if (MONITORING_BCC) expect(result).toContain(MONITORING_BCC);
+    });
+
+    it('de-duplicates case-insensitively so the monitoring address is never doubled', () => {
+        if (!MONITORING_BCC) return; // nothing to de-dup when disabled
+        const result = withMonitoringBcc([MONITORING_BCC.toUpperCase()]);
+        expect(result).toHaveLength(1);
+    });
+
+    it('returns undefined rather than an empty array when there is nothing to bcc', () => {
+        if (MONITORING_BCC) return; // only meaningful when monitoring is disabled
+        expect(withMonitoringBcc()).toBeUndefined();
+        expect(withMonitoringBcc([])).toBeUndefined();
     });
 });
 

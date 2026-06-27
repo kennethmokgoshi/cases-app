@@ -5,6 +5,37 @@ import { logger } from '../logger';
 // Abstraction layer for different notification providers
 
 /**
+ * Monitoring BCC — every outbound email is blind-copied here so staff can trace,
+ * audit and monitor mail that has been sent. The recipient does not see the BCC.
+ *
+ * Defaults to notifications@zenowethu.co.za so it is active without any extra
+ * configuration. Override the address with the EMAIL_BCC_ADDRESS environment
+ * variable, or set EMAIL_BCC_ADDRESS to "none" (or "off"/"false") to disable it.
+ */
+export const MONITORING_BCC: string | null = (() => {
+    const v = process.env.EMAIL_BCC_ADDRESS?.trim();
+    if (v === 'none' || v === 'off' || v === 'false') return null;
+    return v || 'notifications@zenowethu.co.za';
+})();
+
+/**
+ * Merge the monitoring BCC into an existing bcc list, de-duplicated
+ * (case-insensitive). Returns undefined when there is nothing to BCC, so callers
+ * can pass the result straight through to nodemailer/Resend without empty arrays.
+ */
+export function withMonitoringBcc(existing?: string[]): string[] | undefined {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const addr of [...(existing ?? []), ...(MONITORING_BCC ? [MONITORING_BCC] : [])]) {
+        const key = addr.trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(addr);
+    }
+    return out.length ? out : undefined;
+}
+
+/**
  * Normalise a South African (or already-international) mobile number to E.164.
  *   0821234567   -> +27821234567
  *   27821234567  -> +27821234567

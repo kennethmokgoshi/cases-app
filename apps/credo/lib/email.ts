@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { renderBrandedEmail } from "@zenowethu/shared-lib";
+import { renderBrandedEmail, withMonitoringBcc } from "@zenowethu/shared-lib";
 
 interface SendEmailOptions {
   to: string;
@@ -33,6 +33,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
       const info = await transporter.sendMail({
         from:    opts.fromEmail || process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER,
         to:      opts.to,
+        bcc:     withMonitoringBcc()?.join(", "),
         subject: opts.subject,
         html:    opts.html,
         text:    opts.html.replace(/<[^>]*>/g, ""),
@@ -56,6 +57,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
         body: JSON.stringify({
           from:    opts.fromEmail || process.env.EMAIL_FROM || process.env.SMTP_FROM || 'notifications@zenowethu.co.za',
           to:      [opts.to],
+          bcc:     withMonitoringBcc(),
           subject: opts.subject,
           html:    opts.html,
           text:    opts.html.replace(/<[^>]*>/g, '')
@@ -88,6 +90,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
           html:    opts.html,
           from_name:  opts.fromName || 'Credo',
           from_email: opts.fromEmail || 'notifications@zenowethu.co.za',
+          bcc:        withMonitoringBcc(),
           first_name: opts.fromName ? opts.fromName.split(' ')[0] : 'Credo',
           last_name:  opts.fromName ? opts.fromName.split(' ').slice(1).join(' ') : '',
           pre_header: opts.subject

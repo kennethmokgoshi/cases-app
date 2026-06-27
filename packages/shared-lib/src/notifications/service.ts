@@ -24,7 +24,8 @@ import {
     TwilioSmsProvider,
     TwilioWhatsAppProvider,
     MetaWhatsAppProvider,
-    TelegramBotProvider } from './providers';
+    TelegramBotProvider,
+    withMonitoringBcc } from './providers';
 import type { EmailOptions } from './providers';
 import {
     getTemplateByStatus,
@@ -41,19 +42,16 @@ const SMS_ENABLED = process.env.SMS_ENABLED !== 'false';
 const EMAIL_ENABLED = process.env.EMAIL_ENABLED !== 'false';
 const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED !== 'false';
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true'; // Telegram off by default (no provider configured)
-const EMAIL_BCC_ADDRESS = process.env.EMAIL_BCC_ADDRESS;
 
 const COMPANY_NAME = process.env.COMPANY_NAME || 'Zenowethu Debt Management';
 const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 035 1824';
 const VIRTUAL_ASSISTANT_NAME = process.env.VIRTUAL_ASSISTANT_NAME || 'Thandi';
 
-// Helper: Add BCC to email options if configured
+// Helper: blind-copy the monitoring mailbox on every outbound email so staff can
+// trace and audit sent mail. Address/defaults handled by withMonitoringBcc.
 function addBccToOptions(options?: EmailOptions): EmailOptions {
-    if (!EMAIL_BCC_ADDRESS) return options || {};
-    return {
-        ...options,
-        bcc: options?.bcc ? [...options.bcc, EMAIL_BCC_ADDRESS] : [EMAIL_BCC_ADDRESS]
-    };
+    const bcc = withMonitoringBcc(options?.bcc);
+    return bcc ? { ...options, bcc } : { ...(options ?? {}) };
 }
 
 // Initialize providers based on configuration.

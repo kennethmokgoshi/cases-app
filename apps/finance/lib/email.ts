@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { withMonitoringBcc } from '@zenowethu/shared-lib';
 
 export interface EmailAttachment {
     filename: string;
@@ -48,6 +49,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
             const info = await transporter.sendMail({
                 from:        opts.fromEmail || process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER,
                 to:          Array.isArray(opts.to) ? opts.to.join(', ') : opts.to,
+                bcc:         withMonitoringBcc()?.join(', '),
                 subject:     opts.subject,
                 html:        opts.html,
                 text:        opts.text ?? opts.html.replace(/<[^>]*>/g, ''),
@@ -76,6 +78,9 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
             html:    opts.html,
             text:    opts.text ?? opts.html.replace(/<[^>]*>/g, ''),
         };
+
+        const bcc = withMonitoringBcc();
+        if (bcc) body.bcc = bcc;
 
         if (opts.attachments?.length) {
             body.attachments = opts.attachments.map(a => ({
@@ -120,6 +125,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
                     html:    opts.html,
                     from_name:  opts.fromName,
                     from_email: opts.fromEmail,
+                    bcc:        withMonitoringBcc(),
                     first_name: opts.fromName ? opts.fromName.split(' ')[0] : '',
                     last_name:  opts.fromName ? opts.fromName.split(' ').slice(1).join(' ') : '',
                     pre_header: opts.text ? opts.text.substring(0, 100) : opts.subject,
