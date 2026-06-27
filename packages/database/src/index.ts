@@ -11,7 +11,15 @@ function createPrismaClient() {
     // The Contabo VPS firewall silently drops idle TCP connections after ~6 min;
     // this gives Prisma up to 3 attempts with exponential back-off before failing.
     // Handles P1001 (connection refused), P1002 (timeout), P1017 (server closed),
-    // and P2024 (connection pool timeout — all connections stale after VPS idle drop).
+    // and P2024 (connection pool timeout).
+    //
+    // IMPORTANT: this client is a single shared/global instance. We must NOT call
+    // client.$disconnect() here on retry — under concurrency that tears down
+    // connections other in-flight requests are actively using, turning one
+    // request's pool timeout into a cascading failure across all users. For a
+    // genuinely dropped connection (P1001/P1002/P1017) Prisma reconnects lazily
+    // on the next query; for pool exhaustion (P2024) backing off lets in-flight
+    // queries return their connections to the pool. Backoff alone is correct.
     return client.$extends({
         query: {
             $allModels: {
@@ -28,11 +36,7 @@ function createPrismaClient() {
                                 (err instanceof Prisma.PrismaClientKnownRequestError &&
                                     ['P1001', 'P1002', 'P1017', 'P2024'].includes((err as Prisma.PrismaClientKnownRequestError).code))
                             if (!isConnectionError || attempt === MAX_RETRIES - 1) throw err
-                            // On pool exhaustion (P2024), force-disconnect to clear stale connections
-                            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2024') {
-                                await client.$disconnect().catch(() => {})
-                            }
-                            // Exponential back-off: 500ms, 1000ms
+                            // Exponential back-off: 500ms, 1000ms. No $disconnect — see note above.
                             await new Promise(r => setTimeout(r, 500 * (attempt + 1)))
                         }
                     }
