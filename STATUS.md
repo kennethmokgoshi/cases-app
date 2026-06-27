@@ -1,7 +1,21 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-26 (Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+> Last updated: 2026-06-27 (Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### Fixed: case save rejected shared email / cell numbers (2026-06-27)
+
+**Symptom:** Adding/saving a case via the "Add New Case" wizard failed with `Email "opsgenty@gmail.com" already exists for another client: FANI MALEBATJA` (and the equivalent for cell numbers). This blocked legitimate cases.
+
+**Business rule:** One email address or phone/cell number may legitimately be shared by more than one consumer — e.g. clients without their own email use a branch email address, and a branch phone/telephone number is reused across many clients. The **ID number is the only unique identifier** per client (already enforced by `idNumber @unique` in the schema and by the duplicate-ID merge flow).
+
+**Fix:** Removed the application-level `DUPLICATE_EMAIL` and `DUPLICATE_PHONE` checks from the `PATCH /api/cases/[id]` handler. The ID-number duplicate check (with its existing merge-or-reject flow) is unchanged. No DB constraint existed on `email`/`phone`, so no migration was needed.
+
+**Files changed:** `apps/cases/app/api/cases/[id]/route.ts` plus the identical duplicated handlers in `apps/legal`, `apps/insurance`, `apps/finance`, `apps/forensic-audit`.
+
+**Checks:** `pnpm --filter cases typecheck` — route files compile clean (only a pre-existing unrelated error in the generated `.next/dev/types/validator.ts`).
 
 ---
 

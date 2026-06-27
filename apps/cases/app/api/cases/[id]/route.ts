@@ -511,41 +511,10 @@ export async function PATCH(
                 }
             }
         }
-        // Check for duplicate Email (if provided)
-        if (client && client.email) {
-            const existingByEmail = await prisma.client.findFirst({
-                where: {
-                    email: client.email,
-                    id: { not: currentCase.clientId }
-                }
-            });
-
-            if (existingByEmail) {
-                return NextResponse.json({
-                    error: `Email "${client.email}" already exists for another client: ${existingByEmail.firstName} ${existingByEmail.lastName}`,
-                    code: 'DUPLICATE_EMAIL',
-                    field: 'email'
-                }, { status: 409 });
-            }
-        }
-
-        // Check for duplicate Phone Number (if provided)
-        if (client && client.phone) {
-            const existingByPhone = await prisma.client.findFirst({
-                where: {
-                    phone: client.phone,
-                    id: { not: currentCase.clientId }
-                }
-            });
-
-            if (existingByPhone) {
-                return NextResponse.json({
-                    error: `Cell Number "${client.phone}" already exists for another client: ${existingByPhone.firstName} ${existingByPhone.lastName}`,
-                    code: 'DUPLICATE_PHONE',
-                    field: 'cellNumber'
-                }, { status: 409 });
-            }
-        }
+        // NOTE: Email and cell/phone number are intentionally NOT checked for uniqueness.
+        // Business rule: one email or phone number may be shared by more than one consumer
+        // (e.g. clients without their own email use a branch email address). The ID number
+        // is the only unique identifier per client, enforced above and by the schema.
 
         // Build client update data - only include fields that are provided
         const clientUpdateData: Record<string, unknown> = {};
