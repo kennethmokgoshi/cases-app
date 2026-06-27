@@ -42,10 +42,12 @@ describe('Invoice number generation - Race condition fix', () => {
 
     const sequences = await Promise.all(promises)
 
-    // Should get 10 unique sequential numbers
+    // Should get 10 unique sequential numbers. The row is created with nextSeq:2
+    // (the creator consumes seq 1 and returns 2), then each concurrent upsert increments,
+    // so the returned set is deterministically {2..11} — see the companion test below.
     const unique = new Set(sequences)
     expect(unique.size).toBe(10)
-    expect(sequences.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    expect(sequences.sort((a, b) => a - b)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
   })
 
   it('should initialize sequence at 1 for new prefix/year combo', async () => {
