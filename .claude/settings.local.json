@@ -321,7 +321,15 @@
       "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=6144'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter legal dev)",
       "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=8192'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm dev)",
       "PowerShell(pnpm --filter cases typecheck)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(rm -rf apps/finance/.next/dev/types)",
+      "Bash(pnpm --filter @zenowethu/shared-lib --filter finance --filter forensic-audit typecheck)",
+      "PowerShell(pnpm --filter @zenowethu/shared-lib test -- providers 2>&1)",
+      "PowerShell(pnpm --filter @zenowethu/shared-lib --filter cases --filter finance --filter credo typecheck 2>&1)",
+      "PowerShell(pnpm --filter @zenowethu/shared-lib typecheck 2>&1)",
+      "PowerShell(cd 'C:\\\\Visual Studio Code\\\\06 March 2026\\\\packages\\\\shared-lib'; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 30; Write-Output \"EXIT:$LASTEXITCODE\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\\\\n\" http://localhost:3004/payments/record --max-time 90)",
+      "Bash(pnpm --filter @zenowethu/shared-lib test -- --run src/notifications/providers.test.ts)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

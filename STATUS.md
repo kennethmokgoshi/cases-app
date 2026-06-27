@@ -1,7 +1,33 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-27 (Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+> Last updated: 2026-06-27 (Finance dropdown options invisible (white-on-white) fixed via global select option CSS; Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### Fixed: Finance dropdown options invisible — white-on-white (2026-06-27)
+
+**Symptom:** On the Finance "Record Manual Payment" page (and other Finance forms), opening a `<select>` (e.g. Payment Method, Category) showed an effectively blank popup — the options were unreadable.
+
+**Root cause:** Every `<select>` uses Tailwind `bg-white/5 text-white` — a *translucent* white fill that looks dark over the app's dark page, with white text. But the native dropdown popup the browser renders for the options uses the OS-default **white** background, while the option text inherited **white** → white-on-white, invisible. Native `<option>` elements don't inherit the translucent page background.
+
+**Fix:** Added a single global rule in [apps/finance/app/globals.css](apps/finance/app/globals.css) — `select option, select optgroup { background-color: var(--color-bg-secondary); color: var(--color-text-primary); }`. Theme-safe (resolves correctly for default/ocean/sunset themes) and fixes every dropdown in the Finance app at once, not just the payment page.
+
+**Files changed:** `apps/finance/app/globals.css`
+
+**Checks:** Finance dev server (`:3004`) compiled globals.css with no CSS errors. Note: the actual page is SSO-protected (redirects to the Cases `:3000` login) and the native option popup is an OS overlay that browser screenshots can't capture, so verification was limited to confirming the rule compiles cleanly and targets the exact cause.
+
+**Note (follow-up candidate):** the other apps (`cases`, `legal`, `insurance`, `forensic-audit`, `credo`) use the same `bg-white/5 text-white` select pattern and likely have the same invisible-option bug — apply the same `select option` rule (or centralise it) when next touching their `globals.css`.
+
+---
+
+### Added: "Deposit" payment category (2026-06-27)
+
+**Ask:** Staff recording a payment that is a **deposit** (initial payment) had no matching Category — only Installment / Service Fee / Legal Fee / Other.
+
+**Fix:** Added `Deposit` (value `DEPOSIT`) to the Category dropdown on the Record Manual Payment page, placed first as the initial-payment type. `Payment.category` is a free-form `String @default("INSTALLMENT")` in Prisma (not an enum) and the API validates it as `z.string().optional()`, so **no migration or schema change** was needed. Also added `DEPOSIT: 'Deposit'` to the `CATEGORY_LABELS` display map on the client payments history page so existing/new deposits render with a friendly label.
+
+**Files changed:** `apps/finance/app/(authenticated)/payments/record/page.tsx`, `apps/finance/app/(authenticated)/clients/[id]/payments/page.tsx`
 
 ---
 
@@ -551,6 +577,44 @@ EMAIL_BCC_ADDRESS=notifications@zenowethu.co.za
 All outgoing emails will now be blind-copied to that address. Emails appear in the BCC inbox as if they were the original recipient, maintaining full audit trail.
 
 **Status:** Complete and tested (368 tests passing)
+
+---
+
+### Email BCC — made default-on and extended to all email paths (2026-06-27)
+
+**Problem:** The 2026-06-23 BCC only activated when `EMAIL_BCC_ADDRESS` was present in the live env. SMTP credentials live in the DB (`systemSettings`), not env, so the var was not guaranteed to be set in production — meaning the monitoring BCC could be silently absent. In addition, three app-level helpers (`apps/cases/lib/email-with-attachments.ts`, `apps/finance/lib/email.ts`, `apps/credo/lib/email.ts`) send email with their own nodemailer/Resend/GHL-webhook transports, completely bypassing the notification service, so they never BCC'd at all (e.g. invoice/quote emails with attachments, Credo welcome emails).
+
+**Solution:** Centralised the monitoring BCC into a single shared helper that **defaults on** to `notifications@zenowethu.co.za` without any env configuration, and wired it into every outbound email path.
+
+**What was done:**
+
+1. **Shared helper** ✅ — Added `MONITORING_BCC` constant + `withMonitoringBcc()` to `packages/shared-lib/src/notifications/providers.ts` (exported via `@zenowethu/shared-lib`):
+   - Defaults to `notifications@zenowethu.co.za` so the BCC is active out of the box.
+   - `EMAIL_BCC_ADDRESS` still overrides the address; set it to `none`/`off`/`false` to disable.
+   - De-duplicates case-insensitively so the monitoring address is never doubled when a caller already supplies a BCC.
+
+2. **Notification service** ✅ — `addBccToOptions()` now delegates to `withMonitoringBcc()` (all 7 send sites unchanged, still covered).
+
+3. **App-level email helpers now BCC** ✅ — added the monitoring BCC to the SMTP, Resend and GHL-webhook branches of:
+   - `apps/cases/lib/email-with-attachments.ts`
+   - `apps/finance/lib/email.ts`
+   - `apps/credo/lib/email.ts`
+
+4. **Tests** ✅ — Added `withMonitoringBcc` unit tests (default-on, merge, case-insensitive de-dup, disabled-state). `pnpm --filter @zenowethu/shared-lib test providers` → 41 passing.
+
+**Known limitation:** The GHL **API** email provider (`GhlEmailProvider`, conversations API) has no BCC field, so when GHL API is the active email gateway the BCC is not applied. Production currently runs SMTP as the primary gateway (`EMAIL_PROVIDER=smtp`), where BCC works; the GHL **webhook** path does forward BCC.
+
+**Files Changed:**
+- `packages/shared-lib/src/notifications/providers.ts` — `MONITORING_BCC` + `withMonitoringBcc()`
+- `packages/shared-lib/src/notifications/service.ts` — `addBccToOptions()` delegates to shared helper; removed local `EMAIL_BCC_ADDRESS`
+- `packages/shared-lib/src/notifications/providers.test.ts` — `withMonitoringBcc` tests
+- `apps/cases/lib/email-with-attachments.ts` — BCC on SMTP/Resend/GHL-webhook
+- `apps/finance/lib/email.ts` — BCC on SMTP/Resend/GHL-webhook
+- `apps/credo/lib/email.ts` — BCC on SMTP/Resend/GHL-webhook
+
+**Checks:** shared-lib `tsc --noEmit` clean; `cases`/`finance`/`credo` typecheck clean for these files (a pre-existing stale `.next/dev/types/validator.ts` artifact in cases is unrelated); 41 provider tests passing.
+
+**Status:** Complete and tested.
 
 ---
 

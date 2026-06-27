@@ -185,6 +185,7 @@ export default function RecordPaymentPage() {
                                 onChange={(e) => setCategory(e.target.value)}
                                 className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:border-cyan-500 focus:outline-none"
                             >
+                                <option value="DEPOSIT">Deposit</option>
                                 <option value="INSTALLMENT">Installment</option>
                                 <option value="SERVICE_FEE">Service Fee</option>
                                 <option value="LEGAL_FEE">Legal Fee</option>

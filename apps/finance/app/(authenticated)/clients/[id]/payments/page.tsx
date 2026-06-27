@@ -58,6 +58,7 @@ const METHOD_COLORS: Record<string, string> = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
+    DEPOSIT: 'Deposit',
     INSTALLMENT: 'Installment',
     SERVICE_FEE: 'Service Fee',
     LEGAL_FEE: 'Legal Fee',

@@ -95,6 +95,19 @@ body {
 }
 
 /* ========================================
+   NATIVE SELECT DROPDOWN READABILITY
+   Selects use translucent (bg-white/5) backgrounds, but the native
+   dropdown popup renders on the OS default white background. Without an
+   explicit option background the white option text became invisible
+   (white-on-white). Force a solid dark popup with light text in every theme.
+   ======================================== */
+select option,
+select optgroup {
+  background-color: var(--color-bg-secondary, #1e293b);
+  color: var(--color-text-primary, #ffffff);
+}
+
+/* ========================================
    MOBILE RESPONSIVE UTILITIES
    ======================================== */
 
