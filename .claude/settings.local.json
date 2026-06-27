@@ -320,7 +320,8 @@
       "Bash(pnpm --filter cases test -- --run app/api/admin/clients/convert-to-referrer/route.test.ts)",
       "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=6144'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter legal dev)",
       "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=8192'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm dev)",
-      "PowerShell(pnpm --filter cases typecheck)"
+      "PowerShell(pnpm --filter cases typecheck)",
+      "Bash(git rm *)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",
