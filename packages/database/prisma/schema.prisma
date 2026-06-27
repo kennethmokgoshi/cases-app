@@ -325,6 +325,7 @@ model Case {
   debitOrderMandates      DebitOrderMandate[]
   appNextUpdates          CaseAppNextUpdate[]
   paymentArrangements     PaymentArrangement[]
+  documentRequests        DocumentRequest[]
 
   debtCounsellordId String?
   debtCounsellor    DebtCounsellor? @relation(fields: [debtCounsellordId], references: [id])
@@ -964,7 +965,13 @@ model CredoTenant {
 model ConsumerAccount {
   id                   String              @id @default(cuid())
   email                String
-  password             String
+  // Nullable: auto-provisioned profiles (created from a B2B/staff case) have no
+  // password until the consumer activates via the password-reset link.
+  password             String?
+  // Tracks whether the consumer has ever set a password (activated their login).
+  activatedAt          DateTime?
+  // How the profile was created: SELF_REGISTERED | AUTO_PROVISIONED
+  source               String              @default("SELF_REGISTERED")
   firstName            String
   lastName             String
   idNumber             String?             @unique
@@ -989,10 +996,49 @@ model ConsumerAccount {
   activeSubscription   CredoSubscription?  @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
   poaSigningRequests   PoaSigningRequest[]
   otpSession           CredoOtpSession?
+  passwordResetTokens  PasswordResetToken[]
+  documentRequests     DocumentRequest[]
 
   @@index([email])
   @@index([tenantId])
   @@index([idNumber])
+}
+
+model PasswordResetToken {
+  id         String          @id @default(cuid())
+  consumerId String
+  // SHA-256 hash of the token — the raw token is only ever in the emailed link.
+  tokenHash  String          @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime        @default(now())
+  consumer   ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+
+  @@index([consumerId])
+  @@index([expiresAt])
+}
+
+model DocumentRequest {
+  id             String          @id @default(cuid())
+  consumerId     String
+  caseId         String?
+  category       String // IDENTITY | INCOME | BUREAU | LEGAL | CORRESPONDENCE
+  label          String // Human-readable ask, e.g. "Latest 3 months' payslips"
+  notes          String?
+  status         String          @default("REQUESTED") // REQUESTED | UPLOADED | APPROVED | REJECTED
+  fulfilledDocId String?         @unique
+  requestedById  String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  consumer       ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+  case           Case?           @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  fulfilledDoc   CredoDocument?  @relation(fields: [fulfilledDocId], references: [id], onDelete: SetNull)
+
+  @@index([consumerId])
+  @@index([caseId])
+  @@index([status])
 }
 
 model CredoSubscription {
@@ -1057,6 +1103,7 @@ model CredoDocument {
   storagePath  String
   createdAt    DateTime        @default(now())
   consumer     ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+  fulfilledRequest DocumentRequest?
 
   @@index([consumerId])
   @@index([category])

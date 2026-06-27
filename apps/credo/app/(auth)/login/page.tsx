@@ -26,7 +26,7 @@ function LoginForm() {
     });
 
     if (result?.error) {
-      setError("Incorrect username or password. Please try again.");
+      setError("Incorrect ID number or password. Please try again.");
       setLoading(false);
     } else {
       window.location.href = callbackUrl;
@@ -133,15 +133,16 @@ function LoginForm() {
 
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div>
-              <label className="credo-label" htmlFor="username">Email address or ID number</label>
+              <label className="credo-label" htmlFor="username">ID number</label>
               <input
-                id="username" type="text" className="credo-input"
-                placeholder="you@example.co.za or 8001015009087"
-                value={username} onChange={(e) => setUsername(e.target.value)}
-                required autoComplete="username"
+                id="username" type="text" inputMode="numeric" className="credo-input"
+                placeholder="8001015009087"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.replace(/\D/g, "").slice(0, 13))}
+                required autoComplete="username" maxLength={13}
               />
               <p style={{ fontSize: "0.75rem", color: "#94A3B8", margin: "6px 0 0" }}>
-                Use your email address or 13-digit SA ID number
+                Your username is your 13-digit SA ID number
               </p>
             </div>
 

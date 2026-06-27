@@ -15,6 +15,16 @@ interface CredoDoc {
   createdAt: string;
 }
 
+interface DocRequest {
+  id: string;
+  category: string;
+  label: string;
+  notes: string | null;
+  status: "REQUESTED" | "UPLOADED" | "APPROVED" | "REJECTED";
+  createdAt: string;
+  fulfilledDoc: { id: string; originalName: string; createdAt: string } | null;
+}
+
 const CATEGORIES: { key: DocCategory; label: string }[] = [
   { key: "ALL",            label: "All Files"      },
   { key: "IDENTITY",       label: "Identity"       },
@@ -94,6 +104,7 @@ const UPLOAD_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
 
 export default function DocumentsPage() {
   const [docs, setDocs] = useState<CredoDoc[]>([]);
+  const [requests, setRequests] = useState<DocRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<DocCategory>("ALL");
   const [view, setView] = useState<"grid" | "list">("list");
@@ -115,7 +126,19 @@ export default function DocumentsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchDocs(); }, [fetchDocs]);
+  const fetchRequests = useCallback(async () => {
+    try {
+      const res = await fetch("/api/consumer/document-requests");
+      if (res.ok) {
+        const data = await res.json() as { requests: DocRequest[] };
+        setRequests(data.requests);
+      }
+    } catch {
+      /* non-critical */
+    }
+  }, []);
+
+  useEffect(() => { fetchDocs(); fetchRequests(); }, [fetchDocs, fetchRequests]);
 
   async function uploadFile(file: File) {
     setError(null);
@@ -131,11 +154,17 @@ export default function DocumentsPage() {
       if (!res.ok) {
         setError(data.error ?? "Upload failed");
       } else {
-        await fetchDocs();
+        await Promise.all([fetchDocs(), fetchRequests()]);
       }
     } finally {
       setUploading(false);
     }
+  }
+
+  function uploadForRequest(category: string) {
+    setUploadCategory(category as Exclude<DocCategory, "ALL">);
+    // Defer so the category state is applied before the picker opens.
+    setTimeout(() => fileInputRef.current?.click(), 0);
   }
 
   async function deleteDoc(id: string) {
@@ -246,6 +275,62 @@ export default function DocumentsPage() {
           <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: "1rem" }}>✕</button>
         </div>
       )}
+
+      {/* Documents required — requests raised by staff against this consumer */}
+      {(() => {
+        const outstanding = requests.filter(r => r.status === "REQUESTED");
+        if (outstanding.length === 0) return null;
+        return (
+          <div style={{
+            background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, padding: "18px 20px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: "#FEF3C7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 5v3.5M8 11v.5" stroke="#B45309" strokeWidth="1.6" strokeLinecap="round"/>
+                  <circle cx="8" cy="8" r="6" stroke="#B45309" strokeWidth="1.4"/>
+                </svg>
+              </div>
+              <div>
+                <p style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#92400E", margin: 0 }}>
+                  {outstanding.length} document{outstanding.length > 1 ? "s" : ""} required
+                </p>
+                <p style={{ fontSize: "0.8125rem", color: "#B45309", margin: 0 }}>
+                  Your case manager has asked for the following. Upload them to keep your case moving.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {outstanding.map(req => (
+                <div key={req.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                  background: "#FFFFFF", border: "1px solid #FDE68A", borderRadius: 9, padding: "10px 14px", flexWrap: "wrap",
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#0F172A", margin: 0 }}>{req.label}</p>
+                    {req.notes && <p style={{ fontSize: "0.8125rem", color: "#64748B", margin: "2px 0 0" }}>{req.notes}</p>}
+                    <span style={{ fontSize: "0.7rem", color: "#94A3B8" }}>
+                      {CATEGORIES.find(c => c.key === req.category)?.label ?? req.category}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => uploadForRequest(req.category)}
+                    disabled={uploading}
+                    className="btn-primary"
+                    style={{ padding: "7px 14px", fontSize: "0.8125rem", opacity: uploading ? 0.7 : 1, whiteSpace: "nowrap" }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                      <path d="M7 9V2M4 5l3-3 3 3" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M2 11h10" stroke="white" strokeWidth="1.6" strokeLinecap="round"/>
+                    </svg>
+                    Upload
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Storage bar */}
       <div className="credo-card" style={{ padding: "16px 20px" }}>

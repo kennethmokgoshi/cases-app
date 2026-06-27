@@ -198,6 +198,11 @@ export async function POST(request: Request) {
             });
         });
 
+        // Auto-provision a Credo consumer profile (idempotent, never throws).
+        import('@zenowethu/shared-lib').then(({ provisionAndInviteConsumer }) => {
+            provisionAndInviteConsumer(existingClient!.id);
+        }).catch(err => logger.error(`Credo provisioning failed for ${newCase.id}:`, err));
+
         return apiSuccess({
             id: newCase.id,
             fileNumber: newCase.fileNumber,

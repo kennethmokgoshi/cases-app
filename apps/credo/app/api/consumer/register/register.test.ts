@@ -2,39 +2,39 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { prisma } from "@zenowethu/database";
 import bcrypt from "bcryptjs";
 
-describe("Credo Consumer Registration & Authentication", () => {
+/**
+ * Integration tests for the Credo consumer account model.
+ *
+ * Policy under test (current):
+ *  - The 13-digit ID number is the ONLY username and the only unique field.
+ *  - Email and phone are NOT unique — two different people may share them.
+ *  - Password is nullable: auto-provisioned profiles have none until activation.
+ *  - Login is by ID number.
+ */
+describe("Credo Consumer Account model", () => {
   const testEmail = "test-auth@credo.co.za";
   const testIdNumber = "9001015009087";
+  const secondIdNumber = "9001015009088";
   const testPassword = "SecurePassword123";
   const testPhoneNumber = "0825366384";
 
-  beforeEach(async () => {
-    // Clean up test data
+  async function cleanup() {
     await prisma.consumerAccount.deleteMany({
       where: {
         OR: [
           { email: testEmail },
           { idNumber: testIdNumber },
+          { idNumber: secondIdNumber },
         ],
       },
     });
-  });
+  }
 
-  afterEach(async () => {
-    // Clean up after tests
-    await prisma.consumerAccount.deleteMany({
-      where: {
-        OR: [
-          { email: testEmail },
-          { idNumber: testIdNumber },
-        ],
-      },
-    });
-  });
+  beforeEach(cleanup);
+  afterEach(cleanup);
 
-  it("should create a consumer account with email and optional ID number", async () => {
+  it("creates a consumer account keyed by ID number", async () => {
     const hashedPassword = await bcrypt.hash(testPassword, 12);
-
     const consumer = await prisma.consumerAccount.create({
       data: {
         email: testEmail,
@@ -45,19 +45,18 @@ describe("Credo Consumer Registration & Authentication", () => {
         phone: testPhoneNumber,
         province: "Gauteng",
         language: "English",
+        source: "SELF_REGISTERED",
+        activatedAt: new Date(),
       },
     });
 
-    expect(consumer.email).toBe(testEmail);
     expect(consumer.idNumber).toBe(testIdNumber);
-    expect(consumer.firstName).toBe("Test");
-    expect(consumer.lastName).toBe("User");
-    expect(consumer.phone).toBe(testPhoneNumber);
+    expect(consumer.email).toBe(testEmail);
+    expect(consumer.activatedAt).not.toBeNull();
   });
 
-  it("should allow login with email as username", async () => {
+  it("logs in by ID number (the username) and verifies the password", async () => {
     const hashedPassword = await bcrypt.hash(testPassword, 12);
-
     await prisma.consumerAccount.create({
       data: {
         email: testEmail,
@@ -66,130 +65,76 @@ describe("Credo Consumer Registration & Authentication", () => {
         lastName: "User",
         idNumber: testIdNumber,
         phone: testPhoneNumber,
-        province: "Gauteng",
         language: "English",
       },
     });
 
-    // Simulate login with email
-    const consumer = await prisma.consumerAccount.findUnique({
-      where: { email: testEmail },
-    });
-
-    expect(consumer).toBeDefined();
-    const passwordValid = await bcrypt.compare(testPassword, consumer!.password);
-    expect(passwordValid).toBe(true);
-  });
-
-  it("should allow login with ID number as username", async () => {
-    const hashedPassword = await bcrypt.hash(testPassword, 12);
-
-    await prisma.consumerAccount.create({
-      data: {
-        email: testEmail,
-        password: hashedPassword,
-        firstName: "Test",
-        lastName: "User",
-        idNumber: testIdNumber,
-        phone: testPhoneNumber,
-        province: "Gauteng",
-        language: "English",
-      },
-    });
-
-    // Simulate login with ID number
     const consumer = await prisma.consumerAccount.findUnique({
       where: { idNumber: testIdNumber },
     });
 
-    expect(consumer).toBeDefined();
-    const passwordValid = await bcrypt.compare(testPassword, consumer!.password);
-    expect(passwordValid).toBe(true);
+    expect(consumer).not.toBeNull();
+    expect(consumer!.password).not.toBeNull();
+    expect(await bcrypt.compare(testPassword, consumer!.password!)).toBe(true);
+    expect(await bcrypt.compare("WrongPassword", consumer!.password!)).toBe(false);
   });
 
-  it("should reject login with wrong password", async () => {
+  it("allows two different people to share the same email and phone", async () => {
     const hashedPassword = await bcrypt.hash(testPassword, 12);
 
     await prisma.consumerAccount.create({
       data: {
         email: testEmail,
         password: hashedPassword,
-        firstName: "Test",
+        firstName: "Parent",
         lastName: "User",
         idNumber: testIdNumber,
         phone: testPhoneNumber,
-        province: "Gauteng",
         language: "English",
       },
     });
 
-    const consumer = await prisma.consumerAccount.findUnique({
-      where: { email: testEmail },
+    // Same email + phone, different ID number — must succeed.
+    const second = await prisma.consumerAccount.create({
+      data: {
+        email: testEmail,
+        password: hashedPassword,
+        firstName: "Child",
+        lastName: "User",
+        idNumber: secondIdNumber,
+        phone: testPhoneNumber,
+        language: "English",
+      },
     });
 
-    expect(consumer).toBeDefined();
-    const passwordValid = await bcrypt.compare("WrongPassword", consumer!.password);
-    expect(passwordValid).toBe(false);
+    expect(second.email).toBe(testEmail);
+    expect(second.idNumber).toBe(secondIdNumber);
+
+    const shared = await prisma.consumerAccount.findMany({ where: { email: testEmail } });
+    expect(shared.length).toBe(2);
   });
 
-  it("should create consumer without ID number (optional)", async () => {
-    const hashedPassword = await bcrypt.hash(testPassword, 12);
-
+  it("auto-provisioned profiles have a null password until activation", async () => {
     const consumer = await prisma.consumerAccount.create({
       data: {
         email: testEmail,
-        password: hashedPassword,
-        firstName: "NoID",
-        lastName: "User",
+        password: null,
+        firstName: "Auto",
+        lastName: "Provisioned",
+        idNumber: testIdNumber,
         phone: testPhoneNumber,
-        province: "Western Cape",
         language: "English",
-        // idNumber intentionally omitted
+        source: "AUTO_PROVISIONED",
       },
     });
 
-    expect(consumer.email).toBe(testEmail);
-    expect(consumer.idNumber).toBeNull();
-    expect(consumer.firstName).toBe("NoID");
+    expect(consumer.password).toBeNull();
+    expect(consumer.activatedAt).toBeNull();
+    expect(consumer.source).toBe("AUTO_PROVISIONED");
   });
 
-  it("should prevent duplicate email registrations", async () => {
+  it("prevents duplicate ID number registrations", async () => {
     const hashedPassword = await bcrypt.hash(testPassword, 12);
-
-    await prisma.consumerAccount.create({
-      data: {
-        email: testEmail,
-        password: hashedPassword,
-        firstName: "Test",
-        lastName: "User",
-        phone: testPhoneNumber,
-        province: "Gauteng",
-        language: "English",
-      },
-    });
-
-    // Try to create another account with same email
-    try {
-      await prisma.consumerAccount.create({
-        data: {
-          email: testEmail,
-          password: hashedPassword,
-          firstName: "Duplicate",
-          lastName: "User",
-          phone: "0821234567",
-          province: "Gauteng",
-          language: "English",
-        },
-      });
-      expect.fail("Should have thrown unique constraint error");
-    } catch (error: any) {
-      expect(error.code).toBe("P2002"); // Prisma unique constraint error
-    }
-  });
-
-  it("should prevent duplicate ID number registrations", async () => {
-    const hashedPassword = await bcrypt.hash(testPassword, 12);
-
     await prisma.consumerAccount.create({
       data: {
         email: testEmail,
@@ -198,12 +143,10 @@ describe("Credo Consumer Registration & Authentication", () => {
         lastName: "User",
         idNumber: testIdNumber,
         phone: testPhoneNumber,
-        province: "Gauteng",
         language: "English",
       },
     });
 
-    // Try to create another account with same ID number
     try {
       await prisma.consumerAccount.create({
         data: {
@@ -213,7 +156,6 @@ describe("Credo Consumer Registration & Authentication", () => {
           lastName: "ID",
           idNumber: testIdNumber,
           phone: "0821234567",
-          province: "Gauteng",
           language: "English",
         },
       });

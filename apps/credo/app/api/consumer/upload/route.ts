@@ -87,7 +87,22 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, document: doc }, { status: 201 });
+    // If staff requested a document of this category, mark the oldest open request
+    // as fulfilled so it disappears from the consumer's "required" list and shows
+    // as received on the Cases side.
+    const openRequest = await prisma.documentRequest.findFirst({
+      where: { consumerId, category: category as string, status: "REQUESTED" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (openRequest) {
+      await prisma.documentRequest.update({
+        where: { id: openRequest.id },
+        data: { status: "UPLOADED", fulfilledDocId: doc.id },
+      });
+    }
+
+    return NextResponse.json({ success: true, document: doc, fulfilledRequest: !!openRequest }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });

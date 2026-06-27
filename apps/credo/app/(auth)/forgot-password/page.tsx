@@ -4,18 +4,37 @@ import Link from "next/link";
 import { useState } from "react";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+  const [idNumber, setIdNumber] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (idNumber.length !== 13) {
+      setError("Please enter your full 13-digit ID number.");
+      return;
+    }
     setLoading(true);
-    // Simulate sending — real implementation wires to email/GHL
-    await new Promise(r => setTimeout(r, 1200));
-    setSubmitted(true);
-    setLoading(false);
+    setError(null);
+    try {
+      const res = await fetch("/api/consumer/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        setLoading(false);
+        return;
+      }
+      setSubmitted(true);
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -43,7 +62,7 @@ export default function ForgotPasswordPage() {
               </div>
               <h2 style={{ fontSize: "1.375rem", fontWeight: 700, color: "#0F172A", margin: "0 0 10px", fontFamily: "var(--font-playfair), Georgia, serif" }}>Check your email</h2>
               <p style={{ fontSize: "0.9375rem", color: "#64748B", margin: "0 0 28px", lineHeight: 1.6 }}>
-                If an account exists for <strong>{email}</strong>, you will receive a password reset link shortly.
+                If a Credo profile exists for ID <strong>{idNumber}</strong> and has an email on file, a password reset link has been sent. The link expires in 7 days.
               </p>
               <Link href="/login" style={{ display: "block", textAlign: "center", padding: "12px 24px", background: "#0B1D35", color: "#FFFFFF", borderRadius: 9, fontSize: "0.9375rem", fontWeight: 600, textDecoration: "none" }}>
                 Back to login
@@ -55,31 +74,39 @@ export default function ForgotPasswordPage() {
                 Reset your password
               </h2>
               <p style={{ fontSize: "0.9375rem", color: "#64748B", margin: "0 0 28px" }}>
-                Enter your email and we&apos;ll send you a reset link.
+                Enter your 13-digit ID number and we&apos;ll email a reset link to the address on your profile.
               </p>
+
+              {error && (
+                <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 9, padding: "10px 14px", marginBottom: 20 }}>
+                  <p style={{ fontSize: "0.8125rem", color: "#DC2626", margin: 0 }}>{error}</p>
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div>
                   <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "#374151", marginBottom: 6, letterSpacing: "0.02em", textTransform: "uppercase" }}>
-                    Email address
+                    ID number
                   </label>
                   <input
-                    type="email"
+                    type="text"
+                    inputMode="numeric"
                     className="credo-input"
-                    placeholder="sipho@example.co.za"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    placeholder="8001015009087"
+                    value={idNumber}
+                    onChange={e => setIdNumber(e.target.value.replace(/\D/g, "").slice(0, 13))}
+                    maxLength={13}
                     required
                   />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={loading || !email}
+                  disabled={loading || idNumber.length !== 13}
                   style={{
-                    padding: "13px 24px", background: loading || !email ? "#94A3B8" : "#0B1D35",
+                    padding: "13px 24px", background: loading || idNumber.length !== 13 ? "#94A3B8" : "#0B1D35",
                     color: "#FFFFFF", border: "none", borderRadius: 9,
-                    fontSize: "0.9375rem", fontWeight: 600, cursor: loading || !email ? "not-allowed" : "pointer",
+                    fontSize: "0.9375rem", fontWeight: 600, cursor: loading || idNumber.length !== 13 ? "not-allowed" : "pointer",
                     transition: "background 150ms",
                   }}
                 >

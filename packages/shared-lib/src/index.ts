@@ -51,6 +51,9 @@ export * from './automation/run-logger';
 export * from './automation/workflow-engine';
 export * from './debt-review-removal/removal-paths';
 
+// Credo consumer provisioning & password reset
+export * from './credo';
+
 // Utils
 export * from './utils/extract-id-number';
 

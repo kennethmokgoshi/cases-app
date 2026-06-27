@@ -1094,6 +1094,38 @@ export async function sendInternalNotification(entry: {
     }
 }
 
+/**
+ * Send a one-off transactional email (password reset, Credo activation invite, etc.)
+ * through the production email chain (GHL-first, SMTP fallback) with monitoring BCC.
+ * Unlike the case-scoped helpers this is not tied to a Case and writes no WorkflowLog,
+ * so it is safe to call from any app for system emails to consumers.
+ */
+export async function sendTransactionalEmail(opts: {
+    to: string;
+    subject: string;
+    html: string;
+    cc?: string[];
+}): Promise<NotificationResult> {
+    const result: NotificationResult = {
+        smsSuccess: false,
+        emailSuccess: false,
+        whatsappSuccess: false,
+        telegramSuccess: false,
+        errors: [],
+    };
+    try {
+        const provider = await getEmailProvider();
+        const text = opts.html.replace(/<[^>]*>/g, '');
+        const res = await provider.send(opts.to, opts.subject, opts.html, text, addBccToOptions({ cc: opts.cc }));
+        result.emailSuccess = res.success;
+        result.emailMessageId = res.messageId;
+        if (res.error) result.errors.push(res.error);
+    } catch (err) {
+        result.errors.push(err instanceof Error ? err.message : String(err));
+    }
+    return result;
+}
+
 export async function findManagersForCase(caseId: string): Promise<string[]> {
     const caseObj = await prisma.case.findUnique({
         where: { id: caseId },
