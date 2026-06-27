@@ -59,19 +59,23 @@ jobs:
       - name: Typecheck (all apps + packages)
         run: pnpm turbo typecheck
 
-      - name: Run all tests (all apps + packages)
-        run: pnpm turbo test
-
-      # ──────────────────────────────────────────────
-      # E2E Tests Setup & Execution
-      # PostgreSQL service runs automatically for all CI jobs
-      # Database is migrated and seeded before E2E tests run
-      # ──────────────────────────────────────────────
+      # Migrate the test DB BEFORE unit tests. Several route tests are DB-integration
+      # tests that create rows directly, so they need DATABASE_URL set AND the schema present.
       - name: Run database migrations
         run: pnpm --filter @zenowethu/database run db:migrate:deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
 
+      - name: Run all tests (all apps + packages)
+        run: pnpm turbo test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zenowethu_test
+
+      # ──────────────────────────────────────────────
+      # E2E Tests Setup & Execution
+      # PostgreSQL service runs automatically for all CI jobs
+      # DB schema is already migrated above; seed before E2E tests run
+      # ──────────────────────────────────────────────
       - name: Seed test database
         run: |
           cd apps/cases

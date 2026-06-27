@@ -15,6 +15,10 @@
 
 **Note:** these are live-DB integration tests; locally they run against the production DB via `.env.local`. CI uses an ephemeral `zenowethu_test` postgres container. Consider mocking prisma here later (like the other route tests) so they never touch a real DB.
 
+**Plus two CI infrastructure bugs that had kept the test step red regardless** (`.github/workflows/ci-cd.yml` + `turbo.json`):
+1. The "Run database migrations" step ran **after** "Run all tests" — so the test DB had no schema when integration tests ran. Moved it **before** the test step.
+2. The test step had **no `DATABASE_URL`**, and Turbo 2 strict env-mode stripped it anyway — integration tests failed with `Environment variable not found: DATABASE_URL`. Added `DATABASE_URL` to the test step env **and** `passThroughEnv: ["DATABASE_URL"]` to the `test` task in `turbo.json`. Verified `pnpm turbo test --filter=cases` passes with the var now reaching the test process. (Also fixes the `finance/invoices` integration test, same cause.)
+
 ---
 
 ### GHL suspended — `GHL_ENABLED=false` kill-switch (2026-06-26)
