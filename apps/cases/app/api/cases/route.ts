@@ -5,8 +5,6 @@ import { CaseCreateSchema, parseBody } from '@/lib/schemas';
 import fs from 'fs';
 import path from 'path';
 
-console.log('>>> LOADING CASE API ROUTE');
-
 const logger = createLogger('api/cases');
 
 // Hierarchy Helper with Cycle Detection
@@ -193,10 +191,22 @@ export async function GET(request: Request) {
         const [cases, totalCount] = await Promise.all([
             prisma.case.findMany({
                 where,
-                include: {
-                    client: true,
-                    projects: { include: { project: true } },
+                // Slim projection — the list view and its client-side filters only read
+                // these fields. The Case model has 131 columns and Client 38; selecting
+                // every column for all ~1k rows produced a multi-MB payload that took
+                // ~20s+ to serialize and transfer. The selected shape (field names) is
+                // identical to before, so the page needs no changes.
+                select: {
+                    id: true,
+                    fileNumber: true,
+                    status: true,
+                    services: true,
+                    nextUpdate: true,
+                    updatedAt: true,
+                    createdAt: true,
+                    client: { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true } },
                     updatedBy: { select: { firstName: true, lastName: true } },
+                    projects: { select: { isPrimary: true, projectId: true, project: { select: { id: true, name: true } } } },
                 },
                 take: isNaN(take) ? 10000 : take,
                 skip: isNaN(skip) ? 0 : skip,
@@ -222,19 +232,11 @@ export async function GET(request: Request) {
             } catch (e) { return c; }
         });
 
-        // 6. Safe Serialization
-        const json = JSON.stringify(enriched, (key, value) => 
-            typeof value === 'bigint' ? value.toString() : 
-            (value && value.constructor && value.constructor.name === 'Decimal') ? value.toString() : 
-            value
-        );
-
-        return new Response(json, { 
-            status: 200, 
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-Total-Count': totalCount.toString()
-            } 
+        // 6. Serialization — slim projection contains only scalars/dates (no Decimal or
+        // bigint), so native serialization is safe and avoids the per-key replacer that
+        // previously blocked the event loop over the whole result tree.
+        return NextResponse.json(enriched, {
+            headers: { 'X-Total-Count': totalCount.toString() }
         });
     } catch (err: any) {
         const errorDetail = {
@@ -420,6 +422,15 @@ export async function POST(request: Request) {
                 logger.error(`❌ Case automation trigger failed for ${newCase.id}:`, err);
             });
         });
+
+        // Auto-provision a Credo consumer profile for the client(s) so every B2B/staff
+        // case has a portal login. Idempotent and never throws — cannot break case creation.
+        import('@zenowethu/shared-lib').then(({ provisionAndInviteConsumer }) => {
+            provisionAndInviteConsumer(client.id).then(res => {
+                if (res?.created) logger.info(`Credo profile provisioned for ${newCase.fileNumber} (client ${client.id})`);
+            });
+            if (jointClientId) provisionAndInviteConsumer(jointClientId);
+        }).catch(err => logger.error(`Credo provisioning failed for ${newCase.id}:`, err));
 
         // Notify assigned staff member (async, non-blocking)
         if (data.assignedToId && data.assignedToId !== session?.user?.id) {

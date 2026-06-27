@@ -1,7 +1,74 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-27 (Finance dropdown options invisible (white-on-white) fixed via global select option CSS; Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+> Last updated: 2026-06-27 (Credo: auto-provision a consumer profile for every B2B/staff case, ID-number-only login, real email password-reset flow, and staff↔consumer document requests with portal uploads visible on the case — schema migration applied to prod; 22 new shared-lib tests + register test rewrite, all green; tsc clean on credo & cases; redeploy cases + credo. Earlier same day: 20s+ load on All Cases / New Case fixed — root cause was payload over-fetch (all 131 Case + 38 Client columns × ~971 rows + custom JSON.stringify replacer); replaced with slim Prisma `select` projections on /api/cases and /api/projects memberOnly, native serialization — sidebar was always fast because it uses tiny count queries; redeploy cases to apply. Earlier same day: Slow "New Case" load fixed — /api/projects memberOnly path de-duplicated (7→~5 queries), O(n²)→O(n) tree walks, 15s per-user cache; dangerous P2024 $disconnect removed from shared Prisma client (multi-user cascade risk); PgBouncer still TODO for 20+ users; Finance dropdown options invisible (white-on-white) fixed via global select option CSS; Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### Added: Credo auto-provisioned profiles, ID-only login, real password reset, document requests (2026-06-27)
+
+**Goal:** Every case/referral loaded by B2B or staff should get a Credo consumer profile fed from the DB; staff can request documents from the consumer and see their uploads on the case; a real "forgot password" flow emails a reset link; the **ID number is the only username** (email/cell can be shared by different people); a profile can be claimed even before first login.
+
+**What was already working:** Credo register/login (email-first), consumer document upload + vault, dashboard reading `linkedClient`, ServiceRequest→Case conversion. Email was already non-unique (migration `20260625_remove_unique_email_consumer`).
+
+**What was broken/incomplete:** Case creation never created a `ConsumerAccount` (B2B/staff cases had no portal login); forgot-password was a fake `setTimeout` (no token, no email, no reset); login tried email first (email is not unique → ambiguous); registration blocked duplicate emails (conflicts with shared-email reality); consumer uploads were never surfaced in Cases; no "documents required" mechanism existed.
+
+**What changed:**
+- **Schema + migration** `20260627_credo_profiles_password_reset_doc_requests`: `ConsumerAccount.password` → nullable (auto-provisioned profiles have none until activation), added `activatedAt`, `source`; new `PasswordResetToken` (stores SHA-256 hash, single-use, 7-day TTL) and `DocumentRequest` (consumer + optional case, status `REQUESTED|UPLOADED|APPROVED|REJECTED`, links to fulfilling `CredoDocument`). **Applied to prod DB; client regenerated.**
+- **shared-lib `credo/`** (new module): `provisionConsumerForClient` (idempotent, ID-keyed), `provisionAndInviteConsumer` (provision + activation invite, never throws), `createPasswordResetTokenForConsumer`/`hashResetToken`, `requestPasswordReset` (no account enumeration), `validateResetToken`, `resetPasswordWithToken`. Added `sendTransactionalEmail` to the notification service (production GHL→SMTP path + monitoring BCC).
+- **Auto-provisioning** wired into case creation: `POST /api/cases` (+ joint client) and `POST /api/v1/cases` (B2B API).
+- **ID-only login:** `apps/credo/auth.ts` looks up by `idNumber` only and blocks login when password is null; login + forgot-password UIs now take a 13-digit ID.
+- **Forgot/reset password:** real APIs `POST /api/consumer/forgot-password`, `GET/POST /api/consumer/reset-password`; new `/reset-password` page (validates token, sets new password); forgot-password page wired to the API.
+- **Registration:** ID required + the sole uniqueness check; duplicate email allowed; an un-activated (auto-provisioned) profile is **claimed/activated** on register instead of rejected.
+- **Document requests:** `POST/GET /api/cases/[id]/document-requests` (staff raise/list, emails the consumer), `GET /api/cases/[id]/consumer-documents` (list + inline download of portal uploads); consumer upload route auto-fulfils a matching open request; `GET /api/consumer/document-requests` for the portal; "Documents required" panel on the Credo documents page; `ConsumerPortalPanel` on the Cases case-detail Documents tab.
+
+**Tests:** 22 new shared-lib unit tests (`credo/consumer-provisioning.test.ts`, `credo/password-reset.test.ts`) — **22/22 pass**; rewrote `apps/credo/.../register.test.ts` for the new model (ID-unique, shared email allowed, nullable password) — **5/5 pass**; full shared-lib `notifications`+`credo` suite **81/81 pass**.
+
+**Checks:** `tsc --noEmit` → credo **0 errors**, cases **0 errors**. Public auth pages verified in-browser (forgot-password → generic success, reset-password invalid-token state, login shows ID-only) with no console errors.
+
+**Remaining/manual:** Set `CREDO_URL` env (defaults to `https://credo.zenowethu.co.za`) for correct links in emails. Auto-provisioned clients with **no email on file** get a synthetic `@no-email` address and cannot self-activate until staff add a real email (by design). Credo app has no `test` script wired into `turbo test` (its integration tests hit the live DB) — left as-is. Redeploy `cases` and `credo`.
+
+---
+
+### Fixed: 20s+ load on all data pages — payload over-fetch (2026-06-27)
+
+**Symptom (post-deploy):** After deploying the query/cache fixes, **All Cases still took ~24s** and New Case ~20s, while the **sidebar timeline counts and Dashboard loaded instantly**. Key tell: pages returning *small* payloads were fast; pages returning *large* payloads were slow — so the DB connection was fine, the payloads were the problem.
+
+**Root cause:** Massive **column + relation over-fetch**, not the connection.
+- **`GET /api/cases`** ([apps/cases/app/api/cases/route.ts](apps/cases/app/api/cases/route.ts)) defaulted to `take=10000` and used `include: { client: true, projects: { include: { project: true } }, updatedBy }` — pulling **all 131 Case columns + all 38 Client columns** for every one of ~971 rows, then serializing the whole tree through a **custom per-key `JSON.stringify` replacer** (event-loop-blocking). The list page only reads ~10 case fields + 5 client fields and filters client-side, so >90% of the payload was wasted.
+- **`GET /api/projects?memberOnly=true`** (New Case dropdown) still returned full project objects with `members→user` joins, `_count`, `parent`, plus a separate `addActiveCaseCounts` groupBy — none of which the dropdown reads.
+
+**Fix (shape preserved — no page changes needed):**
+- `/api/cases`: replaced `include` with a **slim `select`** of exactly the fields the list + client-side filters use (`id, fileNumber, status, services, nextUpdate, updatedAt, createdAt`, `client{firstName,lastName,email,phone,idNumber}`, `updatedBy{firstName,lastName}`, `projects{isPrimary,projectId,project{id,name}}`). Replaced the custom replacer `JSON.stringify` with native `NextResponse.json` (slim set has no Decimal/bigint). Removed a stray module-load `console.log`.
+- `/api/projects` memberOnly branch: switched to a **slim `select`** (`id,name,type,clientType,parentId,referrer`, `children{id,name,type,clientType,referrer}`) and dropped the now-unneeded `addActiveCaseCounts` query.
+
+**Why the sidebar was always fast:** it issues tiny count/groupBy queries — confirms the bottleneck was payload volume + serialization, not connectivity or `auth()` (auth runs on the fast sidebar path too, so it was ruled out).
+
+**Checks:** `tsc --noEmit` (cases, 8 GB heap) → no errors. `vitest run` graph tests → 6/6 pass. *(Needs redeploy of **cases** to take effect; expect All Cases/New Case to drop from ~20s to low single digits.)*
+
+**Follow-up candidates:** other list endpoints likely share the over-fetch pattern (audit `/api/clients`, finance/legal lists when next touched); long-term, move All Cases to **server-side pagination + search** so the browser never downloads the full set. PgBouncer for 20+ concurrent users still outstanding (infra).
+
+---
+
+### Fixed: Slow "New Case" load + multi-user DB contention (2026-06-27)
+
+**Symptom:** `cases.zenowethu.co.za/cases/new` sat on "Loading…" for several seconds. Concern raised: what happens with ~20 staff connected concurrently to the same VPS PostgreSQL.
+
+**Root cause (load time):** The page blocks render on a single call — `GET /api/projects?memberOnly=true` ([apps/cases/app/(authenticated)/cases/new/page.tsx](apps/cases/app/(authenticated)/cases/new/page.tsx#L433)). For an admin with `memberOnly=true`, that endpoint ran **~7 sequential queries to the remote VPS DB**, including the `projectMember` membership query **twice** and a **full `Project` table scan twice**, plus two **O(n²)** ancestor/descendant walks done in JS (`Array.find`/`Array.filter` inside `while` loops). Heavy per-request debug `logger.info` object-building added more overhead.
+
+**Root cause (concurrency):** All staff share **one** Prisma pool (`connection_limit=10`) against PostgreSQL with **no PgBouncer**. Under 20 users the chatty endpoint drains the pool → `pool_timeout=30` queueing → `P2024`. Worse, the retry middleware called `client.$disconnect()` on the **shared global** client on P2024 — under concurrency that tears down connections other in-flight requests are using, turning one timeout into a **cascading failure** across all users.
+
+**Fix:**
+- Rewrote the `memberOnly` path in [apps/cases/app/api/projects/route.ts](apps/cases/app/api/projects/route.ts): per-request memoised loaders so memberships + the all-projects fetch each run **once** (7→~5 round-trips, two heaviest table scans collapse to one); replaced both O(n²) JS walks with **O(n)** index-map walks; removed per-request debug logging.
+- Extracted the pure walk helpers to [apps/cases/lib/project-graph.ts](apps/cases/lib/project-graph.ts) (`buildChildIndex`, `addAncestors`, `addDescendants`).
+- Added a **15s per-user in-memory cache** for the member-scoped tree, invalidated on project creation (POST).
+- Removed the dangerous `client.$disconnect()` on P2024 from [packages/database/src/index.ts](packages/database/src/index.ts) — backoff-only retry is correct for a shared client.
+
+**Tests:** 6 new Vitest unit tests in [apps/cases/lib/project-graph.test.ts](apps/cases/lib/project-graph.test.ts) (index build, ancestor/descendant walks, leaf no-ops, cycle-safety) — **6/6 passing**.
+
+**Checks:** `vitest run` on the new tests → 6 passed. `tsc --noEmit` (cases, 8 GB heap) → no errors in changed files. *(Default-heap typecheck OOMs — pre-existing whole-app issue, unrelated to this change.)*
+
+**Remaining (infra — not code):** The durable multi-user fix is **PgBouncer (transaction pooling)** in front of PostgreSQL on the VPS + standardising per-app `connection_limit` (currently inconsistent: cases/legal/insurance/forensic=10, finance/database-pkg=3). Requires a Dokploy/compose deploy — not done in this session.
 
 ---
 

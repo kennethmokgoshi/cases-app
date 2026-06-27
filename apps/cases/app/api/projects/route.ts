@@ -3,6 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { ProjectCreateSchema, parseBody } from '@/lib/schemas';
+import { buildChildIndex, addAncestors, addDescendants } from '@/lib/project-graph';
 import { z } from 'zod';
 
 const logger = createLogger('api/projects');
@@ -60,48 +61,6 @@ async function addActiveCaseCounts<T extends { id: string; _count?: any }>(proje
             cases: countMap.get(project.id) || 0
         }
     }));
-}
-
-// ---- Project graph helpers (O(n) tree walks via index maps) ----
-type RawProject = { id: string; parentId: string | null };
-
-function buildChildIndex(all: RawProject[]) {
-    const byId = new Map<string, RawProject>();
-    const childrenByParent = new Map<string, string[]>();
-    for (const p of all) {
-        byId.set(p.id, p);
-        if (p.parentId) {
-            const arr = childrenByParent.get(p.parentId);
-            if (arr) arr.push(p.id);
-            else childrenByParent.set(p.parentId, [p.id]);
-        }
-    }
-    return { byId, childrenByParent };
-}
-
-function addAncestors(rootIds: string[], byId: Map<string, RawProject>, into: Set<string>) {
-    const queue = [...rootIds];
-    while (queue.length > 0) {
-        const node = byId.get(queue.shift()!);
-        if (node?.parentId && !into.has(node.parentId)) {
-            into.add(node.parentId);
-            queue.push(node.parentId);
-        }
-    }
-}
-
-function addDescendants(rootIds: string[], childrenByParent: Map<string, string[]>, into: Set<string>) {
-    const queue = [...rootIds];
-    while (queue.length > 0) {
-        const children = childrenByParent.get(queue.shift()!);
-        if (!children) continue;
-        for (const childId of children) {
-            if (!into.has(childId)) {
-                into.add(childId);
-                queue.push(childId);
-            }
-        }
-    }
 }
 
 // Short-lived per-user cache for the member-scoped project tree. The hierarchy
@@ -279,13 +238,22 @@ export async function GET(request: NextRequest) {
                 memberProjectIds.push(...referrerAndAncestors);
             }
 
+            // Slim projection — the New Case dropdown (the only memberOnly consumer)
+            // reads just these fields. Dropping the members→user joins, _count and the
+            // separate case-count query cuts both the round-trips and the payload size.
             const myProjects = await prisma.project.findMany({
                 where: {
                     id: { in: memberProjectIds },
                     ...whereClause
                 },
-                include: {
-                    parent: true,
+                select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    clientType: true,
+                    parentId: true,
+                    // Linked referrer so case creation can auto-detect referrerId
+                    referrer: { select: { id: true, firstName: true, lastName: true } },
                     // Only include children that the user is also a member of
                     children: {
                         where: { id: { in: memberProjectIds } },
@@ -293,22 +261,15 @@ export async function GET(request: NextRequest) {
                             id: true,
                             name: true,
                             type: true,
-                            // Include linked referrer so case creation can auto-detect referrerId
+                            clientType: true,
                             referrer: { select: { id: true, firstName: true, lastName: true } },
                         }
                     },
-                    _count: { select: { children: true } },
-                    members: {
-                        include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } }
-                    },
-                    // Also include referrer on the top-level project itself
-                    referrer: { select: { id: true, firstName: true, lastName: true } },
                 },
                 orderBy: { name: 'asc' }
             });
 
-            const myProjectsWithCounts = await addActiveCaseCounts(myProjects);
-            const payload = { hierarchy: null, independent: myProjectsWithCounts };
+            const payload = { hierarchy: null, independent: myProjects };
             setCachedTree(cacheKey, payload);
             return NextResponse.json(payload);
         }
