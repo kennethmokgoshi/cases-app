@@ -351,7 +351,8 @@
       "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts.test\\)\\)\")",
       "Bash(node -e \"console.log\\('test script:', JSON.stringify\\(require\\('./package.json'\\).scripts.test\\)\\)\")",
       "Bash(npx eslint *)",
-      "Bash(echo \"=== exit $? ===\")"
+      "Bash(echo \"=== exit $? ===\")",
+      "Bash(pnpm --filter @zenowethu/shared-lib exec vitest run src/credo)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",
