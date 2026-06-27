@@ -1,4 +1,4 @@
-import { logger } from '@zenowethu/shared-lib';
+import { logger, allocateDocumentNumber } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { prisma, Prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
@@ -155,10 +155,7 @@ export async function POST(request: Request) {
 
   try {
     const invoice = await prisma.$transaction(async (tx) => {
-      const count = await tx.invoice.count({
-        where: { invoiceNumber: { startsWith: `${prefix}-${year}-` } } })
-      const seq = String(count + 1).padStart(4, '0')
-      const invoiceNumber = `${prefix}-${year}-${seq}`
+      const invoiceNumber = await allocateDocumentNumber(tx, prefix, year)
 
       return tx.invoice.create({
         data: {

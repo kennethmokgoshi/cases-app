@@ -1,7 +1,37 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-27 (Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+> Last updated: 2026-06-27 (Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### Fixed: "Invoice number conflict — please retry" across all apps (2026-06-27)
+
+**Symptom:** Creating a quotation/invoice (e.g. via the Cases "Create Quotation" modal) intermittently failed with `Invoice number conflict — please retry` (HTTP 409, Prisma `P2002`) — sometimes on a single click with no concurrency.
+
+**Root cause:** The 2026-06-24 atomic-sequence fix was only applied to `apps/finance`'s invoice route. The other apps (`cases`, `legal`, `insurance`, `forensic-audit`) **and Finance's own quote→invoice convert route** still used the legacy `invoice.count() + 1` scheme. This broke two ways:
+1. **Race** — concurrent requests saw the same count and generated the same number.
+2. **Divergence (the more common trigger)** — Finance allocated from the `DocumentSequence` table while the other apps counted rows of the *shared* Invoice table. The two schemes drifted (cancellations, Finance advancing its sequence), so `count + 1` landed on an already-existing number even with one user, one click.
+
+**Fix:**
+- New single source of truth: `allocateDocumentNumber(tx, prefix, year)` in [packages/shared-lib/src/finance/document-number.ts](packages/shared-lib/src/finance/document-number.ts) — atomic `DocumentSequence` upsert+increment, formatted `${prefix}-${year}-NNNN`. Exported from the shared-lib index.
+- All six allocation sites now call it: the invoice POST routes in `cases`, `finance`, `legal`, `insurance`, `forensic-audit`, plus the `finance` quote→invoice convert route. Finance's working numbering semantics (first issued number = `0002`) are preserved exactly to stay consistent with numbers already issued in production.
+- **Reconciliation migration** `20260627_reconcile_document_sequence` raises `DocumentSequence.nextSeq` to `MAX(existing number)` per `(prefix, year)`, so the divergence accumulated under the old scheme cannot cause the first atomic allocation to collide. Idempotent (`GREATEST`), safe to re-run.
+
+**Files changed:**
+- `packages/shared-lib/src/finance/document-number.ts` (new) + `document-number.test.ts` (new) + `src/index.ts` (export)
+- `apps/cases/app/api/finance/invoices/route.ts`
+- `apps/finance/app/api/finance/invoices/route.ts`
+- `apps/finance/app/api/finance/quotes/[id]/convert/route.ts`
+- `apps/legal/app/api/finance/invoices/route.ts`
+- `apps/insurance/app/api/finance/invoices/route.ts`
+- `apps/forensic-audit/app/api/finance/invoices/route.ts`
+
+**Migration added:** `packages/database/prisma/migrations/20260627_reconcile_document_sequence/migration.sql` — **must be applied with `prisma migrate deploy` before/at the deploy** of these route changes.
+
+**Tests:** `document-number.test.ts` — 5 passing (format, sequential increment, independent QUO/INV/year counters, 50-way concurrent uniqueness, >9999 padding). Typecheck clean for shared-lib (via consumers) + all five apps.
+
+**Remaining (noted, not fixed here):** case file numbers and insurance policy numbers in `*/api/.../create` and `*/policy` routes still use the same legacy `count()+1` pattern — same latent bug, separate numbering domain. Candidate for the same `allocateDocumentNumber` treatment in a follow-up.
 
 ---
 

@@ -34,6 +34,9 @@ export * from './ai/provider-client';
 
 export * from './metrics';
 
+// Finance — shared invoice/quotation number allocation (atomic, cross-app)
+export * from './finance/document-number';
+
 // Demo Data
 export * from './demo-data';
 

@@ -1,4 +1,4 @@
-import { logger } from '@zenowethu/shared-lib';
+import { logger, allocateDocumentNumber } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
 import { prisma, Prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
@@ -179,15 +179,7 @@ export async function POST(request: Request) {
 
   try {
     const invoice = await prisma.$transaction(async (tx) => {
-      // Atomically get and increment the sequence number for this prefix/year
-      const seq_record = await tx.documentSequence.upsert({
-        where: { prefix_year: { prefix, year } },
-        update: { nextSeq: { increment: 1 } },
-        create: { prefix, year, nextSeq: 2 }, // Start at 2 since we're returning 1
-      })
-
-      const seq = String(seq_record.nextSeq).padStart(4, '0')
-      const invoiceNumber = `${prefix}-${year}-${seq}`
+      const invoiceNumber = await allocateDocumentNumber(tx, prefix, year)
 
       return tx.invoice.create({
         data: {
