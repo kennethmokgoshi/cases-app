@@ -32,7 +32,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         const result = await recordDrrConsent({ token, ipAddress, userAgent });
         if (!result.ok) {
-            return NextResponse.json({ error: result.error }, { status: result.status });
+            return NextResponse.json(
+                { error: result.error ?? 'Unable to record consent.' },
+                { status: result.status ?? 400 },
+            );
         }
 
         logger.info('[DRR_CONSENT] Consent recorded', { token: token.slice(0, 8) + '…', alreadyConsented: result.alreadyConsented });

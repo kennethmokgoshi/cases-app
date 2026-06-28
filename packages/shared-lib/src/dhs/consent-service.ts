@@ -106,9 +106,17 @@ export async function getDrrConsentByToken(token: string): Promise<ConsentView |
     };
 }
 
-export type RecordConsentResult =
-    | { ok: true; alreadyConsented: boolean; caseId: string }
-    | { ok: false; error: string; status: number };
+export interface RecordConsentResult {
+    ok: boolean;
+    /** Set when ok: true — whether the token had already been consented (idempotent re-submit). */
+    alreadyConsented?: boolean;
+    /** Set when ok: true. */
+    caseId?: string;
+    /** Set when ok: false. */
+    error?: string;
+    /** HTTP status to return when ok: false. */
+    status?: number;
+}
 
 /**
  * Record the consumer's consent against a token, capturing IP + user-agent for the

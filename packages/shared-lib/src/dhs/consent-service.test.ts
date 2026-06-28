@@ -21,7 +21,7 @@ import {
     type RecordConsentResult,
 } from './consent-service';
 
-type ConsentFailure = Extract<RecordConsentResult, { ok: false }>;
+type ConsentFailure = RecordConsentResult & { status: number };
 
 const drr = prisma.debtReviewRemovalConsent as unknown as {
     findFirst: ReturnType<typeof vi.fn>;
