@@ -16,6 +16,7 @@ export const DHS_CONFIG = {
     loginUrl: 'https://www.ncrdebthelp.co.za/dhs_Login.aspx',
     manageTransfersUrl: 'https://www.ncrdebthelp.co.za/dhs_ManageRequestTransfers.aspx',
     requestTransferUrl: 'https://www.ncrdebthelp.co.za/dhs_RequestNewTransfer.aspx',
+    searchManageConsumerUrl: 'https://www.ncrdebthelp.co.za/dhs_SearchManageConsumer.aspx',
     timeout: 60000  // Increased to 60 seconds for slow DHS responses
 };
 

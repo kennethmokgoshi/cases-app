@@ -425,12 +425,15 @@ export async function POST(request: Request) {
 
         // Auto-provision a Credo consumer profile for the client(s) so every B2B/staff
         // case has a portal login. Idempotent and never throws — cannot break case creation.
-        import('@zenowethu/shared-lib').then(({ provisionAndInviteConsumer }) => {
-            provisionAndInviteConsumer(client.id).then(res => {
+        // NOTE: do NOT email an activation invite here. The account is created without a
+        // password; the consumer receives the "set your password" link only when they
+        // request a password reset (requestPasswordReset / forgot-password flow).
+        import('@zenowethu/shared-lib').then(({ provisionConsumerForClient }) => {
+            provisionConsumerForClient(client.id).then(res => {
                 if (res?.created) logger.info(`Credo profile provisioned for ${newCase.fileNumber} (client ${client.id})`);
-            });
-            if (jointClientId) provisionAndInviteConsumer(jointClientId);
-        }).catch(err => logger.error(`Credo provisioning failed for ${newCase.id}:`, err));
+            }).catch(err => logger.error(`Credo provisioning failed for ${newCase.id}:`, err));
+            if (jointClientId) provisionConsumerForClient(jointClientId).catch(err => logger.error(`Credo provisioning failed for joint client on ${newCase.id}:`, err));
+        }).catch(err => logger.error(`Credo provisioning import failed for ${newCase.id}:`, err));
 
         // Notify assigned staff member (async, non-blocking)
         if (data.assignedToId && data.assignedToId !== session?.user?.id) {

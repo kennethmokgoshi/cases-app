@@ -24,3 +24,24 @@ export { lookupDCFromNCR, resolveDCEmail } from './ncr-lookup';
 export type { NCRDCLookupResult, DCEmailResolution } from './ncr-lookup';
 export { handleDHSDecline, classifyDeclineReason, extractEmailFromReason } from './decline-handler';
 export type { DeclineCategory, DeclineHandlerResult } from './decline-handler';
+export {
+    getConsumerStatusHistory,
+    evaluateConsumerClearance,
+    parseStatusHistoryRows,
+    parseDhsDate,
+    daysSinceCalendar,
+    classifyClearanceWorkflowStatus,
+    isClearanceEligibleCode,
+    isAcceptedViaDhsCode,
+    normalizeStatusCode,
+    CLEARANCE_ELIGIBLE_CODES,
+    CLEARANCE_READY_WINDOW_DAYS,
+    ACCEPTED_VIA_DHS_CODES,
+} from './status-history';
+export type {
+    StatusHistoryEntry,
+    ClearanceEvaluation,
+    ClearanceEligibleCode,
+    AcceptedViaDhsCode,
+    ConsumerStatusHistoryResult,
+} from './status-history';

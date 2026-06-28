@@ -199,8 +199,10 @@ export async function POST(request: Request) {
         });
 
         // Auto-provision a Credo consumer profile (idempotent, never throws).
-        import('@zenowethu/shared-lib').then(({ provisionAndInviteConsumer }) => {
-            provisionAndInviteConsumer(existingClient!.id);
+        // No activation email is sent here — the consumer gets the "set your password"
+        // link only via the password-reset / forgot-password flow.
+        import('@zenowethu/shared-lib').then(({ provisionConsumerForClient }) => {
+            provisionConsumerForClient(existingClient!.id);
         }).catch(err => logger.error(`Credo provisioning failed for ${newCase.id}:`, err));
 
         return apiSuccess({

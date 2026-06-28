@@ -154,6 +154,7 @@ model Client {
   payments            Payment[]
   automationRuns      AutomationRun[]
   poaSigningRequests  PoaSigningRequest[]
+  drrConsents         DebtReviewRemovalConsent[]
   debitOrderMandates  DebitOrderMandate[]
   paymentArrangements PaymentArrangement[]
 }
@@ -326,6 +327,7 @@ model Case {
   appNextUpdates          CaseAppNextUpdate[]
   paymentArrangements     PaymentArrangement[]
   documentRequests        DocumentRequest[]
+  drrConsents             DebtReviewRemovalConsent[]
 
   debtCounsellordId String?
   debtCounsellor    DebtCounsellor? @relation(fields: [debtCounsellordId], references: [id])
@@ -995,6 +997,7 @@ model ConsumerAccount {
   subscriptions        CredoSubscription[]
   activeSubscription   CredoSubscription?  @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
   poaSigningRequests   PoaSigningRequest[]
+  drrConsents          DebtReviewRemovalConsent[]
   otpSession           CredoOtpSession?
   passwordResetTokens  PasswordResetToken[]
   documentRequests     DocumentRequest[]
@@ -1868,6 +1871,37 @@ model PoaSigningRequest {
   updatedAt     DateTime  @updatedAt
 
   case     Case?            @relation(fields: [caseId], references: [id])
+  client   Client?          @relation(fields: [clientId], references: [id])
+  consumer ConsumerAccount? @relation(fields: [consumerId], references: [id])
+
+  @@index([token])
+  @@index([caseId])
+  @@index([clientId])
+  @@index([consumerId])
+  @@index([status])
+}
+
+/// Consumer consent to proceed with debt review removal, captured via a unique
+/// public link sent after a file is Accepted via DHS (status codes A/C/D3/D4).
+/// Granting consent fires the onDebtReviewRemovalConsent() hook (extension point).
+model DebtReviewRemovalConsent {
+  id          String    @id @default(cuid())
+  token       String    @unique @default(cuid())
+  status      String    @default("PENDING") // PENDING | CONSENTED | EXPIRED | CANCELLED
+  channel     String    @default("EMAIL") // EMAIL | WHATSAPP | CREDO
+  caseId      String
+  clientId    String?
+  consumerId  String?
+  expiresAt   DateTime
+  consentedAt DateTime?
+  ipAddress   String? // captured at consent for POPIA / ECTA audit trail
+  userAgent   String?
+  consentText String? // snapshot of the exact wording the consumer agreed to
+  triggeredAt DateTime? // when the post-consent hook fired (set by the trigger)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  case     Case             @relation(fields: [caseId], references: [id])
   client   Client?          @relation(fields: [clientId], references: [id])
   consumer ConsumerAccount? @relation(fields: [consumerId], references: [id])
 

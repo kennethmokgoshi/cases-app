@@ -915,3 +915,22 @@ ${SIGNATURE}`;
 function buildResubmitSms(p: { clientFirstName: string }): string {
     return `Hi ${p.clientFirstName}, your DC's DHS response indicates a temporary delay on your file transfer. We will resubmit within 5–7 working days. No action needed from you. — Zenowethu (012 035 1824)`;
 }
+
+// ─── Shared exports ───────────────────────────────────────────────────────────
+// Re-exported so the read-only preview path (decline-preview.ts) renders the
+// EXACT same copy that handleDHSDecline() sends — a single source of truth for
+// every email/SMS body. Do not duplicate these templates elsewhere.
+export {
+    SIGNATURE,
+    buildSendDocsEmail,
+    buildSendDocsSms,
+    buildConsumerConsentEmail,
+    buildConsentSms,
+    buildOutstandingFeesEmail,
+    buildFeesSms,
+    buildAttorneyEmail,
+    buildAttorneyClientEmail,
+    buildAttorneySms,
+    buildResubmitClientEmail,
+    buildResubmitSms,
+};

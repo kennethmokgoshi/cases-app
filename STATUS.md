@@ -1,7 +1,89 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-06-27 (Credo: auto-provision a consumer profile for every B2B/staff case, ID-number-only login, real email password-reset flow, and staff↔consumer document requests with portal uploads visible on the case — schema migration applied to prod; 22 new shared-lib tests + register test rewrite, all green; tsc clean on credo & cases; redeploy cases + credo. Earlier same day: 20s+ load on All Cases / New Case fixed — root cause was payload over-fetch (all 131 Case + 38 Client columns × ~971 rows + custom JSON.stringify replacer); replaced with slim Prisma `select` projections on /api/cases and /api/projects memberOnly, native serialization — sidebar was always fast because it uses tiny count queries; redeploy cases to apply. Earlier same day: Slow "New Case" load fixed — /api/projects memberOnly path de-duplicated (7→~5 queries), O(n²)→O(n) tree walks, 15s per-user cache; dangerous P2024 $disconnect removed from shared Prisma client (multi-user cascade risk); PgBouncer still TODO for 20+ users; Finance dropdown options invisible (white-on-white) fixed via global select option CSS; Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+> Last updated: 2026-06-28 (Credo activation email NO LONGER sent on case/referral creation — profile still auto-created with no password; consumer gets the "set your password" link only via the forgot-password/reset flow. Both `apps/cases/app/api/cases/route.ts` and `.../api/v1/cases/route.ts` now call `provisionConsumerForClient` instead of `provisionAndInviteConsumer`; tsc clean, 22 credo tests green. Earlier same day: Accepted-via-DHS consumer flow + debt review removal CONSENT LINK: new `accepted-email.ts` (consumer "transfer accepted, we'll start flag removal" email — compliance-safe, embeds consent link) and a full token-based consent capture — new `DebtReviewRemovalConsent` model + migration `20260628_debt_review_removal_consent` (NOT yet applied to prod), `consent-service.ts` (create link / record consent with POPIA+IP audit trail / idempotent), public page `/consent/debt-review-removal/[token]` + API, and an `onDebtReviewRemovalConsent()` **extension-point hook** (fires once on consent — downstream action TBD by business). Scope locked to accepted codes A/C/D3/D4. Also ran a LIVE read-only DHS check on the 7 overdue REQUESTED_VIA_DHS files — 3 ACCEPTED (codes B/G→Completed), 4 "declined" but mostly false/under-review (one DC text literally says "accepted"). 15+ new tests, dhs suite 91 green, tsc clean. Earlier: DHS consumer status-history clearance detection: new `packages/shared-lib/src/dhs/status-history.ts` reads the *View Consumer Status History* popup and identifies clearance-eligible codes **A1/B/F1/F2/G/G1**, then classifies workflow status from the status date — **<7 calendar days → READY_CLEARANCE, ≥7 → COMPLETED** (stops at COMPLETED; SETTLED is a later finance step), and maps accepted codes **A/C/D3/D4 → ACCEPTED_VIA_DHS**. Detection only — no case mutation yet; building block for the clearance automation. Pure helpers + read-only Puppeteer scraper `getConsumerStatusHistory(idNumber)`, **live-verified** against two real IDs; 27 tests green, tsc clean. Earlier same day: Requested-via-DHS follow-up automation: new dry-run-capable cron `/api/cron/dhs-requested-followup` + shared-lib trigger for OVERDUE Debt Review Flag Removal files in status `REQUESTED_VIA_DHS` only — deliberately excludes the `DHS_REQUESTED` look-alike (separate automation later). Re-checks DHS and routes ACCEPTED→`ACCEPTED_VIA_DHS` / DECLINED→existing `handleDHSDecline` / PENDING→nextUpdate+3d. New read-only `previewDHSDecline` renders the exact decline emails/SMS via shared templates; `?dryRun=true` sends nothing and writes nothing. Ran dry-run against all 7 live cohort files — 0 sends, 0 writes. 12 new tests, 49/49 dhs tests green, tsc clean. Also confirmed BCC monitoring (`notifications@zenowethu.co.za`) IS working on the live SMTP path (live test delivered); latent bug logged — GHL API provider `GhlEmailProvider` drops BCC if GHL is ever re-enabled. Earlier same day: Credo: auto-provision a consumer profile for every B2B/staff case, ID-number-only login, real email password-reset flow, and staff↔consumer document requests with portal uploads visible on the case — schema migration applied to prod; 22 new shared-lib tests + register test rewrite, all green; tsc clean on credo & cases; redeploy cases + credo. Earlier same day: 20s+ load on All Cases / New Case fixed — root cause was payload over-fetch (all 131 Case + 38 Client columns × ~971 rows + custom JSON.stringify replacer); replaced with slim Prisma `select` projections on /api/cases and /api/projects memberOnly, native serialization — sidebar was always fast because it uses tiny count queries; redeploy cases to apply. Earlier same day: Slow "New Case" load fixed — /api/projects memberOnly path de-duplicated (7→~5 queries), O(n²)→O(n) tree walks, 15s per-user cache; dangerous P2024 $disconnect removed from shared Prisma client (multi-user cascade risk); PgBouncer still TODO for 20+ users; Finance dropdown options invisible (white-on-white) fixed via global select option CSS; Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### Changed: Credo activation email no longer sent on case/referral creation (2026-06-28)
+
+**Goal (user request):** When a case or referral is created we should still auto-create the Credo profile, but **must not** email the consumer the "Activate your Credo profile — set your password" invite at that point. The set-password link should reach the consumer **only when they request a password reset** (forgot-password flow).
+
+**What changed:**
+- **`apps/cases/app/api/cases/route.ts`** — case-creation flow now calls `provisionConsumerForClient(...)` (provision only, no email) instead of `provisionAndInviteConsumer(...)`, for both the primary and joint client. Added per-call `.catch` error logging.
+- **`apps/cases/app/api/v1/cases/route.ts`** — API case-creation flow switched the same way.
+- The profile is still created with **no password**; `requestPasswordReset()` (Credo forgot-password) already handles these auto-provisioned, no-password accounts and sends the "set or reset your password" link on demand — so the activation path is preserved, just deferred to user request.
+
+**Left in place (now unused by creation flows):** `provisionAndInviteConsumer()` and `sendActivationInvite()` in `packages/shared-lib/src/credo/consumer-provisioning.ts` remain exported/tested but are no longer wired into case creation. Kept intentionally as utilities; can be removed later if confirmed dead.
+
+**Checks:** `tsc --noEmit` on cases → 0 errors; shared-lib credo tests 22/22 green.
+
+---
+
+### Added: DHS consumer status-history clearance detection (A1/B/F1/F2/G/G1) (2026-06-27)
+
+**Goal:** Be able to **identify** — from the DHS *View Consumer Status History* popup — when a Debt Review Flag Removal consumer is **out of debt review** and therefore eligible for clearance, and classify the resulting workflow status. Building block for a future clearance automation (no case mutation yet, by explicit request).
+
+**Business logic (confirmed with user):**
+- Mapping is based on the consumer's **current (most recent)** status code from the *View Consumer Status History* popup.
+- **Clearance codes A1, B, F1, F2, G, G1** (out of debt review; e.g. `G` = "Magistrate rescinded the court order / declared not over-indebted — Option C on Form 17.W"): from the status date, **< 7 calendar days → `READY_CLEARANCE`**, **≥ 7 days → `COMPLETED`**.
+- **Accepted codes A, C, D3, D4** (active debt review / transfer accepted) → **`ACCEPTED_VIA_DHS`** (added 2026-06-27 per user). The two code sets are disjoint.
+- Stops at `COMPLETED` (not `SETTLED`) on purpose — no finance integration yet; settlement is a later finance + DHS reconciliation step.
+- Both `READY_CLEARANCE` ("Ready for Clearance", SLA 7d) and `COMPLETED` ("Completed", SLA 2d) **already exist** in `statuses.ts` — this only detects/classifies, it does not add statuses.
+
+**What changed:**
+- **`packages/shared-lib/src/dhs/status-history.ts`** (new): pure, unit-testable helpers — `normalizeStatusCode`, `isClearanceEligibleCode`, `parseDhsDate`, `daysSinceCalendar`, `classifyClearanceWorkflowStatus`, `parseStatusHistoryRows`, `evaluateConsumerClearance` — plus the live read-only Puppeteer scraper `getConsumerStatusHistory(idNumber)` (login → Search & Manage Consumer → Apply Filter → open status-history popup → parse `CODE | STATUS DESCRIPTION | STATUS DATE`). Exposes `CLEARANCE_ELIGIBLE_CODES` and `CLEARANCE_READY_WINDOW_DAYS` constants.
+- **`packages/shared-lib/src/dhs/browser.ts`**: added `searchManageConsumerUrl` (dhs_SearchManageConsumer.aspx) to `DHS_CONFIG`.
+- **`packages/shared-lib/src/dhs/index.ts`**: re-exported the new functions/types.
+
+**Tests:** 27 (`dhs/status-history.test.ts`) — all pass; includes the exact 3-row popup from the user's screenshot, the 7-day boundary, all six clearance codes, the four accepted codes → `ACCEPTED_VIA_DHS`, set-disjointness, "most recent status wins", unrecognised-code → null, and unparseable-date handling. `tsc --noEmit` on shared-lib clean.
+
+**LIVE-VERIFIED (2026-06-27):** Ran the real scraper against ID `7902010427086` (Noluthando Sulupa, NCR Ref 2095500). Login via DB creds (`NCRDC3693`) succeeded; popup parsed correctly → current code **G**, status date **2025-10-20**, 250 days ago → **COMPLETED**. Matched the portal screenshot exactly.
+
+**Scraper fix during verification:** the first live run parsed 0 rows even though the popup rendered — DHS splits the column headers from the data rows (and the modal can be a separate frame), so matching on the "STATUS DESCRIPTION" header text failed. Replaced `readStatusHistoryTable()` with a **content-based, frame-aware** harvester: across `page.frames()`, keep any row that has BOTH a date cell and a long (>30 char) description cell. Also added a poll (10×1.5s) for the AJAX modal. Pure parsing/classification logic was unchanged (still 22/22).
+
+**Remaining/manual:** Next step is the **clearance automation** that consumes `evaluateConsumerClearance()` to set `READY_CLEARANCE`/`COMPLETED` on a cohort (mirroring the dry-run pattern of the Requested-via-DHS follow-up). **AI Debt Review Removal trigger still outstanding.**
+
+---
+
+### Added: Accepted-via-DHS consumer email + Debt Review Removal consent link (2026-06-28)
+
+**Goal:** When "check request status" finds a file **Accepted via DHS** (consumer status codes **A/C/D3/D4**), notify the consumer that the transfer was accepted and we are starting flag removal — and capture their **consent** to proceed via a unique link. Consent must trigger a downstream action (to be defined by the business later).
+
+**What changed:**
+- **`packages/shared-lib/src/dhs/accepted-email.ts`** (new): `buildAcceptedViaDhsEmail({ clientFirstName, fileNumber, consentLink })` + `ACCEPTED_VIA_DHS_SUBJECT`. Confirms acceptance, asks for consent (CTA link), explains flag removal — **no guarantees / no fixed timeline** (compliance). Reuses the shared `SIGNATURE`.
+- **`DebtReviewRemovalConsent` model** + migration `20260628_debt_review_removal_consent` — token (unique), status `PENDING|CONSENTED|EXPIRED|CANCELLED`, channel, case/client/consumer FKs, expiresAt (30d), consentedAt, **ipAddress/userAgent** (POPIA/ECTA audit), `consentText` snapshot, `triggeredAt`. **⚠️ Migration NOT yet applied to prod** (deliberate — apply with `prisma migrate deploy` when ready).
+- **`packages/shared-lib/src/dhs/consent-service.ts`** (new): `createDrrConsentRequest` (reuses an existing un-expired PENDING link), `buildConsentLink`, `getDrrConsentByToken` (sanitised view), `recordDrrConsent` (idempotent, captures IP/UA, then fires hook), and **`onDebtReviewRemovalConsent()` — the EXTENSION POINT** that currently only logs + stamps `triggeredAt`. `DRR_CONSENT_TEXT` holds the exact POPIA-compliant wording.
+- **Public consent page** `apps/cases/app/consent/debt-review-removal/[token]/page.tsx` (brand-styled, loading/error/expired/already-consented/success states, consent checkbox + gated button) and **public API** `apps/cases/app/api/consent/debt-review-removal/[token]/route.ts` (GET details, POST records consent — token IS the credential, same model as POA signing).
+- **BCC:** the accepted email (and all consent comms) ride the production SMTP path with the monitoring BCC to `notifications@zenowethu.co.za`.
+
+**Live read-only DHS check (7 overdue REQUESTED_VIA_DHS files):** 3 ACCEPTED → codes **B/G → Completed** (096, 209, 216); 4 "declined" but **mostly not real declines** — 148/153 DebtBusters "under review (Form 17.7 received, allow 3–7 days)", 206 a **false decline** (DC text says "accepted and processed"), 210 needs a transfer-request email to a specific inbox. Confirms the cohort's `REQUESTED_VIA_DHS` status is stale and the decline classifier needs "under review"/Form 17.7/"accepted" handling before any live decline-send.
+
+**Tests:** `accepted-email.test.ts` (6), `consent-service.test.ts` (9) — all pass; full `dhs` suite **91/91**; `tsc --noEmit` shared-lib clean. Prisma client regenerated (new model types present).
+
+**Remaining/manual:** Apply the migration to prod (`prisma migrate deploy`) before the consent flow can run live. Wire the accepted email + consent link into the trigger's ACCEPTED branch (behind dry-run). Define what `onDebtReviewRemovalConsent()` should trigger. **AI Debt Review Removal trigger still outstanding.**
+
+---
+
+### Added: Requested-via-DHS follow-up automation (dry-run-capable) (2026-06-27)
+
+**Goal:** Automatically work the backlog of **OVERDUE** Debt Review Flag Removal files sitting in **`REQUESTED_VIA_DHS`** — re-check the DHS transfer outcome and act on it — with a **dry-run preview** so staff can see exactly which emails would be sent before going live. By explicit request this covers **only** `REQUESTED_VIA_DHS` and **excludes** the look-alike `DHS_REQUESTED` (a separate automation will cover that later).
+
+**Cohort (verified against live DB):** `deletedAt: null AND isOverdue: true AND services contains 'debt_review_flag_removal' AND status = 'REQUESTED_VIA_DHS'` → **7 files** (the `DHS_REQUESTED` variant is another 16; combined would be 23).
+
+**Data finding (`DHS_REQUESTED`):** `DHS_REQUESTED` is written to cases (32 live) but is **not defined in `statuses.ts`** (no name/SLA/category) — an orphan status. Worth merging into `REQUESTED_VIA_DHS` or formally adding it. The follow-up automation's status filter is the single switch that will later include it.
+
+**What changed:**
+- **`packages/shared-lib/src/dhs-requested-followup/trigger.ts`** (new): `runRequestedViaDhsFollowup({ dryRun, limit })` + `getRequestedViaDhsCohort()`. Live path: `checkTransferStatus()` per file → ACCEPTED/AUTO_TRANSFERRED→`updateCaseStatus('ACCEPTED_VIA_DHS')`; DECLINED→existing `handleDHSDecline()`; PENDING→`setNextUpdate(+3d)` + comment; NOT_LINKED/NOT_REQUESTED→comment for staff. `dryRun` does **no** DHS check, **no** sends, **no** writes.
+- **`packages/shared-lib/src/dhs/decline-preview.ts`** (new): read-only `previewDHSDecline()` that mirrors `handleDHSDecline` routing and renders the **exact** email/SMS bodies by reusing the now-exported template builders from `decline-handler.ts` (single source of truth — no copy drift).
+- **`packages/shared-lib/src/dhs/decline-handler.ts`**: exported the email/SMS template builders + `SIGNATURE` (additive; no behaviour change).
+- **`apps/cases/app/api/cron/dhs-requested-followup/route.ts`** (new): cron (x-cron-secret) or admin-session; `?dryRun=true` / `?limit=N`; logs an `AutomationRun` (`DHS_REQUESTED_FOLLOWUP`) on live runs only.
+
+**Ran now (dry-run, live DB):** all **7** files previewed, **0 emails sent, 0 DB writes**. Surfaced two data issues to fix before a live run: (a) **3 of 7 files have no DC email** (decline → would stall at `REJECTED_EMAIL_DOCS`); (b) some files have `debtCounsellorName = "Aaron Nzotho"` (our own signatory) while the DC email is an external address, so the decline email would greet the external DC as "Aaron Nzotho"; and some `client.email` values look like staff addresses being CC'd.
+
+**Tests:** 12 new (`dhs/decline-preview.test.ts` 6, `dhs-requested-followup/trigger.test.ts` 6) — all pass; full `dhs` suite **49/49** green; `tsc --noEmit` on shared-lib clean for the new files.
+
+**Remaining/manual:** Live run is intentionally NOT executed yet (awaiting sign-off + DC-email/data cleanup). Add the cron schedule (suggested `0 9 * * 1-5`) in the deploy cron config with `x-cron-secret`. Note GHL is disabled, so DHS Puppeteer + SMTP are the live paths; the live run needs DHS portal creds + a browser on the host. **AI Debt Review Removal trigger still outstanding.**
 
 ---
 
