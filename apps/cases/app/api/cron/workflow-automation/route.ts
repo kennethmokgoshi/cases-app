@@ -45,7 +45,7 @@ import {
     hasPriorDHSAttempt,
     type OverdueCase,
 } from '@zenowethu/shared-lib/src/automation/workflow-engine';
-import { checkTransferStatus, requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
+import { checkTransferStatus, requestTransfer, closeBrowser, handleDhsAccepted } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { sendManualMessage } from '@zenowethu/shared-lib/src/notifications/service';
 
@@ -100,6 +100,12 @@ export async function POST(request: Request) {
                 await prisma.case.update({ where: { id: c.id }, data: { nextUpdate: null } });
             }
             await addSystemComment(c.id, `[AUTO] New Lead DHS Check. ${comment}.${newStatus === 'NOT_REQUESTED_VIA_DHS' ? ' Proceeding to DHS request immediately.' : ' Next update +3 working days.'}`, adminId);
+            // Accepted via DHS → notify consumer + request debt-review-removal consent
+            if (newStatus === 'ACCEPTED_VIA_DHS') {
+                await handleDhsAccepted({ caseId: c.id, triggeredByUserId: adminId }).catch((err) =>
+                    logger.error(`[NEW_LEAD] Accepted handler failed for ${c.fileNumber} (non-fatal):`, err)
+                );
+            }
             return { actioned: true, comment };
         });
 
@@ -166,6 +172,12 @@ export async function POST(request: Request) {
 
             await updateCaseStatus(c.id, newStatus, adminId);
             await addSystemComment(c.id, `[AUTO] Requested via DHS Check. ${comment}. Next update +3 working days.`, adminId);
+            // Accepted via DHS → notify consumer + request debt-review-removal consent
+            if (newStatus === 'ACCEPTED_VIA_DHS') {
+                await handleDhsAccepted({ caseId: c.id, triggeredByUserId: adminId }).catch((err) =>
+                    logger.error(`[REQUESTED_VIA_DHS] Accepted handler failed for ${c.fileNumber} (non-fatal):`, err)
+                );
+            }
             return { actioned: true, comment };
         });
 

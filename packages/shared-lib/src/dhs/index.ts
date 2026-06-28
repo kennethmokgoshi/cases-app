@@ -24,6 +24,20 @@ export { lookupDCFromNCR, resolveDCEmail } from './ncr-lookup';
 export type { NCRDCLookupResult, DCEmailResolution } from './ncr-lookup';
 export { handleDHSDecline, classifyDeclineReason, extractEmailFromReason } from './decline-handler';
 export type { DeclineCategory, DeclineHandlerResult } from './decline-handler';
+export { handleDhsAccepted } from './accepted-handler';
+export type { AcceptedHandlerResult } from './accepted-handler';
+export { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT } from './accepted-email';
+export {
+    createDrrConsentRequest,
+    buildConsentLink,
+    getConsentBaseUrl,
+    getDrrConsentByToken,
+    recordDrrConsent,
+    onDebtReviewRemovalConsent,
+    DRR_CONSENT_TEXT,
+    CONSENT_EXPIRY_DAYS,
+} from './consent-service';
+export type { CreateConsentResult, ConsentView, RecordConsentResult } from './consent-service';
 export {
     getConsumerStatusHistory,
     evaluateConsumerClearance,

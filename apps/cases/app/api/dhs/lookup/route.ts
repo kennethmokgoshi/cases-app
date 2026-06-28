@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, renderTemplate, auth } from '@zenowethu/shared-lib';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline } from '@zenowethu/shared-lib/src/dhs';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
 import path, { join } from 'path';
@@ -336,6 +336,30 @@ export async function POST(request: Request) {
                         (result as any).declineErrors = declineResult.errors;
                     } catch (handlerErr) {
                         logger.error('[DHS Lookup] Decline handler threw an error (non-fatal):', handlerErr);
+                    }
+                }
+
+                // ── Auto-notify consumer when Accepted via DHS ──────────────
+                // When the file is ACCEPTED (or auto-transferred), it is now formally
+                // with us. Email the consumer to confirm and ask for their consent to
+                // begin debt review removal. Self-deduping — safe on repeat checks.
+                if (result.status === 'ACCEPTED' || result.status === 'AUTO_TRANSFERRED') {
+                    logger.info('[DHS Lookup] Firing accepted handler (consumer acceptance + consent email)');
+                    try {
+                        const acceptedResult = await handleDhsAccepted({
+                            caseId,
+                            triggeredByUserId: actingUserId,
+                        });
+                        logger.info('[DHS Lookup] Accepted handler result:', {
+                            emailSent: acceptedResult.emailSent,
+                            skipped: acceptedResult.skipped,
+                            errors: acceptedResult.errors,
+                        });
+                        (result as any).acceptedEmailSent = acceptedResult.emailSent;
+                        (result as any).acceptedEmailSkipped = acceptedResult.skipped;
+                        (result as any).acceptedErrors = acceptedResult.errors;
+                    } catch (handlerErr) {
+                        logger.error('[DHS Lookup] Accepted handler threw an error (non-fatal):', handlerErr);
                     }
                 }
             }

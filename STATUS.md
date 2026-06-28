@@ -5,6 +5,40 @@
 
 ---
 
+### Fixed: Duplicate-ID modal showed truncated project name ("June" instead of "Letsatsi Mbombela June 2026") (2026-06-28)
+
+**Symptom (user-reported):** Recording a referral for an ID already on file pops the "Duplicate ID Number Detected" modal, but the **Project** line showed only the leaf node name (e.g. `June`) instead of the full hierarchical project name shown on the case detail view (`Letsatsi Mbombela June 2026`).
+
+**Root cause:** Projects are a tree (source › branch › year › month); each row stores only its leaf `name`. The case detail view derives the readable label by walking up the parent chain, but the duplicate-detection API branches only selected `project.name`. So the modal got `"June"`.
+
+**What changed:**
+- **`apps/cases/lib/project-path.ts`** (new): `buildProjectDisplayName(projectId, projects)` — pure helper that walks the parent chain and re-orders parts as `source branch month year` (e.g. `"Letsatsi Mbombela June 2026"`), normalising `Letsatsi*` variants and stripping `My Cases` noise. Cycle-safe.
+- **`apps/cases/app/api/cases/[id]/route.ts`** — `DUPLICATE_ID_NUMBER` branch (the path feeding the screenshot's modal) now resolves the full path via the helper.
+- **`apps/cases/app/api/cases/route.ts`** — `DUPLICATE_CASE` branch (POST) now does the same, replacing the bare `project.name`.
+
+**Tests:** `apps/cases/lib/project-path.test.ts` (5, new) — full-path build, ordering, Letsatsi/`My Cases` normalisation, missing-id → empty, cyclic-chain safety. All green. `tsc --noEmit` on cases → 0 errors.
+
+---
+
+### Fixed: Accepted-via-DHS consumer email was never being sent — now wired (2026-06-28)
+
+**Symptom (user-reported):** After "Check Request Status" returned **C** (Accepted) on DHS, the workflow status updated to `ACCEPTED_VIA_DHS` but **no email reached the consumer** with the "your transfer was accepted — please consent" link.
+
+**Root cause:** The acceptance email builder (`accepted-email.ts`) and the consent service (`consent-service.ts`) were built on 2026-06-28 but **never wired into any runtime path** — they were referenced only by their own tests and STATUS.md (the prior entry literally logged "Wire the accepted email + consent link into the trigger's ACCEPTED branch" as a remaining item). They weren't even exported from `dhs/index.ts`. So the ACCEPTED branch in `/api/dhs/lookup` (Rule 9) only updated status + created an in-app admin notification — it never emailed the consumer.
+
+**What changed:**
+- **`packages/shared-lib/src/dhs/accepted-handler.ts`** (new): `handleDhsAccepted({ caseId, triggeredByUserId })` — creates a debt-review-removal consent request (token + secure link), emails the consumer the acceptance + consent email, comments the case. **Self-deduping** (skips if a live PENDING/CONSENTED consent already exists, so repeat status checks don't re-email). On email-send failure it **rolls the consent request back to CANCELLED** so the next check retries instead of treating the consumer as already notified. No-email-on-file → escalates via a system comment, no dead link. Never throws (errors collected for the caller).
+- **`packages/shared-lib/src/dhs/index.ts`**: now exports `handleDhsAccepted` + type, and the previously-unexported `accepted-email`/`consent-service` public symbols.
+- **`apps/cases/app/api/dhs/lookup/route.ts`**: ACCEPTED / AUTO_TRANSFERRED now fire `handleDhsAccepted` (non-fatal) and surface `acceptedEmailSent`/`acceptedEmailSkipped`/`acceptedErrors` on the response.
+- **`apps/cases/app/api/cron/workflow-automation/route.ts`**: the two automated branches that transition to `ACCEPTED_VIA_DHS` (NEW_LEAD check, REQUESTED_VIA_DHS check) now also fire `handleDhsAccepted`.
+- **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`**: the "Check Request Status" result toast now reports whether the consumer email was sent / skipped / failed.
+
+**Tests:** `accepted-handler.test.ts` (5, new) — first-acceptance send, idempotent skip, no-email escalation, email-failure rollback-to-CANCELLED, case-not-found. All green; `accepted-email` (6) + `consent-service` (9) still green (20/20 in the focused run). `tsc --noEmit` clean on shared-lib and on the full cases app.
+
+**⚠️ Manual / prod-blocking:** the `DebtReviewRemovalConsent` table migration `20260628_debt_review_removal_consent` is **still not applied to prod** (per the entry below). Until `prisma migrate deploy` is run, `handleDhsAccepted` will throw at the `debtReviewRemovalConsent` query in production — the call is non-fatal so the status check still succeeds, but **no email will send and a `[SYSTEM]` error comment will be written** until the migration is deployed.
+
+---
+
 ### Changed: Credo activation email no longer sent on case/referral creation (2026-06-28)
 
 **Goal (user request):** When a case or referral is created we should still auto-create the Credo profile, but **must not** email the consumer the "Activate your Credo profile — set your password" invite at that point. The set-password link should reach the consumer **only when they request a password reset** (forgot-password flow).

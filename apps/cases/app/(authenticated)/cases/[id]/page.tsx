@@ -1636,9 +1636,18 @@ export default function CaseDetailPage() {
                         statusText += ` (${result.daysCounter})`;
                     }
                     statusText += '. DC info updated.';
-                    
+
                     if (result.status === 'DECLINED' && result.declineReason) {
                         statusText += ` Reason: ${result.declineReason}`;
+                    }
+
+                    // Surface consumer acceptance + consent email outcome
+                    if (result.acceptedEmailSent) {
+                        statusText += ' Acceptance + consent email sent to consumer.';
+                    } else if (result.acceptedEmailSkipped) {
+                        statusText += ' Consumer already notified (consent link active).';
+                    } else if (result.acceptedErrors?.length) {
+                        statusText += ` Consent email not sent: ${result.acceptedErrors.join(', ')}`;
                     }
                 } else {
                     statusText = result.message || 'No transfer request found in DHS';
