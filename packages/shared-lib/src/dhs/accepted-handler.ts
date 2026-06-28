@@ -22,10 +22,16 @@ import { prisma } from '@zenowethu/database';
 import { sendManualMessage } from '../notifications/service';
 import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
+import { addWorkingDays } from '../statuses/workingDays';
 import { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT } from './accepted-email';
 import { createDrrConsentRequest, buildConsentLink } from './consent-service';
 
 const logger = createLogger('dhs/accepted-handler');
+
+/** Workflow status a case is parked at while awaiting the consumer's consent. */
+export const READY_TO_CONSENT_STATUS = 'READY_TO_CONSENT';
+/** Working-day follow-up window while waiting on consent. */
+const CONSENT_FOLLOWUP_DAYS = 3;
 
 export interface AcceptedHandlerResult {
     /** True when the acceptance + consent email was delivered on this run. */
@@ -36,6 +42,8 @@ export interface AcceptedHandlerResult {
     reason?: string;
     /** The secure consent link (when one was created or already exists). */
     consentLink: string | null;
+    /** Workflow status the case was moved to, if any. */
+    statusUpdatedTo: string | null;
     actionsPerformed: string[];
     errors: string[];
 }
@@ -60,6 +68,7 @@ export async function handleDhsAccepted(params: {
         emailSent: false,
         skipped: false,
         consentLink: null,
+        statusUpdatedTo: null,
         actionsPerformed: [],
         errors: [],
     };
@@ -87,9 +96,19 @@ export async function handleDhsAccepted(params: {
         });
         if (existing) {
             result.skipped = true;
-            result.reason = 'Consumer already notified (a consent request already exists for this case)';
             result.consentLink = buildConsentLink(existing.token);
-            logger.info(`[DHS Accepted] Skipping email for case ${caseId} — consent request already exists.`);
+            if (existing.status === 'PENDING') {
+                // Still waiting on the consumer — keep (or restore) the case parked at
+                // "Ready to Consent" so a re-check doesn't downgrade it, and refresh the
+                // +3 working-day follow-up. Don't re-send the email.
+                result.reason = 'Consumer already notified; consent still pending';
+                await setReadyToConsent(caseId, triggeredByUserId);
+                result.statusUpdatedTo = READY_TO_CONSENT_STATUS;
+            } else {
+                // Already CONSENTED — leave the workflow for the post-consent flow to advance.
+                result.reason = 'Consumer has already consented';
+            }
+            logger.info(`[DHS Accepted] Skipping email for case ${caseId} — consent ${existing.status}.`);
             return result;
         }
 
@@ -114,11 +133,30 @@ export async function handleDhsAccepted(params: {
         });
         result.consentLink = consent.link;
 
+        // ── Resolve the previous DC name from the database ───────────────────
+        // The firm the file transferred FROM. Prefer the values on the case;
+        // when those are blank, fall back to the DebtCounsellor master table
+        // keyed by the case's NCRDC number.
+        let previousDcName = (caseData.debtCounsellorName || caseData.previousDebtCounsellor || '').trim();
+        let previousDcTradingName = (caseData.dcTradingName || '').trim();
+        if (!previousDcName && !previousDcTradingName && caseData.ncrdcNo) {
+            const dc = await prisma.debtCounsellor.findUnique({
+                where: { ncrdcNo: caseData.ncrdcNo },
+                select: { fullName: true, tradingName: true },
+            });
+            if (dc) {
+                previousDcName = (dc.fullName || '').trim();
+                previousDcTradingName = (dc.tradingName || '').trim();
+            }
+        }
+
         const subject = ACCEPTED_VIA_DHS_SUBJECT(caseData.fileNumber);
         const body = buildAcceptedViaDhsEmail({
             clientFirstName: caseData.client.firstName,
             fileNumber: caseData.fileNumber,
             consentLink: consent.link,
+            previousDcName,
+            previousDcTradingName,
         });
 
         const emailResult = await sendManualMessage(
@@ -134,10 +172,13 @@ export async function handleDhsAccepted(params: {
             result.actionsPerformed.push(
                 `Acceptance + consent email sent to consumer (${caseData.client.email})`
             );
+            // Park the workflow at "Ready to Consent" with a +3 working-day follow-up.
+            await setReadyToConsent(caseId, triggeredByUserId);
+            result.statusUpdatedTo = READY_TO_CONSENT_STATUS;
             await addComment(
                 caseId,
                 triggeredByUserId,
-                `[SYSTEM] DHS Accepted: Transfer accepted via DHS — file is now with Zenowethu Debt Management. Acceptance + debt-review-removal consent email sent to consumer (${caseData.client.email}). Awaiting consumer consent via the secure link before flag removal proceeds.`
+                `[SYSTEM] DHS Accepted: Transfer accepted — file is now with Zenowethu Debt Management. Acceptance + debt-review-removal consent email sent to consumer (${caseData.client.email}). Status → Ready to Consent. Next update +${CONSENT_FOLLOWUP_DAYS} working days. Awaiting consumer consent via the secure link before flag removal proceeds.`
             );
         } else {
             // Roll back the consent request so the next status check retries the send,
@@ -162,6 +203,23 @@ export async function handleDhsAccepted(params: {
         );
         return result;
     }
+}
+
+/**
+ * Move the case to the "Ready to Consent" parking status and set the +3
+ * working-day follow-up. Best-effort — a failure here must not undo the email.
+ */
+async function setReadyToConsent(caseId: string, userId: string | undefined): Promise<void> {
+    await prisma.case
+        .update({
+            where: { id: caseId },
+            data: {
+                status: READY_TO_CONSENT_STATUS,
+                nextUpdate: addWorkingDays(new Date(), CONSENT_FOLLOWUP_DAYS),
+                ...(userId ? { updatedBy: { connect: { id: userId } } } : {}),
+            },
+        })
+        .catch((err) => logger.error(`[DHS Accepted] Failed to set Ready to Consent for ${caseId}:`, err));
 }
 
 async function addComment(

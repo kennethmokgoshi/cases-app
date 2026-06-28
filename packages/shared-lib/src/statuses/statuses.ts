@@ -313,6 +313,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
 
     // 6. ADVANCED DETOUR
     {
+        code: 'READY_TO_CONSENT',
+        name: 'Ready to Consent',
+        category: 'ADVANCED_DETOUR',
+        description: 'Transfer accepted — acceptance email sent; awaiting consumer consent to begin debt review removal',
+        slaEnabled: true,
+        slaDays: 3,
+        isOverdueState: false },
+    {
         code: 'NEGATIVE_OUTCOME',
         name: 'Negative dispute outcome',
         category: 'ADVANCED_DETOUR',

@@ -3,6 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { createLogger, sendStatusChangeNotification } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { CasePatchSchema, parseBody } from '@/lib/schemas';
+import { buildProjectDisplayName } from '@/lib/project-path';
 import { z } from 'zod';
 
 const logger = createLogger('api/cases/[id]');
@@ -493,7 +494,18 @@ export async function PATCH(
 
                 } else {
                     const existingLatestCase = (existingByIdNumber as any).cases?.[0];
-                    const existingProjectName = existingLatestCase?.projects?.[0]?.project?.name || 'Unknown Project';
+                    const existingProjectId = existingLatestCase?.projects?.[0]?.projectId;
+                    // Resolve the full hierarchical project path (e.g. "Letsatsi Mbombela June 2026")
+                    // rather than just the leaf name (e.g. "June"), so the duplicate modal matches the
+                    // project label shown on the case detail view.
+                    let existingProjectName = existingLatestCase?.projects?.[0]?.project?.name || 'Unknown Project';
+                    if (existingProjectId) {
+                        const dupProjects = await prisma.project.findMany({
+                            select: { id: true, name: true, parentId: true, type: true }
+                        });
+                        const path = buildProjectDisplayName(existingProjectId, dupProjects);
+                        if (path) existingProjectName = path;
+                    }
                     const existingFileNumber = existingLatestCase?.fileNumber || '';
                     return NextResponse.json({
                         error: `ID Number "${client.idNumber}" already exists for another client: ${existingByIdNumber.firstName} ${existingByIdNumber.lastName}`,

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@zenowethu/database', () => ({
     prisma: {
-        case: { findUnique: vi.fn() },
+        case: { findUnique: vi.fn(), update: vi.fn() },
+        debtCounsellor: { findUnique: vi.fn() },
         debtReviewRemovalConsent: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
         caseComment: { create: vi.fn() },
     },
@@ -21,7 +22,8 @@ import { sendManualMessage } from '../notifications/service';
 import { handleDhsAccepted } from './accepted-handler';
 
 const db = prisma as unknown as {
-    case: { findUnique: ReturnType<typeof vi.fn> };
+    case: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    debtCounsellor: { findUnique: ReturnType<typeof vi.fn> };
     debtReviewRemovalConsent: {
         findFirst: ReturnType<typeof vi.fn>;
         create: ReturnType<typeof vi.fn>;
@@ -42,6 +44,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = 'https://cases.zenowethu.co.za';
     db.caseComment.create.mockResolvedValue({});
+    db.case.update.mockResolvedValue({});
     db.debtReviewRemovalConsent.update.mockResolvedValue({});
 });
 
@@ -66,13 +69,43 @@ describe('handleDhsAccepted', () => {
         expect(channel).toBe('EMAIL');
         expect(recipient).toBe('sipho@example.com');
         expect(body).toContain('/consent/debt-review-removal/tok123');
+        // Moves the case to "Ready to Consent" with a follow-up date
+        expect(r.statusUpdatedTo).toBe('READY_TO_CONSENT');
+        const upd = db.case.update.mock.calls.find((c) => c[0].data.status === 'READY_TO_CONSENT');
+        expect(upd).toBeTruthy();
+        expect(upd?.[0].data.nextUpdate).toBeInstanceOf(Date);
     });
 
-    it('is idempotent — skips when a live consent request already exists', async () => {
+    it('resolves the previous DC name from the DebtCounsellor master table by NCRDC', async () => {
+        db.case.findUnique.mockResolvedValue({
+            ...baseCase,
+            ncrdcNo: 'NCRDC2439',
+            debtCounsellorName: '',
+            dcTradingName: '',
+            previousDebtCounsellor: null,
+        });
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
+        db.debtReviewRemovalConsent.create.mockResolvedValue({
+            id: 'consent1', token: 'tok123', expiresAt: new Date(Date.now() + 1e9),
+        });
+        db.debtCounsellor.findUnique.mockResolvedValue({ fullName: null, tradingName: 'debtSolve' });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        await handleDhsAccepted({ caseId: 'case1' });
+
+        expect(db.debtCounsellor.findUnique).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { ncrdcNo: 'NCRDC2439' } })
+        );
+        const body = sendMsg.mock.calls[0][3];
+        expect(body).toMatch(/from debtSolve to Zenowethu Debt Management/i);
+    });
+
+    it('is idempotent — skips the email but keeps the case parked at Ready to Consent (pending)', async () => {
         db.case.findUnique.mockResolvedValue(baseCase);
         db.debtReviewRemovalConsent.findFirst.mockResolvedValue({
             id: 'consent1',
             token: 'existing',
+            status: 'PENDING',
             expiresAt: new Date(Date.now() + 1e9),
         });
 
@@ -82,6 +115,26 @@ describe('handleDhsAccepted', () => {
         expect(r.emailSent).toBe(false);
         expect(sendMsg).not.toHaveBeenCalled();
         expect(db.debtReviewRemovalConsent.create).not.toHaveBeenCalled();
+        // Re-asserts the parked status so a re-check can't downgrade it
+        expect(r.statusUpdatedTo).toBe('READY_TO_CONSENT');
+        const upd = db.case.update.mock.calls.find((c) => c[0].data.status === 'READY_TO_CONSENT');
+        expect(upd).toBeTruthy();
+    });
+
+    it('does not change status on skip when consent is already CONSENTED', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue({
+            id: 'consent1',
+            token: 'existing',
+            status: 'CONSENTED',
+            expiresAt: new Date(Date.now() + 1e9),
+        });
+
+        const r = await handleDhsAccepted({ caseId: 'case1' });
+
+        expect(r.skipped).toBe(true);
+        expect(r.statusUpdatedTo).toBeNull();
+        expect(db.case.update).not.toHaveBeenCalled();
     });
 
     it('escalates (no email) when the consumer has no email on file', async () => {

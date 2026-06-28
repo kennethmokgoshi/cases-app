@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { calculateSlaDeadline, sendStatusChangeNotification, auth, createLogger, WORKFLOW_STATUSES } from '@zenowethu/shared-lib';
 import { CaseCreateSchema, parseBody } from '@/lib/schemas';
+import { buildProjectDisplayName } from '@/lib/project-path';
 import fs from 'fs';
 import path from 'path';
 
@@ -286,7 +287,7 @@ export async function POST(request: Request) {
                 client: { select: { firstName: true, lastName: true } },
                 projects: {
                     where: { isPrimary: true },
-                    include: { project: { select: { name: true } } },
+                    select: { projectId: true, project: { select: { name: true } } },
                     take: 1
                 }
             }
@@ -296,7 +297,16 @@ export async function POST(request: Request) {
             const existingClientName = activeCase.client
                 ? `${activeCase.client.firstName} ${activeCase.client.lastName}`
                 : 'Unknown';
-            const existingProjectName = activeCase.projects[0]?.project?.name || 'Unknown Project';
+            // Resolve the full hierarchical project path (e.g. "Letsatsi › Mbombela › June 2026")
+            // rather than just the leaf name (e.g. "June"), so the duplicate modal matches the
+            // project label shown on the case detail view.
+            const existingProjectId = activeCase.projects[0]?.projectId;
+            let existingProjectName = activeCase.projects[0]?.project?.name || 'Unknown Project';
+            if (existingProjectId) {
+                const allProjects = await prisma.project.findMany({ select: { id: true, name: true, parentId: true, type: true } });
+                const path = buildProjectDisplayName(existingProjectId, allProjects);
+                if (path) existingProjectName = path;
+            }
             logger.warn(`Duplicate case alert for ID ${data.client.idNumber}. Existing case: ${activeCase.fileNumber} (${existingClientName})`);
             return NextResponse.json({
                 error: 'Duplicate Case',

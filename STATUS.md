@@ -5,6 +5,24 @@
 
 ---
 
+### Added: "Ready to Consent" status + accepted-email template rework (2026-06-29)
+
+Follow-on to the accepted-email wiring (entry further below), per user feedback after live testing.
+
+**New workflow status — `READY_TO_CONSENT` ("Ready to Consent"):** added to `packages/shared-lib/src/statuses/statuses.ts` in the **Advanced Detour** category (`slaDays: 3`). No migration — `Case.status` is a free string and `code` is not a union type. When the acceptance/consent email is sent, `handleDhsAccepted` now moves the case to **Ready to Consent** and sets **nextUpdate +3 working days**. On re-checks while consent is still `PENDING`, it re-asserts Ready to Consent (so the DHS-check route's transient `ACCEPTED_VIA_DHS` write can't downgrade it) and refreshes the +3-day follow-up; once `CONSENTED` it leaves the status alone for the post-consent flow to advance. New `statusUpdatedTo` field on `AcceptedHandlerResult`.
+
+**Email template rework (`accepted-email.ts`):**
+- **Removed all "DHS"/"Debt Help System" jargon.** Opens with "your request to transfer your debt review file **from {previous DC} to Zenowethu Debt Management** has been accepted"; status line now "Transfer accepted".
+- **Previous DC name is DB-driven:** the handler resolves it from the case (`debtCounsellorName`/`previousDebtCounsellor`/`dcTradingName`), falling back to the **`DebtCounsellor` master table by NCRDC number**. Added a master-table row `NCRDC2439 → tradingName "debtSolve"` (data, not code). Graceful fallback to "your previous debt counsellor on record" when unknown.
+- **"all major credit bureaus"** (was "the major credit bureaus"); kind, POPIA-framed consent ask that acknowledges the signed POA; a gentle "if we don't hear from you the file will be parked and cannot be attended to" section; trims padded first names.
+- **Signature drops the personal name** — this email now signs off `NCRDC3693 / Zenowethu Debt Management / …` (scoped to the accepted email via a local `ACCEPTED_SIGNATURE`; decline emails keep the shared `SIGNATURE`).
+
+**Tests:** `accepted-email.test.ts` (12) + `accepted-handler.test.ts` (7) cover no-DHS-jargon, DB→"debtSolve" resolution, name-less signature, Ready-to-Consent status move (+ re-park on pending / leave-alone on consented), parked-warning copy. Full status + accepted suites green (67 in the focused run); `tsc --noEmit` shared-lib clean.
+
+**Manual/data:** `NCRDC2439 → debtSolve` was inserted into the live `DebtCounsellor` table this session. Prod still needs the **redeploy** to pick up the new code.
+
+---
+
 ### Fixed: Duplicate-ID modal showed truncated project name ("June" instead of "Letsatsi Mbombela June 2026") (2026-06-28)
 
 **Symptom (user-reported):** Recording a referral for an ID already on file pops the "Duplicate ID Number Detected" modal, but the **Project** line showed only the leaf node name (e.g. `June`) instead of the full hierarchical project name shown on the case detail view (`Letsatsi Mbombela June 2026`).
