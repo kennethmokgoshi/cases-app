@@ -44,6 +44,13 @@ export interface InvoiceData {
   notes?: string
   reference?: string
   createdByName?: string
+  /**
+   * When set, the BILL TO block renders this party (e.g. a debt counsellor)
+   * instead of the consumer — used for DC fee invoices/quotations.
+   */
+  billTo?: { name: string; tradingName?: string; email?: string } | null
+  /** Optional "RE:" subline under BILL TO (e.g. the consumer the fees relate to). */
+  reLine?: string
   /** Override default banking details (from env vars) with invoice-specific details */
   bankingDetails?: BankingDetails | null
 }
@@ -287,7 +294,29 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   drawText(page, 'BILL TO', MARGIN, metaTop - 12, bold, 7.5, GRAY_TEXT)
   let leftY = metaTop - 26
 
-  if (data.clientName) {
+  if (data.billTo) {
+    // DC fee invoice/quote: bill the debt counsellor, reference the consumer below.
+    drawText(page, data.billTo.name, MARGIN, leftY, bold, 11, DARK_TEXT)
+    leftY -= 15
+    if (data.billTo.tradingName) {
+      drawText(page, `t/a ${data.billTo.tradingName}`, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+      leftY -= 12
+    }
+    if (data.billTo.email) {
+      drawText(page, data.billTo.email, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+      leftY -= 12
+    }
+    if (data.reLine) {
+      for (const line of wrapText(data.reLine, regular, 8.5, W / 2 - MARGIN)) {
+        drawText(page, line, MARGIN, leftY, regular, 8.5, NAVY)
+        leftY -= 12
+      }
+    }
+    if (data.caseFileNumber) {
+      drawText(page, `Case: ${data.caseFileNumber}`, MARGIN, leftY, regular, 8.5, GRAY_TEXT)
+      leftY -= 12
+    }
+  } else if (data.clientName) {
     drawText(page, data.clientName, MARGIN, leftY, bold, 11, DARK_TEXT)
     leftY -= 15
   }

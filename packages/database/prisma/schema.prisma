@@ -236,6 +236,10 @@ model Case {
   cb_statusDate           DateTime?
   ncrdcNo                 String?
   dhsStatus               String?
+  // Manual staff override: DHS sometimes drops a file into our DC profile without a
+  // formal "Accepted"/"Auto Transferred" status. Staff tick this to mark the file as
+  // Accepted via DHS so the Manage Consumers (consent) follow-on can proceed.
+  manuallyAcceptedViaDhs  Boolean               @default(false)
   dhsDaysCounter          String?
   debtReviewDate          DateTime?
   debtCounsellorName      String?
@@ -883,6 +887,12 @@ model Invoice {
   bankAccountId        String?
   type                 DocumentType  @default(INVOICE)
   publicToken          String?       @unique
+  // Debt-counsellor bill-to details — populated only for DC_FEE_INVOICE type.
+  // The consumer the fees relate to is the linked `client`/`case` (or stored in
+  // `reference` for standalone invoices with no case in the system).
+  dcName               String?
+  dcEmail              String?
+  dcTradingName        String?
   // Quote lifecycle — set when a client accepts/rejects a quotation
   acceptedAt           DateTime?
   rejectedAt           DateTime?
@@ -1754,6 +1764,12 @@ enum ReferrerCommissionStage {
 enum DocumentType {
   INVOICE
   QUOTE
+  // Fee-recovery invoice raised TO another debt counsellor when they request a
+  // DHS transfer of a consumer who still owes Zenowethu fees. Bill-to is the DC.
+  DC_FEE_INVOICE
+  // Same as DC_FEE_INVOICE but issued as a QUOTATION (QUO-… number) rather than
+  // a formal invoice — e.g. when the DC asks for a fee quote before settling.
+  DC_FEE_QUOTE
 }
 
 enum InvoiceStatus {

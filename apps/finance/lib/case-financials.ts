@@ -8,6 +8,7 @@ export type PaymentLike = {
 export type InvoiceLike = {
     total: number | string;
     status: string;
+    type?: string;
 };
 
 export type CaseFinancialSummary = {
@@ -22,6 +23,12 @@ export type CaseFinancialSummary = {
     paymentCount: number;
     invoicedTotal: number;
     invoiceCount: number;
+    /** Sum of quotes (type QUOTE) with status ACCEPTED. */
+    acceptedQuotesTotal: number;
+    /** Number of accepted quotes counted into acceptedQuotesTotal. */
+    acceptedQuoteCount: number;
+    /** Remaining owed on accepted quotes: acceptedQuotesTotal - totalPaid, floored at 0. Null when there are no accepted quotes. */
+    quoteBalance: number | null;
 };
 
 const COUNTED_PAYMENT_STATUSES = new Set(['COMPLETED']);
@@ -40,7 +47,11 @@ export function summariseCaseFinancials(input: {
     const invoicesCounted = input.invoices.filter(i => COUNTED_INVOICE_STATUSES.has(i.status));
     const invoicedTotal = invoicesCounted.reduce((sum, i) => sum + Number(i.total), 0);
 
+    const acceptedQuotes = input.invoices.filter(i => i.type === 'QUOTE' && i.status === 'ACCEPTED');
+    const acceptedQuotesTotal = acceptedQuotes.reduce((sum, i) => sum + Number(i.total), 0);
+
     const hasFee = serviceFee !== null && serviceFee > 0;
+    const hasAcceptedQuotes = acceptedQuotes.length > 0;
 
     return {
         serviceFee,
@@ -51,6 +62,9 @@ export function summariseCaseFinancials(input: {
         paymentCount: input.payments.length,
         invoicedTotal: round2(invoicedTotal),
         invoiceCount: input.invoices.length,
+        acceptedQuotesTotal: round2(acceptedQuotesTotal),
+        acceptedQuoteCount: acceptedQuotes.length,
+        quoteBalance: hasAcceptedQuotes ? round2(Math.max(0, acceptedQuotesTotal - totalPaid)) : null,
     };
 }
 

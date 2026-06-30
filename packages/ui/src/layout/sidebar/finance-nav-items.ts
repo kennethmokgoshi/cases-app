@@ -65,6 +65,7 @@ export function buildFinanceNav(session: SessionLike): FinanceNavSection[] {
                 { label: 'Reconciliation', href: '/reconciliation', iconPath: ICONS.checkCircle, accent: 'emerald' },
                 { label: 'Quotes', href: '/quotes', iconPath: ICONS.clipboard, accent: 'emerald' },
                 { label: 'Invoices', href: '/invoices', iconPath: ICONS.document, accent: 'emerald' },
+                { label: 'Outstanding Fees', href: '/outstanding-fees', iconPath: ICONS.document, accent: 'emerald' },
                 { label: 'Revenue', href: '/revenue', iconPath: ICONS.trendUp, accent: 'emerald' },
                 { label: 'Financial Reports', href: '/reports', iconPath: ICONS.chartBar, accent: 'emerald' },
             ],

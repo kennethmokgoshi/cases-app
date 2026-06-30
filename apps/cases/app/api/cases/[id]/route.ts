@@ -228,6 +228,7 @@ export async function PATCH(
             r350Status,
             partnerSplitPercent,
             dhsStatus,
+            manuallyAcceptedViaDhs,
             debtCounsellorName,
             dcTradingName,
             dcEmail,
@@ -619,6 +620,7 @@ export async function PATCH(
         if (partnerSplitPercent !== undefined) caseUpdateData.partnerSplitPercent = partnerSplitPercent;
         // DHS fields - only update if provided
         if (dhsStatus !== undefined) caseUpdateData.dhsStatus = dhsStatus;
+        if (manuallyAcceptedViaDhs !== undefined) caseUpdateData.manuallyAcceptedViaDhs = manuallyAcceptedViaDhs;
         if (debtCounsellorName !== undefined) caseUpdateData.debtCounsellorName = debtCounsellorName;
         if (dcTradingName !== undefined) caseUpdateData.dcTradingName = dcTradingName;
         if (dcEmail !== undefined) caseUpdateData.dcEmail = dcEmail;

@@ -19,7 +19,7 @@ vi.mock('../automation/automation-user', () => ({
 
 import { prisma } from '@zenowethu/database';
 import { sendManualMessage } from '../notifications/service';
-import { handleDhsAccepted } from './accepted-handler';
+import { handleDhsAccepted, isManageConsumersEligible } from './accepted-handler';
 
 const db = prisma as unknown as {
     case: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
@@ -174,5 +174,36 @@ describe('handleDhsAccepted', () => {
         const r = await handleDhsAccepted({ caseId: 'missing' });
         expect(r.errors).toContain('Case not found');
         expect(r.emailSent).toBe(false);
+    });
+});
+
+describe('isManageConsumersEligible', () => {
+    it('matches accepted workflow statuses (whitespace/underscore/case-insensitive)', () => {
+        expect(isManageConsumersEligible({ status: 'ACCEPTED_VIA_DHS' })).toBe(true);
+        expect(isManageConsumersEligible({ status: 'READY_TO_CONSENT' })).toBe(true);
+        expect(isManageConsumersEligible({ status: 'accepted via dhs' })).toBe(true);
+    });
+
+    it('matches the DHS request-status labels', () => {
+        expect(isManageConsumersEligible({ dhsStatus: 'Accepted' })).toBe(true);
+        expect(isManageConsumersEligible({ dhsStatus: 'Auto Transferred' })).toBe(true);
+    });
+
+    it('is true when either status or dhsStatus qualifies', () => {
+        expect(isManageConsumersEligible({ status: 'REQUESTED_VIA_DHS', dhsStatus: 'Accepted' })).toBe(true);
+    });
+
+    it('honors the manual "Accepted via DHS" staff override regardless of status', () => {
+        expect(isManageConsumersEligible({ status: 'REQUESTED_VIA_DHS', dhsStatus: 'Pending', manuallyAcceptedViaDhs: true })).toBe(true);
+        expect(isManageConsumersEligible({ manuallyAcceptedViaDhs: true })).toBe(true);
+        expect(isManageConsumersEligible({ manuallyAcceptedViaDhs: false, status: 'PENDING' })).toBe(false);
+    });
+
+    it('rejects non-accepted / empty states', () => {
+        expect(isManageConsumersEligible({ status: 'REQUESTED_VIA_DHS', dhsStatus: 'Pending' })).toBe(false);
+        expect(isManageConsumersEligible({ status: 'DECLINED_VIA_DHS' })).toBe(false);
+        expect(isManageConsumersEligible({ status: 'NOT_LINKED', dhsStatus: 'Not Requested via DHS' })).toBe(false);
+        expect(isManageConsumersEligible({})).toBe(false);
+        expect(isManageConsumersEligible({ status: null, dhsStatus: undefined })).toBe(false);
     });
 });

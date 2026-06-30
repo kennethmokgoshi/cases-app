@@ -93,6 +93,7 @@ export const CasePatchSchema = z.object({
     r350Status: optionalString,
     partnerSplitPercent: z.number().min(0).max(100).optional(),
     dhsStatus: optionalString,
+    manuallyAcceptedViaDhs: z.boolean().optional(),
     debtCounsellorName: optionalString,
     dcTradingName: optionalString,
     dcEmail: z.string().email().optional().nullable(),

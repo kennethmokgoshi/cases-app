@@ -29,6 +29,7 @@ import { AssistClientConsentModal } from './AssistClientConsentModal';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
 import SendQuoteModal from './SendQuoteModal';
 import SendMandateModal from './SendMandateModal';
+import DcFeeInvoiceModal from './DcFeeInvoiceModal';
 import { ConsumerPortalPanel } from '@/app/components/ConsumerPortalPanel';
 
 
@@ -94,6 +95,7 @@ type CaseDetail = {
     ncrdcNo: string | null;
     ncrSysRef: string | null;
     dhsStatus: string | null;
+    manuallyAcceptedViaDhs: boolean;
     dhsDaysCounter: string | null;
     debtCounsellorName: string | null;
     dcTradingName: string | null;
@@ -313,10 +315,12 @@ export default function CaseDetailPage() {
     // DHS automation states
     const [dhsLoading, setDhsLoading] = useState(false);
     const [checkRequestLoading, setCheckRequestLoading] = useState(false);
+    const [manageConsumersLoading, setManageConsumersLoading] = useState(false);
     const [nctLoading, setNctLoading] = useState(false);
     const [dhsMessage, setDhsMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
     const [nctMessage, setNctMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
     const [isEditingDhs, setIsEditingDhs] = useState(false);
+    const [markingAcceptedViaDhs, setMarkingAcceptedViaDhs] = useState(false);
     const [isEditingNct, setIsEditingNct] = useState(false);
     const [isEditingCreditInfo, setIsEditingCreditInfo] = useState(false);
     const [isReferring, setIsReferring] = useState(false);
@@ -406,6 +410,7 @@ export default function CaseDetailPage() {
     const highlightedCommentId = searchParams.get('comment');
     // DC pre-send confirmation
     const [dcConfirmPending, setDcConfirmPending] = useState<'FILE_REQUEST' | 'INVOICE_REQUEST' | null>(null);
+    const [isDcFeeInvoiceOpen, setIsDcFeeInvoiceOpen] = useState(false);
 
     // Tasks & Decline Reason State
     // Tasks & Decline Reason State
@@ -1089,6 +1094,41 @@ export default function CaseDetailPage() {
         }
     };
 
+    // Manual "Accepted via DHS" override. DHS sometimes transfers a file into our
+    // DC profile without ever showing a formal Accepted/Auto Transferred status, so
+    // staff can tick this to mark the file accepted and unlock "Manage Consumers".
+    const handleToggleAcceptedViaDhs = async (checked: boolean) => {
+        if (!caseData) return;
+        setMarkingAcceptedViaDhs(true);
+        setDhsMessage(null);
+        // Optimistic update so the checkbox reflects the click immediately.
+        setCaseData(prev => (prev ? { ...prev, manuallyAcceptedViaDhs: checked } : prev));
+        try {
+            const res = await fetch(`/api/cases/${params.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ manuallyAcceptedViaDhs: checked })
+            });
+            if (!res.ok) throw new Error('Failed to update');
+            const updatedCase = await res.json();
+            setCaseData(updatedCase);
+            setActivityUpdate(prev => prev + 1);
+            setDhsMessage({
+                type: 'success',
+                text: checked
+                    ? 'Marked Accepted via DHS — you can now run Manage Consumers to send the consumer acceptance + consent email.'
+                    : 'Cleared the manual "Accepted via DHS" flag.'
+            });
+        } catch (error) {
+            log.error({ err: error }, 'Failed to toggle Accepted via DHS', error);
+            // Revert the optimistic update on failure.
+            setCaseData(prev => (prev ? { ...prev, manuallyAcceptedViaDhs: !checked } : prev));
+            setDhsMessage({ type: 'error', text: 'Failed to update Accepted via DHS. Please try again.' });
+        } finally {
+            setMarkingAcceptedViaDhs(false);
+        }
+    };
+
     const handleRequestTransfer = async () => {
         if (!caseData?.client.idNumber) {
             setDhsMessage({ type: 'error', text: 'Client ID number is required' });
@@ -1641,13 +1681,11 @@ export default function CaseDetailPage() {
                         statusText += ` Reason: ${result.declineReason}`;
                     }
 
-                    // Surface consumer acceptance + consent email outcome
-                    if (result.acceptedEmailSent) {
-                        statusText += ' Acceptance + consent email sent to consumer.';
-                    } else if (result.acceptedEmailSkipped) {
-                        statusText += ' Consumer already notified (consent link active).';
-                    } else if (result.acceptedErrors?.length) {
-                        statusText += ` Consent email not sent: ${result.acceptedErrors.join(', ')}`;
+                    // Accepted detection ends here. The consumer acceptance + consent
+                    // email follow-on now lives on the dedicated "Manage Consumers"
+                    // button — prompt staff to run it.
+                    if (result.acceptedReadyForManage) {
+                        statusText += ' File is Accepted via DHS — click "Manage Consumers" to send the consumer acceptance + consent email.';
                     }
                 } else {
                     statusText = result.message || 'No transfer request found in DHS';
@@ -1669,7 +1707,47 @@ export default function CaseDetailPage() {
         }
     };
 
+    // DHS Manage Consumers — post-acceptance follow-on (carries on once the file
+    // is Accepted via DHS). Today: consumer acceptance + debt-review-removal consent
+    // email. Later: Search & Manage Consumer clearance status-history check.
+    const handleManageConsumers = async () => {
+        if (!caseData?.client.idNumber) {
+            setDhsMessage({ type: 'error', text: 'Client ID number is required' });
+            return;
+        }
+        setManageConsumersLoading(true);
+        setDhsMessage(null);
+        try {
+            const res = await fetch('/api/dhs/lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    idNumber: caseData.client.idNumber,
+                    caseId: caseData.id,
+                    action: 'manage_consumers'
+                })
+            });
+            const result = await res.json();
 
+            // Refresh case data so the new status (e.g. Ready to Consent) shows
+            const caseRes = await fetch(`/api/cases/${params.id}`);
+            if (caseRes.ok) {
+                const updatedCase = await caseRes.json();
+                setCaseData(updatedCase);
+            }
+            setActivityUpdate(prev => prev + 1);
+
+            setDhsMessage({
+                type: result.success ? (result.skipped ? 'info' : 'success') : 'error',
+                text: result.message || (result.success ? 'Manage Consumers completed.' : 'Manage Consumers failed.')
+            });
+        } catch (error) {
+            log.error({ err: error }, 'Manage Consumers error:', error);
+            setDhsMessage({ type: 'error', text: 'Failed to connect to DHS' });
+        } finally {
+            setManageConsumersLoading(false);
+        }
+    };
 
     // DHS Request Transfer
     const handleDHSTransfer = async () => {
@@ -3176,6 +3254,16 @@ export default function CaseDetailPage() {
                                                 </button>
                                             </div>
                                         )}
+                                        {/* Generate a fee-recovery invoice addressed TO the debt counsellor
+                                            who requested a transfer of a consumer that still owes Zenowethu fees. */}
+                                        <button
+                                            onClick={() => setIsDcFeeInvoiceOpen(true)}
+                                            className="w-full py-1.5 px-3 bg-amber-600/20 border border-amber-600/40 text-amber-300 rounded text-xs font-semibold hover:bg-amber-600/30 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>
+                                            DC: Generate Fee Invoice / Quote
+                                        </button>
+
                                         {/* Bureau + provider only */}
                                         <button
                                             onClick={handleSendFileRequests}
@@ -3484,6 +3572,23 @@ export default function CaseDetailPage() {
                                                         {checkRequestLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Check Request Status'}
                                                     </button>
                                                     {(() => {
+                                                        // Manage Consumers carries on once the file is Accepted via DHS.
+                                                        const norm = (v?: string | null) => (v || '').replace(/[\s_]+/g, '').toUpperCase();
+                                                        const acceptedStates = ['ACCEPTEDVIADHS', 'READYTOCONSENT', 'ACCEPTED', 'AUTOTRANSFERRED'];
+                                                        const eligible = caseData.manuallyAcceptedViaDhs || acceptedStates.includes(norm(caseData.status)) || acceptedStates.includes(norm(caseData.dhsStatus));
+                                                        if (!eligible) return null;
+                                                        return (
+                                                            <button
+                                                                onClick={handleManageConsumers}
+                                                                disabled={manageConsumersLoading}
+                                                                title="Carry on from Accepted via DHS — send the consumer acceptance + debt-review-removal consent email."
+                                                                className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
+                                                            >
+                                                                {manageConsumersLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Manage Consumers'}
+                                                            </button>
+                                                        );
+                                                    })()}
+                                                    {(() => {
                                                         const status = caseData.dhsStatus?.toUpperCase();
                                                         if (status !== 'PENDING' && status !== 'DECLINED') return null;
                                                         return (
@@ -3497,6 +3602,30 @@ export default function CaseDetailPage() {
                                                         );
                                                     })()}
                                                 </div>
+
+                                                {/* Manual "Accepted via DHS" override — DHS sometimes drops a file into our
+                                                    DC profile without a formal Accepted/Auto Transferred status. Only relevant
+                                                    to debt review / debt review flag removal services. */}
+                                                {isDebtReviewSelected(caseData.services) && (
+                                                <label className="mt-3 flex items-start gap-2.5 p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 cursor-pointer hover:bg-emerald-500/10 transition-colors">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!caseData.manuallyAcceptedViaDhs}
+                                                        disabled={markingAcceptedViaDhs}
+                                                        onChange={(e) => handleToggleAcceptedViaDhs(e.target.checked)}
+                                                        className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-zeno-navy text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer disabled:opacity-50"
+                                                    />
+                                                    <span className="text-xs leading-relaxed">
+                                                        <span className="text-emerald-300 font-semibold flex items-center gap-1.5">
+                                                            Client has been Accepted via DHS
+                                                            {markingAcceptedViaDhs && <span className="animate-spin h-3 w-3 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full inline-block" />}
+                                                        </span>
+                                                        <span className="text-gray-400 block mt-0.5">
+                                                            Tick if DHS has transferred this file into our DC profile even though it does not show a formal Accepted / Auto Transferred status. This unlocks <strong className="text-gray-300">Manage Consumers</strong>.
+                                                        </span>
+                                                    </span>
+                                                </label>
+                                                )}
 
                                                 {caseData.dhsStatus === 'NOT_LINKED' && (
                                                     <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-3">
@@ -4634,6 +4763,21 @@ export default function CaseDetailPage() {
                         instalmentAmount: caseData.totalMonthlyInstallment?.toString(),
                         instalments: (caseData as any).instalments?.toString()
                     }}
+                />
+            )}
+
+            {/* Generate Debt Counsellor Fee Invoice Modal */}
+            {caseData && (
+                <DcFeeInvoiceModal
+                    isOpen={isDcFeeInvoiceOpen}
+                    onClose={() => { setIsDcFeeInvoiceOpen(false); setActivityUpdate(prev => prev + 1); }}
+                    caseId={caseData.id}
+                    dcName={caseData.debtCounsellorName}
+                    dcEmail={caseData.dcEmail}
+                    dcTradingName={caseData.dcTradingName}
+                    clientFirstName={caseData.client?.firstName}
+                    clientLastName={caseData.client?.lastName}
+                    clientIdNumber={caseData.client?.idNumber}
                 />
             )}
 

@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, renderTemplate, auth } from '@zenowethu/shared-lib';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted } from '@zenowethu/shared-lib/src/dhs';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted, isManageConsumersEligible } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
 import path, { join } from 'path';
@@ -339,28 +339,16 @@ export async function POST(request: Request) {
                     }
                 }
 
-                // ── Auto-notify consumer when Accepted via DHS ──────────────
-                // When the file is ACCEPTED (or auto-transferred), it is now formally
-                // with us. Email the consumer to confirm and ask for their consent to
-                // begin debt review removal. Self-deduping — safe on repeat checks.
+                // ── Accepted via DHS: detection ends here ───────────────────
+                // "Check Request Status" deliberately STOPS once it has detected the
+                // outcome (Accepted / Declined / Pending) and parked the case at the
+                // right status. The post-acceptance follow-on — the consumer
+                // acceptance + debt-review-removal consent email — has moved to the
+                // dedicated "Manage Consumers" action (action: 'manage_consumers'),
+                // so this button no longer carries that extra work. Decline handling
+                // (above) stays here as the "rejected" branch.
                 if (result.status === 'ACCEPTED' || result.status === 'AUTO_TRANSFERRED') {
-                    logger.info('[DHS Lookup] Firing accepted handler (consumer acceptance + consent email)');
-                    try {
-                        const acceptedResult = await handleDhsAccepted({
-                            caseId,
-                            triggeredByUserId: actingUserId,
-                        });
-                        logger.info('[DHS Lookup] Accepted handler result:', {
-                            emailSent: acceptedResult.emailSent,
-                            skipped: acceptedResult.skipped,
-                            errors: acceptedResult.errors,
-                        });
-                        (result as any).acceptedEmailSent = acceptedResult.emailSent;
-                        (result as any).acceptedEmailSkipped = acceptedResult.skipped;
-                        (result as any).acceptedErrors = acceptedResult.errors;
-                    } catch (handlerErr) {
-                        logger.error('[DHS Lookup] Accepted handler threw an error (non-fatal):', handlerErr);
-                    }
+                    (result as any).acceptedReadyForManage = true;
                 }
             }
         } else if (action === 'auto_fill') {
@@ -985,6 +973,53 @@ export async function POST(request: Request) {
                 }
             }
 
+        } else if (action === 'manage_consumers') {
+            // ── Manage Consumers: post-acceptance follow-on ─────────────────────
+            // Carries on from where "Check Request Status" now stops. Only valid
+            // once the file is Accepted via DHS. Today it runs the consumer
+            // acceptance + debt-review-removal consent email (idempotent — safe to
+            // click more than once). The deeper Search & Manage Consumer clearance
+            // status-history check (Ready for Clearance / Completed detection via
+            // evaluateConsumerClearance) will be wired in here next, pending sign-off
+            // on its exact scope.
+            if (!caseId || !caseData) {
+                return NextResponse.json({ success: false, message: 'Case ID not provided or case not found' }, { status: 400 });
+            }
+
+            if (!isManageConsumersEligible(caseData)) {
+                return NextResponse.json({
+                    success: false,
+                    message: `Manage Consumers can only run once the file is Accepted via DHS. Current status: ${caseData.dhsStatus || caseData.status || 'unknown'}. Run "Check Request Status" first to confirm acceptance.`,
+                });
+            }
+
+            logger.info('[DHS Lookup] manage_consumers: firing accepted handler (consumer acceptance + consent email)');
+            const acceptedResult = await handleDhsAccepted({
+                caseId,
+                triggeredByUserId: actingUserId,
+            });
+            logger.info('[DHS Lookup] manage_consumers accepted handler result:', {
+                emailSent: acceptedResult.emailSent,
+                skipped: acceptedResult.skipped,
+                errors: acceptedResult.errors,
+            });
+
+            result = {
+                success: acceptedResult.errors.length === 0,
+                emailSent: acceptedResult.emailSent,
+                skipped: acceptedResult.skipped,
+                consentLink: acceptedResult.consentLink,
+                statusUpdatedTo: acceptedResult.statusUpdatedTo,
+                actionsPerformed: acceptedResult.actionsPerformed,
+                errors: acceptedResult.errors,
+                message: acceptedResult.errors.length
+                    ? `Manage Consumers completed with issues: ${acceptedResult.errors.join(', ')}`
+                    : acceptedResult.skipped
+                        ? (acceptedResult.reason || 'Consumer already notified — consent link is still active.')
+                        : acceptedResult.emailSent
+                            ? 'Acceptance + consent email sent to consumer. Case moved to Ready to Consent.'
+                            : 'Manage Consumers ran — no email was sent.',
+            };
         }
 
         // Close browser after operation

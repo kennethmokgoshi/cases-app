@@ -404,7 +404,18 @@
       "Bash(grep -qiE \"Ready in|Local:|✓ Ready|ready started\" \"C:/Users/Kenneth/AppData/Local/Temp/claude/C--Visual-Studio-Code-06-March-2026/feabe3a4-2694-42cd-8fd8-e7d98f80f8f5/tasks/bxi0gafv0.output\")",
       "Bash(tail -15 \"C:/Users/Kenneth/AppData/Local/Temp/claude/C--Visual-Studio-Code-06-March-2026/feabe3a4-2694-42cd-8fd8-e7d98f80f8f5/tasks/bxi0gafv0.output\")",
       "Bash(pnpm --filter @zenowethu/shared-lib exec vitest run src/dhs/accepted-email.test.ts src/dhs/accepted-handler.test.ts)",
-      "Bash(pnpm --filter @zenowethu/shared-lib exec vitest run src/dhs/accepted-handler.test.ts src/dhs/accepted-email.test.ts src/statuses)"
+      "Bash(pnpm --filter @zenowethu/shared-lib exec vitest run src/dhs/accepted-handler.test.ts src/dhs/accepted-email.test.ts src/statuses)",
+      "Bash(pnpm --filter @zenowethu/shared-lib exec vitest run src/dhs/accepted-handler.test.ts)",
+      "Bash(pnpm --filter @zenowethu/shared-lib test -- accepted-handler)",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Select-Object ProcessId, @{N='Cmd';E={ if\\($_.CommandLine.Length -gt 110\\){$_.CommandLine.Substring\\(0,110\\)}else{$_.CommandLine} }} | Format-Table -Wrap -AutoSize)",
+      "Bash(kill -0 0)",
+      "Bash(:)",
+      "Bash(tail -3 \"/c/Users/Kenneth/AppData/Local/Temp/claude/C--Visual-Studio-Code-06-March-2026/746357c3-9a9d-4b9d-a103-ad0d2dc5a3f0/tasks/bx7gx3c0f.output\")",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/cases/cmqw4tp2f0001y1pwfchapvs5\" -TimeoutSec 150 -MaximumRedirection 0 -ErrorAction Stop; \"STATUS: $\\($r.StatusCode\\)\" } catch { \"ERR/REDIR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if\\($c\\){ $p = Get-Process -Id $c.OwningProcess; $cmd = \\(Get-CimInstance Win32_Process -Filter \"ProcessId=$\\($p.Id\\)\"\\).CommandLine; \"PID $\\($p.Id\\) \\($\\($p.ProcessName\\)\\) is listening on :3000\"; if\\($cmd.Length -gt 130\\){$cmd.Substring\\(0,130\\)}else{$cmd} } else { \"nothing listening on :3000\" })",
+      "Bash(cd \"/c/Visual Studio Code/06 March 2026/packages/database\" && ls prisma/migrations | tail -5)",
+      "Bash(pnpm --filter finance test -- case-financials summary)",
+      "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=8192'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter cases dev 2>&1)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

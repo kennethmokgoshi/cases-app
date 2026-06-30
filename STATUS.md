@@ -5,6 +5,117 @@
 
 ---
 
+### Changed: DC Fee tool consolidated into Finance ("Outstanding Fees") + shared form (2026-06-30)
+
+**Goal (user request):** Surface the DC fee invoice/quote generator on the **Finance sidebar**. Discovered the Finance **"Outstanding Fees"** page (`/outstanding-fees`, prior-session stub) was a **broken duplicate** of this exact feature — it POSTed to a non-existent `/api/invoices` (real route is `/api/finance/invoices`) so submit 404'd, and it never rendered a DC-addressed PDF. User chose to **rebuild the full feature in Finance**.
+
+**What changed (no new migration — `DC_FEE_QUOTE` already live):**
+- **`packages/ui/src/finance/DcFeeInvoiceForm.tsx`** (new, shared) — the full capture form (DC + consumer fields, catalogue fee lines, 15% VAT toggle, Quote/Invoice toggle, live totals, success state with Download PDF + Email to DC). Theme-neutral Tailwind so it renders in both apps. Exported from `@zenowethu/ui`.
+- **`apps/cases/.../DcFeeInvoiceModal.tsx`** — reduced to a thin modal wrapper around `DcFeeInvoiceForm` (Cases behaviour unchanged; now single source).
+- **`apps/finance/app/(authenticated)/outstanding-fees/page.tsx`** — replaced the broken stub: renders `DcFeeInvoiceForm` with an optional consumer search (`/api/finance/clients/search`) that pre-fills + links the client. Still on the Finance sidebar under FINANCE.
+- **Finance API (new):** `POST /api/dc-fee-invoices`, `GET /api/dc-fee-invoices/[id]/pdf`, `POST /api/dc-fee-invoices/[id]/send` — mirror the Cases routes, reuse the shared `createDcFeeInvoice` service; Finance PDF via new `apps/finance/lib/dc-fee-invoice-pdf.ts`.
+- **`apps/finance/lib/invoice-pdf.ts`** — `InvoiceData` gains `billTo`/`reLine`; BILL TO block renders the DC (same extension as the Cases generator).
+- **Cases standalone `POST /api/dc-fee-invoices`** — now accepts an optional `clientId` for consumer linking (parity with Finance).
+
+**Checks:** shared-lib **558/558 green**; `tsc --noEmit` **clean on both finance and cases** (the shared UI form is typechecked transitively by both). No new migration.
+
+**⚠️ Manual setup:** redeploy **both** the cases and finance apps in Dokploy to ship the shared `@zenowethu/ui` form + new Finance routes. After redeploy, the full tool is on the Finance sidebar → **Outstanding Fees**.
+
+---
+
+### Added: DC Fee tool — Quotation mode (Quote/Invoice toggle) (2026-06-30)
+
+**Goal (user request):** Let the DC Fee tool also issue a **QUOTATION** (not just an invoice), still addressed to the requesting debt counsellor — a Quote/Invoice toggle like the Finance invoice page.
+
+**What changed:**
+- **`packages/shared-lib/src/finance/dc-fee-invoice.ts`** — input schema gains `documentType: 'INVOICE' | 'QUOTE'` (default `INVOICE`); new `dcFeeDocLabel()` helper.
+- **`dc-fee-invoice-service.ts`** — quotes are numbered `QUO-…` and typed `DC_FEE_QUOTE`; invoices stay `INV-…` / `DC_FEE_INVOICE`. The 30-day window reads as "valid until" vs "due".
+- **`packages/database/prisma/schema.prisma`** + migration `20260630_dc_fee_quote` — new `DocumentType.DC_FEE_QUOTE` enum value (additive). **Applied to prod via `prisma migrate deploy` on 2026-06-30.**
+- **`apps/cases/lib/dc-fee-invoice-pdf.ts`** — renders both types; `documentType` drives the PDF label ("QUOTATION"/"INVOICE", "Valid Until"/"Due Date") and is surfaced on the summary.
+- **`.../api/dc-fee-invoices/[id]/send/route.ts`** — email subject/body/timeline log adapt to quote vs invoice wording.
+- **`DcFeeInvoiceModal.tsx`** — Quotation/Invoice toggle at the top; header, submit button, success heading and toast all relabel dynamically.
+
+**Tests:** shared-lib **558/558 green** (+3: schema `documentType` default/accept, `dcFeeDocLabel`, service quote → `QUO-`/`DC_FEE_QUOTE`).
+
+**⚠️ Local typecheck pending:** Prisma client regeneration is blocked by a **running dev server** locking the Windows query-engine DLL (EPERM). Stop the dev server(s), then `cd packages/database && npx prisma generate` + `pnpm --filter cases typecheck`. The Dokploy redeploy regenerates the client for prod regardless.
+
+---
+
+### Added: Debt Counsellor Fee Invoice — generate a fee-recovery invoice TO a requesting DC (2026-06-29)
+
+**Goal (user request):** Other debt counsellors submit DHS transfer requests for consumers who still owe **Zenowethu** fees; staff decline on the DHS ("owes fees"), and the requesting DC then asks for an **invoice**. Staff needed a tool to capture the DC + consumer details and the fee breakdown and produce a branded invoice addressed **to that debt counsellor**. (This is the *inverse* of the existing outbound `OUTSTANDING_FEES`/`dc-notification` flow, which only *requests* an invoice from another DC — left untouched.)
+
+**What was already there (prior session):** `packages/shared-lib/src/finance/dc-fee-invoice.ts` (fee catalogue + Zod schema + VAT maths + consumer-reference builder), `dc-fee-invoice-service.ts` (`createDcFeeInvoice` → persists a `type: DC_FEE_INVOICE` `Invoice` via the atomic `INV-YYYY-NNNN` allocator), schema fields `Invoice.dcName/dcEmail/dcTradingName` + `DocumentType.DC_FEE_INVOICE`, and migration `20260629_dc_fee_invoice`. None of it was exported, rendered, wired to a route, or surfaced in the UI.
+
+**What this session completed:**
+- **`packages/shared-lib/src/index.ts`** — exports the browser-safe `./finance/dc-fee-invoice` (catalogue/schema/maths) for the form. The Prisma-backed service stays a deep import (server-only).
+- **`apps/cases/lib/invoice-pdf.ts`** — `InvoiceData` gains optional `billTo { name, tradingName, email }` + `reLine`; the BILL TO block now renders the debt counsellor (with a "RE: consumer (ID …)" line) when `billTo` is set, else the existing consumer path.
+- **`apps/cases/lib/dc-fee-invoice-pdf.ts`** (new) — loads a DC_FEE_INVOICE, maps it to `InvoiceData` (bill-to = DC), renders + disk-caches the PDF. Flat result shape (not a discriminated union — the app is `strict: false`).
+- **API routes (new):** `POST /api/cases/[id]/dc-fee-invoice` (case-linked, pre-filled), `POST /api/dc-fee-invoices` (standalone), `GET /api/dc-fee-invoices/[id]/pdf` (download), `POST /api/dc-fee-invoices/[id]/send` (emails the DC the PDF via `sendEmailWithAttachments`; logs on the case timeline; status → SENT).
+- **UI (new):** `DcFeeInvoiceModal.tsx` — DC + consumer fields, dynamic fee lines (catalogue dropdown + editable description + amount), live total, 15% VAT toggle, notes; success state with **Download PDF** + **Email to Debt Counsellor**; toast/loading/error/success states (no `alert`/`confirm`). Wired into the case page via a **"DC: Generate Fee Invoice"** button in the DC actions cluster, plus a standalone page at `/dc-fee-invoices/new`.
+- **Fee catalogue** (user's 4 + extras): commission paid out, after-care, admin, legal, restructuring/Section 86, rejection (Form 17.1), court/NCT, distribution/PDA, monthly service (arrears), consultation, disbursements, + free-text Other.
+
+**Tests:** `dc-fee-invoice.test.ts` (12: schema validation, VAT on/off maths, rounding, reference) + `dc-fee-invoice-service.test.ts` (2: persistence mapping with mocked Prisma) — **shared-lib 555/555 green**. `tsc --noEmit` on cases **clean** (run with `--max-old-space-size=8192`).
+
+**⚠️ Manual setup needed:** migration `20260629_dc_fee_invoice` is **NOT yet applied to prod** (additive: 3 nullable `Invoice` columns + `DC_FEE_INVOICE` enum value, all `IF NOT EXISTS`/nullable — non-destructive). Apply with `npx prisma migrate deploy`, then **redeploy the cases app**. Local Prisma client already regenerated.
+
+**Remaining / notes:** Finance app lists these as ordinary invoices but its own PDF/detail render bill-to from the client; extending finance's generator for DC bill-to (or sharing the cases generator) is a follow-up. Email send requires SMTP/Resend/GHL configured (same chain as all cases email).
+
+---
+
+### Added: Finance case page — Accepted Quotes + Available Balance cards (2026-06-29)
+
+**Goal (user request):** On the Finance case detail page (`finance.zenowethu.co.za/cases/[id]`), surface **accepted quotes** and an **available balance** alongside total paid. A case like PIET CHAUKE shows an ACCEPTED quote of R4,500, R0 invoiced and R1,000 paid — nothing previously tied the R1,000 to the R4,500.
+
+**Decision confirmed with user:** "Available Balance" = **accepted quotes total − total paid** (remaining owed on accepted quotes), floored at 0. For PIET: R4,500 − R1,000 = **R3,500** remaining.
+
+**What changed:**
+- **`apps/finance/lib/case-financials.ts`** — `InvoiceLike` gains optional `type`; `CaseFinancialSummary` gains `acceptedQuotesTotal`, `acceptedQuoteCount`, and `quoteBalance` (remaining on accepted quotes, floored at 0, **null when no accepted quotes**). Accepted quotes = `type === 'QUOTE' && status === 'ACCEPTED'` — kept distinct from `invoicedTotal` (quotes are never counted as invoiced).
+- **`apps/finance/app/api/finance/cases/[id]/summary/route.ts`** — passes invoice `type` into the summary so quotes can be distinguished.
+- **`apps/finance/app/(authenticated)/cases/[id]/page.tsx`** — two new summary cards, rendered **only when accepted quotes exist**: "Accepted Quotes" (total + count) and "Available Balance" (amber while owing, emerald + "fully paid ✓" at 0, with a "Remaining of X after Y paid" subtitle).
+
+**Tests:** `case-financials.test.ts` +5 (10 total) covering accepted-quote totalling, balance after payments, floor-at-0 on overpayment, ACCEPTED-only filtering (ignores pending quotes & accepted invoices), and null balance when no accepted quotes — all green. `summary/route.test.ts` 4/4 green. `tsc --noEmit` on finance clean.
+
+**Note:** Pre-existing unrelated failure in `app/api/finance/quotes/[id]/convert/route.test.ts` (2 tests) — confirmed failing on a clean tree before this change; not touched here.
+
+---
+
+### Added: Manual "Accepted via DHS" checkbox on the case (2026-06-29)
+
+**Goal (user request):** DHS sometimes transfers a file into our debt counsellor profile even when it was **not** formally accepted or auto-transferred — so the automated status check never flags it as accepted and the post-acceptance follow-on stays locked. User asked for a simple checkbox to mark "the client has been Accepted via DHS".
+
+**What changed (completes the override the prior session had stubbed in `isManageConsumersEligible` + tests):**
+- **`packages/database/prisma/schema.prisma`** — new `Case.manuallyAcceptedViaDhs Boolean @default(false)`. Migration `20260629_case_manually_accepted_via_dhs` (additive `ADD COLUMN ... NOT NULL DEFAULT false`) **applied to prod via `prisma migrate deploy` on 2026-06-29**; local Prisma client regenerated. **Cases app still needs a redeploy** to pick up the new code (DB column already live).
+- **`packages/shared-lib/src/dhs/accepted-handler.ts`** — `isManageConsumersEligible` now returns true when `manuallyAcceptedViaDhs === true`, regardless of scraped status. Non-destructive: it does **not** clobber `dhsStatus`/`status`.
+- **`apps/cases/lib/schemas.ts`** — `CasePatchSchema` accepts `manuallyAcceptedViaDhs: z.boolean().optional()`.
+- **`apps/cases/app/api/cases/[id]/route.ts`** — PATCH persists the flag.
+- **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — new checkbox **"Client has been Accepted via DHS"** in the DHS panel (optimistic toggle → PATCH → refresh, with loading/success/error toast). Ticking it makes the green **"Manage Consumers"** button appear so staff can send the consumer acceptance + consent email.
+
+**Tests:** `accepted-handler.test.ts` manual-override cases green within the full shared-lib suite (537 passed).
+
+**Manual setup needed:** ✅ migration applied to prod + local client regenerated (2026-06-29). **Remaining: redeploy the cases app** (Dokploy on Contabo) so the new code ships — the DB column is already live.
+
+---
+
+### Changed: Split "Check Request Status" — accepted/rejected detection only; new "Manage Consumers" button for the post-acceptance follow-on (2026-06-29)
+
+**Goal (user request):** "Check Request Status" was doing too much — it detected the DHS request outcome AND auto-fired the consumer acceptance + debt-review-removal consent email when it found an ACCEPTED file. User wants the status check to **detect Accepted/Rejected and stop there**, and a **new "Manage Consumers" button** to carry on once the file is *Accepted via DHS*.
+
+**Decisions confirmed with the user:** keep decline auto-handling on "Check Request Status" (it's the "rejected" branch); leave the existing "Check DHS" (search) button untouched; add "Manage Consumers" as a third button. The *exact* deeper scope of Manage Consumers (whether it also runs the live Search & Manage Consumer clearance status-history check) was **deferred** — to be confirmed.
+
+**What changed:**
+- **`packages/shared-lib/src/dhs/accepted-handler.ts`** — new pure helper `isManageConsumersEligible({ status, dhsStatus, manuallyAcceptedViaDhs })`: true when the file is Accepted via DHS by workflow status (`ACCEPTED_VIA_DHS`/`READY_TO_CONSENT`), DHS label (`Accepted`/`Auto Transferred`), or the staff "Accepted via DHS" override. Exported from `dhs/index.ts` (with `READY_TO_CONSENT_STATUS`).
+- **`apps/cases/app/api/dhs/lookup/route.ts`** — `check_status` no longer calls `handleDhsAccepted`; on ACCEPTED/AUTO_TRANSFERRED it only flags `acceptedReadyForManage` on the response (status is still parked at `ACCEPTED_VIA_DHS` by Rules 8/9, manager notification unchanged, **decline handler unchanged**). New `action: 'manage_consumers'` branch — guards on `isManageConsumersEligible(caseData)` then runs `handleDhsAccepted` (consent email + Ready to Consent), returning `emailSent`/`skipped`/`consentLink`/`message`.
+- **`apps/cases/app/(authenticated)/cases/[id]/page.tsx`** — new `handleManageConsumers` + `manageConsumersLoading`; new green **"Manage Consumers"** button shown only when the file is Accepted via DHS (status/label/manual override). "Check Request Status" toast now nudges staff to click Manage Consumers when it detects an accepted file (replaced the old auto-email surfacing).
+
+**Behaviour change to note:** the **`/api/cron/workflow-automation`** cron still fires `handleDhsAccepted` automatically on its ACCEPTED transitions — only the **manual button** was split. If the cron should also defer to Manage Consumers (for consistency), that's a follow-up tied to the deferred scope question.
+
+**Tests:** `accepted-handler.test.ts` +5 (now 12) covering `isManageConsumersEligible` (workflow statuses, DHS labels, either-field, manual override, negatives) — all green. `handleDhsAccepted` suite unchanged and green.
+
+**Remaining:** (1) confirm Manage Consumers' deeper scope — wire `getConsumerStatusHistory` + `evaluateConsumerClearance` (already built, unwired) for Ready-for-Clearance/Completed detection; (2) decide whether the workflow-automation cron should also stop auto-sending the consent email; (3) prod still needs the `20260628_debt_review_removal_consent` migration applied + redeploy (per entries below).
+
+---
+
 ### Added: "Ready to Consent" status + accepted-email template rework (2026-06-29)
 
 Follow-on to the accepted-email wiring (entry further below), per user feedback after live testing.

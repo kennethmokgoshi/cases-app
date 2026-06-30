@@ -249,6 +249,28 @@ export default function FinanceCaseDetailPage() {
                     <p className="text-2xl font-bold text-white">{formatRand(summary.invoicedTotal)}</p>
                     <p className="text-xs text-gray-500 mt-1">{summary.invoiceCount} invoice{summary.invoiceCount === 1 ? '' : 's'}</p>
                 </div>
+                {summary.acceptedQuoteCount > 0 && (
+                    <>
+                        <div className="bg-[var(--color-bg-secondary)] rounded-xl p-5 border border-white/5">
+                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Accepted Quotes</p>
+                            <p className="text-2xl font-bold text-white">{formatRand(summary.acceptedQuotesTotal)}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                {summary.acceptedQuoteCount} accepted quote{summary.acceptedQuoteCount === 1 ? '' : 's'}
+                            </p>
+                        </div>
+                        <div className="bg-[var(--color-bg-secondary)] rounded-xl p-5 border border-white/5">
+                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Available Balance</p>
+                            <p className={`text-2xl font-bold ${summary.quoteBalance === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                {formatRand(summary.quoteBalance)}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                {summary.quoteBalance === 0
+                                    ? 'Accepted quotes fully paid ✓'
+                                    : `Remaining of ${formatRand(summary.acceptedQuotesTotal)} after ${formatRand(summary.totalPaid)} paid`}
+                            </p>
+                        </div>
+                    </>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

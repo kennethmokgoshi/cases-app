@@ -37,6 +37,11 @@ export * from './metrics';
 // Finance — shared invoice/quotation number allocation (atomic, cross-app)
 export * from './finance/document-number';
 
+// Finance — Debt Counsellor fee invoice catalogue/schema/maths (browser-safe).
+// The Prisma-backed persistence lives in './finance/dc-fee-invoice-service' and is
+// imported directly by server routes — it is intentionally NOT re-exported here.
+export * from './finance/dc-fee-invoice';
+
 // Demo Data
 export * from './demo-data';
 

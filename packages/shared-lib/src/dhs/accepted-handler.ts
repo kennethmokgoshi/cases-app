@@ -33,6 +33,49 @@ export const READY_TO_CONSENT_STATUS = 'READY_TO_CONSENT';
 /** Working-day follow-up window while waiting on consent. */
 const CONSENT_FOLLOWUP_DAYS = 3;
 
+/**
+ * Workflow/DHS status values (normalised — no spaces/underscores, upper-case)
+ * that mean a file is "Accepted via DHS" and therefore eligible for the
+ * Manage Consumers post-acceptance follow-on.
+ *   • ACCEPTED_VIA_DHS / READY_TO_CONSENT — our workflow statuses
+ *   • Accepted / Auto Transferred         — the DHS request-status labels
+ */
+const MANAGE_CONSUMERS_ELIGIBLE = new Set<string>([
+    'ACCEPTEDVIADHS',
+    'READYTOCONSENT',
+    'ACCEPTED',
+    'AUTOTRANSFERRED',
+]);
+
+const normaliseStatus = (value?: string | null): string =>
+    (value ?? '').replace(/[\s_]+/g, '').toUpperCase();
+
+/**
+ * True when a case is in an "Accepted via DHS" state and is therefore eligible
+ * for the Manage Consumers post-acceptance follow-on (the consumer acceptance +
+ * debt-review-removal consent email, and later the Search & Manage Consumer
+ * clearance status-history check).
+ *
+ * Accepts either the workflow `status` or the DHS `dhsStatus` label; matching is
+ * whitespace/underscore/case-insensitive so 'ACCEPTED_VIA_DHS', 'Accepted', and
+ * 'Auto Transferred' all qualify. Pure — safe to reuse on the server and client.
+ *
+ * `manuallyAcceptedViaDhs` is the staff override: DHS sometimes transfers a file
+ * into our DC profile without ever showing a formal Accepted/Auto Transferred
+ * status, so a human can tick the "Accepted via DHS" box to unlock this follow-on.
+ */
+export function isManageConsumersEligible(input: {
+    status?: string | null;
+    dhsStatus?: string | null;
+    manuallyAcceptedViaDhs?: boolean | null;
+}): boolean {
+    return (
+        input.manuallyAcceptedViaDhs === true ||
+        MANAGE_CONSUMERS_ELIGIBLE.has(normaliseStatus(input.status)) ||
+        MANAGE_CONSUMERS_ELIGIBLE.has(normaliseStatus(input.dhsStatus))
+    );
+}
+
 export interface AcceptedHandlerResult {
     /** True when the acceptance + consent email was delivered on this run. */
     emailSent: boolean;

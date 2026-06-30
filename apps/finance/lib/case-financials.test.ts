@@ -55,6 +55,54 @@ describe('summariseCaseFinancials', () => {
         expect(s.overCollected).toBe(0);
         expect(s.totalPaid).toBe(200);
     });
+
+    it('totals accepted quotes and computes the remaining balance after payments', () => {
+        const s = summariseCaseFinancials({
+            serviceFee: null,
+            payments: [{ amount: 1000, status: 'COMPLETED' }],
+            invoices: [{ total: 4500, status: 'ACCEPTED', type: 'QUOTE' }],
+        });
+        expect(s.acceptedQuotesTotal).toBe(4500);
+        expect(s.acceptedQuoteCount).toBe(1);
+        // 4500 accepted - 1000 paid = 3500 remaining
+        expect(s.quoteBalance).toBe(3500);
+        // A quote is not an invoice
+        expect(s.invoicedTotal).toBe(0);
+    });
+
+    it('floors the quote balance at 0 once accepted quotes are fully paid', () => {
+        const s = summariseCaseFinancials({
+            serviceFee: null,
+            payments: [{ amount: 5000, status: 'COMPLETED' }],
+            invoices: [{ total: 4500, status: 'ACCEPTED', type: 'QUOTE' }],
+        });
+        expect(s.quoteBalance).toBe(0);
+    });
+
+    it('only counts ACCEPTED quotes, not pending/rejected quotes or invoices', () => {
+        const s = summariseCaseFinancials({
+            serviceFee: null,
+            payments: [],
+            invoices: [
+                { total: 4500, status: 'ACCEPTED', type: 'QUOTE' },
+                { total: 2000, status: 'SENT', type: 'QUOTE' },
+                { total: 9999, status: 'ACCEPTED', type: 'INVOICE' },
+            ],
+        });
+        expect(s.acceptedQuotesTotal).toBe(4500);
+        expect(s.acceptedQuoteCount).toBe(1);
+    });
+
+    it('returns a null quote balance when there are no accepted quotes', () => {
+        const s = summariseCaseFinancials({
+            serviceFee: 1000,
+            payments: [{ amount: 500, status: 'COMPLETED' }],
+            invoices: [{ total: 1000, status: 'SENT', type: 'INVOICE' }],
+        });
+        expect(s.acceptedQuotesTotal).toBe(0);
+        expect(s.acceptedQuoteCount).toBe(0);
+        expect(s.quoteBalance).toBeNull();
+    });
 });
 
 describe('formatRand', () => {
