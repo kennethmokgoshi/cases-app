@@ -1,5 +1,6 @@
 import { logger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
+import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem } from '@/lib/invoice-pdf'
@@ -66,6 +67,8 @@ export async function GET(
       ? `${invoice.client.firstName} ${invoice.client.lastName}`
       : undefined
 
+    const bankingDetails = await resolveInvoiceBankingDetails(invoice)
+
     const pdfBytes = await generateInvoicePdf({
       documentType:        invoice.type as 'INVOICE' | 'QUOTE',
       invoiceNumber:       invoice.invoiceNumber,
@@ -87,12 +90,7 @@ export async function GET(
       createdByName:       invoice.createdBy
         ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
         : undefined,
-      bankingDetails: invoice.bankAccount ? {
-        bankName:      invoice.bankAccount.bankName,
-        accountHolder: invoice.bankAccount.accountName,
-        accountNumber: invoice.bankAccount.accountNumber,
-        branchCode:    invoice.bankAccount.branchCode ?? undefined,
-      } : (invoice.type === 'QUOTE' ? null : undefined),
+      bankingDetails,
     })
 
     // Cache to disk — TODO: replace with object storage in production

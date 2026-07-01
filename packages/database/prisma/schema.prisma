@@ -117,10 +117,10 @@ model ReferrerCommission {
 }
 
 model Client {
-  id                  String               @id @default(cuid())
+  id                  String                     @id @default(cuid())
   firstName           String
   lastName            String
-  idNumber            String               @unique
+  idNumber            String                     @unique
   email               String?
   phone               String?
   whatsappNumber      String?
@@ -131,9 +131,9 @@ model Client {
   grossSalary         Decimal?
   netSalary           Decimal?
   salaryPayDate       Int?
-  type                String               @default("Standard")
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  type                String                     @default("Standard")
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
   ghlContactId        String?
   alternativeEmail    String?
   alternativePhone    String?
@@ -145,8 +145,8 @@ model Client {
   accountType         String?
   branchCode          String?
   debitOrderDay       Int?
-  cases               Case[]               @relation("PrimaryClient")
-  jointCases          Case[]               @relation("JointClient")
+  cases               Case[]                     @relation("PrimaryClient")
+  jointCases          Case[]                     @relation("JointClient")
   consumerAccount     ConsumerAccount?
   creditAccounts      CreditAccount[]
   invoices            Invoice[]
@@ -197,37 +197,39 @@ model NotificationQueue {
 }
 
 model Case {
-  id                      String                @id @default(cuid())
-  fileNumber              String                @unique
+  id                      String                     @id @default(cuid())
+  fileNumber              String                     @unique
   clientId                String
   jointClientId           String?
-  acquisitionType         String                @default("B2C")
+  acquisitionType         String                     @default("B2C")
   partnerName             String?
   partnerBranch           String?
-  r350Status              String                @default("NOT_APPLICABLE") // NOT_APPLICABLE | PENDING | PAID_R350 | FILE_PAID | TOLD_R350 | WAITING_R350 | WAIVED
+  r350Status              String                     @default("NOT_APPLICABLE") // NOT_APPLICABLE | PENDING | PAID_R350 | FILE_PAID | TOLD_R350 | WAITING_R350 | WAIVED
   r350PaidDate            DateTime?
   r350PaidRef             String?
   r350PaidById            String?
-  r350Waived              Boolean               @default(false)
+  r350Waived              Boolean                    @default(false)
   r350WaivedById          String?
   r350WaivedAt            DateTime?
   r350WaivedReason        String?
-  serviceFeeCollectedBy   String                @default("ZENOWETHU")
-  partnerSplitPercent     Int                   @default(0)
+  r350InvoiceId           String?
+  r350InvoiceSentAt       DateTime?
+  serviceFeeCollectedBy   String                     @default("ZENOWETHU")
+  partnerSplitPercent     Int                        @default(0)
   status                  String
-  statusEntryDate         DateTime              @default(now())
+  statusEntryDate         DateTime                   @default(now())
   deadline                DateTime?
-  isOverdue               Boolean               @default(false)
-  daysInStatus            Int                   @default(0)
+  isOverdue               Boolean                    @default(false)
+  daysInStatus            Int                        @default(0)
   serviceFee              Decimal?
-  instalments             Int                   @default(1)
+  instalments             Int                        @default(1)
   zenowethuShare          Decimal?
-  isInvoiced              Boolean               @default(false)
-  closedAccounts          Int                   @default(0)
-  openAccounts            Int                   @default(0)
-  prescribedAccounts      Int                   @default(0)
-  totalDebtAmount         Decimal?              @default(0)
-  totalMonthlyInstallment Decimal?              @default(0)
+  isInvoiced              Boolean                    @default(false)
+  closedAccounts          Int                        @default(0)
+  openAccounts            Int                        @default(0)
+  prescribedAccounts      Int                        @default(0)
+  totalDebtAmount         Decimal?                   @default(0)
+  totalMonthlyInstallment Decimal?                   @default(0)
   cb_ncrdcNo              String?
   cb_debtCounsellor       String?
   cb_contactNo            String?
@@ -239,7 +241,7 @@ model Case {
   // Manual staff override: DHS sometimes drops a file into our DC profile without a
   // formal "Accepted"/"Auto Transferred" status. Staff tick this to mark the file as
   // Accepted via DHS so the Manage Consumers (consent) follow-on can proceed.
-  manuallyAcceptedViaDhs  Boolean               @default(false)
+  manuallyAcceptedViaDhs  Boolean                    @default(false)
   dhsDaysCounter          String?
   debtReviewDate          DateTime?
   debtCounsellorName      String?
@@ -267,47 +269,47 @@ model Case {
   nextUpdate              DateTime?
   fileToBeCompleted       DateTime?
   insuranceNotes          String?
-  category                String                @default("Standard")
+  category                String                     @default("Standard")
   services                String?
   todos                   String?
   declineReason           String?
-  declineReasonAttended   Boolean               @default(false)
+  declineReasonAttended   Boolean                    @default(false)
   declineFirstDetectedAt  DateTime? // When decline was FIRST detected (never updated, used for window calculation)
   declineLastDetectedAt   DateTime? // Most recent decline detection (updated on each new decline, visible in UI)
   description             String?
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
   assignedToId            String?
   createdById             String?
-  aiAutonomyLevel         String                @default("CO_PILOT")
+  aiAutonomyLevel         String                     @default("CO_PILOT")
   nctCaseNumber           String?
   nctEPurseBalance        Decimal?
   nctFilingDate           DateTime?
   nctLastUpdated          DateTime?
   nctStatus               String?
-  planReadyToStart        Boolean               @default(false)
+  planReadyToStart        Boolean                    @default(false)
   ncrSysRef               String?
   dcProvince              String?
   dcTel                   String?
   lastUsedMobile          String?
   lastUsedTel             String?
   referrerId              String?
-  isAdminOnly             Boolean               @default(false)
+  isAdminOnly             Boolean                    @default(false)
   ghlOpportunityId        String?
   leadSource              String?
   marketingData           Json?
   updatedById             String?
   deletedAt               DateTime?
   deletedById             String?
-  assignedTo              User?                 @relation("CaseAssignee", fields: [assignedToId], references: [id])
-  client                  Client                @relation("PrimaryClient", fields: [clientId], references: [id])
-  jointClient             Client?               @relation("JointClient", fields: [jointClientId], references: [id])
-  createdBy               User?                 @relation("CaseCreator", fields: [createdById], references: [id])
-  deletedBy               User?                 @relation("CaseDeleter", fields: [deletedById], references: [id])
-  referrer                Referrer?             @relation(fields: [referrerId], references: [id])
-  updatedBy               User?                 @relation("CaseUpdater", fields: [updatedById], references: [id])
-  r350PaidBy              User?                 @relation("CaseR350PaidBy", fields: [r350PaidById], references: [id])
-  r350WaivedBy            User?                 @relation("CaseR350WaivedBy", fields: [r350WaivedById], references: [id])
+  assignedTo              User?                      @relation("CaseAssignee", fields: [assignedToId], references: [id])
+  client                  Client                     @relation("PrimaryClient", fields: [clientId], references: [id])
+  jointClient             Client?                    @relation("JointClient", fields: [jointClientId], references: [id])
+  createdBy               User?                      @relation("CaseCreator", fields: [createdById], references: [id])
+  deletedBy               User?                      @relation("CaseDeleter", fields: [deletedById], references: [id])
+  referrer                Referrer?                  @relation(fields: [referrerId], references: [id])
+  updatedBy               User?                      @relation("CaseUpdater", fields: [updatedById], references: [id])
+  r350PaidBy              User?                      @relation("CaseR350PaidBy", fields: [r350PaidById], references: [id])
+  r350WaivedBy            User?                      @relation("CaseR350WaivedBy", fields: [r350WaivedById], references: [id])
   assignments             CaseAssignment[]
   comments                CaseComment[]
   followers               CaseFollower[]
@@ -476,6 +478,7 @@ model User {
   approvedPlans              CasePlan[]                     @relation("PlanApprover")
   mentions                   CommentMention[]
   dccpCredential             DCCPCredential?
+  staffBankingDetail         StaffBankingDetail?
   approvedDebtReviewDocs     DebtReviewDocument[]           @relation("DebtReviewDocumentApprover")
   uploadedDocuments          Document[]
   grantedDocumentAccess      DocumentAccessGrant[]          @relation("DocumentAccessGranter")
@@ -484,6 +487,7 @@ model User {
   inAppNotifications         InAppNotification[]
   invoicesCreated            Invoice[]                      @relation("InvoiceCreator")
   invoicesDecided            Invoice[]                      @relation("InvoiceDecider")
+  invoicesPersonalBanking    Invoice[]                      @relation("InvoicePersonalBanking")
   sentNotifications          NotificationLog[]              @relation("SentNotifications")
   recordedPayments           Payment[]                      @relation("PaymentRecorder")
   uploadedBatches            PaymentBatch[]
@@ -863,52 +867,56 @@ model PaymentBatch {
 }
 
 model Invoice {
-  id                   String        @id @default(cuid())
-  invoiceNumber        String        @unique
-  status               InvoiceStatus @default(DRAFT)
-  clientId             String?
-  caseId               String?
-  projectId            String?
-  lineItems            Json
-  subtotal             Decimal       @default(0)
-  vatRate              Decimal       @default(0.15)
-  vatAmount            Decimal       @default(0)
-  total                Decimal       @default(0)
-  issuedAt             DateTime      @default(now())
-  dueAt                DateTime
-  pdfPath              String?
-  sentAt               DateTime?
-  sentTo               String?
-  notes                String?
-  reference            String?
-  createdById          String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  bankAccountId        String?
-  type                 DocumentType  @default(INVOICE)
-  publicToken          String?       @unique
+  id                    String        @id @default(cuid())
+  invoiceNumber         String        @unique
+  status                InvoiceStatus @default(DRAFT)
+  clientId              String?
+  caseId                String?
+  projectId             String?
+  lineItems             Json
+  subtotal              Decimal       @default(0)
+  vatRate               Decimal       @default(0.15)
+  vatAmount             Decimal       @default(0)
+  total                 Decimal       @default(0)
+  issuedAt              DateTime      @default(now())
+  dueAt                 DateTime
+  pdfPath               String?
+  sentAt                DateTime?
+  sentTo                String?
+  notes                 String?
+  reference             String?
+  createdById           String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  bankAccountId         String?
+  type                  DocumentType  @default(INVOICE)
+  publicToken           String?       @unique
   // Debt-counsellor bill-to details — populated only for DC_FEE_INVOICE type.
   // The consumer the fees relate to is the linked `client`/`case` (or stored in
   // `reference` for standalone invoices with no case in the system).
-  dcName               String?
-  dcEmail              String?
-  dcTradingName        String?
+  dcName                String?
+  dcEmail               String?
+  dcTradingName         String?
   // Quote lifecycle — set when a client accepts/rejects a quotation
-  acceptedAt           DateTime?
-  rejectedAt           DateTime?
-  decisionNote         String?
-  decidedById          String?
+  acceptedAt            DateTime?
+  rejectedAt            DateTime?
+  decisionNote          String?
+  decidedById           String?
   // Set when an ACCEPTED quote is converted into an invoice
-  convertedToInvoiceId String?       @unique
-  bankAccount          BankAccount?  @relation(fields: [bankAccountId], references: [id])
-  case                 Case?         @relation(fields: [caseId], references: [id])
-  client               Client?       @relation(fields: [clientId], references: [id])
-  createdBy            User?         @relation("InvoiceCreator", fields: [createdById], references: [id])
-  decidedBy            User?         @relation("InvoiceDecider", fields: [decidedById], references: [id])
-  project              Project?      @relation(fields: [projectId], references: [id])
-  convertedToInvoice   Invoice?      @relation("QuoteConversion", fields: [convertedToInvoiceId], references: [id])
-  convertedFromQuote   Invoice?      @relation("QuoteConversion")
-  payments             Payment[]
+  convertedToInvoiceId  String?       @unique
+  // Set instead of bankAccountId when a staff member's own personal banking is
+  // used (R350 admin fee invoices, or Admin choosing "use my own banking").
+  personalBankingUserId String?
+  bankAccount           BankAccount?  @relation(fields: [bankAccountId], references: [id])
+  case                  Case?         @relation(fields: [caseId], references: [id])
+  client                Client?       @relation(fields: [clientId], references: [id])
+  createdBy             User?         @relation("InvoiceCreator", fields: [createdById], references: [id])
+  decidedBy             User?         @relation("InvoiceDecider", fields: [decidedById], references: [id])
+  project               Project?      @relation(fields: [projectId], references: [id])
+  convertedToInvoice    Invoice?      @relation("QuoteConversion", fields: [convertedToInvoiceId], references: [id])
+  convertedFromQuote    Invoice?      @relation("QuoteConversion")
+  personalBankingUser   User?         @relation("InvoicePersonalBanking", fields: [personalBankingUserId], references: [id])
+  payments              Payment[]
 
   @@index([status])
   @@index([type])
@@ -916,6 +924,7 @@ model Invoice {
   @@index([caseId])
   @@index([issuedAt])
   @@index([dueAt])
+  @@index([personalBankingUserId])
 }
 
 model DocumentSequence {
@@ -975,7 +984,7 @@ model CredoTenant {
 }
 
 model ConsumerAccount {
-  id                   String              @id @default(cuid())
+  id                   String                     @id @default(cuid())
   email                String
   // Nullable: auto-provisioned profiles (created from a B2B/staff case) have no
   // password until the consumer activates via the password-reset link.
@@ -983,29 +992,29 @@ model ConsumerAccount {
   // Tracks whether the consumer has ever set a password (activated their login).
   activatedAt          DateTime?
   // How the profile was created: SELF_REGISTERED | AUTO_PROVISIONED
-  source               String              @default("SELF_REGISTERED")
+  source               String                     @default("SELF_REGISTERED")
   firstName            String
   lastName             String
-  idNumber             String?             @unique
+  idNumber             String?                    @unique
   phone                String?
   province             String?
-  language             String              @default("English")
+  language             String                     @default("English")
   tenantId             String?
-  isVerified           Boolean             @default(false)
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  linkedClientId       String?             @unique
-  isAdmin              Boolean             @default(false)
+  isVerified           Boolean                    @default(false)
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  linkedClientId       String?                    @unique
+  isAdmin              Boolean                    @default(false)
   projectId            String?
-  role                 String              @default("CONSUMER")
-  activeSubscriptionId String?             @unique
-  linkedClient         Client?             @relation(fields: [linkedClientId], references: [id])
-  project              Project?            @relation(fields: [projectId], references: [id])
-  tenant               CredoTenant?        @relation(fields: [tenantId], references: [id])
+  role                 String                     @default("CONSUMER")
+  activeSubscriptionId String?                    @unique
+  linkedClient         Client?                    @relation(fields: [linkedClientId], references: [id])
+  project              Project?                   @relation(fields: [projectId], references: [id])
+  tenant               CredoTenant?               @relation(fields: [tenantId], references: [id])
   documents            CredoDocument[]
   serviceRequests      ServiceRequest[]
   subscriptions        CredoSubscription[]
-  activeSubscription   CredoSubscription?  @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
+  activeSubscription   CredoSubscription?         @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
   poaSigningRequests   PoaSigningRequest[]
   drrConsents          DebtReviewRemovalConsent[]
   otpSession           CredoOtpSession?
@@ -1106,16 +1115,16 @@ model TelegramSession {
 }
 
 model CredoDocument {
-  id           String          @id @default(cuid())
-  consumerId   String
-  fileName     String
-  originalName String
-  mimeType     String
-  size         Int
-  category     String
-  storagePath  String
-  createdAt    DateTime        @default(now())
-  consumer     ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+  id               String           @id @default(cuid())
+  consumerId       String
+  fileName         String
+  originalName     String
+  mimeType         String
+  size             Int
+  category         String
+  storagePath      String
+  createdAt        DateTime         @default(now())
+  consumer         ConsumerAccount  @relation(fields: [consumerId], references: [id], onDelete: Cascade)
   fulfilledRequest DocumentRequest?
 
   @@index([consumerId])
@@ -1689,6 +1698,22 @@ model DCCPCredential {
   userId    String   @unique
   portalUrl String   @default("https://portal.colms.co.za/arsys/shared/login.jsp?/arsys/")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Staff member's own personal banking details — self-service, used only to
+// populate the R350 admin fee invoice for cases they created (falls back to
+// Zenowethu's default BankAccount if not set). Also selectable by Admin as an
+// "own banking" option on general invoices/quotes.
+model StaffBankingDetail {
+  id            String   @id @default(cuid())
+  bankName      String
+  accountName   String
+  accountNumber String
+  branchCode    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DCCPCommissionRecord {

@@ -37,5 +37,38 @@ export async function allocateDocumentNumber(
     create: { prefix, year, nextSeq: 2 },
   })
 
-  return `${prefix}-${year}-${String(seq.nextSeq).padStart(4, '0')}`
+  const prefixStr = `${prefix}-${year}-`
+  let next = seq.nextSeq
+
+  // Self-heal counter drift. If the DocumentSequence fell behind the numbers
+  // actually issued for this prefix/year — e.g. legacy or imported invoices that
+  // were created outside this allocator — the candidate can collide with an
+  // existing `invoiceNumber` (a P2002 unique violation). The common (no-drift)
+  // path is a single indexed lookup on the unique `invoiceNumber`; only when a
+  // clash is detected do we scan the issued numbers and jump the counter past
+  // the real maximum. Because the `upsert` above holds a row lock on the
+  // sequence row for the life of the transaction, concurrent allocations
+  // serialise here, so each caller still receives a distinct number.
+  const clash = await tx.invoice.findFirst({
+    where:  { invoiceNumber: `${prefixStr}${String(next).padStart(4, '0')}` },
+    select: { id: true },
+  })
+  if (clash) {
+    const issued = await tx.invoice.findMany({
+      where:  { invoiceNumber: { startsWith: prefixStr } },
+      select: { invoiceNumber: true },
+    })
+    let maxIssued = next
+    for (const { invoiceNumber } of issued) {
+      const n = parseInt(invoiceNumber.slice(prefixStr.length), 10)
+      if (Number.isFinite(n) && n > maxIssued) maxIssued = n
+    }
+    next = maxIssued + 1
+    await tx.documentSequence.update({
+      where: { prefix_year: { prefix, year } },
+      data:  { nextSeq: next },
+    })
+  }
+
+  return `${prefixStr}${String(next).padStart(4, '0')}`
 }

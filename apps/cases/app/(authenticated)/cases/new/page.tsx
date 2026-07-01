@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
 import { ClientOnly } from './ClientOnly';
+import { buildManualCaseCreatePayload, buildManualCasePatchPayload } from '@/lib/manual-case-payload';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -678,7 +679,7 @@ function NewCaseWithAIComponent() {
         }
     };
 
-    const handleCreateManualCase = async () => {
+    const handleCreateManualCase = async (allowDuplicate = false) => {
         if (!formData.surname || !formData.names || !formData.idNumber) {
             toast.error('Please fill in Surname, Full Names, and ID Number');
             return;
@@ -686,23 +687,32 @@ function NewCaseWithAIComponent() {
         setSubmitting(true);
         setSubmitError(null);
         try {
-            // Create temp case shell
-            const tempCase = await fetch('/api/cases', {
+            const createRes = await fetch('/api/cases', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    client: { firstName: 'Manual', lastName: 'Entry', idNumber: `MANUAL-${Date.now()}` },
+                body: JSON.stringify(buildManualCaseCreatePayload(formData, {
                     projectId: finalProjectId,
                     acquisitionType,
                     partnerName: acquisitionType === 'B2B' ? getPartnerNameFromProject() : null,
                     partnerBranch: acquisitionType === 'B2B' ? getBranchNameFromProject() : null,
                     partnerSplitPercent: acquisitionType === 'B2B' ? 50 : 0,
                     referrerId: autoDetectedReferrerId ?? undefined,
-                })
+                    services: selectedServices,
+                    allowDuplicate,
+                }))
             });
-            if (!tempCase.ok) throw new Error('Failed to initialize case');
-            const tempCaseData = await tempCase.json();
-            const caseId = tempCaseData.id;
+
+            const createdCase = await createRes.json();
+            if (!createRes.ok) {
+                if (createRes.status === 409 && (createdCase.code === 'DUPLICATE_CASE' || createdCase.code === 'DUPLICATE_ID_NUMBER')) {
+                    setDuplicateError(createdCase);
+                    return;
+                }
+                setSubmitError({ title: '❌ Error', message: createdCase.error || 'Failed to create case', code: createdCase.code || 'ERROR' });
+                return;
+            }
+
+            const caseId = createdCase.id;
 
             // Upload any attached files (no AI analysis)
             const hasFiles = uploadedFiles.id || uploadedFiles.poa || (uploadedFiles.creditReports?.length || 0) > 0 ||
@@ -725,40 +735,18 @@ function NewCaseWithAIComponent() {
                 if (uploadedFiles.form177) fd.append('files', uploadedFiles.form177);
                 if (uploadedFiles.clearance) fd.append('files', uploadedFiles.clearance);
                 uploadedFiles.optional.forEach(f => fd.append('files', f));
-                await fetch('/api/documents/upload', { method: 'POST', body: fd });
+                const uploadRes = await fetch('/api/documents/upload', { method: 'POST', body: fd });
+                if (!uploadRes.ok) {
+                    const uploadError = await uploadRes.json().catch(() => ({}));
+                    throw new Error(uploadError.error || uploadError.details || 'Case was created, but document upload failed');
+                }
             }
 
-            // Patch case with real data
+            // Patch case-level fields that are not accepted by POST /api/cases.
             const res = await fetch(`/api/cases/${caseId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    client: {
-                        firstName: formData.names,
-                        lastName: formData.surname,
-                        idNumber: formData.idNumber,
-                        email: formData.email || null,
-                        phone: formData.cellNumber || null,
-                        address: formData.address || null,
-                        employer: formData.employer || null,
-                        grossSalary: formData.grossSalary || null,
-                        netSalary: formData.netSalary || null,
-                        salaryPayDate: formData.salaryPayDate || null,
-                        type: formData.category
-                    },
-                    jointClient: formData.isJointApplication ? {
-                        firstName: formData.jointNames,
-                        lastName: formData.jointSurname,
-                        idNumber: formData.jointIdNumber,
-                        phone: formData.jointCellNumber || null,
-                        email: formData.jointEmail || null,
-                    } : null,
-                    services: selectedServices,
-                    serviceFee: formData.serviceFee || null,
-                    instalments: formData.instalments || 1,
-                    totalDebtAmount: formData.totalDebtAmount ? Number(formData.totalDebtAmount) : 0,
-                    totalMonthlyInstallment: formData.totalMonthlyInstallment ? Number(formData.totalMonthlyInstallment) : 0
-                })
+                body: JSON.stringify(buildManualCasePatchPayload(formData, selectedServices))
             });
 
             const data = await res.json();
@@ -2111,7 +2099,7 @@ function NewCaseWithAIComponent() {
                             Back
                         </button>
                         <button
-                            onClick={handleCreateManualCase}
+                            onClick={() => handleCreateManualCase()}
                             disabled={!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.replace(/\s/g, '').length < 6 || submitting}
                             className={`flex-1 px-8 py-3 rounded-lg font-bold text-white transition-all ${!formData.surname || !formData.names || !formData.idNumber || formData.idNumber.replace(/\s/g, '').length < 6 || submitting ? 'bg-gray-700 cursor-not-allowed opacity-50' : 'bg-zeno-cyan hover:bg-cyan-600 shadow-lg shadow-cyan-900/20'}`}
                         >
@@ -3046,7 +3034,7 @@ function NewCaseWithAIComponent() {
                             <p className="text-gray-300 text-sm mt-0.5">Project: <span className="text-gray-100">{duplicateError.existingProjectName || 'Unknown Project'}</span></p>
                         </div>
                         <p className="text-gray-400 text-sm mb-5">
-                            You can merge this submission into the existing client record, or cancel and search for their existing case.
+                            You can record this referral against the existing client record, or cancel and search for their existing case.
                         </p>
                         <div className="flex gap-3">
                             <button
@@ -3056,10 +3044,15 @@ function NewCaseWithAIComponent() {
                                 Cancel
                             </button>
                             <button
-                                onClick={() => { setDuplicateError(null); setPrefixedIdInput(''); handleSubmit(true); }}
+                                onClick={() => {
+                                    setDuplicateError(null);
+                                    setPrefixedIdInput('');
+                                    if (manualMode) handleCreateManualCase(true);
+                                    else handleSubmit(true);
+                                }}
                                 className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-bold"
                             >
-                                Merge into Existing Record
+                                Record Referral
                             </button>
                         </div>
                     </div>

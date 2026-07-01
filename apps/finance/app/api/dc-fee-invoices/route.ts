@@ -51,6 +51,7 @@ export async function POST(request: Request) {
     )
   } catch (err) {
     logger.error('[POST /api/dc-fee-invoices] (finance)', err)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    const message = err instanceof Error ? err.message : 'Internal Server Error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

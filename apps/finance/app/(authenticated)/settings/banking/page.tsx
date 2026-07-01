@@ -1,5 +1,5 @@
 'use client'
-import { confirm } from '@zenowethu/ui';
+import { confirm, useSession } from '@zenowethu/ui';
 
 
 import { useState, useEffect } from 'react'
@@ -19,6 +19,7 @@ type BankAccount = {
 }
 
 export default function BankingSettingsPage() {
+  const { data: session, status } = useSession()
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -61,6 +62,25 @@ export default function BankingSettingsPage() {
     } catch (err) {
       setError('Failed to deactivate account')
     }
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (session?.user?.isAdmin !== true) {
+    return (
+      <div className="p-8 max-w-6xl mx-auto">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-6 rounded-2xl text-center">
+          <h1 className="text-xl font-bold mb-2">Admin Access Required</h1>
+          <p className="text-sm text-red-300/80">Only Admin may view or manage Zenowethu's bank accounts.</p>
+        </div>
+      </div>
+    )
   }
 
   return (

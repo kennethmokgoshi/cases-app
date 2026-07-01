@@ -32,6 +32,13 @@ export default function AccountSettings() {
         newPassword: '',
         confirmPassword: '' });
 
+    const [bankingDetails, setBankingDetails] = useState({
+        bankName: '',
+        accountName: '',
+        accountNumber: '',
+        branchCode: '' });
+    const [hasSavedBankingDetails, setHasSavedBankingDetails] = useState(false);
+
     useEffect(() => {
         async function fetchProfile() {
             try {
@@ -47,6 +54,14 @@ export default function AccountSettings() {
                         idNumber: data.idNumber || '',
                         address: data.address || '',
                         avatarUrl: data.avatarUrl || '' }));
+                    if (data.staffBankingDetail) {
+                        setBankingDetails({
+                            bankName: data.staffBankingDetail.bankName || '',
+                            accountName: data.staffBankingDetail.accountName || '',
+                            accountNumber: data.staffBankingDetail.accountNumber || '',
+                            branchCode: data.staffBankingDetail.branchCode || '' });
+                        setHasSavedBankingDetails(true);
+                    }
                 }
             } catch (error) {
                 logger.error('Error fetching profile:', error);
@@ -62,12 +77,24 @@ export default function AccountSettings() {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const handleBankingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setBankingDetails(prev => ({ ...prev, [name]: value }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setMessage({ type: '', text: '' });
 
         if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
             setMessage({ type: 'error', text: 'New passwords do not match' });
+            return;
+        }
+
+        const bankingFilled = bankingDetails.bankName.trim() || bankingDetails.accountName.trim() || bankingDetails.accountNumber.trim();
+        const bankingComplete = bankingDetails.bankName.trim() && bankingDetails.accountName.trim() && bankingDetails.accountNumber.trim();
+        if (bankingFilled && !bankingComplete) {
+            setMessage({ type: 'error', text: 'Bank name, account name and account number are all required to save your banking details.' });
             return;
         }
 
@@ -85,11 +112,20 @@ export default function AccountSettings() {
                     address: formData.address,
                     avatarUrl: formData.avatarUrl,
                     currentPassword: formData.currentPassword,
-                    newPassword: formData.newPassword }) });
+                    newPassword: formData.newPassword,
+                    bankingDetails: bankingComplete
+                        ? {
+                            bankName: bankingDetails.bankName.trim(),
+                            accountName: bankingDetails.accountName.trim(),
+                            accountNumber: bankingDetails.accountNumber.trim(),
+                            branchCode: bankingDetails.branchCode.trim() || undefined,
+                        }
+                        : (hasSavedBankingDetails ? null : undefined) }) });
 
             const result = await res.json();
             if (res.ok) {
                 setMessage({ type: 'success', text: 'Profile updated successfully!' });
+                setHasSavedBankingDetails(Boolean(bankingComplete));
                 // Reset password fields
                 setFormData(prev => ({
                     ...prev,
@@ -252,10 +288,67 @@ export default function AccountSettings() {
 
                     <div className="h-px bg-white/5"></div>
 
+                    {/* Banking Details Section */}
+                    <section>
+                        <h2 className="text-xl font-semibold mb-2 text-zeno-cyan flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-full bg-zeno-cyan/10 flex items-center justify-center text-sm">3</span>
+                            Banking Details — Admin Fee Payouts
+                        </h2>
+                        <p className="text-xs text-gray-500 mb-6">
+                            Used only for the R350 admin fee invoice on cases you create. Leave blank to use Zenowethu&apos;s default banking details.
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-400">Bank Name</label>
+                                <input
+                                    type="text"
+                                    name="bankName"
+                                    value={bankingDetails.bankName}
+                                    onChange={handleBankingChange}
+                                    placeholder="e.g. FNB"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan transition-colors"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-400">Account Holder Name</label>
+                                <input
+                                    type="text"
+                                    name="accountName"
+                                    value={bankingDetails.accountName}
+                                    onChange={handleBankingChange}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan transition-colors"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-400">Account Number</label>
+                                <input
+                                    type="text"
+                                    name="accountNumber"
+                                    value={bankingDetails.accountNumber}
+                                    onChange={handleBankingChange}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan transition-colors"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-400">Branch Code (Optional)</label>
+                                <input
+                                    type="text"
+                                    name="branchCode"
+                                    value={bankingDetails.branchCode}
+                                    onChange={handleBankingChange}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan transition-colors"
+                                />
+                            </div>
+                        </div>
+                    </section>
+
+                    <div className="h-px bg-white/5"></div>
+
                     {/* Password Section */}
                     <section>
                         <h2 className="text-xl font-semibold mb-6 text-zeno-orange flex items-center gap-2">
-                            <span className="w-8 h-8 rounded-full bg-zeno-orange/10 flex items-center justify-center text-sm">3</span>
+                            <span className="w-8 h-8 rounded-full bg-zeno-orange/10 flex items-center justify-center text-sm">4</span>
                             Security
                         </h2>
 

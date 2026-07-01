@@ -206,11 +206,14 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const HDR_H      = 19
 
   // ── Banking details ───────────────────────────────────────────────────────
+  // Fallback is Zenowethu's FNB account — only used if the caller (which should
+  // normally resolve via resolveInvoiceBankingDetails in @zenowethu/shared-lib)
+  // didn't supply bankingDetails at all.
   const bd          = data.bankingDetails
-  const bankName    = bd?.bankName      ?? process.env.COMPANY_BANK_NAME    ?? 'CAPITEC BUSINESS'
-  const bankAccount = bd?.accountNumber ?? process.env.COMPANY_BANK_ACCOUNT ?? '105 181 8346'
-  const branchCode  = bd?.branchCode    ?? process.env.COMPANY_BRANCH_CODE  ?? '450105'
-  const acctHolder  = bd?.accountHolder ?? 'Zenowethu Debt Management (Pty) Ltd'
+  const bankName    = bd?.bankName      ?? process.env.COMPANY_BANK_NAME    ?? 'FNB'
+  const bankAccount = bd?.accountNumber ?? process.env.COMPANY_BANK_ACCOUNT ?? '62867268635'
+  const branchCode  = bd?.branchCode    ?? process.env.COMPANY_BRANCH_CODE  ?? '250655'
+  const acctHolder  = bd?.accountHolder ?? 'Zenowethu Trading Debt Management (PTY) LTD'
 
   const bankRows: [string, string][] = [
     ['Bank',           bankName],
@@ -218,7 +221,7 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
     ['Account Number', bankAccount],
     ...(branchCode ? [['Branch Code', branchCode] as [string, string]] : []),
     ['VAT Number',     process.env.COMPANY_VAT_NUMBER ?? '4590307072'],
-    ['Reference',      data.invoiceNumber],
+    ['Reference',      data.reference || data.invoiceNumber],
   ]
 
   const noteLines = data.notes ? wrapText(data.notes, regular, 7.5, CONTENT_W) : []

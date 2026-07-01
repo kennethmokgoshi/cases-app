@@ -1,5 +1,6 @@
 import { logger, renderBrandedEmail } from '@zenowethu/shared-lib'
 import { auth } from '@zenowethu/shared-lib'
+import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf'
@@ -85,7 +86,7 @@ export async function POST(
 
     // Non-admins can only send invoices that have banking details attached
     const isAdmin = session.user.isAdmin === true
-    if (!isAdmin && invoice.type === 'INVOICE' && !invoice.bankAccountId) {
+    if (!isAdmin && invoice.type === 'INVOICE' && !invoice.bankAccountId && !invoice.personalBankingUserId) {
       return NextResponse.json(
         { error: 'Banking details must be set on the invoice before sending. Contact an admin to send without banking details.' },
         { status: 403 },
@@ -97,6 +98,8 @@ export async function POST(
     const createdByName = invoice.createdBy
       ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
       : undefined
+
+    const bankingDetails = await resolveInvoiceBankingDetails(invoice)
 
     const invoiceData: InvoiceData = {
       documentType:         invoice.type as 'INVOICE' | 'QUOTE',
@@ -117,10 +120,10 @@ export async function POST(
       notes:                invoice.notes     ?? undefined,
       reference:            invoice.reference ?? undefined,
       createdByName,
-      bankName:             invoice.bankAccount?.bankName,
-      bankAccountName:      invoice.bankAccount?.accountName,
-      bankAccountNumber:    invoice.bankAccount?.accountNumber,
-      branchCode:           invoice.bankAccount?.branchCode ?? undefined,
+      bankName:             bankingDetails.bankName,
+      bankAccountName:      bankingDetails.accountHolder,
+      bankAccountNumber:    bankingDetails.accountNumber,
+      branchCode:           bankingDetails.branchCode,
     }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)

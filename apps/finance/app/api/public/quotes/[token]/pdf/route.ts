@@ -1,4 +1,5 @@
 import { prisma } from '@zenowethu/database'
+import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details'
 import { generateInvoicePdf, InvoiceLineItem } from '@/lib/invoice-pdf'
 import { NextResponse } from 'next/server'
 
@@ -16,6 +17,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
 
   if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const bankingDetails = await resolveInvoiceBankingDetails(invoice)
+
   const pdfBytes = await generateInvoicePdf({
     documentType:   invoice.type as 'INVOICE' | 'QUOTE',
     invoiceNumber:  invoice.invoiceNumber,
@@ -32,12 +35,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     total:          Number(invoice.total),
     notes:          invoice.notes ?? undefined,
     reference:      invoice.reference ?? undefined,
-    bankingDetails: invoice.bankAccount ? {
-      bankName:      invoice.bankAccount.bankName,
-      accountHolder: invoice.bankAccount.accountName,
-      accountNumber: invoice.bankAccount.accountNumber,
-      branchCode:    invoice.bankAccount.branchCode ?? undefined,
-    } : null,
+    bankingDetails,
   })
 
   return new Response(Buffer.from(pdfBytes), {

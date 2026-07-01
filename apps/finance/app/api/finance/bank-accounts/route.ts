@@ -28,6 +28,9 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
+  if (session.user.isAdmin !== true) {
+    return NextResponse.json({ error: 'Only Admin may manage Zenowethu bank accounts.' }, { status: 403 })
+  }
 
   let body: unknown
   try { body = await request.json() } catch {

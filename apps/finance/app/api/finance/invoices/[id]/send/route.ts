@@ -1,5 +1,6 @@
 import { logger, renderBrandedEmail } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
+import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf'
@@ -92,6 +93,8 @@ export async function POST(
       ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
       : undefined
 
+    const bankingDetails = await resolveInvoiceBankingDetails(invoice)
+
     const invoiceData: InvoiceData = {
       documentType:        invoice.type as 'INVOICE' | 'QUOTE',
       invoiceNumber:       invoice.invoiceNumber,
@@ -111,12 +114,7 @@ export async function POST(
       notes:               invoice.notes     ?? undefined,
       reference:           invoice.reference ?? undefined,
       createdByName,
-      bankingDetails: invoice.bankAccount ? {
-        bankName:      invoice.bankAccount.bankName,
-        accountHolder: invoice.bankAccount.accountName,
-        accountNumber: invoice.bankAccount.accountNumber,
-        branchCode:    invoice.bankAccount.branchCode ?? undefined,
-      } : (invoice.type === 'QUOTE' ? null : undefined),
+      bankingDetails,
     }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)

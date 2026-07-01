@@ -89,6 +89,9 @@ type CaseDetail = {
     r350WaivedReason: string | null;
     r350PaidBy: { firstName: string; lastName: string } | null;
     r350WaivedBy: { firstName: string; lastName: string } | null;
+    r350InvoiceId: string | null;
+    r350InvoiceSentAt: string | null;
+    createdById: string | null;
     serviceFeeCollectedBy: string;
     partnerSplitPercent: number;
     // DHS Information
@@ -454,6 +457,23 @@ export default function CaseDetailPage() {
     const [r350PaidDate, setR350PaidDate] = useState('');
     const [r350WaiveReason, setR350WaiveReason] = useState('');
     const [r350Saving, setR350Saving] = useState(false);
+    const [r350InvoiceSending, setR350InvoiceSending] = useState(false);
+
+    async function handleSendR350AdminInvoice() {
+        if (!caseData) return;
+        setR350InvoiceSending(true);
+        try {
+            const res = await fetch(`/api/cases/${caseData.id}/r350-admin-invoice`, { method: 'POST' });
+            const json = await res.json();
+            if (!res.ok) { toast.error(json.error ?? 'Failed to send R350 admin invoice'); return; }
+            setCaseData((prev) => prev ? { ...prev, r350InvoiceId: json.invoiceId, r350InvoiceSentAt: new Date().toISOString() } : prev);
+            toast.success(json.resent ? `Invoice ${json.invoiceNumber} resent to ${json.sentTo}` : `Invoice ${json.invoiceNumber} sent to ${json.sentTo}`);
+        } catch {
+            toast.error('Network error — please try again');
+        } finally {
+            setR350InvoiceSending(false);
+        }
+    }
 
     async function handleR350Action(action: 'pay' | 'waive' | 'reset') {
         if (!caseData) return;
@@ -2255,6 +2275,16 @@ export default function CaseDetailPage() {
                                                         Waive
                                                     </button>
                                                 </>
+                                            )}
+                                            {(caseData.r350Status !== 'PAID_R350' && caseData.r350Status !== 'FILE_PAID' && !caseData.r350Waived) &&
+                                             (caseData.createdById === session?.user?.id || isAdmin || session?.user?.isExecutive) && (
+                                                <button
+                                                    onClick={handleSendR350AdminInvoice}
+                                                    disabled={r350InvoiceSending}
+                                                    className="text-xs px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 transition-colors disabled:opacity-50"
+                                                >
+                                                    {r350InvoiceSending ? 'Sending…' : caseData.r350InvoiceId ? 'Resend Admin Invoice' : 'Send Admin Invoice'}
+                                                </button>
                                             )}
                                             {(isAdmin || session?.user?.isExecutive) &&
                                              (caseData.r350Status === 'PAID_R350' || caseData.r350Status === 'FILE_PAID' || caseData.r350Waived) && (

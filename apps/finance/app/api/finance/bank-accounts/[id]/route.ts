@@ -17,6 +17,9 @@ const UpdateSchema = z.object({
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
+  if (session.user.isAdmin !== true) {
+    return NextResponse.json({ error: 'Only Admin may manage Zenowethu bank accounts.' }, { status: 403 })
+  }
 
   const { id } = await params
 
@@ -45,6 +48,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
+  if (session.user.isAdmin !== true) {
+    return NextResponse.json({ error: 'Only Admin may manage Zenowethu bank accounts.' }, { status: 403 })
+  }
 
   const { id } = await params
 

@@ -62,11 +62,14 @@ export default function NewInvoicePage() {
   const { data: session } = useSession()
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
   const [bankAccountId, setBankAccountId] = useState('')
+  const [useOwnBanking, setUseOwnBanking] = useState(false)
 
   const isAdmin = session?.user?.isAdmin === true;
   const isExecutive = (session?.user as any)?.isExecutive === true || (session?.user as any)?.role?.toUpperCase() === 'EXECUTIVE';
   const isFinance = (session?.user as any)?.role?.toUpperCase() === 'FINANCE' || (session?.user as any)?.userType?.toUpperCase() === 'FINANCE';
-  const canChangeBank = isAdmin || isExecutive || isFinance;
+  const isManager = (session?.user as any)?.isManager === true || (session?.user as any)?.role?.toUpperCase() === 'MANAGER';
+  const isSeniorManager = (session?.user as any)?.isSeniorManager === true || (session?.user as any)?.role?.toUpperCase() === 'SENIOR_MANAGER';
+  const canChangeBank = isAdmin || isExecutive || isFinance || isManager || isSeniorManager;
 
   const subtotal  = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0)
   const vatAmount = subtotal * vatRate
@@ -145,7 +148,8 @@ export default function NewInvoicePage() {
           vatRate,
           reference: reference.trim() || undefined,
           notes:     notes.trim()     || undefined,
-          bankAccountId: bankAccountId || undefined,
+          bankAccountId: useOwnBanking ? undefined : (bankAccountId || undefined),
+          useOwnBanking: isAdmin && useOwnBanking ? true : undefined,
         }),
       })
 
@@ -291,22 +295,35 @@ export default function NewInvoicePage() {
 
             {canChangeBank ? (
               <div className="space-y-3">
-                <select
-                  value={bankAccountId}
-                  onChange={e => setBankAccountId(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
-                >
-                  <option value="" className="bg-gray-900">
-                    {isAdmin && docType === 'QUOTE' ? '— No banking details —' : 'Select Bank Account…'}
-                  </option>
-                  {bankAccounts.map(a => (
-                    <option key={a.id} value={a.id} className="bg-gray-900">
-                      {a.bankName} - {a.accountNumber} {a.isDefault ? '(Default)' : ''}
-                    </option>
-                  ))}
-                </select>
+                {isAdmin && (
+                  <label className="flex items-center gap-2 text-xs text-gray-400">
+                    <input
+                      type="checkbox"
+                      checked={useOwnBanking}
+                      onChange={e => setUseOwnBanking(e.target.checked)}
+                      className="rounded border-white/20"
+                    />
+                    Use my own personal banking details instead
+                  </label>
+                )}
+                {!useOwnBanking && (
+                  <select
+                    value={bankAccountId}
+                    onChange={e => setBankAccountId(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                  >
+                    <option value="" className="bg-gray-900">Select Bank Account…</option>
+                    {bankAccounts.map(a => (
+                      <option key={a.id} value={a.id} className="bg-gray-900">
+                        {a.bankName} - {a.accountNumber} {a.isDefault ? '(Default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <p className="text-[10px] text-gray-500 italic">
-                  {isAdmin ? 'As an Administrator, you can omit banking details on quotations.' : 'You have permission to select a non-default bank account.'}
+                  {useOwnBanking
+                    ? 'Your own banking details (set on your Account page) will be used on this document.'
+                    : 'You have permission to select a non-default bank account.'}
                 </p>
               </div>
             ) : (

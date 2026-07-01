@@ -3,8 +3,34 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 
 const logger = createLogger('api/users/profile');
+
+const BankingDetailsSchema = z.object({
+    bankName: z.string().trim().min(1).max(100),
+    accountName: z.string().trim().min(1).max(200),
+    accountNumber: z.string().trim().min(1).max(50),
+    branchCode: z.string().trim().max(20).optional(),
+});
+
+const UpdateProfileSchema = z.object({
+    firstName: z.string().trim().min(1).max(100).optional(),
+    lastName: z.string().trim().min(1).max(100).optional(),
+    email: z.string().trim().email().optional(),
+    phone: z.string().trim().max(30).optional(),
+    idNumber: z.string().trim().max(20).optional(),
+    address: z.string().trim().max(500).optional(),
+    avatarUrl: z.string().trim().max(2000).optional(),
+    currentPassword: z.string().optional(),
+    newPassword: z.string().min(8).optional(),
+    /**
+     * Own personal banking, used only for the R350 admin fee invoice on cases
+     * this user created (falls back to Zenowethu's default banking if unset).
+     * Pass `null` to clear a previously saved record.
+     */
+    bankingDetails: BankingDetailsSchema.nullable().optional(),
+});
 
 export async function GET(request: NextRequest) {
     try {
@@ -27,7 +53,11 @@ export async function GET(request: NextRequest) {
                 avatarUrl: true,
                 organization: true,
                 role: true,
-                userType: true }
+                userType: true,
+                staffBankingDetail: {
+                    select: { bankName: true, accountName: true, accountNumber: true, branchCode: true },
+                },
+            }
         });
 
         if (!user) {
@@ -48,8 +78,12 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const body = await request.json();
-        const { firstName, lastName, email, phone, idNumber, address, avatarUrl, currentPassword, newPassword } = body;
+        const rawBody = await request.json();
+        const parsed = UpdateProfileSchema.safeParse(rawBody);
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 422 });
+        }
+        const { firstName, lastName, email, phone, idNumber, address, avatarUrl, currentPassword, newPassword, bankingDetails } = parsed.data;
 
         const originalUser = await prisma.user.findUnique({
             where: { id: session.user.id }
@@ -59,7 +93,7 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        const updateData: any = {};
+        const updateData: Record<string, unknown> = {};
         if (firstName) updateData.firstName = firstName;
         if (lastName)  updateData.lastName  = lastName;
         if (email)     updateData.email     = email.toLowerCase();
@@ -96,6 +130,18 @@ export async function PUT(request: NextRequest) {
                 avatarUrl: true }
         });
 
+        // Self-service banking details — own record only, upserted independently
+        // of the rest of the profile fields.
+        if (bankingDetails === null) {
+            await prisma.staffBankingDetail.deleteMany({ where: { userId: session.user.id } });
+        } else if (bankingDetails) {
+            await prisma.staffBankingDetail.upsert({
+                where: { userId: session.user.id },
+                create: { userId: session.user.id, ...bankingDetails },
+                update: { ...bankingDetails },
+            });
+        }
+
         return NextResponse.json({
             message: 'Profile updated successfully',
             user: updatedUser
@@ -108,4 +154,3 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
-

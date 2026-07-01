@@ -3,10 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@zenowethu/shared-lib', () => ({
     auth: vi.fn(),
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+    allocateDocumentNumber: async (tx: any, prefix: string, year: number) => {
+        const seq = await tx.documentSequence.upsert({
+            where: { prefix_year: { prefix, year } },
+            update: { nextSeq: { increment: 1 } },
+            create: { prefix, year, nextSeq: 2 },
+        });
+        return `${prefix}-${year}-${String(seq.nextSeq).padStart(4, '0')}`;
+    },
 }));
 
 const tx = {
     invoice: { count: vi.fn(), create: vi.fn(), update: vi.fn() },
+    documentSequence: { upsert: vi.fn() },
 };
 
 vi.mock('@zenowethu/database', () => ({
@@ -79,7 +88,7 @@ describe('POST /api/finance/quotes/[id]/convert', () => {
     it('converts an accepted quote into an INV invoice and links both', async () => {
         vi.mocked(auth as any).mockResolvedValue(adminSession);
         vi.mocked(prisma.invoice.findUnique).mockResolvedValue(acceptedQuote as any);
-        tx.invoice.count.mockResolvedValue(7);
+        tx.documentSequence.upsert.mockResolvedValue({ nextSeq: 8 });
         tx.invoice.create.mockImplementation(async (args: any) => ({ id: 'inv-new', ...args.data }));
         tx.invoice.update.mockResolvedValue({} as any);
 
@@ -102,7 +111,7 @@ describe('POST /api/finance/quotes/[id]/convert', () => {
         vi.mocked(auth as any).mockResolvedValue(adminSession);
         vi.mocked(prisma.invoice.findUnique).mockResolvedValue({ ...acceptedQuote, bankAccountId: null } as any);
         vi.mocked(prisma.bankAccount.findFirst).mockResolvedValue({ id: 'bank-default' } as any);
-        tx.invoice.count.mockResolvedValue(0);
+        tx.documentSequence.upsert.mockResolvedValue({ nextSeq: 2 });
         tx.invoice.create.mockImplementation(async (args: any) => ({ id: 'inv-new', ...args.data }));
         tx.invoice.update.mockResolvedValue({} as any);
 

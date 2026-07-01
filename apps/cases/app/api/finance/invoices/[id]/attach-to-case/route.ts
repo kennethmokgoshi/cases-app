@@ -9,6 +9,7 @@
  * updates the existing Document record rather than creating a duplicate.
  */
 import { auth } from '@zenowethu/shared-lib'
+import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem } from '@/lib/invoice-pdf'
@@ -73,6 +74,8 @@ export async function POST(
       ? `${invoice.client.firstName} ${invoice.client.lastName}`
       : undefined
 
+    const bankingDetails = await resolveInvoiceBankingDetails(invoice)
+
     // Generate a fresh PDF
     const pdfBytes = await generateInvoicePdf({
       documentType:      invoice.type as 'INVOICE' | 'QUOTE',
@@ -95,10 +98,10 @@ export async function POST(
       createdByName:     invoice.createdBy
         ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
         : undefined,
-      bankName:          invoice.bankAccount?.bankName        ?? undefined,
-      bankAccountName:   invoice.bankAccount?.accountName     ?? undefined,
-      bankAccountNumber: invoice.bankAccount?.accountNumber   ?? undefined,
-      branchCode:        invoice.bankAccount?.branchCode      ?? undefined,
+      bankName:          bankingDetails.bankName,
+      bankAccountName:   bankingDetails.accountHolder,
+      bankAccountNumber: bankingDetails.accountNumber,
+      branchCode:        bankingDetails.branchCode,
     })
 
     // Write PDF to the case documents folder (served by /uploads/[...path]/route.ts)

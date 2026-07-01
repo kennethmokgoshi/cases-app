@@ -201,17 +201,20 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   const HDR_H      = 19
 
   // ── Banking details (used for height estimation and rendering) ────────────
-  const bankName    = data.bankName          ?? process.env.COMPANY_BANK_NAME    ?? 'CAPITEC BUSINESS'
-  const bankAccount = data.bankAccountNumber ?? process.env.COMPANY_BANK_ACCOUNT ?? '105 181 8346'
-  const branchCode  = data.branchCode        ?? process.env.COMPANY_BRANCH_CODE  ?? '450105'
-  const accountName = data.bankAccountName   ?? 'Zenowethu Debt Management (Pty) Ltd'
+  // Fallback is Zenowethu's FNB account — only used if the caller (which should
+  // normally resolve via resolveInvoiceBankingDetails in @zenowethu/shared-lib)
+  // didn't supply banking fields at all.
+  const bankName    = data.bankName          ?? process.env.COMPANY_BANK_NAME    ?? 'FNB'
+  const bankAccount = data.bankAccountNumber ?? process.env.COMPANY_BANK_ACCOUNT ?? '62867268635'
+  const branchCode  = data.branchCode        ?? process.env.COMPANY_BRANCH_CODE  ?? '250655'
+  const accountName = data.bankAccountName   ?? 'Zenowethu Trading Debt Management (PTY) LTD'
   const bankRows: [string, string][] = [
     ['Bank',           bankName],
     ['Account Name',   accountName],
     ['Account Number', bankAccount],
     ...(branchCode ? [['Branch Code', branchCode] as [string, string]] : []),
     ['VAT Number',     process.env.COMPANY_VAT_NUMBER ?? '4590307072'],
-    ['Reference',      data.invoiceNumber],
+    ['Reference',      data.reference || data.invoiceNumber],
   ]
 
   const noteLines = data.notes ? wrapText(data.notes, regular, 7.5, CONTENT_W) : []

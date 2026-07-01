@@ -12,7 +12,11 @@ vi.mock('@zenowethu/database', () => ({
     $transaction: async (cb: (tx: unknown) => unknown) =>
       cb({
         documentSequence: { upsert: (...a: unknown[]) => upsertMock(...a) },
-        invoice: { create: (...a: unknown[]) => createMock(...a) },
+        invoice: {
+          create: (...a: unknown[]) => createMock(...a),
+          findFirst: async () => null,
+          findMany: async () => [],
+        },
       }),
   },
 }));
