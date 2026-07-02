@@ -98,14 +98,14 @@ describe('consumerLabelFromReference', () => {
 });
 
 describe('buildDcFeeLineDescription', () => {
-  it('folds the consumer into the fee reason as a natural sentence', () => {
+  it('folds the consumer into the fee reason with the ID on its own line', () => {
     expect(
       buildDcFeeLineDescription('Commission paid out', 'Uelenda Mononyane (ID: 8608020432086)'),
-    ).toBe('Outstanding fees commission paid out for Uelenda Mononyane (ID: 8608020432086)');
+    ).toBe('Outstanding fees commission paid out for Uelenda Mononyane\n(ID: 8608020432086)');
   });
   it('preserves embedded acronyms while lower-casing the first letter only', () => {
     expect(buildDcFeeLineDescription('Rejection fee (Form 17.1)', 'A B (ID: 1)')).toBe(
-      'Outstanding fees rejection fee (Form 17.1) for A B (ID: 1)',
+      'Outstanding fees rejection fee (Form 17.1) for A B\n(ID: 1)',
     );
   });
   it('omits the "for …" clause when no consumer is known', () => {

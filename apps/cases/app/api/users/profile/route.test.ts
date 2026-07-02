@@ -112,4 +112,26 @@ describe('PUT /api/users/profile', () => {
     expect(mockUpsert).not.toHaveBeenCalled();
     expect(mockDeleteMany).not.toHaveBeenCalled();
   });
+
+  it('accepts an empty-string newPassword/currentPassword (the account page always sends these) alongside banking details', async () => {
+    mockAuth.mockResolvedValueOnce(session as never);
+    const res = await PUT(makePutRequest({
+      firstName: 'Jane',
+      newPassword: '',
+      currentPassword: '',
+      bankingDetails: { bankName: 'Standard Bank', accountName: 'The Director', accountNumber: '10174612727', branchCode: '051001' },
+    }) as never);
+    expect(res.status).toBe(200);
+    expect(mockUpsert).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      create: { userId: 'user-1', bankName: 'Standard Bank', accountName: 'The Director', accountNumber: '10174612727', branchCode: '051001' },
+      update: { bankName: 'Standard Bank', accountName: 'The Director', accountNumber: '10174612727', branchCode: '051001' },
+    });
+  });
+
+  it('still rejects a too-short newPassword when the user actually tries to change it', async () => {
+    mockAuth.mockResolvedValueOnce(session as never);
+    const res = await PUT(makePutRequest({ currentPassword: 'oldpass', newPassword: 'short' }) as never);
+    expect(res.status).toBe(422);
+  });
 });

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AllocatePaymentModal } from '@/components/payments/AllocatePaymentModal';
+import { EditPaymentModal } from '@/components/payments/EditPaymentModal';
 import SendRefundFormModal, { type RefundFormRecipient } from './SendRefundFormModal';
 
 const logger = {
@@ -50,6 +51,7 @@ function PaymentsContent() {
     const [payments, setPayments] = useState<Payment[]>([]);
     const [total, setTotal] = useState(0);
     const [allocatingPayment, setAllocatingPayment]     = useState<Payment | null>(null);
+    const [editingPayment, setEditingPayment]           = useState<Payment | null>(null);
     const [refundRecipient, setRefundRecipient]         = useState<RefundFormRecipient | undefined>(undefined);
     const [showRefundModal, setShowRefundModal]          = useState(false);
     const [page, setPage] = useState(1);
@@ -272,6 +274,13 @@ function PaymentsContent() {
                                             </td>
                                             <td className="px-5 py-3">
                                                 <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => setEditingPayment(p)}
+                                                        title="Edit this payment"
+                                                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded text-xs font-medium transition-colors"
+                                                    >
+                                                        Edit
+                                                    </button>
                                                     {!p.client && (
                                                         <button
                                                             onClick={() => setAllocatingPayment(p)}
@@ -336,6 +345,17 @@ function PaymentsContent() {
                 )}
             </div>
         </div>
+
+        {editingPayment && (
+            <EditPaymentModal
+                payment={editingPayment}
+                onClose={() => setEditingPayment(null)}
+                onSuccess={() => {
+                    setEditingPayment(null)
+                    fetchPayments(page)
+                }}
+            />
+        )}
 
         {allocatingPayment && (
             <AllocatePaymentModal

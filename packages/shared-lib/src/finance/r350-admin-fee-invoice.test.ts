@@ -31,40 +31,64 @@ describe('createR350AdminFeeInvoice', () => {
     createMock.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'inv-1', ...data }));
   });
 
-  it('uses the case creator\'s own banking when they have one on file', async () => {
+  it('uses the case creator\'s own banking when useOwnBanking is chosen and they have one on file', async () => {
     staffBankingFindUniqueMock.mockResolvedValue({ bankName: 'FNB' });
 
-    await createR350AdminFeeInvoice({
-      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1',
+    const result = await createR350AdminFeeInvoice({
+      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1', useOwnBanking: true,
     });
 
+    expect(result.ok).toBe(true);
     const data = createMock.mock.calls[0][0].data;
     expect(data.personalBankingUserId).toBe('user-1');
     expect(data.bankAccountId).toBeNull();
     expect(bankAccountFindFirstMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to the org default bank account when the creator has no personal banking', async () => {
+  it('fails with 422 when useOwnBanking is chosen but the creator has no personal banking on file', async () => {
     staffBankingFindUniqueMock.mockResolvedValue(null);
-    bankAccountFindFirstMock.mockResolvedValue({ id: 'bank-fnb' });
 
-    await createR350AdminFeeInvoice({
-      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1',
+    const result = await createR350AdminFeeInvoice({
+      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1', useOwnBanking: true,
     });
 
+    expect(result).toEqual({ ok: false, status: 422, error: expect.stringContaining('have not added your own banking details') });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the org default bank account when useOwnBanking is false, regardless of personal banking on file', async () => {
+    staffBankingFindUniqueMock.mockResolvedValue({ bankName: 'FNB' });
+    bankAccountFindFirstMock.mockResolvedValue({ id: 'bank-fnb' });
+
+    const result = await createR350AdminFeeInvoice({
+      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1', useOwnBanking: false,
+    });
+
+    expect(result.ok).toBe(true);
     const data = createMock.mock.calls[0][0].data;
     expect(data.bankAccountId).toBe('bank-fnb');
     expect(data.personalBankingUserId).toBeNull();
+    expect(staffBankingFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  it('fails with 500 when useOwnBanking is false and no default bank account is configured', async () => {
+    bankAccountFindFirstMock.mockResolvedValue(null);
+
+    const result = await createR350AdminFeeInvoice({
+      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1', useOwnBanking: false,
+    });
+
+    expect(result).toEqual({ ok: false, status: 500, error: expect.stringContaining('No default banking details') });
   });
 
   it('creates a flat R350 line item, no VAT, with the consumer ID number as reference', async () => {
-    staffBankingFindUniqueMock.mockResolvedValue(null);
     bankAccountFindFirstMock.mockResolvedValue({ id: 'bank-fnb' });
 
-    await createR350AdminFeeInvoice({
-      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1',
+    const result = await createR350AdminFeeInvoice({
+      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1', useOwnBanking: false,
     });
 
+    expect(result.ok).toBe(true);
     const data = createMock.mock.calls[0][0].data;
     expect(data.type).toBe('INVOICE');
     expect(data.status).toBe('DRAFT');

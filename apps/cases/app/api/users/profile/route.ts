@@ -23,7 +23,11 @@ const UpdateProfileSchema = z.object({
     address: z.string().trim().max(500).optional(),
     avatarUrl: z.string().trim().max(2000).optional(),
     currentPassword: z.string().optional(),
-    newPassword: z.string().min(8).optional(),
+    // The account page always submits this field (empty string when the user
+    // isn't changing their password) — only enforce the length when non-empty.
+    newPassword: z.string().optional().refine((v) => !v || v.length >= 8, {
+        message: 'New password must be at least 8 characters',
+    }),
     /**
      * Own personal banking, used only for the R350 admin fee invoice on cases
      * this user created (falls back to Zenowethu's default banking if unset).

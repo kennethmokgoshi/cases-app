@@ -47,8 +47,12 @@ const mockInvoiceUpdate = vi.mocked(prisma.invoice.update);
 const mockCreateR350Invoice = vi.mocked(createR350AdminFeeInvoice);
 const mockSendEmail = vi.mocked(sendEmailWithAttachments);
 
-function makeRequest(): Request {
-  return new Request('http://localhost/api/cases/case-1/r350-admin-invoice', { method: 'POST' });
+function makeRequest(body?: unknown): Request {
+  return new Request('http://localhost/api/cases/case-1/r350-admin-invoice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 }
 
 const params = Promise.resolve({ id: 'case-1' });
@@ -89,7 +93,7 @@ const invoiceRow = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockCreateR350Invoice.mockResolvedValue({ id: 'inv-1' } as never);
+  mockCreateR350Invoice.mockResolvedValue({ ok: true, invoice: { id: 'inv-1' } } as never);
   mockInvoiceFindUnique.mockResolvedValue(invoiceRow as never);
   mockInvoiceUpdate.mockResolvedValue({} as never);
   mockCaseUpdate.mockResolvedValue({} as never);
@@ -130,7 +134,7 @@ describe('POST /api/cases/[id]/r350-admin-invoice', () => {
     expect(res.status).toBe(422);
   });
 
-  it('creates and sends a new R350 invoice on first call, tagging the case', async () => {
+  it('defaults to Zenowethu banking (useOwnBanking: false) when no body is sent', async () => {
     mockAuth.mockResolvedValueOnce(creatorSession as never);
     mockCaseFindUnique.mockResolvedValueOnce(b2cCase as never);
 
@@ -141,7 +145,7 @@ describe('POST /api/cases/[id]/r350-admin-invoice', () => {
     expect(body.resent).toBe(false);
 
     expect(mockCreateR350Invoice).toHaveBeenCalledWith({
-      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1',
+      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1', useOwnBanking: false,
     });
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     expect(mockInvoiceUpdate).toHaveBeenCalledWith({
@@ -152,6 +156,29 @@ describe('POST /api/cases/[id]/r350-admin-invoice', () => {
       where: { id: 'case-1' },
       data: { r350InvoiceId: 'inv-1', r350InvoiceSentAt: expect.any(Date) },
     });
+  });
+
+  it('passes useOwnBanking: true through to the invoice creator when explicitly chosen', async () => {
+    mockAuth.mockResolvedValueOnce(creatorSession as never);
+    mockCaseFindUnique.mockResolvedValueOnce(b2cCase as never);
+
+    const res = await POST(makeRequest({ useOwnBanking: true }), { params });
+    expect(res.status).toBe(200);
+    expect(mockCreateR350Invoice).toHaveBeenCalledWith({
+      caseId: 'case-1', clientId: 'client-1', reference: '8001015009087', createdById: 'user-1', useOwnBanking: true,
+    });
+  });
+
+  it('bubbles up the 422 error when useOwnBanking is chosen but the creator has no personal banking', async () => {
+    mockAuth.mockResolvedValueOnce(creatorSession as never);
+    mockCaseFindUnique.mockResolvedValueOnce(b2cCase as never);
+    mockCreateR350Invoice.mockResolvedValueOnce({ ok: false, status: 422, error: 'no personal banking' } as never);
+
+    const res = await POST(makeRequest({ useOwnBanking: true }), { params });
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe('no personal banking');
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
   it('resends the existing invoice without creating a new one when r350InvoiceId is already set', async () => {

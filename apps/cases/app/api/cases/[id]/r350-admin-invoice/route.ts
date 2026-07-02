@@ -5,6 +5,12 @@ import { createR350AdminFeeInvoice } from '@zenowethu/shared-lib/src/finance/r35
 import { prisma } from '@zenowethu/database';
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
+import { z } from 'zod';
+
+const BodySchema = z.object({
+  /** Choice made by whoever is sending: their own banking, or Zenowethu's default. Only used on first send. */
+  useOwnBanking: z.boolean().optional().default(false),
+});
 
 const logger = createLogger('api/cases/[id]/r350-admin-invoice');
 
@@ -51,6 +57,16 @@ export async function POST(
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  let body: unknown = {};
+  try { const text = await request.text(); if (text) body = JSON.parse(text); } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  const parsedBody = BodySchema.safeParse(body);
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsedBody.error.flatten() }, { status: 422 });
+  }
+  const { useOwnBanking } = parsedBody.data;
 
   try {
     const existing = await prisma.case.findUnique({
@@ -100,8 +116,12 @@ export async function POST(
         clientId: existing.clientId,
         reference: existing.client.idNumber,
         createdById: existing.createdById,
+        useOwnBanking,
       });
-      invoiceId = created.id;
+      if (!created.ok) {
+        return NextResponse.json({ error: created.error }, { status: created.status });
+      }
+      invoiceId = created.invoice.id;
     }
 
     const invoice = await prisma.invoice.findUnique({

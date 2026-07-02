@@ -163,5 +163,10 @@ export function buildDcFeeLineDescription(
   const lowered = reason ? reason.charAt(0).toLowerCase() + reason.slice(1) : reason;
   const consumer = (consumerLabel ?? '').trim();
   const base = `Outstanding fees ${lowered}`.trim();
-  return consumer ? `${base} for ${consumer}` : base;
+  if (!consumer) return base;
+  // Put the ID number on its own line, so the consumer's full name and their ID
+  // read on separate lines: "… for Name\n(ID: 8608…)". The `\n` is honoured by the
+  // invoice PDF renderer (it splits each line-item description on newlines).
+  const consumerBroken = consumer.replace(/\s*\((ID:[^)]*)\)\s*$/i, '\n($1)');
+  return `${base} for ${consumerBroken}`;
 }

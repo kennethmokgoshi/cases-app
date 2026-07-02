@@ -388,7 +388,9 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
   for (let i = 0; i < data.lineItems.length; i++) {
     const item      = data.lineItems[i]
     const descText  = lineItemDescription(item)
-    const descLines = wrapText(descText, regular, DESC_SIZE, DESC_MAX_W)
+    // Honour explicit newlines in the description (e.g. consumer name / ID on
+    // separate lines), then word-wrap each segment to the column width.
+    const descLines = descText.split('\n').flatMap(seg => wrapText(seg, regular, DESC_SIZE, DESC_MAX_W))
     const rowH      = Math.max(MIN_ROW_H, descLines.length * LINE_H + ROW_V_PAD * 2)
 
     if (cursor - rowH < CONTENT_BOTTOM) {

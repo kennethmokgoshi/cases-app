@@ -33,8 +33,10 @@ export async function GET(request: Request) {
 
         const { searchParams } = new URL(request.url);
         const parsed = PaymentQuerySchema.safeParse({
-            page: searchParams.get('page'),
-            limit: searchParams.get('limit'),
+            // .get() returns null for absent params; Zod defaults only apply to
+            // undefined, and z.coerce.number() turns null into 0 which fails min(1)
+            page: searchParams.get('page') ?? undefined,
+            limit: searchParams.get('limit') ?? undefined,
             search: searchParams.get('search') ?? '',
             method: searchParams.get('method') ?? '',
             status: searchParams.get('status') ?? '',

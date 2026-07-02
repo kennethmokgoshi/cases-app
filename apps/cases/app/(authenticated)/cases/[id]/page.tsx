@@ -458,21 +458,37 @@ export default function CaseDetailPage() {
     const [r350WaiveReason, setR350WaiveReason] = useState('');
     const [r350Saving, setR350Saving] = useState(false);
     const [r350InvoiceSending, setR350InvoiceSending] = useState(false);
+    const [r350InvoiceBankChoiceOpen, setR350InvoiceBankChoiceOpen] = useState(false);
+    const [r350UseOwnBanking, setR350UseOwnBanking] = useState(false);
 
-    async function handleSendR350AdminInvoice() {
+    async function sendR350AdminInvoice(useOwnBanking: boolean) {
         if (!caseData) return;
         setR350InvoiceSending(true);
         try {
-            const res = await fetch(`/api/cases/${caseData.id}/r350-admin-invoice`, { method: 'POST' });
+            const res = await fetch(`/api/cases/${caseData.id}/r350-admin-invoice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ useOwnBanking }),
+            });
             const json = await res.json();
             if (!res.ok) { toast.error(json.error ?? 'Failed to send R350 admin invoice'); return; }
             setCaseData((prev) => prev ? { ...prev, r350InvoiceId: json.invoiceId, r350InvoiceSentAt: new Date().toISOString() } : prev);
+            setR350InvoiceBankChoiceOpen(false);
             toast.success(json.resent ? `Invoice ${json.invoiceNumber} resent to ${json.sentTo}` : `Invoice ${json.invoiceNumber} sent to ${json.sentTo}`);
         } catch {
             toast.error('Network error — please try again');
         } finally {
             setR350InvoiceSending(false);
         }
+    }
+
+    function handleSendR350AdminInvoiceClick() {
+        if (!caseData) return;
+        // Resend re-sends the same already-created invoice — banking was already
+        // chosen when it was first created, so there's nothing to pick again.
+        if (caseData.r350InvoiceId) { sendR350AdminInvoice(false); return; }
+        setR350UseOwnBanking(false);
+        setR350InvoiceBankChoiceOpen(true);
     }
 
     async function handleR350Action(action: 'pay' | 'waive' | 'reset') {
@@ -2279,7 +2295,7 @@ export default function CaseDetailPage() {
                                             {(caseData.r350Status !== 'PAID_R350' && caseData.r350Status !== 'FILE_PAID' && !caseData.r350Waived) &&
                                              (caseData.createdById === session?.user?.id || isAdmin || session?.user?.isExecutive) && (
                                                 <button
-                                                    onClick={handleSendR350AdminInvoice}
+                                                    onClick={handleSendR350AdminInvoiceClick}
                                                     disabled={r350InvoiceSending}
                                                     className="text-xs px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 transition-colors disabled:opacity-50"
                                                 >
@@ -5001,6 +5017,57 @@ export default function CaseDetailPage() {
                                 className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg transition-colors text-sm"
                             >
                                 {r350Saving ? 'Saving…' : 'Confirm Waiver'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── R350 — Admin Invoice banking choice ─────────────────────── */}
+            {r350InvoiceBankChoiceOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-zeno-dark border border-zeno-blue/50 rounded-xl w-full max-w-md">
+                        <div className="px-6 py-4 border-b border-zeno-blue/40 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-base font-bold text-white">Send R350 Admin Invoice</h2>
+                                <p className="text-xs text-gray-400 mt-0.5">Choose which banking details this invoice should show.</p>
+                            </div>
+                            <button onClick={() => setR350InvoiceBankChoiceOpen(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+                        </div>
+                        <div className="p-6 space-y-3">
+                            <label className="flex items-start gap-3 p-3 rounded-lg border border-zeno-blue/40 hover:border-zeno-cyan/50 cursor-pointer transition-colors">
+                                <input
+                                    type="radio"
+                                    checked={!r350UseOwnBanking}
+                                    onChange={() => setR350UseOwnBanking(false)}
+                                    className="mt-1"
+                                />
+                                <span>
+                                    <span className="block text-sm font-semibold text-white">Zenowethu Default Banking</span>
+                                    <span className="block text-xs text-gray-400">Zenowethu's default account (FNB).</span>
+                                </span>
+                            </label>
+                            <label className="flex items-start gap-3 p-3 rounded-lg border border-zeno-blue/40 hover:border-zeno-cyan/50 cursor-pointer transition-colors">
+                                <input
+                                    type="radio"
+                                    checked={r350UseOwnBanking}
+                                    onChange={() => setR350UseOwnBanking(true)}
+                                    className="mt-1"
+                                />
+                                <span>
+                                    <span className="block text-sm font-semibold text-white">My Own Banking Details</span>
+                                    <span className="block text-xs text-gray-400">Uses the banking details you've saved on your Account page. Add them there first if you haven't yet.</span>
+                                </span>
+                            </label>
+                        </div>
+                        <div className="px-6 py-4 border-t border-zeno-blue/40 flex justify-end gap-3">
+                            <button onClick={() => setR350InvoiceBankChoiceOpen(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                            <button
+                                onClick={() => sendR350AdminInvoice(r350UseOwnBanking)}
+                                disabled={r350InvoiceSending}
+                                className="bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg transition-colors text-sm"
+                            >
+                                {r350InvoiceSending ? 'Sending…' : 'Send Invoice'}
                             </button>
                         </div>
                     </div>

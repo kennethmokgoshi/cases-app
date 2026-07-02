@@ -421,7 +421,20 @@
       "Bash(find apps *)",
       "Bash(pnpm --filter @zenowethu/shared-lib test -- dc-fee-invoice.test.ts)",
       "Bash(ls apps/cases/.env.example apps/finance/.env.example)",
-      "Bash(grep -rn \"LETTERHEAD\\\\|COMPANY_BANK_NAME\" apps/cases/.env.example apps/finance/.env.example)"
+      "Bash(grep -rn \"LETTERHEAD\\\\|COMPANY_BANK_NAME\" apps/cases/.env.example apps/finance/.env.example)",
+      "PowerShell(pnpm --filter cases dev)",
+      "Bash(seq 1 30)",
+      "Bash(curl -s -o /dev/null -m 2 http://localhost:3000)",
+      "Bash(echo \"UP\")",
+      "Bash(sleep 2)",
+      "Bash(curl -s -o /dev/null -m 2 -w \"%{http_code}\" http://localhost:3000)",
+      "PowerShell(pnpm --filter finance test -- run app/api/finance/payments/route.test.ts)",
+      "PowerShell(pnpm --filter cases exec vitest run app/api/admin/referrers --reporter=dot)",
+      "PowerShell(pnpm --filter finance dev)",
+      "PowerShell($conns = Get-NetTCPConnection -LocalPort 3004 -State Listen -ErrorAction SilentlyContinue; $conns | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -Confirm:$false; \"Killed PID $_\" })",
+      "PowerShell(try { Remove-Item -Recurse -Force \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\finance\\\\.next\" -Confirm:$false -ErrorAction Stop; \"cache cleared\" } catch { \"cache clear skipped: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(pnpm --filter finance test -- run app/api/finance/payments)",
+      "PowerShell(Set-Location \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\finance\"; pnpm exec tsc --noEmit; \"exit=$LASTEXITCODE\")"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

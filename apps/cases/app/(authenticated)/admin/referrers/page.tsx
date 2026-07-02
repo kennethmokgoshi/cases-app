@@ -99,7 +99,8 @@ export default function ReferrersPage() {
     const [registeringFolderId, setRegisteringFolderId] = useState<string | null>(null);
 
     const isManager = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'MANAGER';
-    const canDelete = session?.user?.isAdmin || session?.user?.isExecutive;
+    // Managers can view and add referrers; only Admin/Executive can edit or delete
+    const canManage = session?.user?.isAdmin || session?.user?.isExecutive;
 
     useEffect(() => {
         if (status === 'authenticated' && !isManager) router.push('/');
@@ -462,10 +463,12 @@ export default function ReferrersPage() {
                                         <Link href={`/admin/referrers/${r.id}`} className="text-zeno-cyan hover:text-zeno-cyan/80 text-xs px-2 py-1 rounded hover:bg-zeno-cyan/10 transition-colors">
                                             Commission
                                         </Link>
-                                        <button onClick={() => openEdit(r)} className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-white/5">
-                                            Edit
-                                        </button>
-                                        {canDelete && (
+                                        {canManage && (
+                                            <button onClick={() => openEdit(r)} className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-white/5">
+                                                Edit
+                                            </button>
+                                        )}
+                                        {canManage && (
                                             <button onClick={() => setDeleteTarget(r)} className="text-red-400 hover:text-red-300 text-xs transition-colors px-2 py-1 rounded hover:bg-red-500/10">
                                                 Delete
                                             </button>
@@ -504,7 +507,7 @@ export default function ReferrersPage() {
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field label="First Name *" value={form.firstName} onChange={(v) => setForm((f) => ({ ...f, firstName: v }))} />
                                     <Field label="Last Name *" value={form.lastName} onChange={(v) => setForm((f) => ({ ...f, lastName: v }))} />
-                                    <Field label="SA ID Number" value={form.idNumber} onChange={(v) => setForm((f) => ({ ...f, idNumber: v }))} disabled={!!editTarget} placeholder="13-digit SA ID (Optional)" />
+                                    <Field label="SA ID Number" value={form.idNumber} onChange={(v) => setForm((f) => ({ ...f, idNumber: v }))} placeholder="13-digit SA ID (Optional)" />
                                     <Field label="Email Address" value={form.email} onChange={(v) => setForm((f) => ({ ...f, email: v }))} type="email" />
                                     <Field label="Cell Number" value={form.cellNumber} onChange={(v) => setForm((f) => ({ ...f, cellNumber: v }))} placeholder="e.g. 082 000 0000" />
                                 </div>
@@ -756,11 +759,13 @@ export default function ReferrersPage() {
                                 <p className="text-gray-400 text-xs mt-1">Total cases: <strong className="text-white">{detailTarget._count.cases}</strong></p>
                             </DetailSection>
                         </div>
-                        <div className="px-6 pb-6">
-                            <button onClick={() => { setDetailTarget(null); openEdit(detailTarget); }} className="w-full border border-zeno-cyan/40 text-zeno-cyan rounded-lg py-2 text-sm hover:bg-zeno-cyan/10 transition-colors">
-                                Edit Referrer
-                            </button>
-                        </div>
+                        {canManage && (
+                            <div className="px-6 pb-6">
+                                <button onClick={() => { setDetailTarget(null); openEdit(detailTarget); }} className="w-full border border-zeno-cyan/40 text-zeno-cyan rounded-lg py-2 text-sm hover:bg-zeno-cyan/10 transition-colors">
+                                    Edit Referrer
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

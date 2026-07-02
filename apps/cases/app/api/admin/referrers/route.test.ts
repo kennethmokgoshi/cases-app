@@ -148,6 +148,16 @@ describe('POST /api/admin/referrers', () => {
         expect(res.status).toBe(409);
     });
 
+    it('allows manager to create a referrer (add-only role)', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockManager as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
+        vi.mocked(prisma.project.findFirst).mockResolvedValueOnce({ id: 'root-proj', name: 'Referrals' } as never);
+        vi.mocked(prisma.project.create).mockResolvedValueOnce({ id: 'proj-1', name: 'John Doe' } as never);
+        vi.mocked(prisma.referrer.create).mockResolvedValueOnce({ ...sampleReferrer } as never);
+        const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', { firstName: 'John', lastName: 'Doe', idNumber: '8001015009087' }));
+        expect(res.status).toBe(201);
+    });
+
     it('creates referrer and sub-project for admin', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
@@ -203,6 +213,41 @@ describe('PATCH /api/admin/referrers/[id]', () => {
         vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
         const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(403);
+    });
+
+    it('returns 403 for manager — only admin/executive can edit', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockManager as never);
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(403);
+    });
+
+    it('allows admin to add an ID number to an existing referrer', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique)
+            .mockResolvedValueOnce({ ...sampleReferrer, idNumber: null } as never) // existing lookup
+            .mockResolvedValueOnce(null); // duplicate check
+        vi.mocked(prisma.referrer.update).mockResolvedValueOnce({ ...sampleReferrer } as never);
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { idNumber: '8001015009087' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(200);
+        const [updateArgs] = vi.mocked(prisma.referrer.update).mock.calls;
+        expect(updateArgs[0].data).toMatchObject({ idNumber: '8001015009087' });
+    });
+
+    it('returns 409 when new ID number belongs to another referrer', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique)
+            .mockResolvedValueOnce({ ...sampleReferrer, idNumber: null } as never) // existing lookup
+            .mockResolvedValueOnce({ ...sampleReferrer, id: 'ref-2' } as never); // duplicate check hit
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { idNumber: '8001015009087' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(409);
+        expect(vi.mocked(prisma.referrer.update)).not.toHaveBeenCalled();
+    });
+
+    it('returns 422 for an ID number that is not 13 digits', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { idNumber: '12345' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(422);
     });
 
     it('returns 404 when referrer not found', async () => {

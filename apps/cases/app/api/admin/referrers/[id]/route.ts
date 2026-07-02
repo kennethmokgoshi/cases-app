@@ -10,6 +10,7 @@ const COMMISSION_TYPES = ['FIXED', 'VOLUME_BASED'] as const;
 const PatchSchema = z.object({
     firstName: z.string().min(1).max(100).optional(),
     lastName: z.string().min(1).max(100).optional(),
+    idNumber: z.string().trim().length(13).or(z.literal('')).transform(val => val === '' ? null : val).nullable().optional(),
     email: z.string().email().nullable().optional(),
     cellNumber: z.string().max(20).nullable().optional(),
     employerName: z.string().max(200).nullable().optional(),
@@ -74,13 +75,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 }
 
-// PATCH /api/admin/referrers/[id]
+// PATCH /api/admin/referrers/[id] — only Admin or Executive can edit referrers
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        if (!isAdminLevel(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        if (!session.user.isAdmin && !session.user.isExecutive) {
+            return NextResponse.json({ error: 'Forbidden — only Admin or Executive can edit referrers' }, { status: 403 });
+        }
 
         const existing = await prisma.referrer.findUnique({ where: { id } });
         if (!existing) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
@@ -92,6 +95,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
 
         const data = parsed.data;
+
+        // ID number must stay unique across referrers
+        if (data.idNumber && data.idNumber !== existing.idNumber) {
+            const duplicate = await prisma.referrer.findUnique({ where: { idNumber: data.idNumber } });
+            if (duplicate && duplicate.id !== id) {
+                return NextResponse.json({ error: 'A referrer with this ID number already exists' }, { status: 409 });
+            }
+        }
+        if (data.idNumber === null && existing.idNumber) {
+            logger.warn(`Referrer ${id} idNumber being cleared (was: ${existing.idNumber}) by user ${session.user.id}`);
+        }
 
         // Contact-field preservation: email and cellNumber are used for referrer notifications
         // throughout the case lifecycle. Log prominently if they are being explicitly cleared.
