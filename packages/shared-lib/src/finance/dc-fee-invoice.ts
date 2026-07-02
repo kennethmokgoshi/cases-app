@@ -138,3 +138,30 @@ export function buildConsumerReference(input: {
   const name = `${input.clientFirstName} ${input.clientLastName}`.trim();
   return `Outstanding fees re: ${name} (ID: ${input.clientIdNumber})`;
 }
+
+/**
+ * Strip the "Outstanding fees re: " prefix from a stored consumer reference,
+ * leaving just the "Name (ID: …)" portion. Used so the consumer the fees relate
+ * to can be folded into each fee line's DESCRIPTION instead of printed as a
+ * separate line under BILL TO.
+ */
+export function consumerLabelFromReference(reference: string | null | undefined): string {
+  return (reference ?? '').replace(/^\s*Outstanding fees re:\s*/i, '').trim();
+}
+
+/**
+ * Compose a single fee-line description that names the consumer the fees relate
+ * to, e.g. "Outstanding fees commission paid out for John Dlamini (ID: 8001…)".
+ * The reason's first letter is lower-cased so the sentence reads naturally while
+ * preserving embedded acronyms (Form 17.1, NCT, Section 86).
+ */
+export function buildDcFeeLineDescription(
+  reasonDescription: string,
+  consumerLabel: string,
+): string {
+  const reason = (reasonDescription ?? '').trim();
+  const lowered = reason ? reason.charAt(0).toLowerCase() + reason.slice(1) : reason;
+  const consumer = (consumerLabel ?? '').trim();
+  const base = `Outstanding fees ${lowered}`.trim();
+  return consumer ? `${base} for ${consumer}` : base;
+}

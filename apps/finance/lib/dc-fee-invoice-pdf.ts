@@ -8,6 +8,10 @@
  */
 
 import { prisma } from '@zenowethu/database'
+import {
+  consumerLabelFromReference,
+  buildDcFeeLineDescription,
+} from '@zenowethu/shared-lib/src/finance/dc-fee-invoice'
 import fs from 'fs/promises'
 import path from 'path'
 import { generateInvoicePdf, type InvoiceData, type InvoiceLineItem } from './invoice-pdf'
@@ -46,7 +50,15 @@ export async function generateDcFeeInvoicePdf(invoiceId: string): Promise<Genera
   }
 
   const documentType: 'INVOICE' | 'QUOTE' = invoice.type === 'DC_FEE_QUOTE' ? 'QUOTE' : 'INVOICE'
-  const lineItems = invoice.lineItems as unknown as InvoiceLineItem[]
+
+  // Fold the consumer the fees relate to into each fee line's DESCRIPTION —
+  // e.g. "Outstanding fees commission paid out for John Dlamini (ID: …)" — rather
+  // than printing it as a separate "RE:" line under BILL TO.
+  const consumerLabel = consumerLabelFromReference(invoice.reference)
+  const lineItems = (invoice.lineItems as unknown as InvoiceLineItem[]).map((li) => ({
+    ...li,
+    description: buildDcFeeLineDescription(li.description ?? '', consumerLabel),
+  }))
 
   const data: InvoiceData = {
     documentType,
@@ -59,7 +71,6 @@ export async function generateDcFeeInvoicePdf(invoiceId: string): Promise<Genera
       tradingName: invoice.dcTradingName ?? undefined,
       email: invoice.dcEmail ?? undefined,
     },
-    reLine: invoice.reference ?? undefined,
     caseFileNumber: invoice.case?.fileNumber ?? undefined,
     lineItems,
     subtotal: Number(invoice.subtotal),

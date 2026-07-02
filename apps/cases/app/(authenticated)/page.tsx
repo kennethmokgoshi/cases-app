@@ -16,6 +16,9 @@ export default async function DirectorDashboard() {
   if (session?.user && session.user.userType === 'B2B_PARTNER') {
     redirect('/b2b-dashboard');
   }
+  if (session?.user && session.user.userType === 'REFERRER') {
+    redirect('/referrer');
+  }
 
   // Fetch Real Stats — gracefully degrade if DB is unreachable
   let stats = {

@@ -69,6 +69,7 @@ model Referrer {
   branchCode            String?
   accountHolderName     String?
   projectId             String?              @unique
+  portalUserId          String?              @unique
   isActive              Boolean              @default(true)
   notes                 String?
   createdById           String?
@@ -81,8 +82,10 @@ model Referrer {
   parentReferrerId      String?
   cases                 Case[]
   createdBy             User?                @relation("ReferrerCreator", fields: [createdById], references: [id])
+  portalUser            User?                @relation("ReferrerPortalUser", fields: [portalUserId], references: [id], onDelete: SetNull)
   project               Project?             @relation(fields: [projectId], references: [id])
   commissions           ReferrerCommission[]
+  paymentQueries        ReferrerPaymentQuery[]
   parentReferrer        Referrer?            @relation("ReferrerHierarchy", fields: [parentReferrerId], references: [id])
   referredReferrers     Referrer[]           @relation("ReferrerHierarchy")
 
@@ -90,6 +93,7 @@ model Referrer {
   @@index([idNumber])
   @@index([isActive])
   @@index([parentReferrerId])
+  @@index([portalUserId])
 }
 
 model ReferrerCommission {
@@ -109,11 +113,40 @@ model ReferrerCommission {
   case             Case                    @relation(fields: [caseId], references: [id], onDelete: Cascade)
   paidBy           User?                   @relation("CommissionPaidBy", fields: [paidById], references: [id])
   referrer         Referrer                @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+  paymentQueries   ReferrerPaymentQuery[]
 
   @@index([referrerId])
   @@index([isPaid])
   @@index([isEligible])
   @@index([stage])
+}
+
+model ReferrerPaymentQuery {
+  id                String               @id @default(cuid())
+  referrerId        String
+  caseId            String
+  commissionId      String?
+  submittedByUserId String
+  status            String               @default("PENDING") // PENDING | IN_REVIEW | RESOLVED | REJECTED
+  claimedPaidAt     DateTime?
+  claimedAmount     Decimal?
+  notes             String?
+  adminNotes        String?
+  resolvedAt        DateTime?
+  resolvedById      String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  case              Case                 @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  commission        ReferrerCommission?  @relation(fields: [commissionId], references: [id], onDelete: SetNull)
+  referrer          Referrer             @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+  resolvedBy        User?                @relation("ReferrerPaymentQueryResolver", fields: [resolvedById], references: [id])
+  submittedBy       User                 @relation("ReferrerPaymentQuerySubmitter", fields: [submittedByUserId], references: [id])
+
+  @@index([referrerId])
+  @@index([caseId])
+  @@index([commissionId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Client {
@@ -325,6 +358,7 @@ model Case {
   notifications           NotificationLog[]
   payments                Payment[]
   referrerCommission      ReferrerCommission?
+  referrerPaymentQueries  ReferrerPaymentQuery[]
   workflowLogs            WorkflowLog[]
   automationRuns          AutomationRun[]
   notificationQueue       NotificationQueue[]
@@ -493,7 +527,10 @@ model User {
   uploadedBatches            PaymentBatch[]
   projectMemberships         ProjectMember[]
   createdReferrers           Referrer[]                     @relation("ReferrerCreator")
+  referrerPortalProfile      Referrer?                      @relation("ReferrerPortalUser")
   commissionsPaid            ReferrerCommission[]           @relation("CommissionPaidBy")
+  referrerPaymentQueries     ReferrerPaymentQuery[]         @relation("ReferrerPaymentQuerySubmitter")
+  resolvedReferrerQueries    ReferrerPaymentQuery[]         @relation("ReferrerPaymentQueryResolver")
   r350PaymentsRecorded       Case[]                         @relation("CaseR350PaidBy")
   r350WaiversRecorded        Case[]                         @relation("CaseR350WaivedBy")
   b2bPartner                 Project?                       @relation("B2BPartnerUsers", fields: [b2bPartnerId], references: [id])

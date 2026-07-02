@@ -415,7 +415,13 @@
       "PowerShell($c = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if\\($c\\){ $p = Get-Process -Id $c.OwningProcess; $cmd = \\(Get-CimInstance Win32_Process -Filter \"ProcessId=$\\($p.Id\\)\"\\).CommandLine; \"PID $\\($p.Id\\) \\($\\($p.ProcessName\\)\\) is listening on :3000\"; if\\($cmd.Length -gt 130\\){$cmd.Substring\\(0,130\\)}else{$cmd} } else { \"nothing listening on :3000\" })",
       "Bash(cd \"/c/Visual Studio Code/06 March 2026/packages/database\" && ls prisma/migrations | tail -5)",
       "Bash(pnpm --filter finance test -- case-financials summary)",
-      "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=8192'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter cases dev 2>&1)"
+      "PowerShell($env:NODE_OPTIONS = '--max-old-space-size=8192'; cd \"C:\\\\Visual Studio Code\\\\06 March 2026\"; pnpm --filter cases dev 2>&1)",
+      "Bash(pnpm --filter website dev)",
+      "Bash(find . -iname \"Letterhead*.pdf\" -not -path \"*/node_modules/*\")",
+      "Bash(find apps *)",
+      "Bash(pnpm --filter @zenowethu/shared-lib test -- dc-fee-invoice.test.ts)",
+      "Bash(ls apps/cases/.env.example apps/finance/.env.example)",
+      "Bash(grep -rn \"LETTERHEAD\\\\|COMPANY_BANK_NAME\" apps/cases/.env.example apps/finance/.env.example)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

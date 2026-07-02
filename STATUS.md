@@ -1,10 +1,47 @@
 # ZenoCasesSystem — Project Status
 
 > **Any agent**: Read this file first when the user asks "what's next?" or "where are we?"
-> Last updated: 2026-07-01 (Fixed manual new-case referral creation failure caused by temp-client PATCH/update flow; see entry below.)
+> Last updated: 2026-07-02 (DC fee invoice: moved consumer reference from under BILL TO into each fee line's DESCRIPTION + hardened letterhead resolution; see entry below.)
+> Previously: 2026-07-02 (Built Referrer Portal Phase 1 MVP; see entry below.)
+> Previously: 2026-07-01 (Fixed manual new-case referral creation failure caused by temp-client PATCH/update flow; see entry below.)
 > Previously: 2026-07-01 (Referral portal advisory/scoping discussion - no code built; see entry below.)
 > Previously: 2026-07-01 (Fixed a live production bug: `TelegramSession` has existed in `schema.prisma` since the 2026-06-26 Telegram bot commit and `packages/shared-lib/src/integrations/telegram-bot.ts` / the `apps/cases/app/api/webhooks/telegram/route.ts` webhook call `prisma.telegramSession.*` in prod, but no migration ever created the table — the accompanying migration from that commit only covered per-app next-update/payment-arrangements. Any inbound Telegram message would have thrown "table does not exist". New additive-only migration `20260701_add_telegram_session` applied directly to prod via `prisma migrate deploy`; `prisma migrate diff` against the live DB now shows zero drift. Confirmed the bot is currently dormant in this environment — `TELEGRAM_BOT_TOKEN` is unset in `apps/cases/.env`/`.env.local`, so the webhook route no-ops before touching Prisma — but the table now exists so turning it on (setting the token + registering Telegram's webhook) is safe. Outbound Telegram sends were already separately gated behind `TELEGRAM_ENABLED` (default false) and unaffected. 564/564 shared-lib tests green, Prisma client regenerated.)
 > Previously: 2026-06-28 (Credo activation email NO LONGER sent on case/referral creation — profile still auto-created with no password; consumer gets the "set your password" link only via the forgot-password/reset flow. Both `apps/cases/app/api/cases/route.ts` and `.../api/v1/cases/route.ts` now call `provisionConsumerForClient` instead of `provisionAndInviteConsumer`; tsc clean, 22 credo tests green. Earlier same day: Accepted-via-DHS consumer flow + debt review removal CONSENT LINK: new `accepted-email.ts` (consumer "transfer accepted, we'll start flag removal" email — compliance-safe, embeds consent link) and a full token-based consent capture — new `DebtReviewRemovalConsent` model + migration `20260628_debt_review_removal_consent` (NOT yet applied to prod), `consent-service.ts` (create link / record consent with POPIA+IP audit trail / idempotent), public page `/consent/debt-review-removal/[token]` + API, and an `onDebtReviewRemovalConsent()` **extension-point hook** (fires once on consent — downstream action TBD by business). Scope locked to accepted codes A/C/D3/D4. Also ran a LIVE read-only DHS check on the 7 overdue REQUESTED_VIA_DHS files — 3 ACCEPTED (codes B/G→Completed), 4 "declined" but mostly false/under-review (one DC text literally says "accepted"). 15+ new tests, dhs suite 91 green, tsc clean. Earlier: DHS consumer status-history clearance detection: new `packages/shared-lib/src/dhs/status-history.ts` reads the *View Consumer Status History* popup and identifies clearance-eligible codes **A1/B/F1/F2/G/G1**, then classifies workflow status from the status date — **<7 calendar days → READY_CLEARANCE, ≥7 → COMPLETED** (stops at COMPLETED; SETTLED is a later finance step), and maps accepted codes **A/C/D3/D4 → ACCEPTED_VIA_DHS**. Detection only — no case mutation yet; building block for the clearance automation. Pure helpers + read-only Puppeteer scraper `getConsumerStatusHistory(idNumber)`, **live-verified** against two real IDs; 27 tests green, tsc clean. Earlier same day: Requested-via-DHS follow-up automation: new dry-run-capable cron `/api/cron/dhs-requested-followup` + shared-lib trigger for OVERDUE Debt Review Flag Removal files in status `REQUESTED_VIA_DHS` only — deliberately excludes the `DHS_REQUESTED` look-alike (separate automation later). Re-checks DHS and routes ACCEPTED→`ACCEPTED_VIA_DHS` / DECLINED→existing `handleDHSDecline` / PENDING→nextUpdate+3d. New read-only `previewDHSDecline` renders the exact decline emails/SMS via shared templates; `?dryRun=true` sends nothing and writes nothing. Ran dry-run against all 7 live cohort files — 0 sends, 0 writes. 12 new tests, 49/49 dhs tests green, tsc clean. Also confirmed BCC monitoring (`notifications@zenowethu.co.za`) IS working on the live SMTP path (live test delivered); latent bug logged — GHL API provider `GhlEmailProvider` drops BCC if GHL is ever re-enabled. Earlier same day: Credo: auto-provision a consumer profile for every B2B/staff case, ID-number-only login, real email password-reset flow, and staff↔consumer document requests with portal uploads visible on the case — schema migration applied to prod; 22 new shared-lib tests + register test rewrite, all green; tsc clean on credo & cases; redeploy cases + credo. Earlier same day: 20s+ load on All Cases / New Case fixed — root cause was payload over-fetch (all 131 Case + 38 Client columns × ~971 rows + custom JSON.stringify replacer); replaced with slim Prisma `select` projections on /api/cases and /api/projects memberOnly, native serialization — sidebar was always fast because it uses tiny count queries; redeploy cases to apply. Earlier same day: Slow "New Case" load fixed — /api/projects memberOnly path de-duplicated (7→~5 queries), O(n²)→O(n) tree walks, 15s per-user cache; dangerous P2024 $disconnect removed from shared Prisma client (multi-user cascade risk); PgBouncer still TODO for 20+ users; Finance dropdown options invisible (white-on-white) fixed via global select option CSS; Invoice/quotation "number conflict" fixed across ALL apps — single shared atomic allocator + DocumentSequence reconciliation; Removed email/cell-number uniqueness check on case save — only ID number is unique per client; Fixed flaky admin-client DB integration tests blocking CI deploy; GHL suspended via GHL_ENABLED kill-switch; Fixed 550 welcome-email sender bug; Email primary; Per-app Next Update; Payment Arrangements; Telegram bot)
+
+---
+
+### Changed: DC fee invoice consumer reference moved into DESCRIPTION + letterhead hardened (2026-07-02)
+
+**Goal (user request):** On DC fee invoices/quotes, the consumer reference (`Outstanding fees re: <Name> (ID: …)`) was printed as a separate "RE:" line under BILL TO. Move it into the DESCRIPTION column, folded into the fee reason so a Commission-paid-out line reads "Outstanding fees commission paid out for <Name> (ID: …)". Also ensure the Zenowethu letterhead is used.
+
+**What changed:**
+- `packages/shared-lib/src/finance/dc-fee-invoice.ts`: added two pure helpers — `consumerLabelFromReference()` (strips the `Outstanding fees re: ` prefix off the stored reference) and `buildDcFeeLineDescription(reason, consumerLabel)` (composes `Outstanding fees <reason> for <consumer>`, lower-casing only the reason's first letter so acronyms like Form 17.1 / NCT survive).
+- `apps/cases/lib/dc-fee-invoice-pdf.ts` and `apps/finance/lib/dc-fee-invoice-pdf.ts`: each fee line's `description` is now built via the helpers from the invoice's stored `reference`, and the separate `reLine` under BILL TO was removed. Applied at render time, so **existing** DC fee invoices (e.g. INV-2026-0004) also render the new layout on next download/send — no data migration needed.
+- Letterhead loader (`invoice-pdf.ts` in both apps): added an optional `INVOICE_LETTERHEAD_PATH` env override (first candidate) plus a sibling-app relative path, so the branded Zenowethu letterhead resolves in dev, Docker, and from either app's cwd. Bundled copy at `apps/cases/public/templates/poa/Letterhead.pdf` remains the auto-resolved default.
+
+**Tests:** Added 6 cases to `dc-fee-invoice.test.ts` (prefix strip + round-trip with `buildConsumerReference`, null/blank handling, sentence folding, acronym preservation, no-consumer fallback). Full shared-lib Vitest green: 48 files / 584 tests.
+
+**Env var:** `INVOICE_LETTERHEAD_PATH` (optional) documented in `apps/cases/.env.example` and `apps/finance/.env.example`.
+
+**Deploy note:** Redeploy `cases` (and `finance` if DC fee docs are generated there) to ship.
+
+---
+
+### Added: Referrer Portal Phase 1 MVP (2026-07-02)
+
+**Goal (user request):** Build the approved Phase 1 referrer portal so referrers can log in, track referrals, see commission earned/pending/paid, view payout references, download commission statements, update their own profile/banking details, and submit missing-payment/commission follow-ups.
+
+**Privacy guardrail:** The portal is scoped through `Referrer.portalUserId` and every referrer API resolves the referrer from the signed-in user, not from a client-supplied referrer ID. Consumer data exposed to referrers is limited to file number, masked consumer label (first initial + surname), high-level status, commission amount/status, and payment reference. No consumer ID number, phone/email, banking details, documents, credit/DHS/XDS data, workflow logs, or internal notes are exposed.
+
+**Schema:** Added additive migration `20260701_referrer_portal_phase1` with `Referrer.portalUserId` and new `ReferrerPaymentQuery` for structured missing-payment/commission claims. Added the inverse Prisma relations on `User`, `Case`, and `ReferrerCommission`.
+
+**Backend/UI:** New `/referrer` portal page plus APIs under `/api/referrer-portal/*` for summary, profile update, payment-query submit/list, and privacy-safe statement PDF download. Added admin route `POST /api/admin/referrers/[id]/portal-access` to create/link a `REFERRER` user with a one-time temporary password. Existing admin referrer detail page now shows portal access status and an "Enable Portal Login" action.
+
+**Tooling note:** Added the existing `next-auth` override to `pnpm-workspace.yaml` because this local runtime uses pnpm 11, which no longer reads `package.json#pnpm.overrides`; this lets frozen installs match the existing lockfile. `pnpm-lock.yaml` was not changed.
+
+**Tests:** New focused tests for portal privacy helpers, portal access resolution, summary masking, profile updates, payment-query ownership checks, statement masking, and admin portal-user creation. Focused Vitest green: 7 files / 21 tests. `apps/cases` `tsc --noEmit` green after Prisma client generation.
+
+**Next steps:** Apply migration in the target DB (`prisma migrate deploy`), redeploy the cases app, enable portal login for selected referrers from Admin -> Referrers, and manually verify one referrer account end-to-end in browser. Phase 2 remains referral intake + POPIA consent.
 
 ---
 
@@ -30,7 +67,15 @@
 
 **Recommendation direction:** Build this, but as a privacy-limited referrer portal over the existing referrer/commission model rather than a new parallel B2B case portal. Show referral identifiers, high-level workflow milestones, commission status/amounts, payout/request status, and referrer-owned profile/banking details. Do not expose consumer case documents, bank details, credit data, full ID numbers, free-text internal notes, DHS/XDS details, or staff comments unless a separate consent/legal basis is documented.
 
-**No implementation done:** This was advisory only. No schema, API, UI, or tests were changed.
+**Approved six-phase roadmap (user approved 2026-07-01; do not build until explicitly requested):**
+1. **Phase 1 - Referrer Portal MVP:** referrer login, dashboard totals, referral status, commission earned/pending/paid, payout references, downloadable statements, profile/banking details, and missing-commission/payment follow-up form.
+2. **Phase 2 - Referral Intake + POPIA Consent:** new referral submission, consent declaration, optional proof upload, duplicate checks, and internal review queue before case conversion.
+3. **Phase 3 - Commission Claims + Staff Verification:** structured missing-payment queries, proof-of-payment upload, admin verification queue, status updates, and audit trail.
+4. **Phase 4 - Secure Messaging + Notifications:** referrer-safe communication thread per referral, email/SMS status notifications, payout notifications, and no internal case-note exposure.
+5. **Phase 5 - Partner Team Management + Reporting:** organization/team logins, branch/user performance, monthly statements, exportable reports, and manager-only views.
+6. **Phase 6 - Advanced Automation + Compliance:** automated commission reconciliation, anomaly detection, POPIA access logs, configurable commission rules, and finance/accounting exports.
+
+**No implementation done:** Roadmap approved only. No schema, API, UI, or tests were changed. Build should start with Phase 1 only when the user explicitly asks to proceed.
 
 ---
 
@@ -67,6 +112,14 @@
 2. Redeploy both `cases` and `finance` apps in Dokploy (new migration + shared-lib changes span both).
 
 **Not verified live in-browser:** no test login credentials were available in this session, so the account page / case page button / invoice form UI were verified via `tsc`, lint, and the test suites above, plus a dev-server smoke check (login page renders correctly, no compile crash) — not an interactive click-through. Recommend a manual pass after deploy.
+
+---
+
+### Fixed: Finance email had no provider — `sendEmail` now reads SMTP from the DB (2026-06-30)
+
+**Symptom:** On the Finance Outstanding Fees tool, "Email to Debt Counsellor" didn't actually send (download worked). Root cause: `apps/finance/lib/email.ts` `sendEmail()` read SMTP only from `process.env.SMTP_HOST`, but this deployment stores SMTP creds in the DB `systemSettings` (not env) — so Finance found no provider and fell through to the dev mock (fake success) / "not configured" on prod. The Cases app already sends correctly because it uses `getSMTPCredentials()`.
+
+**Fix:** `sendEmail()` now loads SMTP via `getSMTPCredentials()` (DB `systemSettings` first, env fallback) — same source the rest of the platform uses — and sets a proper `"Name" <from>` header. Fixes DC-fee email **and all other Finance email** (invoice/quote send, etc.). No schema/API change.
 
 ---
 
@@ -2998,7 +3051,7 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 
 ### 🔴 Immediate (Do First)
 - [ ] **AI-Driven File Requests**: Create a trigger that will let AI request all "debt review removal" files (Form 17.W, Court Orders, etc.) for relevant cases.
-- [ ] **Referral Portal Decision**: Confirm privacy scope, referrer identity model, commission claim workflow, and whether consumer identifiers should be masked before any build starts.
+- [ ] **Referral Portal Phase 1**: When approved to build, implement the Referrer Portal MVP with referrer login, masked referral tracking, commission totals, statements, profile/banking details, and missing-commission/payment follow-up queue.
 
 ### 🟡 Short Term (1-2 Weeks)
 

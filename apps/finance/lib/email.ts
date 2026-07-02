@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { withMonitoringBcc } from '@zenowethu/shared-lib';
+import { withMonitoringBcc, getSMTPCredentials } from '@zenowethu/shared-lib';
 
 export interface EmailAttachment {
     filename: string;
@@ -32,22 +32,28 @@ export interface SendEmailResult {
  *   4. Mock  — dev/test only
  */
 export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult> {
-    // --- 1. SMTP ---
-    if (process.env.SMTP_HOST) {
+    // --- 1. SMTP (DB-backed admin settings, env fallback) ---
+    // Credentials come from `getSMTPCredentials()` which reads the `systemSettings`
+    // table first (where this deployment actually stores SMTP config) and falls
+    // back to env. Reading raw `process.env.SMTP_HOST` here previously meant email
+    // silently had no provider on servers that keep creds in the DB.
+    const smtp = await getSMTPCredentials();
+    if (smtp.host) {
         const transporter = nodemailer.createTransport({
-            host:   process.env.SMTP_HOST,
-            port:   parseInt(process.env.SMTP_PORT || '587'),
-            secure: process.env.SMTP_SECURE === 'true',
+            host:   smtp.host,
+            port:   smtp.port,
+            secure: smtp.secure,
             auth: {
-                user: process.env.SMTP_USER || '',
-                pass: process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '',
+                user: smtp.username,
+                pass: smtp.password,
             },
             tls: { rejectUnauthorized: false },
         });
 
         try {
+            const configuredFrom = smtp.fromEmail || smtp.username;
             const info = await transporter.sendMail({
-                from:        opts.fromEmail || process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER,
+                from:        opts.fromName ? `"${opts.fromName}" <${configuredFrom}>` : (opts.fromEmail || configuredFrom),
                 to:          Array.isArray(opts.to) ? opts.to.join(', ') : opts.to,
                 bcc:         withMonitoringBcc()?.join(', '),
                 subject:     opts.subject,

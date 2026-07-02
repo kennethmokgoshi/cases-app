@@ -140,6 +140,8 @@ function drawRightAlignedText(
 // Finance app tries cases app's public folder as well (same Docker image)
 async function tryLoadLetterhead(): Promise<Uint8Array | null> {
   const candidates = [
+    // Explicit override wins, so ops can point at the branded letterhead anywhere.
+    ...(process.env.INVOICE_LETTERHEAD_PATH ? [process.env.INVOICE_LETTERHEAD_PATH] : []),
     join(process.cwd(), 'public', 'templates', 'poa', 'Letterhead.pdf'),
     join(process.cwd(), '..', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
     join(process.cwd(), 'apps', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),

@@ -73,6 +73,12 @@ type Referrer = {
     notes: string | null;
     commissionType: string;
     fixedCommissionAmount: number | null;
+    portalUser: {
+        id: string;
+        email: string;
+        lastLogin: string | null;
+        isLocked: boolean;
+    } | null;
 };
 
 type Summary = {
@@ -110,6 +116,9 @@ export default function ReferrerDetailPage() {
     const [editForm, setEditForm] = useState({ stage: '' as CommissionStage, commissionAmount: '', paymentRef: '', notes: '', isPaid: false });
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
+    const [portalSaving, setPortalSaving] = useState(false);
+    const [portalMessage, setPortalMessage] = useState('');
+    const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
     const isManager = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'MANAGER';
 
@@ -186,6 +195,27 @@ export default function ReferrerDetailPage() {
         } catch { /* silent */ }
     }
 
+    async function enablePortalAccess() {
+        setPortalSaving(true);
+        setPortalMessage('');
+        setTemporaryPassword(null);
+        try {
+            const res = await fetch(`/api/admin/referrers/${referrerId}/portal-access`, { method: 'POST' });
+            const json = await res.json();
+            if (!res.ok) {
+                setPortalMessage(json.error ?? 'Portal access could not be enabled');
+                return;
+            }
+            setReferrer((current) => current ? { ...current, portalUser: json.user } : current);
+            setTemporaryPassword(json.temporaryPassword ?? null);
+            setPortalMessage(json.temporaryPassword ? 'Portal login created. Copy this temporary password now.' : 'Portal login is already enabled.');
+        } catch {
+            setPortalMessage('Portal access could not be enabled');
+        } finally {
+            setPortalSaving(false);
+        }
+    }
+
     if (status === 'loading' || loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
@@ -238,6 +268,36 @@ export default function ReferrerDetailPage() {
                     <div>
                         <p className="text-xs text-gray-400 mb-0.5">Email</p>
                         <p className="text-white">{referrer.email ?? '—'}</p>
+                    </div>
+                    <div className="col-span-2 md:col-span-4 border-t border-zeno-blue/40 pt-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div>
+                                <p className="text-xs text-gray-400 mb-1">Portal Access</p>
+                                {referrer.portalUser ? (
+                                    <p className="text-white text-sm">
+                                        Enabled for {referrer.portalUser.email}
+                                        {referrer.portalUser.lastLogin ? `, last login ${new Date(referrer.portalUser.lastLogin).toLocaleString('en-ZA')}` : ', no login yet'}
+                                    </p>
+                                ) : (
+                                    <p className="text-gray-300 text-sm">Not enabled for this referrer.</p>
+                                )}
+                                {portalMessage && <p className="text-xs text-zeno-cyan mt-2">{portalMessage}</p>}
+                                {temporaryPassword && (
+                                    <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                                        <p className="text-xs text-amber-200 mb-1">Temporary password</p>
+                                        <p className="font-mono text-sm text-white break-all">{temporaryPassword}</p>
+                                    </div>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={enablePortalAccess}
+                                disabled={portalSaving || !!referrer.portalUser}
+                                className="bg-white/5 border border-white/10 text-white font-medium px-4 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {portalSaving ? 'Enabling...' : referrer.portalUser ? 'Portal Enabled' : 'Enable Portal Login'}
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <p className="text-xs text-gray-400 mb-0.5">Bank</p>

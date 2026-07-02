@@ -6,6 +6,8 @@ import {
   dcFeeInvoiceInputSchema,
   computeDcFeeTotals,
   buildConsumerReference,
+  consumerLabelFromReference,
+  buildDcFeeLineDescription,
   ZA_VAT_RATE,
 } from './dc-fee-invoice';
 
@@ -71,6 +73,43 @@ describe('buildConsumerReference', () => {
     expect(
       buildConsumerReference({ clientFirstName: 'John', clientLastName: 'Dlamini', clientIdNumber: '8001015009087' }),
     ).toBe('Outstanding fees re: John Dlamini (ID: 8001015009087)');
+  });
+});
+
+describe('consumerLabelFromReference', () => {
+  it('strips the "Outstanding fees re: " prefix', () => {
+    expect(
+      consumerLabelFromReference('Outstanding fees re: Uelenda Mononyane (ID: 8608020432086)'),
+    ).toBe('Uelenda Mononyane (ID: 8608020432086)');
+  });
+  it('is a round-trip with buildConsumerReference', () => {
+    const ref = buildConsumerReference({
+      clientFirstName: 'John',
+      clientLastName: 'Dlamini',
+      clientIdNumber: '8001015009087',
+    });
+    expect(consumerLabelFromReference(ref)).toBe('John Dlamini (ID: 8001015009087)');
+  });
+  it('returns an empty string for null/undefined/blank input', () => {
+    expect(consumerLabelFromReference(null)).toBe('');
+    expect(consumerLabelFromReference(undefined)).toBe('');
+    expect(consumerLabelFromReference('')).toBe('');
+  });
+});
+
+describe('buildDcFeeLineDescription', () => {
+  it('folds the consumer into the fee reason as a natural sentence', () => {
+    expect(
+      buildDcFeeLineDescription('Commission paid out', 'Uelenda Mononyane (ID: 8608020432086)'),
+    ).toBe('Outstanding fees commission paid out for Uelenda Mononyane (ID: 8608020432086)');
+  });
+  it('preserves embedded acronyms while lower-casing the first letter only', () => {
+    expect(buildDcFeeLineDescription('Rejection fee (Form 17.1)', 'A B (ID: 1)')).toBe(
+      'Outstanding fees rejection fee (Form 17.1) for A B (ID: 1)',
+    );
+  });
+  it('omits the "for …" clause when no consumer is known', () => {
+    expect(buildDcFeeLineDescription('Admin fees', '')).toBe('Outstanding fees admin fees');
   });
 });
 

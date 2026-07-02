@@ -18,7 +18,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (!isAdminLevel(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-        const referrer = await prisma.referrer.findUnique({ where: { id } });
+        const referrer = await prisma.referrer.findUnique({
+            where: { id },
+            include: {
+                portalUser: { select: { id: true, email: true, lastLogin: true, isLocked: true } },
+            },
+        });
         if (!referrer) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
 
         const commissions = await prisma.referrerCommission.findMany({

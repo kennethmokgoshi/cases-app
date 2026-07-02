@@ -48,6 +48,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             where: { id },
             include: {
                 project: { select: { id: true, name: true, parentId: true } },
+                portalUser: { select: { id: true, email: true, lastLogin: true, isLocked: true } },
                 parentReferrer: { select: { id: true, firstName: true, lastName: true } },
                 referredReferrers: { select: { id: true, firstName: true, lastName: true, isActive: true } },
                 _count: { select: { cases: true } },

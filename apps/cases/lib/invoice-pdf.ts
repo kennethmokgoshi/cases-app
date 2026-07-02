@@ -136,8 +136,12 @@ function drawRightAlignedText(
 // ── Letterhead loader ─────────────────────────────────────────────────────────
 async function tryLoadLetterhead(): Promise<Uint8Array | null> {
   const candidates = [
+    // Explicit override wins, so ops can point at the branded letterhead anywhere.
+    ...(process.env.INVOICE_LETTERHEAD_PATH ? [process.env.INVOICE_LETTERHEAD_PATH] : []),
     join(process.cwd(), 'public', 'templates', 'poa', 'Letterhead.pdf'),
     join(process.cwd(), 'apps', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
+    // Finance/other apps' cwd → reach the canonical Cases-app copy in the same image.
+    join(process.cwd(), '..', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
     '/app/apps/cases/public/templates/poa/Letterhead.pdf',
     '/app/public/templates/poa/Letterhead.pdf',
   ]
