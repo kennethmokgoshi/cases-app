@@ -31,6 +31,8 @@ import SendQuoteModal from './SendQuoteModal';
 import SendMandateModal from './SendMandateModal';
 import DcFeeInvoiceModal from './DcFeeInvoiceModal';
 import { ConsumerPortalPanel } from '@/app/components/ConsumerPortalPanel';
+import { getCaseHeaderClientAction } from '@/lib/case-header-client-action';
+import { canShowDhsManageConsumers } from '@/lib/dhs-manage-consumers-eligibility';
 
 
 // Client-side logger (avoid importing createLogger from shared-lib)
@@ -292,7 +294,8 @@ export default function CaseDetailPage() {
     const { data: session } = useSession();
     const isAdmin     = session?.user?.isAdmin === true;
     const isExecutive = session?.user?.isExecutive === true;
-    const isFinance   = (session?.user as any)?.role?.toUpperCase() === 'FINANCE';
+    const userRole = (session?.user as { role?: string | null } | undefined)?.role?.toUpperCase();
+    const isFinance   = userRole === 'FINANCE';
     const canCreateInvoice = isAdmin || isExecutive || isFinance;
 
     const [caseData, setCaseData] = useState<CaseDetail | null>(null);
@@ -319,6 +322,7 @@ export default function CaseDetailPage() {
     const [dhsLoading, setDhsLoading] = useState(false);
     const [checkRequestLoading, setCheckRequestLoading] = useState(false);
     const [manageConsumersLoading, setManageConsumersLoading] = useState(false);
+    const [resendConsentLoading, setResendConsentLoading] = useState(false);
     const [nctLoading, setNctLoading] = useState(false);
     const [dhsMessage, setDhsMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
     const [nctMessage, setNctMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -1785,6 +1789,35 @@ export default function CaseDetailPage() {
         }
     };
 
+    // Resend the acceptance + consent confirmation link (Credo login-gated) to the
+    // consumer. Reuses the existing consent token — earlier emailed links stay valid.
+    const handleResendConsentLink = async () => {
+        setResendConsentLoading(true);
+        setDhsMessage(null);
+        try {
+            const res = await fetch(`/api/cases/${params.id}/resend-consent`, { method: 'POST' });
+            const result = await res.json();
+
+            // Refresh case data + timeline so the resend comment shows
+            const caseRes = await fetch(`/api/cases/${params.id}`);
+            if (caseRes.ok) {
+                const updatedCase = await caseRes.json();
+                setCaseData(updatedCase);
+            }
+            setActivityUpdate(prev => prev + 1);
+
+            setDhsMessage({
+                type: result.success ? (result.emailSent ? 'success' : 'info') : 'error',
+                text: result.message || result.error || (result.success ? 'Confirmation link re-sent.' : 'Resend failed.')
+            });
+        } catch (error) {
+            log.error({ err: error }, 'Resend consent link error:', error);
+            setDhsMessage({ type: 'error', text: 'Failed to resend the confirmation link' });
+        } finally {
+            setResendConsentLoading(false);
+        }
+    };
+
     // DHS Request Transfer
     const handleDHSTransfer = async () => {
         if (!caseData?.client.idNumber) {
@@ -1855,6 +1888,11 @@ export default function CaseDetailPage() {
     const primaryProject = caseData.projects.find(p => p.isPrimary);
     const secondaryProjects = caseData.projects.filter(p => !p.isPrimary);
     const hasAIAnalysis = caseData.documents.some(d => d.extractedData !== null);
+    const canManageReferrerConversion = isAdmin || isExecutive || userRole === 'MANAGER';
+    const clientHeaderAction = getCaseHeaderClientAction({
+        status: caseData.status,
+        canManageReferrerConversion,
+    });
 
     // Debt-review-specific features: Form 16 + Debt Review Docs tab only visible for DR/DRR cases
     const caseServiceList: string[] = (() => { try { return JSON.parse(caseData.services ?? '[]'); } catch { return []; } })();
@@ -2037,7 +2075,19 @@ export default function CaseDetailPage() {
                                     </>
                                 )}
                             </button>
-                            {(isAdmin || isExecutive || (session?.user as any)?.role?.toUpperCase() === 'MANAGER') && (
+                            {clientHeaderAction === 'manage-client' && (
+                                <button
+                                    onClick={startEditing}
+                                    className="px-3 py-1.5 bg-zeno-cyan/10 border border-zeno-cyan/20 text-zeno-cyan rounded hover:bg-zeno-cyan/20 text-sm flex items-center gap-2 transition-colors"
+                                    title="Manage this existing ZDM client"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                    Manage Client
+                                </button>
+                            )}
+                            {clientHeaderAction === 'convert-to-referrer' && (
                                 <button
                                     onClick={() => setShowConvertModal(true)}
                                     className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded hover:bg-indigo-500/20 text-sm flex items-center gap-2 transition-colors"
@@ -3618,20 +3668,32 @@ export default function CaseDetailPage() {
                                                         {checkRequestLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Check Request Status'}
                                                     </button>
                                                     {(() => {
-                                                        // Manage Consumers carries on once the file is Accepted via DHS.
-                                                        const norm = (v?: string | null) => (v || '').replace(/[\s_]+/g, '').toUpperCase();
-                                                        const acceptedStates = ['ACCEPTEDVIADHS', 'READYTOCONSENT', 'ACCEPTED', 'AUTOTRANSFERRED'];
-                                                        const eligible = caseData.manuallyAcceptedViaDhs || acceptedStates.includes(norm(caseData.status)) || acceptedStates.includes(norm(caseData.dhsStatus));
+                                                        // Manage Consumers carries on once the file is accepted or is already a ZDM client.
+                                                        const eligible = canShowDhsManageConsumers({
+                                                            status: caseData.status,
+                                                            dhsStatus: caseData.dhsStatus,
+                                                            manuallyAcceptedViaDhs: caseData.manuallyAcceptedViaDhs,
+                                                        });
                                                         if (!eligible) return null;
                                                         return (
-                                                            <button
-                                                                onClick={handleManageConsumers}
-                                                                disabled={manageConsumersLoading}
-                                                                title="Carry on from Accepted via DHS — send the consumer acceptance + debt-review-removal consent email."
-                                                                className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
-                                                            >
-                                                                {manageConsumersLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Manage Consumers'}
-                                                            </button>
+                                                            <>
+                                                                <button
+                                                                    onClick={handleManageConsumers}
+                                                                    disabled={manageConsumersLoading}
+                                                                    title="Carry on from Accepted via DHS — send the consumer acceptance + debt-review-removal consent email."
+                                                                    className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
+                                                                >
+                                                                    {manageConsumersLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Manage Consumers'}
+                                                                </button>
+                                                                <button
+                                                                    onClick={handleResendConsentLink}
+                                                                    disabled={resendConsentLoading}
+                                                                    title="Re-send the Credo confirmation link email (with ID-number login instructions) to the consumer. The existing secure link stays valid; does nothing if they have already confirmed."
+                                                                    className="px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
+                                                                >
+                                                                    {resendConsentLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Resend Confirmation Link'}
+                                                                </button>
+                                                            </>
                                                         );
                                                     })()}
                                                     {(() => {

@@ -232,6 +232,77 @@ describe('handleDhsAccepted', () => {
         expect(cancel).toBeTruthy();
     });
 
+    it('forceResend re-sends the email on a PENDING consent, reusing the existing token', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue({
+            id: 'consent1',
+            token: 'existing-tok',
+            status: 'PENDING',
+            channel: 'EMAIL', // originally sent before the Credo profile existed
+            consumerId: null,
+            expiresAt: new Date(Date.now() + 1e9),
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        const r = await handleDhsAccepted({ caseId: 'case1', triggeredByUserId: 'staff1', forceResend: true });
+
+        expect(r.emailSent).toBe(true);
+        expect(r.skipped).toBe(false);
+        // Existing token reused — no new consent row
+        expect(db.debtReviewRemovalConsent.create).not.toHaveBeenCalled();
+        expect(r.consentLink).toBe('https://credo.zenowethu.co.za/consent/existing-tok');
+        const body = sendMsg.mock.calls[0][3];
+        expect(body).toContain('/consent/existing-tok');
+        // Consent row upgraded to the Credo channel now that a profile exists
+        const channelSync = db.debtReviewRemovalConsent.update.mock.calls.find(
+            (c) => c[0].data.channel === 'CREDO'
+        );
+        expect(channelSync?.[0].data.consumerId).toBe('cons1');
+        // Timeline comment reflects a RESEND, not a first send
+        const comment = db.caseComment.create.mock.calls.find((c) => c[0].data.content.includes('RE-SENT'));
+        expect(comment).toBeTruthy();
+    });
+
+    it('forceResend never re-emails a consumer who has already consented', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue({
+            id: 'consent1',
+            token: 'existing-tok',
+            status: 'CONSENTED',
+            channel: 'CREDO',
+            expiresAt: new Date(Date.now() + 1e9),
+        });
+
+        const r = await handleDhsAccepted({ caseId: 'case1', forceResend: true });
+
+        expect(r.skipped).toBe(true);
+        expect(r.emailSent).toBe(false);
+        expect(r.reason).toBe('Consumer has already consented');
+        expect(sendMsg).not.toHaveBeenCalled();
+    });
+
+    it('a failed resend leaves the existing consent token alive (no CANCELLED rollback)', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue({
+            id: 'consent1',
+            token: 'existing-tok',
+            status: 'PENDING',
+            channel: 'CREDO',
+            consumerId: 'cons1',
+            expiresAt: new Date(Date.now() + 1e9),
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: false, errors: ['SMTP refused'] });
+
+        const r = await handleDhsAccepted({ caseId: 'case1', forceResend: true });
+
+        expect(r.emailSent).toBe(false);
+        expect(r.errors).toContain('SMTP refused');
+        const cancel = db.debtReviewRemovalConsent.update.mock.calls.find(
+            (c) => c[0].data.status === 'CANCELLED'
+        );
+        expect(cancel).toBeFalsy();
+    });
+
     it('returns an error (no throw) when the case is not found', async () => {
         db.case.findUnique.mockResolvedValue(null);
         const r = await handleDhsAccepted({ caseId: 'missing' });

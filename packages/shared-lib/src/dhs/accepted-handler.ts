@@ -43,12 +43,15 @@ const CONSENT_FOLLOWUP_DAYS = 3;
  * Manage Consumers post-acceptance follow-on.
  *   • ACCEPTED_VIA_DHS / READY_TO_CONSENT — our workflow statuses
  *   • Accepted / Auto Transferred         — the DHS request-status labels
+ *   • ZDM_CLIENT / ZDM Client             — the file is already under our own
+ *     NCRDC, so no transfer is needed and the follow-on is available immediately
  */
 const MANAGE_CONSUMERS_ELIGIBLE = new Set<string>([
     'ACCEPTEDVIADHS',
     'READYTOCONSENT',
     'ACCEPTED',
     'AUTOTRANSFERRED',
+    'ZDMCLIENT',
 ]);
 
 const normaliseStatus = (value?: string | null): string =>
@@ -105,8 +108,15 @@ export interface AcceptedHandlerResult {
 export async function handleDhsAccepted(params: {
     caseId: string;
     triggeredByUserId?: string;
+    /**
+     * Re-send the acceptance + consent email even when a PENDING consent already
+     * exists (the "Resend Confirmation Link" button). The existing token/link is
+     * reused so earlier emails stay valid. A CONSENTED case is never re-emailed.
+     */
+    forceResend?: boolean;
 }): Promise<AcceptedHandlerResult> {
     const { caseId } = params;
+    const forceResend = params.forceResend === true;
     // Attribute to the staff member who ran the check, else the system automation user.
     const triggeredByUserId =
         params.triggeredByUserId ?? (await getAutomationUserId()) ?? undefined;
@@ -141,26 +151,35 @@ export async function handleDhsAccepted(params: {
                 expiresAt: { gt: new Date() },
             },
         });
-        if (existing) {
+        if (existing && existing.status === 'CONSENTED') {
+            // Already CONSENTED — never re-email; leave the workflow for the
+            // post-consent flow to advance.
             result.skipped = true;
             result.consentLink =
                 existing.channel === 'CREDO'
                     ? buildCredoConsentLink(existing.token)
                     : buildConsentLink(existing.token);
-            if (existing.status === 'PENDING') {
-                // Still waiting on the consumer — keep (or restore) the case parked at
-                // "Ready to Consent" so a re-check doesn't downgrade it, and refresh the
-                // +3 working-day follow-up. Don't re-send the email.
-                result.reason = 'Consumer already notified; consent still pending';
-                await setReadyToConsent(caseId, triggeredByUserId);
-                result.statusUpdatedTo = READY_TO_CONSENT_STATUS;
-            } else {
-                // Already CONSENTED — leave the workflow for the post-consent flow to advance.
-                result.reason = 'Consumer has already consented';
-            }
-            logger.info(`[DHS Accepted] Skipping email for case ${caseId} — consent ${existing.status}.`);
+            result.reason = 'Consumer has already consented';
+            logger.info(`[DHS Accepted] Skipping email for case ${caseId} — consent CONSENTED.`);
             return result;
         }
+        if (existing && !forceResend) {
+            // Still waiting on the consumer — keep (or restore) the case parked at
+            // "Ready to Consent" so a re-check doesn't downgrade it, and refresh the
+            // +3 working-day follow-up. Don't re-send the email.
+            result.skipped = true;
+            result.consentLink =
+                existing.channel === 'CREDO'
+                    ? buildCredoConsentLink(existing.token)
+                    : buildConsentLink(existing.token);
+            result.reason = 'Consumer already notified; consent still pending';
+            await setReadyToConsent(caseId, triggeredByUserId);
+            result.statusUpdatedTo = READY_TO_CONSENT_STATUS;
+            logger.info(`[DHS Accepted] Skipping email for case ${caseId} — consent PENDING.`);
+            return result;
+        }
+        // From here: no live consent yet, OR forceResend on a PENDING one (the
+        // consent request below reuses the existing token, so old links stay valid).
 
         // ── No email on file → escalate to staff, do not create a dead link ──
         if (!caseData.client.email) {
@@ -218,6 +237,15 @@ export async function handleDhsAccepted(params: {
             ? buildCredoConsentLink(consent.token)
             : consent.link;
 
+        // Resend of a pre-existing consent: keep the row in step with the link we
+        // are about to email — the Credo profile may only have been provisioned
+        // after the original send (when the first email used the public link).
+        if (existing && credoConsumerId && (existing.consumerId !== credoConsumerId || existing.channel !== 'CREDO')) {
+            await prisma.debtReviewRemovalConsent
+                .update({ where: { id: consent.id }, data: { consumerId: credoConsumerId, channel: 'CREDO' } })
+                .catch((err) => logger.error(`[DHS Accepted] Failed to sync consent channel for ${caseId}:`, err));
+        }
+
         // ── Resolve the previous DC name from the database ───────────────────
         // The firm the file transferred FROM. Prefer the values on the case;
         // when those are blank, fall back to the DebtCounsellor master table
@@ -259,7 +287,9 @@ export async function handleDhsAccepted(params: {
         if (emailResult.emailSuccess) {
             result.emailSent = true;
             result.actionsPerformed.push(
-                `Acceptance + consent email sent to consumer (${caseData.client.email})`
+                existing
+                    ? `Consent email RE-SENT to consumer (${caseData.client.email})`
+                    : `Acceptance + consent email sent to consumer (${caseData.client.email})`
             );
             // Park the workflow at "Ready to Consent" with a +3 working-day follow-up.
             await setReadyToConsent(caseId, triggeredByUserId);
@@ -267,14 +297,20 @@ export async function handleDhsAccepted(params: {
             await addComment(
                 caseId,
                 triggeredByUserId,
-                `[SYSTEM] DHS Accepted: Transfer accepted — file is now with Zenowethu Debt Management. Acceptance + debt-review-removal consent email sent to consumer (${caseData.client.email}). Status → Ready to Consent. Next update +${CONSENT_FOLLOWUP_DAYS} working days. Awaiting consumer consent via the secure link before flag removal proceeds.`
+                existing
+                    ? `[SYSTEM] Consent confirmation link RE-SENT to consumer (${caseData.client.email}) at staff request. The existing secure link remains valid. Still awaiting consumer consent before flag removal proceeds.`
+                    : `[SYSTEM] DHS Accepted: Transfer accepted — file is now with Zenowethu Debt Management. Acceptance + debt-review-removal consent email sent to consumer (${caseData.client.email}). Status → Ready to Consent. Next update +${CONSENT_FOLLOWUP_DAYS} working days. Awaiting consumer consent via the secure link before flag removal proceeds.`
             );
         } else {
-            // Roll back the consent request so the next status check retries the send,
-            // rather than treating the consumer as "already notified".
-            await prisma.debtReviewRemovalConsent
-                .update({ where: { id: consent.id }, data: { status: 'CANCELLED' } })
-                .catch(() => null);
+            // Roll back a NEWLY created consent request so the next status check
+            // retries the send, rather than treating the consumer as "already
+            // notified". A reused (resend) token is left untouched — cancelling it
+            // would kill the link already in the consumer's inbox.
+            if (!existing) {
+                await prisma.debtReviewRemovalConsent
+                    .update({ where: { id: consent.id }, data: { status: 'CANCELLED' } })
+                    .catch(() => null);
+            }
             result.errors.push(...emailResult.errors);
             await addComment(
                 caseId,
