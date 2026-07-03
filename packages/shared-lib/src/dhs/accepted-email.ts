@@ -25,7 +25,7 @@
 const ACCEPTED_SIGNATURE = `NCRDC3693
 Zenowethu Debt Management
 Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
-Tel: +27 12 035 1824 | Cell: 082 363 8207
+Tel: +27 81 747 7616 | Cell: 082 363 8207
 info@zenowethu.co.za | www.zenowethu.co.za
 Member of DCASA`;
 
@@ -84,7 +84,7 @@ IF WE DO NOT HEAR FROM YOU
 ─────────────────────────────────────────
 Please understand, kindly, that until your consent is received we are unable to begin. Without it your file will simply be parked and cannot be attended to, which would delay the removal of the debt review flag. We would not want anything to hold back your progress, so we gently encourage you to confirm your consent at your earliest convenience.
 
-If you have any questions in the meantime, please reply to this email or contact us on 012 035 1824. We are here to help.
+If you have any questions in the meantime, please reply to this email or contact us on 081 747 7616. We are here to help.
 
 Thank you for choosing Zenowethu Debt Management — we look forward to assisting you.
 

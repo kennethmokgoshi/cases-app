@@ -22,6 +22,7 @@ type Payment = {
     status: string;
     category: string;
     notes: string | null;
+    proofOfPaymentUrl: string | null;
     client: { id: string; firstName: string; lastName: string; idNumber: string } | null;
     case: { fileNumber: string } | null;
     recordedBy: { firstName: string; lastName: string } | null;
@@ -266,11 +267,24 @@ function PaymentsContent() {
                                                 {p.reference ?? '—'}
                                             </td>
                                             <td className="px-5 py-3 text-gray-500 text-xs">
-                                                {p.batch ? (
-                                                    <span title={p.batch.fileName}>Batch</span>
-                                                ) : (
-                                                    <span>Manual</span>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    {p.batch ? (
+                                                        <span title={p.batch.fileName}>Batch</span>
+                                                    ) : (
+                                                        <span>Manual</span>
+                                                    )}
+                                                    {p.proofOfPaymentUrl && (
+                                                        <a
+                                                            href={p.proofOfPaymentUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            title="View proof of payment"
+                                                            className="px-1.5 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded text-[10px] font-semibold hover:bg-cyan-500/20 transition-colors"
+                                                        >
+                                                            POP
+                                                        </a>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-5 py-3">
                                                 <div className="flex items-center gap-2">

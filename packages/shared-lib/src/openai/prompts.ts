@@ -566,7 +566,7 @@ PRIORITY ORDER — classify documents in this strict order of priority:
 
 2. *** ZENOWETHU_POA (HIGH PRIORITY) ***
    Any document with Zenowethu company branding — this is a packet of ~4 pages.
-   TEXT CLUES (any ONE of these is enough): "Zenowethu", "ZENOWETHU", "ZDM", "ZDM_POA", "zenowethu@", "NCRDC3693", "Aftercare Fee", "Transfer Authorisation", "Credit Information Authorization", "Power of Attorney" combined with Zenowethu name, "012 035 1824", "cases.zenowethu.co.za", "www.zenowethu"
+   TEXT CLUES (any ONE of these is enough): "Zenowethu", "ZENOWETHU", "ZDM", "ZDM_POA", "zenowethu@", "NCRDC3693", "Aftercare Fee", "Transfer Authorisation", "Credit Information Authorization", "Power of Attorney" combined with Zenowethu name, "012 035 1824", "081 747 7616", "cases.zenowethu.co.za", "www.zenowethu"
    IMAGE CLUES: Zenowethu logo (teal/green logo), Zenowethu letterhead at top of page, "ZDM" logo or text
    RULE: If ANY page contains Zenowethu branding (text, "ZDM", or logo), group ALL connected pages as ZENOWETHU_POA. Do NOT classify as generic POA or OTHER.
    TYPICAL CONTENT: Page 1=Aftercare Fees schedule, Page 2=Transfer Authorization, Page 3=Power of Attorney, Page 4=Credit Info Authorization
@@ -669,12 +669,12 @@ B. Power of Attorney
    - Page heading: "POWER OF ATTORNEY"
    - Body: "This Power of Attorney (the 'Agreement') is made BETWEEN: Zenowethu Debt Management"
    - Body: "nominate, constitute and appoint Zenowethu Debt Management"
-   - Has Witness Signature lines and footer "+27 12 035 1824"
+   - Has Witness Signature lines and footer "+27 12 035 1824" or "+27 81 747 7616"
 
 C. Authorisation to Obtain Confidential Information
    - Page heading: "Authorisation to Obtain Confidential Information with All Credit Bureaus"
    - Body: "I consent to the Debt Counsellor obtaining and updating my credit records details from any/all registered credit bureaus"
-   - Has footer "+27 12 035 1824"
+   - Has footer "+27 12 035 1824" or "+27 81 747 7616"
 
 === STRICT EXCLUSIONS — NEVER EXTRACT THESE ===
 ❌ Any page headed "SCHEDULE 6" or "Schedule 6: Power of Attorney in favour of Zenowethu" — SKIP even if Zenowethu logo is present

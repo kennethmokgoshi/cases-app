@@ -84,7 +84,7 @@ function buildRefundEmailHtml(input: SendRefundFormInput): string {
     </ol>
 
     <p style="margin:0 0 6px;font-size:13px;color:#6B7280;">Processing time: <strong>5–10 business days</strong> from receipt of completed form.</p>
-    <p style="margin:0;font-size:13px;color:#6B7280;">Questions? Call us on <strong>+27 12 035 1824</strong> or WhatsApp <strong>082 363 8207</strong>.</p>
+    <p style="margin:0;font-size:13px;color:#6B7280;">Questions? Call us on <strong>+27 81 747 7616</strong> or WhatsApp <strong>082 363 8207</strong>.</p>
   `
 
   return renderBrandedEmail(content, {

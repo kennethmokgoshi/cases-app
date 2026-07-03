@@ -115,7 +115,7 @@ def draw_header(c):
     contact_lines = [
         "Aaron Nzotho  |  NCRDC3693",
         "Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190",
-        "Tel: +27 12 035 1824   Cell: 082 363 8207",
+        "Tel: +27 81 747 7616   Cell: 082 363 8207",
         "info@zenowethu.co.za   |   www.zenowethu.co.za",
     ]
     c.setFont("Helvetica", 6.5)

@@ -210,7 +210,7 @@ stepRegistry.register(
           idNumber:    caseWithDC.client.idNumber,
           fileNumber:  caseWithDC.fileNumber,
           companyName: process.env.COMPANY_NAME || 'Zenowethu Debt Management',
-          phone:       process.env.COMPANY_PHONE || '012 035 1824',
+          phone:       process.env.COMPANY_PHONE || '081 747 7616',
       };
       const emailSubject = dcTemplate
           ? renderTemplate(dcTemplate.emailSubject, templateVars)

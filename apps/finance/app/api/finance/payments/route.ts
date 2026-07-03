@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
+import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync';
 import { z } from 'zod';
+import { readPaymentRequest, validateProofFile, saveProofFile } from '../../../../lib/payment-proof';
 
 const PaymentQuerySchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
@@ -105,11 +107,19 @@ export async function POST(request: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const body = await request.json();
+        // Accept JSON (no attachment) or multipart/form-data (with optional proof of payment)
+        const { body, proofFile } = await readPaymentRequest(request);
         const parsed = PaymentCreateSchema.safeParse(body);
 
         if (!parsed.success) {
             return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+        }
+
+        if (proofFile) {
+            const fileError = validateProofFile(proofFile);
+            if (fileError) {
+                return NextResponse.json({ error: fileError }, { status: 400 });
+            }
         }
 
         const { idNumber, amount, date, method, reference, notes, category } = parsed.data;
@@ -135,7 +145,7 @@ export async function POST(request: Request) {
             }
         }
 
-        const payment = await prisma.payment.create({
+        let payment = await prisma.payment.create({
             data: {
                 amount: parseFloat(String(amount)),
                 date: new Date(date),
@@ -151,7 +161,29 @@ export async function POST(request: Request) {
                 client: { select: { firstName: true, lastName: true } },
                 case: { select: { fileNumber: true } } } });
 
-        return NextResponse.json(payment, { status: 201 });
+        // Captured payments may now cover the case's accepted quote — advance
+        // the case workflow (forward-only). Never fails the recorded payment.
+        await checkQuoteFulfilmentSafe(payment.caseId, session.user.id);
+
+        // Save proof of payment after the payment exists — a failed file write must
+        // not lose the recorded payment, so it degrades to a warning instead
+        let proofUploadError: string | undefined;
+        if (proofFile) {
+            try {
+                const proofOfPaymentUrl = await saveProofFile(payment.id, proofFile);
+                payment = await prisma.payment.update({
+                    where: { id: payment.id },
+                    data: { proofOfPaymentUrl },
+                    include: {
+                        client: { select: { firstName: true, lastName: true } },
+                        case: { select: { fileNumber: true } } } });
+            } catch (fileError: any) {
+                logger.error('[Finance] POST /payments proof-of-payment save failed:', fileError);
+                proofUploadError = 'Payment was recorded, but the proof of payment file could not be saved. You can retry by editing the payment.';
+            }
+        }
+
+        return NextResponse.json(proofUploadError ? { ...payment, proofUploadError } : payment, { status: 201 });
     } catch (error: any) {
         logger.error('[Finance] POST /payments error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });

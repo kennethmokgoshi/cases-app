@@ -258,10 +258,10 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Uint8Array>
       drawText(page, 'DEBT MANAGEMENT (PTY) LTD', MARGIN, H - 50, regular, 9, rgb(0.75, 0.75, 0.75))
       drawText(page, 'NCR Reg: NCRDC3693  |  DCASA Member', MARGIN, H - 64, regular, 7.5, rgb(0.65, 0.65, 0.65))
       drawText(page, 'Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190', MARGIN, H - 76, regular, 7, rgb(0.60, 0.60, 0.60))
-      drawText(page, 'Tel: +27 12 035 1824  |  info@zenowethu.co.za  |  www.zenowethu.co.za', MARGIN, H - 88, regular, 7, rgb(0.60, 0.60, 0.60))
+      drawText(page, 'Tel: +27 81 747 7616  |  info@zenowethu.co.za  |  www.zenowethu.co.za', MARGIN, H - 88, regular, 7, rgb(0.60, 0.60, 0.60))
       page.drawLine({ start: { x: MARGIN, y: FY + 26 }, end: { x: RIGHT, y: FY + 26 }, thickness: 0.5, color: ORANGE })
       drawText(page, 'Aaron Nzotho | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190', MARGIN, FY + 14, regular, 6.5, GRAY_TEXT)
-      drawText(page, 'Tel: +27 12 035 1824  |  Cell: 082 363 8207  |  info@zenowethu.co.za  |  www.zenowethu.co.za  |  Member of DCASA', MARGIN, FY + 2, regular, 6.5, GRAY_TEXT)
+      drawText(page, 'Tel: +27 81 747 7616  |  Cell: 082 363 8207  |  info@zenowethu.co.za  |  www.zenowethu.co.za  |  Member of DCASA', MARGIN, FY + 2, regular, 6.5, GRAY_TEXT)
     }
 
     cursor = CONTENT_TOP

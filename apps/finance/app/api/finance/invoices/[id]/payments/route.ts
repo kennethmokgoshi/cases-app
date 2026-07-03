@@ -1,5 +1,6 @@
 import { logger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
+import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -118,9 +119,14 @@ export async function POST(
       return { payment, invoice: updated, amountPaid }
     })
 
+    // Captured payments may now cover the case's accepted quote — advance the
+    // case workflow (forward-only). Never fails the recorded payment.
+    const quoteFulfilment = await checkQuoteFulfilmentSafe(invoice.caseId, session.user.id)
+
     return NextResponse.json({
       ...result,
       balanceDue: Math.max(0, Number(result.invoice.total) - result.amountPaid),
+      quoteFulfilment,
     }, { status: 201 })
   } catch (err) {
     logger.error('[POST /api/finance/invoices/[id]/payments]', err)

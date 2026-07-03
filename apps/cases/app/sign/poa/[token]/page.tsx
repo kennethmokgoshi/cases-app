@@ -121,7 +121,7 @@ export default function SignPoaPage() {
             <h2 className="text-lg font-semibold text-red-400 mb-2">Signing Link Invalid</h2>
             <p className="text-sm text-red-300 mb-4">{error}</p>
             <p className="text-xs text-red-400">
-              Please contact Zenowethu Debt Management at <strong>012 035 1824</strong> to request a new signing link.
+              Please contact Zenowethu Debt Management at <strong>081 747 7616</strong> to request a new signing link.
             </p>
           </div>
         </div>
@@ -235,7 +235,7 @@ export default function SignPoaPage() {
             <div className="text-xs text-gray-500 space-y-1">
               <p>• Link valid for 72 hours</p>
               <p>• Each link can only be signed once</p>
-              <p>• Questions? Call us at 012 035 1824</p>
+              <p>• Questions? Call us at 081 747 7616</p>
             </div>
           </div>
         </div>

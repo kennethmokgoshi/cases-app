@@ -866,6 +866,7 @@ model Payment {
   category     String        @default("INSTALLMENT")
   status       String        @default("COMPLETED")
   notes        String?
+  proofOfPaymentUrl String?
   clientId     String?
   caseId       String?
   batchId      String?

@@ -1,5 +1,6 @@
 import { logger } from '@zenowethu/shared-lib'
 import { auth } from '@zenowethu/shared-lib'
+import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync'
 import { prisma, Prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -70,7 +71,7 @@ export async function PATCH(
   }
 
   try {
-    const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true, subtotal: true, vatRate: true } })
+    const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true, subtotal: true, vatRate: true, type: true, caseId: true } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     if (existing.status === 'PAID' || existing.status === 'CANCELLED') {
@@ -106,6 +107,13 @@ export async function PATCH(
     }
 
     const updated = await prisma.invoice.update({ where: { id }, data: updateData })
+
+    // Marking an invoice PAID may fulfil the case's accepted quote — advance
+    // the case workflow (forward-only). Never fails the invoice update.
+    if (input.status === 'PAID' && existing.type === 'INVOICE') {
+      await checkQuoteFulfilmentSafe(existing.caseId, session.user.id)
+    }
+
     return NextResponse.json(updated)
   } catch (err) {
     logger.error('[PATCH /api/finance/invoices/[id]]', err)

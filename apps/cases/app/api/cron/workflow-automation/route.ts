@@ -203,7 +203,7 @@ export async function POST(request: Request) {
                 const clientName = `${c.client.firstName} ${c.client.lastName}`.trim();
                 const dcName = c.debtCounsellorName || c.dcTradingName || 'Debt Counsellor';
                 const subject = `Transfer Request — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                const body = `Dear ${dcName},\n\nWe hereby request the transfer of the above-mentioned consumer's debt review file to Zenowethu Debt Management (NCRDC3693).\n\nPlease find attached:\n- Signed Power of Attorney / Consumer Consent\n- Copy of Consumer Identity Document\n\nKindly process this transfer request via the NCR Debt Help System (ncrdebthelp.co.za) at your earliest convenience.\n\nShould you require any additional documentation, please do not hesitate to contact us.\n\nThank you,\nAaron Nzotho | NCRDC3693\nSuite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190\nTel: +27 12 035 1824 | Cell: 082 363 8207\ninfo@zenowethu.co.za | www.zenowethu.co.za`;
+                const body = `Dear ${dcName},\n\nWe hereby request the transfer of the above-mentioned consumer's debt review file to Zenowethu Debt Management (NCRDC3693).\n\nPlease find attached:\n- Signed Power of Attorney / Consumer Consent\n- Copy of Consumer Identity Document\n\nKindly process this transfer request via the NCR Debt Help System (ncrdebthelp.co.za) at your earliest convenience.\n\nShould you require any additional documentation, please do not hesitate to contact us.\n\nThank you,\nAaron Nzotho | NCRDC3693\nSuite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190\nTel: +27 81 747 7616 | Cell: 082 363 8207\ninfo@zenowethu.co.za | www.zenowethu.co.za`;
                 const attachments: string[] = [];
                 if (poaUrl) attachments.push(poaUrl);
                 if (idUrl) attachments.push(idUrl);
@@ -306,7 +306,7 @@ export async function POST(request: Request) {
                         // No invoice — re-request from DC, CC consumer
                         const dcName = c.debtCounsellorName || c.dcTradingName || 'Debt Counsellor';
                         const subject = `Request for Invoice — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                        const body = `Dear ${dcName},\n\nWe are following up on our invoice request for the consumer file of ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nKindly provide the outstanding invoice/statement of fees so that we may resolve this matter and proceed with the file transfer.\n\nPlease reply to this email with the invoice attached.\n\nThank you,\nZenowethu Debt Management\nTel: +27 12 035 1824 | info@zenowethu.co.za`;
+                        const body = `Dear ${dcName},\n\nWe are following up on our invoice request for the consumer file of ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nKindly provide the outstanding invoice/statement of fees so that we may resolve this matter and proceed with the file transfer.\n\nPlease reply to this email with the invoice attached.\n\nThank you,\nZenowethu Debt Management\nTel: +27 81 747 7616 | info@zenowethu.co.za`;
                         const emailSent = await sendDCEmail(c.id, c, subject, body);
 
                         // CC consumer on follow-up
@@ -410,7 +410,7 @@ export async function POST(request: Request) {
                     const clientName = `${c.client.firstName} ${c.client.lastName}`.trim();
                     const dcName = c.debtCounsellorName || c.dcTradingName || 'Debt Counsellor';
                     const subject = `Invoice Request — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                    const body = `Dear ${dcName},\n\nThe transfer request for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}) was declined due to outstanding fees.\n\nKindly provide an invoice/statement of the outstanding amount so that we may assist our client in settling this and proceed with the transfer.\n\nPlease reply with the invoice attached.\n\nThank you,\nZenowethu Debt Management\nTel: +27 12 035 1824 | info@zenowethu.co.za`;
+                    const body = `Dear ${dcName},\n\nThe transfer request for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}) was declined due to outstanding fees.\n\nKindly provide an invoice/statement of the outstanding amount so that we may assist our client in settling this and proceed with the transfer.\n\nPlease reply with the invoice attached.\n\nThank you,\nZenowethu Debt Management\nTel: +27 81 747 7616 | info@zenowethu.co.za`;
 
                     const sent = await sendDCEmail(c.id, c, subject, body);
                     await updateCaseStatus(c.id, 'INVOICE_REQUESTED_DC', adminId);
@@ -456,7 +456,7 @@ export async function POST(request: Request) {
                             // Still no invoice — re-request with escalation note
                             const urgency = months >= 3 ? 'URGENT: ' : '';
                             const subject = `${urgency}${months}-Month Follow-up: Invoice Request — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                            const body = `Dear ${dcName},\n\nThis is our ${months === 1 ? 'first' : months === 2 ? 'second' : months === 3 ? 'third' : 'fourth+'} follow-up request for an invoice/statement for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nThis request was first submitted ${months} month(s) ago. Kindly provide the outstanding invoice so we may resolve this matter.\n\n${months >= 3 ? 'Please be advised that further delays may require formal escalation.\n\n' : ''}Thank you,\nZenowethu Debt Management\nTel: +27 12 035 1824 | info@zenowethu.co.za`;
+                            const body = `Dear ${dcName},\n\nThis is our ${months === 1 ? 'first' : months === 2 ? 'second' : months === 3 ? 'third' : 'fourth+'} follow-up request for an invoice/statement for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nThis request was first submitted ${months} month(s) ago. Kindly provide the outstanding invoice so we may resolve this matter.\n\n${months >= 3 ? 'Please be advised that further delays may require formal escalation.\n\n' : ''}Thank you,\nZenowethu Debt Management\nTel: +27 81 747 7616 | info@zenowethu.co.za`;
 
                             await sendDCEmail(c.id, c, subject, body);
                             await updateCaseStatus(c.id, nextStatus[status], adminId);
@@ -614,7 +614,7 @@ export async function POST(request: Request) {
                                     <p style="color:#666;font-size:13px">This is an automated weekly report from Zenowethu Debt Management.</p>
                                 </div>
                                 <div style="background:#0B1D35;padding:16px;text-align:center">
-                                    <p style="color:#C4953A;margin:0;font-size:12px">Aaron Nzotho | NCRDC3693 | Suite 2, Central House, 17 Central Road, Mabopane | Tel: +27 12 035 1824 | info@zenowethu.co.za</p>
+                                    <p style="color:#C4953A;margin:0;font-size:12px">Aaron Nzotho | NCRDC3693 | Suite 2, Central House, 17 Central Road, Mabopane | Tel: +27 81 747 7616 | info@zenowethu.co.za</p>
                                 </div>
                             </div>`;
 

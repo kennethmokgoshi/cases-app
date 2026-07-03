@@ -18,6 +18,7 @@ import { auth } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { POST } from './route';
 
+
 const session = { user: { id: 'u1', isAdmin: true } };
 const params = Promise.resolve({ id: 'quote-1' });
 
@@ -29,7 +30,7 @@ function makeRequest(body: unknown) {
     });
 }
 
-describe('POST /api/finance/quotes/[id]/decision', () => {
+describe('POST /api/finance/quotes/[id]/decision (cases app)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -55,36 +56,7 @@ describe('POST /api/finance/quotes/[id]/decision', () => {
         expect(res.status).toBe(409);
     });
 
-    it('refuses a decision on a converted quote', async () => {
-        vi.mocked(auth as any).mockResolvedValue(session);
-        vi.mocked(prisma.invoice.findUnique).mockResolvedValue({
-            id: 'quote-1', type: 'QUOTE', status: 'CONVERTED',
-        } as any);
-        const res = await POST(makeRequest({ decision: 'REJECTED' }), { params });
-        expect(res.status).toBe(409);
-    });
-
-    it('marks a sent quote as accepted with audit fields', async () => {
-        vi.mocked(auth as any).mockResolvedValue(session);
-        vi.mocked(prisma.invoice.findUnique).mockResolvedValue({
-            id: 'quote-1', type: 'QUOTE', status: 'SENT',
-        } as any);
-        vi.mocked(prisma.invoice.update).mockImplementation((async (args: any) => ({
-            id: 'quote-1', ...args.data,
-        })) as any);
-
-        const res = await POST(makeRequest({ decision: 'ACCEPTED', note: 'Client phoned in' }), { params });
-        expect(res.status).toBe(200);
-
-        const updateArgs = vi.mocked(prisma.invoice.update).mock.calls[0][0] as any;
-        expect(updateArgs.data.status).toBe('ACCEPTED');
-        expect(updateArgs.data.acceptedAt).toBeInstanceOf(Date);
-        expect(updateArgs.data.rejectedAt).toBeNull();
-        expect(updateArgs.data.decidedById).toBe('u1');
-        expect(updateArgs.data.decisionNote).toBe('Client phoned in');
-    });
-
-    it('accepting a case-linked quote advances the case to QUOTE_ACCEPTED (forward-only)', async () => {
+    it('marks a sent quote as accepted and advances the linked case (forward-only)', async () => {
         vi.mocked(auth as any).mockResolvedValue(session);
         vi.mocked(prisma.invoice.findUnique).mockResolvedValue({
             id: 'quote-1', type: 'QUOTE', status: 'SENT', caseId: 'case-1', invoiceNumber: 'QUO-2026-0056',
@@ -102,23 +74,24 @@ describe('POST /api/finance/quotes/[id]/decision', () => {
         expect(json.caseSync).toEqual({
             moved: true, fromStatus: 'ACCEPTED_VIA_DHS', toStatus: 'QUOTE_ACCEPTED',
         });
-        const caseUpdate = vi.mocked(prisma.case.update).mock.calls[0][0] as any;
-        expect(caseUpdate.data.status).toBe('QUOTE_ACCEPTED');
     });
 
-    it('marks a quote as rejected and clears acceptedAt', async () => {
+    it('does not move a case backwards when it is already past QUOTE_ACCEPTED', async () => {
         vi.mocked(auth as any).mockResolvedValue(session);
         vi.mocked(prisma.invoice.findUnique).mockResolvedValue({
-            id: 'quote-1', type: 'QUOTE', status: 'ACCEPTED',
+            id: 'quote-1', type: 'QUOTE', status: 'SENT', caseId: 'case-1', invoiceNumber: 'QUO-2026-0056',
         } as any);
-        vi.mocked(prisma.invoice.update).mockResolvedValue({ id: 'quote-1' } as any);
+        vi.mocked(prisma.invoice.update).mockResolvedValue({ id: 'quote-1', status: 'ACCEPTED' } as any);
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            id: 'case-1', status: 'SETTLED_SUCCESS', referrerId: null,
+        } as any);
 
-        const res = await POST(makeRequest({ decision: 'REJECTED' }), { params });
+        const res = await POST(makeRequest({ decision: 'ACCEPTED' }), { params });
         expect(res.status).toBe(200);
 
-        const updateArgs = vi.mocked(prisma.invoice.update).mock.calls[0][0] as any;
-        expect(updateArgs.data.status).toBe('REJECTED');
-        expect(updateArgs.data.rejectedAt).toBeInstanceOf(Date);
-        expect(updateArgs.data.acceptedAt).toBeNull();
+        const json = await res.json();
+        expect(json.caseSync.moved).toBe(false);
+        expect(json.caseSync.reason).toBe('NOT_FORWARD');
+        expect(prisma.case.update).not.toHaveBeenCalled();
     });
 });

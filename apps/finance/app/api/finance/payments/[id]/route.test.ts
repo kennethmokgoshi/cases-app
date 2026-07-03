@@ -13,6 +13,11 @@ vi.mock('@zenowethu/shared-lib', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock('fs/promises', () => ({
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { auth } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 
@@ -96,5 +101,25 @@ describe('PATCH /api/finance/payments/[id]', () => {
     const res = await PATCH(makeRequest({ amount: 250 }), params);
     expect(res.status).toBe(200);
     expect(mockLogCreate).not.toHaveBeenCalled();
+  });
+
+  it('accepts multipart with a replacement proof of payment', async () => {
+    const form = new FormData();
+    form.set('proofOfPayment', new File(['proof-bytes'], 'pop.png', { type: 'image/png' }));
+    const req = new Request('http://localhost/api/finance/payments/pay-1', { method: 'PATCH', body: form });
+    const res = await PATCH(req, params);
+    expect(res.status).toBe(200);
+    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: { proofOfPaymentUrl: expect.stringMatching(/^\/uploads\/payments\/pay-1\/\d+-pop\.png$/) },
+    }));
+  });
+
+  it('rejects a disallowed proof file type with 400', async () => {
+    const form = new FormData();
+    form.set('proofOfPayment', new File(['x'], 'evil.exe', { type: 'application/x-msdownload' }));
+    const req = new Request('http://localhost/api/finance/payments/pay-1', { method: 'PATCH', body: form });
+    const res = await PATCH(req, params);
+    expect(res.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });

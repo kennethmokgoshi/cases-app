@@ -197,7 +197,7 @@ export async function generateMandatePdf(data: MandateData): Promise<Uint8Array>
   cursor = drawTableRow('', '17 Central Road', cursor)
   cursor = drawTableRow('', 'Mabopane', cursor)
   cursor = drawTableRow('Postal Code', '0190', cursor)
-  cursor = drawTableRow('Contact Details', '012 035 1824 / 082 363 8207', cursor)
+  cursor = drawTableRow('Contact Details', '081 747 7616 / 082 363 8207', cursor)
 
   // E. OFFICE USE / ACCEPTANCE (second page)
   const page2 = pdfDoc.addPage([595, 842])

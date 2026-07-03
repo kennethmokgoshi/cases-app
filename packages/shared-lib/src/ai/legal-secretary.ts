@@ -48,7 +48,7 @@ export interface DraftResponse {
 function buildPrompt(request: DraftingRequest): string {
     const clientFullName = `${request.client.firstName} ${request.client.lastName}`;
     const company = request.companyName || 'Zenowethu Debt Management';
-    const phone = request.companyPhone || '012 035 1824';
+    const phone = request.companyPhone || '081 747 7616';
     const sender = request.senderName || company;
 
     if (request.documentType === 'DC_DRR_FILE_REQUEST') {

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
+import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync';
 import { z } from 'zod';
+import { readPaymentRequest, validateProofFile, saveProofFile } from '../../../../../lib/payment-proof';
 
 const PaymentUpdateSchema = z.object({
     amount: z.union([z.string(), z.number()]).refine(
@@ -13,10 +15,7 @@ const PaymentUpdateSchema = z.object({
     reference: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
     category: z.string().min(1).optional(),
-}).refine(
-    data => Object.values(data).some(v => v !== undefined),
-    { message: 'At least one field must be provided' }
-);
+});
 
 export async function PATCH(
     request: Request,
@@ -29,10 +28,19 @@ export async function PATCH(
         }
 
         const { id } = await params;
-        const body = await request.json();
+        const { body, proofFile } = await readPaymentRequest(request);
         const parsed = PaymentUpdateSchema.safeParse(body);
         if (!parsed.success) {
             return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+        }
+        if (!proofFile && !Object.values(parsed.data).some(v => v !== undefined)) {
+            return NextResponse.json({ error: 'At least one field must be provided' }, { status: 400 });
+        }
+        if (proofFile) {
+            const fileError = validateProofFile(proofFile);
+            if (fileError) {
+                return NextResponse.json({ error: fileError }, { status: 400 });
+            }
         }
 
         const existing = await prisma.payment.findUnique({ where: { id } });
@@ -49,6 +57,8 @@ export async function PATCH(
         if (reference !== undefined) data.reference = reference || null;
         if (notes !== undefined) data.notes = notes || null;
         if (category !== undefined) data.category = category;
+        // New proof replaces the previous URL; the old file stays on disk for audit
+        if (proofFile) data.proofOfPaymentUrl = await saveProofFile(id, proofFile);
 
         const payment = await prisma.payment.update({
             where: { id },
@@ -71,6 +81,12 @@ export async function PATCH(
                     action: 'PAYMENT_EDITED',
                     userId: session.user.id,
                     notes: `Payment ${id} edited — ${changes}` } });
+        }
+
+        // An edited amount may now cover the case's accepted quote — advance
+        // the case workflow (forward-only). Never fails the edit itself.
+        if (amount !== undefined) {
+            await checkQuoteFulfilmentSafe(existing.caseId, session.user.id);
         }
 
         return NextResponse.json(payment);

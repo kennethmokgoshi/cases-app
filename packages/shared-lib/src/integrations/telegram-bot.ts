@@ -22,7 +22,7 @@ const logger = createLogger('telegram-bot');
 
 const OTP_TTL_MIN = 15;
 const MAX_ATTEMPTS = 5;
-const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 035 1824';
+const COMPANY_PHONE = process.env.COMPANY_PHONE || '081 747 7616';
 
 export interface TelegramInbound {
     chatId: string;

@@ -49,7 +49,7 @@ Zenowethu provides specialized credit repair services and will be handling your 
 
 The Zenowethu team has received your file and is currently reviewing it. They will contact you directly within 7 working days if any further information is required.
 
-If you have any immediate questions, you may contact them at 012 035 1824.
+If you have any immediate questions, you may contact them at 081 747 7616.
 
 Kind Regards,
 {partnerUserName}
@@ -806,7 +806,7 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                                             Debt Management | Insurance | Financial Services
                                         </div>
                                         <div style="color: rgba(255,255,255,0.7); font-size: 10px; margin-top: 8px; font-family: Arial, sans-serif; letter-spacing: 0.5px;">
-                                            NCRDC3693 | DCASA 0863 | 012 035 1824
+                                            NCRDC3693 | DCASA 0863 | 081 747 7616
                                         </div>
                                     </td>
                                 </tr>
@@ -841,7 +841,7 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                         <td class="footer">
                             <p style="margin: 0 0 10px 0; font-weight: bold; color: ${BRAND_NAVY}; font-size: 14px;">${companyName}</p>
                             <p style="margin: 0 0 5px 0;">Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199</p>
-                            <p style="margin: 0 0 5px 0;">Tel: 012 035 1824 | Email: <a href="mailto:notifications@zenowethu.co.za">notifications@zenowethu.co.za</a></p>
+                            <p style="margin: 0 0 5px 0;">Tel: 081 747 7616 | Email: <a href="mailto:notifications@zenowethu.co.za">notifications@zenowethu.co.za</a></p>
                             <p style="margin: 0 0 20px 0;">Web: <a href="https://www.zenowethu.co.za">www.zenowethu.co.za</a></p>
                             
                             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eeeeee; font-size: 10px; line-height: 1.4; text-align: justify;">

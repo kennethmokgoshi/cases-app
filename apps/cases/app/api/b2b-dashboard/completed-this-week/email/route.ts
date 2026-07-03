@@ -161,7 +161,7 @@ export async function POST() {
             <div style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
                 <p style="color:#6b7280;font-size:12px;margin:0;">
                     Aaron Nzotho | NCRDC3693 | Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190<br>
-                    Tel: +27 12 035 1824 | Cell: 082 363 8207 | info@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
+                    Tel: +27 81 747 7616 | Cell: 082 363 8207 | info@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
                 </p>
             </div>
         </div>`;

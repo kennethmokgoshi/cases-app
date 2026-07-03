@@ -3,9 +3,14 @@ import { GET, POST } from './route';
 
 vi.mock('@zenowethu/database', () => ({
   prisma: {
-    payment: { findMany: vi.fn(), count: vi.fn(), create: vi.fn() },
+    payment: { findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
     client: { findUnique: vi.fn() },
   },
+}));
+
+vi.mock('fs/promises', () => ({
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@zenowethu/shared-lib', () => ({
@@ -15,11 +20,21 @@ vi.mock('@zenowethu/shared-lib', () => ({
 
 import { auth } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { writeFile } from 'fs/promises';
 
 const mockAuth = vi.mocked(auth);
 const mockFindMany = vi.mocked(prisma.payment.findMany);
 const mockCount = vi.mocked(prisma.payment.count);
 const mockCreate = vi.mocked(prisma.payment.create);
+const mockUpdate = vi.mocked(prisma.payment.update);
+const mockWriteFile = vi.mocked(writeFile);
+
+function makeMultipartRequest(fields: Record<string, string>, file?: { name: string; type: string; content?: string }): Request {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  if (file) form.set('proofOfPayment', new File([file.content ?? 'proof-bytes'], file.name, { type: file.type }));
+  return new Request('http://localhost/api/finance/payments', { method: 'POST', body: form });
+}
 
 function makeGetRequest(query = ''): Request {
   return new Request(`http://localhost/api/finance/payments${query ? `?${query}` : ''}`);
@@ -93,5 +108,48 @@ describe('POST /api/finance/payments', () => {
   it('rejects a non-positive amount with 400', async () => {
     const res = await POST(makePostRequest({ amount: 0, date: '2026-07-01', method: 'EFT' }));
     expect(res.status).toBe(400);
+  });
+
+  it('accepts multipart with a proof of payment and stores its URL', async () => {
+    mockCreate.mockResolvedValueOnce({ id: 'pay-9' } as never);
+    mockUpdate.mockResolvedValueOnce({ id: 'pay-9', proofOfPaymentUrl: '/uploads/payments/pay-9/x.pdf' } as never);
+    const res = await POST(makeMultipartRequest(
+      { amount: '200', date: '2026-07-01', method: 'EFT' },
+      { name: 'pop.pdf', type: 'application/pdf' }
+    ));
+    expect(res.status).toBe(201);
+    expect(mockWriteFile).toHaveBeenCalled();
+    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'pay-9' },
+      data: { proofOfPaymentUrl: expect.stringMatching(/^\/uploads\/payments\/pay-9\/\d+-pop\.pdf$/) },
+    }));
+  });
+
+  it('accepts multipart without a proof file', async () => {
+    mockCreate.mockResolvedValueOnce({ id: 'pay-10' } as never);
+    const res = await POST(makeMultipartRequest({ amount: '200', date: '2026-07-01', method: 'EFT' }));
+    expect(res.status).toBe(201);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a disallowed proof file type with 400 before creating the payment', async () => {
+    const res = await POST(makeMultipartRequest(
+      { amount: '200', date: '2026-07-01', method: 'EFT' },
+      { name: 'macro.xlsm', type: 'application/vnd.ms-excel.sheet.macroEnabled.12' }
+    ));
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('still records the payment when the proof file write fails (returns proofUploadError)', async () => {
+    mockCreate.mockResolvedValueOnce({ id: 'pay-11' } as never);
+    mockWriteFile.mockRejectedValueOnce(new Error('disk full'));
+    const res = await POST(makeMultipartRequest(
+      { amount: '200', date: '2026-07-01', method: 'EFT' },
+      { name: 'pop.pdf', type: 'application/pdf' }
+    ));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.proofUploadError).toBeTruthy();
   });
 });

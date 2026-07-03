@@ -434,7 +434,13 @@
       "PowerShell($conns = Get-NetTCPConnection -LocalPort 3004 -State Listen -ErrorAction SilentlyContinue; $conns | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -Confirm:$false; \"Killed PID $_\" })",
       "PowerShell(try { Remove-Item -Recurse -Force \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\finance\\\\.next\" -Confirm:$false -ErrorAction Stop; \"cache cleared\" } catch { \"cache clear skipped: $\\($_.Exception.Message\\)\" })",
       "PowerShell(pnpm --filter finance test -- run app/api/finance/payments)",
-      "PowerShell(Set-Location \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\finance\"; pnpm exec tsc --noEmit; \"exit=$LASTEXITCODE\")"
+      "PowerShell(Set-Location \"C:\\\\Visual Studio Code\\\\06 March 2026\\\\apps\\\\finance\"; pnpm exec tsc --noEmit; \"exit=$LASTEXITCODE\")",
+      "PowerShell(pnpm --filter @zenowethu/shared-lib test -- src/search/case-search-route.test.ts)",
+      "Bash(pnpm vitest *)",
+      "Bash(cd \"/c/Visual Studio Code/06 March 2026/apps/finance\" && npx tsc --version && grep -E '\"strict|\"target' tsconfig.json ../../packages/tsconfig/*.json 2>/dev/null | head)",
+      "Bash(curl -s -o /dev/null -w \"decision endpoint HTTP %{http_code}\\\\n\" --max-time 90 -X POST http://localhost:3000/api/finance/quotes/test-id/decision -H \"Content-Type: application/json\" -d '{\"decision\":\"ACCEPTED\"}')",
+      "Bash(grep -v \"^\\\\./\\\\.claude/worktrees/\" \"C:\\\\Users\\\\Kenneth\\\\.claude\\\\projects\\\\C--Visual-Studio-Code-06-March-2026\\\\5b08a030-e1df-48e9-9026-fd62834202d9\\\\tool-results\\\\bpusyvnam.txt\")",
+      "PowerShell(git add -A)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

@@ -263,7 +263,7 @@ function buildEmailHtml(clientName: string, type: string, downloadUrl: string, s
         </div>
 
         <p style="font-size: 12px; color: #888;">Your digital signature is legally binding under the Electronic Communications and Transactions Act (ECTA, Act 25 of 2002). Your IP address and timestamp will be recorded.</p>
-        <p>Questions? Call us at <strong>012 035 1824</strong> or reply to this email.</p>
+        <p>Questions? Call us at <strong>081 747 7616</strong> or reply to this email.</p>
         <p>Kind regards,<br/><strong>Zenowethu Debt Management Team</strong></p>
     `;
 
@@ -294,7 +294,7 @@ _Link valid for 72 hours._
 📄 *Or download the PDF manually:*
 ${downloadUrl}
 
-Questions? Call us: *012 035 1824*
+Questions? Call us: *081 747 7616*
 
 _Your signature is legally valid under the Electronic Communications and Transactions Act (ECTA)._
 

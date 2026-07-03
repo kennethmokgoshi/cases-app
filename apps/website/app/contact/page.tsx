@@ -25,7 +25,7 @@ export default function Contact() {
             <h3 className="text-2xl font-black mb-4">WhatsApp AI</h3>
             <p className="text-slate-500 mb-10 text-sm leading-relaxed">Get instant status updates and basic legal guidance 24/7 via our AI Assistant.</p>
             <a 
-              href="https://wa.me/27120351824" 
+              href="https://wa.me/27817477616" 
               className="inline-block w-full py-5 bg-brand-cyan text-brand-dark font-black rounded-2xl uppercase tracking-widest text-xs"
             >
               Start AI Chat
@@ -40,10 +40,10 @@ export default function Contact() {
             <h3 className="text-2xl font-black mb-4">Legal Support</h3>
             <p className="text-slate-500 mb-10 text-sm leading-relaxed">Speak directly with an NCR-registered consultant about your case.</p>
             <a 
-              href="tel:+27120351824" 
+              href="tel:+27817477616" 
               className="inline-block w-full py-5 bg-brand-gold text-white font-black rounded-2xl uppercase tracking-widest text-xs shadow-lg shadow-gold-500/20"
             >
-              012 035 1824
+              081 747 7616
             </a>
           </div>
 

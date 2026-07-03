@@ -10,7 +10,7 @@ const FIRM = {
     dcasa:   '0863',
     regNo:   '2013/121120/07',
     address: 'Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190',
-    tel:     '012 035 1824',
+    tel:     '081 747 7616',
     cell:    '082 363 8207',
     email:   'info@zenowethu.co.za',
     web:     'www.zenowethu.co.za',

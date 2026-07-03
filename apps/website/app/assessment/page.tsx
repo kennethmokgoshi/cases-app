@@ -145,7 +145,7 @@ export default function Assessment() {
               </p>
               <p className="text-slate-500 text-xs">
                 In the meantime, you can reach us on{" "}
-                <a href="tel:+27120351824" className="text-brand-cyan underline">012 035 1824</a>.
+                <a href="tel:+27817477616" className="text-brand-cyan underline">081 747 7616</a>.
               </p>
             </div>
           ) : (

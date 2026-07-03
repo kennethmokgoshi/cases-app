@@ -23,7 +23,7 @@ export default function About() {
             
             <div className="grid grid-cols-2 gap-8">
               <div className="p-6 glass rounded-2xl">
-                <h4 className="text-3xl font-black text-brand-cyan mb-1">012 035 1824</h4>
+                <h4 className="text-3xl font-black text-brand-cyan mb-1">081 747 7616</h4>
                 <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Direct Support</p>
               </div>
               <div className="p-6 glass rounded-2xl">

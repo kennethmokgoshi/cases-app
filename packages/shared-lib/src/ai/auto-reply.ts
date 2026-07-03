@@ -26,7 +26,7 @@ export interface AutoReplyResponse {
 }
 
 const COMPANY = 'Zenowethu Debt Management';
-const PHONE   = '012 035 1824';
+const PHONE   = '081 747 7616';
 
 function buildPrompt(req: AutoReplyRequest): string {
     const { inboundMessage, channel, senderType, caseContext } = req;

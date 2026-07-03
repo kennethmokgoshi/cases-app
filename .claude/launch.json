@@ -37,6 +37,12 @@
       "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
       "runtimeArgs": ["--filter", "credo", "dev"],
       "port": 3005
+    },
+    {
+      "name": "website",
+      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeArgs": ["--filter", "website", "dev"],
+      "port": 3006
     }
   ]
 }

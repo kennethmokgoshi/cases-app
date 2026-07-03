@@ -10,10 +10,10 @@ const DecisionSchema = z.object({
 }).strict()
 
 /**
- * Record the client's decision on a quotation. Accepted quotes appear in the
- * "Quotes Issued" register; rejected quotes remain visible on the client file.
- * Accepting a case-linked quote also advances the case to QUOTE_ACCEPTED when
- * that is a forward move on the workflow board (shared quote-case-sync logic).
+ * Record the consumer's decision on a quotation from the Cases app. Uses the
+ * same shared logic as Finance, so the quote status stays in sync across both
+ * apps and accepting a case-linked quote advances the case to QUOTE_ACCEPTED
+ * when that is a forward move on the workflow board.
  */
 export async function POST(
   request: Request,

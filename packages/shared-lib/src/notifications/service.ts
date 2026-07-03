@@ -44,7 +44,7 @@ const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED !== 'false';
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true'; // Telegram off by default (no provider configured)
 
 const COMPANY_NAME = process.env.COMPANY_NAME || 'Zenowethu Debt Management';
-const COMPANY_PHONE = process.env.COMPANY_PHONE || '012 035 1824';
+const COMPANY_PHONE = process.env.COMPANY_PHONE || '081 747 7616';
 const VIRTUAL_ASSISTANT_NAME = process.env.VIRTUAL_ASSISTANT_NAME || 'Thandi';
 
 // Helper: blind-copy the monitoring mailbox on every outbound email so staff can

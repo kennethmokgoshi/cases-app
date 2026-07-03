@@ -30,7 +30,7 @@ export class GhlWorkflowService {
 <p>Your debt review transfer has been rejected by your current Debt Counsellor with the following reason:</p>
 <blockquote style="border-left:3px solid #e53e3e;padding-left:12px;color:#c53030;">${reason}</blockquote>
 <p>Our team will contact you shortly to discuss the next steps.</p>
-<p>Regards,<br/>Zenowethu Debt Management<br/>012 035 1824</p>
+<p>Regards,<br/>Zenowethu Debt Management<br/>081 747 7616</p>
         `.trim();
 
         await Promise.allSettled([

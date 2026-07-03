@@ -6,13 +6,18 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import SendInvoiceModal from './SendInvoiceModal'
 import MarkPaidButton from './MarkPaidButton'
+import QuoteActions from './QuoteActions'
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT:     'bg-gray-500/20 text-gray-400 border border-gray-500/30',
-  SENT:      'bg-blue-500/20 text-blue-400 border border-blue-500/30',
-  PAID:      'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-  OVERDUE:   'bg-red-500/20 text-red-400 border border-red-500/30',
-  CANCELLED: 'bg-gray-500/10 text-gray-500 border border-gray-500/20',
+  DRAFT:          'bg-gray-500/20 text-gray-400 border border-gray-500/30',
+  SENT:           'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+  PAID:           'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+  PARTIALLY_PAID: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+  OVERDUE:        'bg-red-500/20 text-red-400 border border-red-500/30',
+  CANCELLED:      'bg-gray-500/10 text-gray-500 border border-gray-500/20',
+  ACCEPTED:       'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+  REJECTED:       'bg-red-500/20 text-red-400 border border-red-500/30',
+  CONVERTED:      'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30',
 }
 
 function formatZAR(n: number | string) {
@@ -62,6 +67,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       project:     { select: { id: true, name: true } },
       createdBy:   { select: { firstName: true, lastName: true } },
       bankAccount: { select: { id: true, bankName: true, accountName: true, accountNumber: true, branchCode: true, accountType: true } },
+      decidedBy:   { select: { firstName: true, lastName: true } },
+      convertedToInvoice: { select: { id: true, invoiceNumber: true } },
     },
   })
 
@@ -86,7 +93,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-white font-mono">{invoice.invoiceNumber}</h1>
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[invoice.status] ?? STATUS_COLORS.DRAFT}`}>
-                {invoice.status.charAt(0) + invoice.status.slice(1).toLowerCase()}
+                {invoice.status.charAt(0) + invoice.status.slice(1).toLowerCase().replace(/_/g, ' ')}
               </span>
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/30">
                 {docLabel}
@@ -111,7 +118,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             Download PDF
           </a>
 
-          {invoice.status !== 'CANCELLED' && invoice.status !== 'PAID' && (
+          {invoice.status !== 'CANCELLED' && invoice.status !== 'PAID' && invoice.status !== 'CONVERTED' && invoice.status !== 'REJECTED' && (
             <SendInvoiceModal
               invoiceId={invoice.id}
               invoiceNumber={invoice.invoiceNumber}
@@ -121,11 +128,43 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             />
           )}
 
-          {invoice.status !== 'PAID' && invoice.status !== 'CANCELLED' && (
-            <MarkPaidButton invoiceId={invoice.id} />
+          {isQuote ? (
+            <QuoteActions quoteId={invoice.id} quoteNumber={invoice.invoiceNumber} status={invoice.status} />
+          ) : (
+            invoice.status !== 'PAID' && invoice.status !== 'CANCELLED' && (
+              <MarkPaidButton invoiceId={invoice.id} />
+            )
           )}
         </div>
       </div>
+
+      {/* Quote decision / conversion banner */}
+      {isQuote && (invoice.acceptedAt || invoice.rejectedAt || invoice.convertedToInvoice) && (
+        <div className={`rounded-lg px-4 py-3 text-sm border ${
+          invoice.rejectedAt
+            ? 'bg-red-500/10 border-red-500/20 text-red-400'
+            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+        }`}>
+          {invoice.acceptedAt && (
+            <span>Accepted by the consumer on {formatDate(invoice.acceptedAt)}</span>
+          )}
+          {invoice.rejectedAt && (
+            <span>Rejected by the consumer on {formatDate(invoice.rejectedAt)}</span>
+          )}
+          {invoice.decidedBy && (
+            <span className="text-gray-400"> — recorded by {invoice.decidedBy.firstName} {invoice.decidedBy.lastName}</span>
+          )}
+          {invoice.decisionNote && <span className="block text-gray-400 mt-1">{invoice.decisionNote}</span>}
+          {invoice.convertedToInvoice && (
+            <span className="block mt-1">
+              Converted to invoice{' '}
+              <Link href={`/invoices/${invoice.convertedToInvoice.id}`} className="font-mono underline">
+                {invoice.convertedToInvoice.invoiceNumber}
+              </Link>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Non-admin warning when no banking details */}
       {!hasBankingDetails && !isAdmin && invoice.status === 'DRAFT' && (

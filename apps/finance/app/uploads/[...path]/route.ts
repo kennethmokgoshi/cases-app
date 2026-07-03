@@ -2,14 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { logger } from '@zenowethu/shared-lib';
+import { auth, logger } from '@zenowethu/shared-lib';
 
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ path: string[] }> }
 ) {
     try {
+        const session = await auth();
+        if (!session?.user) {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+
         const { path: pathParts } = await params;
+        if (pathParts.some(part => part.includes('..') || part.includes('\\') || part.includes('/'))) {
+            return new NextResponse('Invalid path', { status: 400 });
+        }
         const filePath = join(process.cwd(), 'storage', 'uploads', ...pathParts);
 
         if (!existsSync(filePath)) {
@@ -30,7 +38,7 @@ export async function GET(
         return new NextResponse(fileBuffer, {
             headers: {
                 'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=31536000, immutable' } });
+                'Cache-Control': 'private, max-age=31536000, immutable' } });
     } catch (error) {
         logger.error('Error serving file:', error);
         return new NextResponse('Internal Server Error', { status: 500 });

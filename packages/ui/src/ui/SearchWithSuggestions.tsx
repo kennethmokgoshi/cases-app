@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -74,16 +74,29 @@ export function SearchWithSuggestions({
     className = ''
 }: SearchWithSuggestionsProps) {
     const router = useRouter();
+    const pathname = usePathname();
     const [query, setQuery] = useState(initialValue);
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [loading, setLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+    const prevPathname = useRef(pathname);
 
     useEffect(() => {
         setQuery(initialValue);
     }, [initialValue]);
+
+    // Clear the search box whenever the user navigates to a new page, so a
+    // stale term doesn't linger in the persistent TopBar search.
+    useEffect(() => {
+        if (prevPathname.current === pathname) return;
+        prevPathname.current = pathname;
+        setQuery('');
+        setSuggestions([]);
+        setShowSuggestions(false);
+        if (onQueryChange) onQueryChange('');
+    }, [pathname, onQueryChange]);
 
     // Handle clicks outside the component to close suggestions
     useEffect(() => {

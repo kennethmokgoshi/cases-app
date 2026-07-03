@@ -208,7 +208,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             Download {docLabel} PDF
           </a>
           <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '12px 0 0' }}>
-            Powered by Zenowethu Debt Management · 012 035 1824
+            Powered by Zenowethu Debt Management · 081 747 7616
           </p>
         </div>
       </div>

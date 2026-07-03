@@ -81,7 +81,7 @@ export default function DebtReviewRemovalConsentPage() {
   }
 
   if (error && !data) {
-    return <Shell><div style={{ color: '#B91C1C', fontWeight: 600 }}>{error}</div><p style={{ color: '#64748B', marginTop: 12, fontSize: 14 }}>If you need help, contact us on 012 035 1824 or info@zenowethu.co.za.</p></Shell>;
+    return <Shell><div style={{ color: '#B91C1C', fontWeight: 600 }}>{error}</div><p style={{ color: '#64748B', marginTop: 12, fontSize: 14 }}>If you need help, contact us on 081 747 7616 or info@zenowethu.co.za.</p></Shell>;
   }
 
   if (done) {
@@ -98,7 +98,7 @@ export default function DebtReviewRemovalConsentPage() {
   }
 
   if (data?.expired || data?.status === 'EXPIRED') {
-    return <Shell><div style={{ color: '#B45309', fontWeight: 600 }}>This consent link has expired.</div><p style={{ color: '#64748B', marginTop: 12, fontSize: 14 }}>Please contact us on 012 035 1824 and we will send you a new link.</p></Shell>;
+    return <Shell><div style={{ color: '#B45309', fontWeight: 600 }}>This consent link has expired.</div><p style={{ color: '#64748B', marginTop: 12, fontSize: 14 }}>Please contact us on 081 747 7616 and we will send you a new link.</p></Shell>;
   }
 
   return (
@@ -133,7 +133,7 @@ export default function DebtReviewRemovalConsentPage() {
       </button>
 
       <p style={{ color: '#94A3B8', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
-        Aaron Nzotho | NCRDC3693 | Zenowethu Debt Management | 012 035 1824 | Member of DCASA
+        Aaron Nzotho | NCRDC3693 | Zenowethu Debt Management | 081 747 7616 | Member of DCASA
       </p>
     </Shell>
   );

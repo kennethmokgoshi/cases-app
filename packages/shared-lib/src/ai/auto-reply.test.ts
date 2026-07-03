@@ -54,7 +54,7 @@ describe('generateAutoReply', () => {
             makeOpenAIResponse({
                 shouldSend: true,
                 subject: 'Re: Your Debt Review Enquiry — ZEN-001',
-                body: 'Dear Sipho, your case is currently under debt review. A team member will follow up within 1–2 business days. Zenowethu Debt Management — 012 035 1824.',
+                body: 'Dear Sipho, your case is currently under debt review. A team member will follow up within 1–2 business days. Zenowethu Debt Management — 081 747 7616.',
                 reasoning: 'Status query with sufficient context to respond.',
             })
         );

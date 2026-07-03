@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     } catch (error) {
         console.error('[leads API] Error:', error);
         return NextResponse.json(
-            { error: 'Failed to save your enquiry. Please try again or call us on 012 035 1824.' },
+            { error: 'Failed to save your enquiry. Please try again or call us on 081 747 7616.' },
             { status: 500 },
         );
     }

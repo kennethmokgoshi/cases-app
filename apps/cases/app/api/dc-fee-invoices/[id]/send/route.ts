@@ -54,7 +54,7 @@ function buildEmailHtml(
     </div>
     <p style="margin-top: 20px; font-size: 14px; color: #666;">
         Aaron Nzotho | NCRDC3693 | Zenowethu Debt Management<br/>
-        Tel: +27 12 035 1824 | info@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
+        Tel: +27 81 747 7616 | info@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
     </p>
   `;
 

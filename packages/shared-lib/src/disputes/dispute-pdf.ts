@@ -11,7 +11,7 @@ const ZENOWETHU = {
     ncrdc: 'NCRDC3693',
     dcasa: '0863',
     address: 'Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199',
-    phone: '012 035 1824',
+    phone: '081 747 7616',
     email: 'notifications@zenowethu.co.za',
 };
 

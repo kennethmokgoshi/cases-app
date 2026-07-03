@@ -695,7 +695,7 @@ async function addComment(
 const SIGNATURE = `Aaron Nzotho | NCRDC3693
 Zenowethu Debt Management
 Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
-Tel: +27 12 035 1824 | Cell: 082 363 8207
+Tel: +27 81 747 7616 | Cell: 082 363 8207
 info@zenowethu.co.za | www.zenowethu.co.za
 Member of DCASA`;
 
@@ -738,7 +738,7 @@ function buildSendDocsSms(p: {
     dcName: string;
     declineReason: string;
 }): string {
-    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined the DHS transfer request: "${p.declineReason.slice(0, 100)}${p.declineReason.length > 100 ? '…' : ''}". We have responded with your documents and requested they proceed. We will follow up. — Zenowethu (012 035 1824)`;
+    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined the DHS transfer request: "${p.declineReason.slice(0, 100)}${p.declineReason.length > 100 ? '…' : ''}". We have responded with your documents and requested they proceed. We will follow up. — Zenowethu (081 747 7616)`;
 }
 
 function buildConsumerConsentEmail(p: {
@@ -778,7 +778,7 @@ function buildConsentSms(p: {
     dcName: string;
     dcContactLine: string;
 }): string {
-    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined your DHS transfer request — they need your direct consent. Please contact them${p.dcContactLine} to confirm consent, then reply here. — Zenowethu (012 035 1824)`;
+    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined your DHS transfer request — they need your direct consent. Please contact them${p.dcContactLine} to confirm consent, then reply here. — Zenowethu (081 747 7616)`;
 }
 
 function buildOutstandingFeesEmail(p: {
@@ -815,7 +815,7 @@ function buildFeesSms(p: {
     clientFirstName: string;
     dcName: string;
 }): string {
-    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined your DHS transfer — outstanding fees must be settled first. We are requesting the invoice and will send it to you. Contact us on 012 035 1824. — Zenowethu`;
+    return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined your DHS transfer — outstanding fees must be settled first. We are requesting the invoice and will send it to you. Contact us on 081 747 7616. — Zenowethu`;
 }
 
 function buildAttorneyEmail(p: {
@@ -881,7 +881,7 @@ ${SIGNATURE}`;
 }
 
 function buildAttorneySms(p: { clientFirstName: string }): string {
-    return `Hi ${p.clientFirstName}, your DC's DHS response indicates legal/attorney involvement is required for your transfer. We are engaging with the relevant parties and will keep you updated. — Zenowethu (012 035 1824)`;
+    return `Hi ${p.clientFirstName}, your DC's DHS response indicates legal/attorney involvement is required for your transfer. We are engaging with the relevant parties and will keep you updated. — Zenowethu (081 747 7616)`;
 }
 
 function buildResubmitClientEmail(p: {
@@ -903,7 +903,7 @@ WHAT HAPPENS NEXT
 ─────────────────────────────────────────
 This is a temporary delay. We will monitor the DHS and resubmit your transfer request within the next 5–7 working days. You do not need to take any action at this time.
 
-If you have any concerns or questions in the meantime, please do not hesitate to contact us on 012 035 1824 or reply to this email.
+If you have any concerns or questions in the meantime, please do not hesitate to contact us on 081 747 7616 or reply to this email.
 
 Thank you for your patience — we are working on your behalf.
 
@@ -913,7 +913,7 @@ ${SIGNATURE}`;
 }
 
 function buildResubmitSms(p: { clientFirstName: string }): string {
-    return `Hi ${p.clientFirstName}, your DC's DHS response indicates a temporary delay on your file transfer. We will resubmit within 5–7 working days. No action needed from you. — Zenowethu (012 035 1824)`;
+    return `Hi ${p.clientFirstName}, your DC's DHS response indicates a temporary delay on your file transfer. We will resubmit within 5–7 working days. No action needed from you. — Zenowethu (081 747 7616)`;
 }
 
 // ─── Shared exports ───────────────────────────────────────────────────────────

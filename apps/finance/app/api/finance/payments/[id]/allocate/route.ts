@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
+import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync';
 
 export async function PATCH(
     request: Request,
@@ -75,6 +76,10 @@ export async function PATCH(
         }
 
         const [updatedPayment] = await prisma.$transaction(ops as any);
+
+        // A newly allocated payment may complete the case's accepted quote —
+        // advance the case workflow (forward-only). Never fails the allocation.
+        await checkQuoteFulfilmentSafe(caseId, session.user.id);
 
         return NextResponse.json(updatedPayment);
     } catch (error: any) {

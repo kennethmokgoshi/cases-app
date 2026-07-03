@@ -10,6 +10,7 @@ type Payment = {
   reference: string | null
   category: string
   notes: string | null
+  proofOfPaymentUrl?: string | null
   client: { firstName: string; lastName: string } | null
   case: { fileNumber: string } | null
 }
@@ -27,6 +28,7 @@ export function EditPaymentModal({ payment, onClose, onSuccess }: EditPaymentMod
   const [reference, setReference] = useState(payment.reference ?? '')
   const [category, setCategory]   = useState(payment.category)
   const [notes, setNotes]         = useState(payment.notes ?? '')
+  const [proofFile, setProofFile] = useState<File | null>(null)
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState('')
 
@@ -34,10 +36,23 @@ export function EditPaymentModal({ payment, onClose, onSuccess }: EditPaymentMod
     setSaving(true)
     setError('')
     try {
-      const res = await fetch(`/api/finance/payments/${payment.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, date, method, reference, category, notes }) })
+      let res: Response
+      if (proofFile) {
+        const form = new FormData()
+        form.set('amount', amount)
+        form.set('date', date)
+        form.set('method', method)
+        form.set('reference', reference)
+        form.set('category', category)
+        form.set('notes', notes)
+        form.set('proofOfPayment', proofFile)
+        res = await fetch(`/api/finance/payments/${payment.id}`, { method: 'PATCH', body: form })
+      } else {
+        res = await fetch(`/api/finance/payments/${payment.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount, date, method, reference, category, notes }) })
+      }
       if (res.ok) {
         onSuccess(payment.id)
         onClose()
@@ -131,6 +146,26 @@ export function EditPaymentModal({ payment, onClose, onSuccess }: EditPaymentMod
               placeholder="e.g. EFT-20260221-001"
               className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:border-cyan-500 focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Proof of Payment (optional)</label>
+            {payment.proofOfPaymentUrl && !proofFile && (
+              <div className="mb-2 flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                <a href={payment.proofOfPaymentUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-cyan-400 hover:text-cyan-300 text-xs underline">
+                  View current proof of payment
+                </a>
+                <span className="text-gray-600 text-xs ml-3">choose a file to replace it</span>
+              </div>
+            )}
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+              onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+              className="w-full text-sm text-gray-400 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-400 file:text-sm file:font-medium file:cursor-pointer hover:file:bg-cyan-500/30"
+            />
+            <p className="text-xs text-gray-600 mt-1">PDF, JPG, PNG or WebP — max 10MB</p>
           </div>
 
           <div>

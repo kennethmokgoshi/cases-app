@@ -561,6 +561,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         description: 'Client consented to pay fees after flag removal',
         slaEnabled: false,
         isOverdueState: false },
+    {
+        code: 'QUOTE_ACCEPTED',
+        name: 'Quote Accepted',
+        category: 'PAYING',
+        description: 'Client accepted quotation — awaiting payment of quoted amount',
+        slaEnabled: true,
+        slaDays: 5,
+        isOverdueState: false },
 
     // 10. SETTLED
     {

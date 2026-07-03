@@ -27,8 +27,11 @@ export default function RecordPaymentPage() {
     const [notes, setNotes] = useState('');
     const [category, setCategory] = useState('INSTALLMENT');
 
+    const [proofFile, setProofFile] = useState<File | null>(null);
+
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [warning, setWarning] = useState('');
 
     useEffect(() => {
         if (idNumber.length >= 6) lookupClient();
@@ -66,14 +69,35 @@ export default function RecordPaymentPage() {
         e.preventDefault();
         setSubmitting(true);
         setError('');
+        setWarning('');
         try {
-            const res = await fetch('/api/finance/payments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ idNumber: idNumber || undefined, amount, date, method, reference, notes, category }) });
+            let res: Response;
+            if (proofFile) {
+                const form = new FormData();
+                if (idNumber) form.set('idNumber', idNumber);
+                form.set('amount', amount);
+                form.set('date', date);
+                form.set('method', method);
+                form.set('reference', reference);
+                form.set('notes', notes);
+                form.set('category', category);
+                form.set('proofOfPayment', proofFile);
+                res = await fetch('/api/finance/payments', { method: 'POST', body: form });
+            } else {
+                res = await fetch('/api/finance/payments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idNumber: idNumber || undefined, amount, date, method, reference, notes, category }) });
+            }
             if (!res.ok) {
                 const data = await res.json();
-                throw new Error(data.error || 'Failed to record payment');
+                throw new Error(typeof data.error === 'string' ? data.error : 'Failed to record payment');
+            }
+            const created = await res.json();
+            if (created.proofUploadError) {
+                // Payment saved but the file didn't — keep staff on the page so they see it
+                setWarning(created.proofUploadError);
+                return;
             }
             router.push('/payments');
         } catch (err: any) {
@@ -206,6 +230,23 @@ export default function RecordPaymentPage() {
                     </div>
 
                     <div>
+                        <label className="text-xs text-gray-500 mb-1.5 block">Proof of Payment (optional)</label>
+                        <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                            onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+                            className="w-full text-sm text-gray-400 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-400 file:text-sm file:font-medium file:cursor-pointer hover:file:bg-cyan-500/30"
+                        />
+                        <p className="text-xs text-gray-600 mt-1">PDF, JPG, PNG or WebP — max 10MB</p>
+                        {proofFile && (
+                            <div className="mt-2 flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                                <span className="text-gray-300 text-xs truncate">{proofFile.name} ({(proofFile.size / 1024).toFixed(0)} KB)</span>
+                                <button type="button" onClick={() => setProofFile(null)} className="text-gray-500 hover:text-red-400 text-xs ml-3">Remove</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
                         <label className="text-xs text-gray-500 mb-1.5 block">Notes</label>
                         <textarea
                             value={notes}
@@ -220,6 +261,13 @@ export default function RecordPaymentPage() {
                 {error && (
                     <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
                         {error}
+                    </div>
+                )}
+
+                {warning && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-400 text-sm">
+                        {warning}{' '}
+                        <Link href="/payments" className="underline hover:text-amber-300">Go to Payments</Link>
                     </div>
                 )}
 
