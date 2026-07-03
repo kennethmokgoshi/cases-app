@@ -8,12 +8,18 @@ vi.mock('@zenowethu/database', () => ({
             create: vi.fn(),
             update: vi.fn(),
         },
+        caseComment: { create: vi.fn() },
     },
+}));
+
+vi.mock('../automation/automation-user', () => ({
+    getAutomationUserId: vi.fn().mockResolvedValue('auto-user'),
 }));
 
 import { prisma } from '@zenowethu/database';
 import {
     buildConsentLink,
+    buildCredoConsentLink,
     createDrrConsentRequest,
     getDrrConsentByToken,
     recordDrrConsent,
@@ -29,15 +35,24 @@ const drr = prisma.debtReviewRemovalConsent as unknown as {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
 };
+const caseComment = (prisma as unknown as { caseComment: { create: ReturnType<typeof vi.fn> } }).caseComment;
 
 beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = 'https://cases.zenowethu.co.za';
+    process.env.CREDO_URL = 'https://credo.zenowethu.co.za';
+    caseComment.create.mockResolvedValue({});
 });
 
 describe('buildConsentLink', () => {
     it('builds the public consent URL', () => {
         expect(buildConsentLink('tok123')).toBe('https://cases.zenowethu.co.za/consent/debt-review-removal/tok123');
+    });
+});
+
+describe('buildCredoConsentLink', () => {
+    it('builds the login-gated Credo consent URL', () => {
+        expect(buildCredoConsentLink('tok123')).toBe('https://credo.zenowethu.co.za/consent/tok123');
     });
 });
 
@@ -92,6 +107,24 @@ describe('recordDrrConsent', () => {
         expect(consentUpdate?.[0].data.ipAddress).toBe('1.2.3.4');
         const triggerUpdate = drr.update.mock.calls.find(c => c[0].data.triggeredAt);
         expect(triggerUpdate).toBeTruthy();
+        // Consent is recorded on the case timeline
+        expect(caseComment.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ caseId: 'case1', activityType: 'DRR_CONSENT_RECEIVED' }),
+            }),
+        );
+    });
+
+    it('stamps the Credo consumer id when the approval comes from the portal', async () => {
+        drr.findUnique
+            .mockResolvedValueOnce({ id: 'c1', token: 't', status: 'PENDING', caseId: 'case1', expiresAt: new Date(Date.now() + 1e6) })
+            .mockResolvedValueOnce({ id: 'c1', caseId: 'case1', case: { fileNumber: 'ZDM-1' }, client: null, consumer: { idNumber: '8001015009087' } });
+        drr.update.mockResolvedValue({ id: 'c1', caseId: 'case1' });
+
+        await recordDrrConsent({ token: 't', consumerId: 'consumer-9' });
+
+        const consentUpdate = drr.update.mock.calls.find(c => c[0].data.status === 'CONSENTED');
+        expect(consentUpdate?.[0].data.consumerId).toBe('consumer-9');
     });
 
     it('is idempotent — already CONSENTED returns success without re-firing', async () => {

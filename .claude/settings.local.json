@@ -440,7 +440,20 @@
       "Bash(cd \"/c/Visual Studio Code/06 March 2026/apps/finance\" && npx tsc --version && grep -E '\"strict|\"target' tsconfig.json ../../packages/tsconfig/*.json 2>/dev/null | head)",
       "Bash(curl -s -o /dev/null -w \"decision endpoint HTTP %{http_code}\\\\n\" --max-time 90 -X POST http://localhost:3000/api/finance/quotes/test-id/decision -H \"Content-Type: application/json\" -d '{\"decision\":\"ACCEPTED\"}')",
       "Bash(grep -v \"^\\\\./\\\\.claude/worktrees/\" \"C:\\\\Users\\\\Kenneth\\\\.claude\\\\projects\\\\C--Visual-Studio-Code-06-March-2026\\\\5b08a030-e1df-48e9-9026-fd62834202d9\\\\tool-results\\\\bpusyvnam.txt\")",
-      "PowerShell(git add -A)"
+      "PowerShell(git add -A)",
+      "PowerShell(git push)",
+      "PowerShell(Set-Location \"C:\\\\Visual Studio Code\\\\06 March 2026\"; $env:CI = \"true\"; pnpm install 2>&1 | Select-Object -Last 10)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3005 --max-time 3)",
+      "Bash(curl -s -o /dev/null --max-time 2 http://localhost:3000)",
+      "Bash(curl -s -o /dev/null --max-time 2 http://localhost:3006)",
+      "Bash(taskkill //PID 32184 //F)",
+      "Bash(taskkill //PID 28900 //F)",
+      "Bash(taskkill //PID 2788 //F)",
+      "Bash(curl -s -o /dev/null --max-time 2 http://localhost:3004)",
+      "Bash(curl -s -o /dev/null --max-time 2 http://localhost:3005)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3005/consent/test-token-123\" -MaximumRedirection 0 -UseBasicParsing -ErrorAction Stop; \"Status: $\\($r.StatusCode\\)\" } catch { $resp = $_.Exception.Response; \"Status: $\\([int]$resp.StatusCode\\)\"; \"Location: $\\($resp.Headers['Location']\\)\" })",
+      "PowerShell($loc = \\(curl.exe -s -o NUL -w \"%{redirect_url}\" \"http://localhost:3005/consent/test-token-123\"\\); \"Redirects to: $loc\"; $api = \\(curl.exe -s -w \"`nHTTP %{http_code}\" \"http://localhost:3005/api/consumer/consent/test-token-123\"\\); $api)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 3 http://localhost:3001)"
     ],
     "additionalDirectories": [
       "C:\\Visual Studio Code\\06 March 2026\\FromGIt\\cases-app-main\\apps\\cases\\app\\api\\cases\\[id]",

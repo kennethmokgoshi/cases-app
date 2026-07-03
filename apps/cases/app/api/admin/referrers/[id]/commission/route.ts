@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
-import { z } from 'zod';
 
 const logger = createLogger('api/admin/referrers/[id]/commission');
 
@@ -22,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             where: { id },
             include: {
                 portalUser: { select: { id: true, email: true, lastLogin: true, isLocked: true } },
+                _count: { select: { cases: true } },
             },
         });
         if (!referrer) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
@@ -44,7 +44,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         });
 
         const summary = {
-            total: commissions.length,
+            total: referrer._count.cases,
+            commissionRecords: commissions.length,
             eligible: commissions.filter((c) => c.isEligible).length,
             paid: commissions.filter((c) => c.isPaid).length,
             unpaidEligible: commissions.filter((c) => c.isEligible && !c.isPaid).length,

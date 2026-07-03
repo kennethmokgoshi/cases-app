@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createLogger } from '@zenowethu/shared-lib';
 import { getDrrConsentByToken, recordDrrConsent } from '@zenowethu/shared-lib/src/dhs/consent-service';
+import { runDrrDocumentReadiness } from '@zenowethu/shared-lib/src/dhs/drr-readiness';
 
 const logger = createLogger('api/consent/debt-review-removal/[token]');
 
@@ -39,6 +40,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
 
         logger.info('[DRR_CONSENT] Consent recorded', { token: token.slice(0, 8) + '…', alreadyConsented: result.alreadyConsented });
+
+        // Post-consent document readiness (credit report / payslip / bank statement
+        // check + combined-document split). Fire-and-forget: the consumer's confirm
+        // must not wait on AI splitting; the outcome lands on the case timeline.
+        if (!result.alreadyConsented && result.caseId) {
+            const caseId = result.caseId;
+            void runDrrDocumentReadiness({ caseId }).catch((err) =>
+                logger.error(`[DRR_CONSENT] Post-consent readiness failed for case ${caseId}:`, err),
+            );
+        }
+
         return NextResponse.json({
             success: true,
             alreadyConsented: result.alreadyConsented,

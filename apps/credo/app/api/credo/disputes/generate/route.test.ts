@@ -22,6 +22,7 @@ vi.mock('@zenowethu/database', () => ({
 
 vi.mock('@zenowethu/shared-lib', () => ({
     generateDisputeLetter: vi.fn(),
+    logAuditAction: vi.fn(),
 }));
 
 describe('POST /api/credo/disputes/generate', () => {

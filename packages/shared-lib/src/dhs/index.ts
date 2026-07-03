@@ -31,6 +31,8 @@ export {
     createDrrConsentRequest,
     buildConsentLink,
     getConsentBaseUrl,
+    buildCredoConsentLink,
+    getCredoBaseUrl,
     getDrrConsentByToken,
     recordDrrConsent,
     onDebtReviewRemovalConsent,
@@ -38,6 +40,13 @@ export {
     CONSENT_EXPIRY_DAYS,
 } from './consent-service';
 export type { CreateConsentResult, ConsentView, RecordConsentResult } from './consent-service';
+export {
+    runDrrDocumentReadiness,
+    docTypeToKind,
+    resolveDocumentFilePath,
+    REQUIRED_DOC_KINDS,
+} from './drr-readiness';
+export type { DrrReadinessResult, RequiredDocKind } from './drr-readiness';
 export {
     getConsumerStatusHistory,
     evaluateConsumerClearance,

@@ -45,14 +45,45 @@ function previousDcLabel(name?: string | null, tradingName?: string | null): str
 export function buildAcceptedViaDhsEmail(p: {
     clientFirstName: string;
     fileNumber: string;
-    /** Public link the consumer clicks to consent to debt review removal. */
+    /** Link the consumer clicks to consent to debt review removal. */
     consentLink: string;
     /** Previous debt counsellor (the firm the file transferred FROM), if known. */
     previousDcName?: string | null;
     previousDcTradingName?: string | null;
+    /**
+     * Credo portal login details — present when the consent is approved inside
+     * the Credo portal (the preferred flow). The username is ALWAYS the
+     * consumer's 13-digit SA ID number.
+     */
+    credo?: {
+        /** The consumer's 13-digit SA ID number — their Credo username. */
+        idNumber: string;
+        /** Set-password/activation link when the profile has no password yet. */
+        setPasswordLink?: string | null;
+    } | null;
 }): string {
     const firstName = (p.clientFirstName || '').trim() || 'Sir/Madam';
     const fromDc = previousDcLabel(p.previousDcName, p.previousDcTradingName);
+
+    const credoSection = p.credo
+        ? `
+─────────────────────────────────────────
+HOW TO LOG IN TO YOUR CREDO PORTAL
+─────────────────────────────────────────
+Your consent is given inside Credo, your secure Zenowethu consumer portal. Logging in is simple:
+
+  Your username:  your 13-digit SA ID number (${p.credo.idNumber})
+${p.credo.setPasswordLink
+            ? `  Your password:  you have not set one yet — please set it first using this link:
+
+  ${p.credo.setPasswordLink}
+
+Once your password is set, click the consent link above (or again at any time) and sign in with your ID number and your new password.`
+            : `  Your password:  the password you chose for Credo. If you have forgotten it, click "Forgot password?" on the login page.`}
+
+After signing in you will see your consent page — read it and press "I Approve" so our team can start working on your file.
+`
+        : '';
 
     return `Dear ${firstName},
 
@@ -71,7 +102,7 @@ Please click the secure link below to review and confirm your consent:
   ${p.consentLink}
 
 We completely understand if this feels like one more thing to do — it only takes a moment, and once it is done you do not need to do anything further.
-
+${credoSection}
 ─────────────────────────────────────────
 WHAT HAPPENS NEXT
 ─────────────────────────────────────────

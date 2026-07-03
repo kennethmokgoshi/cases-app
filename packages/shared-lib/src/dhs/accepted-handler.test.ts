@@ -6,6 +6,7 @@ vi.mock('@zenowethu/database', () => ({
         debtCounsellor: { findUnique: vi.fn() },
         debtReviewRemovalConsent: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
         caseComment: { create: vi.fn() },
+        consumerAccount: { findUnique: vi.fn() },
     },
 }));
 
@@ -17,8 +18,17 @@ vi.mock('../automation/automation-user', () => ({
     getAutomationUserId: vi.fn().mockResolvedValue('auto-user'),
 }));
 
+vi.mock('../credo/consumer-provisioning', () => ({
+    provisionConsumerForClient: vi.fn(),
+    createPasswordResetTokenForConsumer: vi.fn(),
+}));
+
 import { prisma } from '@zenowethu/database';
 import { sendManualMessage } from '../notifications/service';
+import {
+    provisionConsumerForClient,
+    createPasswordResetTokenForConsumer,
+} from '../credo/consumer-provisioning';
 import { handleDhsAccepted, isManageConsumersEligible } from './accepted-handler';
 
 const db = prisma as unknown as {
@@ -30,26 +40,34 @@ const db = prisma as unknown as {
         update: ReturnType<typeof vi.fn>;
     };
     caseComment: { create: ReturnType<typeof vi.fn> };
+    consumerAccount: { findUnique: ReturnType<typeof vi.fn> };
 };
 const sendMsg = sendManualMessage as unknown as ReturnType<typeof vi.fn>;
+const provision = provisionConsumerForClient as unknown as ReturnType<typeof vi.fn>;
+const createResetToken = createPasswordResetTokenForConsumer as unknown as ReturnType<typeof vi.fn>;
 
 const baseCase = {
     id: 'case1',
     clientId: 'cl1',
     fileNumber: 'ZDM-2026-001',
-    client: { firstName: 'Sipho', email: 'sipho@example.com' },
+    client: { firstName: 'Sipho', email: 'sipho@example.com', idNumber: '8001015009087' },
 };
 
 beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = 'https://cases.zenowethu.co.za';
+    process.env.CREDO_URL = 'https://credo.zenowethu.co.za';
     db.caseComment.create.mockResolvedValue({});
     db.case.update.mockResolvedValue({});
     db.debtReviewRemovalConsent.update.mockResolvedValue({});
+    // Default: Credo profile exists and is already activated (has a password).
+    provision.mockResolvedValue({ consumerId: 'cons1', created: false, activationToken: null });
+    db.consumerAccount.findUnique.mockResolvedValue({ password: 'hashed' });
+    createResetToken.mockResolvedValue('fresh-token');
 });
 
 describe('handleDhsAccepted', () => {
-    it('creates a consent request and emails the consumer on first acceptance', async () => {
+    it('provisions a Credo profile and emails the Credo consent link with login instructions', async () => {
         db.case.findUnique.mockResolvedValue(baseCase);
         db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
         db.debtReviewRemovalConsent.create.mockResolvedValue({
@@ -63,17 +81,62 @@ describe('handleDhsAccepted', () => {
 
         expect(r.emailSent).toBe(true);
         expect(r.skipped).toBe(false);
-        expect(r.consentLink).toContain('/consent/debt-review-removal/tok123');
-        // Email sent to the consumer with the consent link in the body
+        // The consent link is the login-gated Credo page, not the public token page
+        expect(r.consentLink).toBe('https://credo.zenowethu.co.za/consent/tok123');
+        // Consent is tied to the Credo profile
+        expect(provision).toHaveBeenCalledWith('cl1');
+        const createData = db.debtReviewRemovalConsent.create.mock.calls[0][0].data;
+        expect(createData.consumerId).toBe('cons1');
+        expect(createData.channel).toBe('CREDO');
+        // Email sent to the consumer with the Credo link + ID-number login instructions
         const [, channel, recipient, body] = sendMsg.mock.calls[0];
         expect(channel).toBe('EMAIL');
         expect(recipient).toBe('sipho@example.com');
-        expect(body).toContain('/consent/debt-review-removal/tok123');
+        expect(body).toContain('https://credo.zenowethu.co.za/consent/tok123');
+        expect(body).toContain('13-digit SA ID number (8001015009087)');
         // Moves the case to "Ready to Consent" with a follow-up date
         expect(r.statusUpdatedTo).toBe('READY_TO_CONSENT');
         const upd = db.case.update.mock.calls.find((c) => c[0].data.status === 'READY_TO_CONSENT');
         expect(upd).toBeTruthy();
         expect(upd?.[0].data.nextUpdate).toBeInstanceOf(Date);
+    });
+
+    it('includes a set-password link when the Credo profile has never been activated', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
+        db.debtReviewRemovalConsent.create.mockResolvedValue({
+            id: 'consent1', token: 'tok123', expiresAt: new Date(Date.now() + 1e9),
+        });
+        // Existing profile, but no password yet → a fresh activation token is issued
+        provision.mockResolvedValue({ consumerId: 'cons1', created: false, activationToken: null });
+        db.consumerAccount.findUnique.mockResolvedValue({ password: null });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        await handleDhsAccepted({ caseId: 'case1' });
+
+        expect(createResetToken).toHaveBeenCalledWith('cons1');
+        const body = sendMsg.mock.calls[0][3];
+        expect(body).toContain('https://credo.zenowethu.co.za/reset-password?token=fresh-token');
+    });
+
+    it('falls back to the public consent link when no Credo profile can be provisioned', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
+        db.debtReviewRemovalConsent.create.mockResolvedValue({
+            id: 'consent1', token: 'tok123', expiresAt: new Date(Date.now() + 1e9),
+        });
+        provision.mockResolvedValue(null); // e.g. client has no valid 13-digit ID number
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        const r = await handleDhsAccepted({ caseId: 'case1' });
+
+        expect(r.emailSent).toBe(true);
+        expect(r.consentLink).toBe('https://cases.zenowethu.co.za/consent/debt-review-removal/tok123');
+        const createData = db.debtReviewRemovalConsent.create.mock.calls[0][0].data;
+        expect(createData.channel).toBe('EMAIL');
+        const body = sendMsg.mock.calls[0][3];
+        expect(body).toContain('/consent/debt-review-removal/tok123');
+        expect(body).not.toContain('HOW TO LOG IN TO YOUR CREDO PORTAL');
     });
 
     it('resolves the previous DC name from the DebtCounsellor master table by NCRDC', async () => {

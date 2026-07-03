@@ -24,6 +24,7 @@ vi.mock('@zenowethu/database', () => ({
 import { createDcFeeInvoice } from './dc-fee-invoice-service';
 
 const baseInput = {
+  documentType: 'INVOICE' as const,
   dcName: 'Jane Counsellor',
   dcEmail: 'jane@dc.co.za',
   dcTradingName: 'Jane DC Services',

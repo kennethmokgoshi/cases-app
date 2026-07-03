@@ -10,6 +10,7 @@
 
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
+import { getAutomationUserId } from '../automation/automation-user';
 
 const logger = createLogger('dhs/consent-service');
 
@@ -37,6 +38,21 @@ export function getConsentBaseUrl(): string {
 /** Build the public consent link for a token. */
 export function buildConsentLink(token: string): string {
     return `${getConsentBaseUrl()}/consent/debt-review-removal/${token}`;
+}
+
+/** Base URL of the Credo consumer portal. */
+export function getCredoBaseUrl(): string {
+    return (process.env.CREDO_URL || 'https://credo.zenowethu.co.za').replace(/\/+$/, '');
+}
+
+/**
+ * Build the login-gated Credo consent link for a token. The consumer signs in to
+ * Credo (username = 13-digit SA ID number) and approves the consent there — this
+ * is the preferred channel because the approval is tied to an authenticated
+ * consumer profile, not just possession of the emailed link.
+ */
+export function buildCredoConsentLink(token: string): string {
+    return `${getCredoBaseUrl()}/consent/${token}`;
 }
 
 export interface CreateConsentResult {
@@ -127,8 +143,10 @@ export async function recordDrrConsent(params: {
     token: string;
     ipAddress?: string;
     userAgent?: string;
+    /** Credo consumer id when the consent is approved from inside the portal. */
+    consumerId?: string;
 }): Promise<RecordConsentResult> {
-    const { token, ipAddress, userAgent } = params;
+    const { token, ipAddress, userAgent, consumerId } = params;
     const c = await prisma.debtReviewRemovalConsent.findUnique({ where: { token } });
 
     if (!c) return { ok: false, error: 'This consent link is not valid.', status: 404 };
@@ -143,7 +161,13 @@ export async function recordDrrConsent(params: {
 
     const updated = await prisma.debtReviewRemovalConsent.update({
         where: { id: c.id },
-        data: { status: 'CONSENTED', consentedAt: new Date(), ipAddress: ipAddress ?? null, userAgent: userAgent ?? null },
+        data: {
+            status: 'CONSENTED',
+            consentedAt: new Date(),
+            ipAddress: ipAddress ?? null,
+            userAgent: userAgent ?? null,
+            ...(consumerId ? { consumerId } : {}),
+        },
     });
     logger.info(`[DRR_CONSENT] Consent GRANTED for case ${updated.caseId} (token ${token.slice(0, 8)}…)`);
 
@@ -158,16 +182,15 @@ export async function recordDrrConsent(params: {
 }
 
 /**
- * ───────────────────────────── EXTENSION POINT ─────────────────────────────
- * Fired exactly once when a consumer grants debt review removal consent.
+ * Fired exactly once when a consumer grants debt review removal consent
+ * (PENDING → CONSENTED transition only). Records the consent on the case
+ * timeline and stamps triggeredAt.
  *
- * TODO (per business): wire up what consent should TRIGGER. Examples that may go
- * here later: kick off the debt-review-removal trigger, generate Form 17.W, queue
- * bureau dispute letters, advance the case status, notify staff, etc.
- *
- * The consent row id is passed so the handler can load full context. Keep this
- * idempotent — it only fires on the PENDING→CONSENTED transition. Stamps
- * triggeredAt for traceability.
+ * The document-readiness pipeline (check credit report / payslip / bank
+ * statement, split the combined document, chase the referrer) is deliberately
+ * NOT run here: it needs the case files on disk, which only the Cases app can
+ * reach. The consent API routes invoke it — the Cases route directly, the Credo
+ * route via the Cases internal endpoint (see dhs/drr-readiness.ts).
  */
 export async function onDebtReviewRemovalConsent(consentId: string): Promise<void> {
     const consent = await prisma.debtReviewRemovalConsent.findUnique({
@@ -177,11 +200,29 @@ export async function onDebtReviewRemovalConsent(consentId: string): Promise<voi
     if (!consent) return;
 
     logger.info(
-        `[DRR_CONSENT] onDebtReviewRemovalConsent fired for case ${consent.caseId} ` +
-        `(file ${consent.case?.fileNumber ?? '?'}) — no downstream action wired yet (awaiting business definition).`
+        `[DRR_CONSENT] Consent granted for case ${consent.caseId} ` +
+        `(file ${consent.case?.fileNumber ?? '?'}, channel ${consent.channel}) — recording on case timeline.`
     );
 
-    // ↓↓↓ Add the triggered action(s) here once defined. ↓↓↓
+    const automationUserId = await getAutomationUserId().catch(() => null);
+    if (automationUserId) {
+        const who = consent.consumer
+            ? `via their Credo profile (ID ${consent.consumer.idNumber ? consent.consumer.idNumber.slice(0, 6) + '***' : 'on file'})`
+            : 'via the secure emailed link';
+        await prisma.caseComment
+            .create({
+                data: {
+                    caseId: consent.caseId,
+                    userId: automationUserId,
+                    content:
+                        `[SYSTEM] Debt review removal CONSENT RECEIVED — the consumer approved ${who}. ` +
+                        `The document readiness check (credit report, payslip, bank statement) is now running; ` +
+                        `its outcome will be posted here.`,
+                    activityType: 'DRR_CONSENT_RECEIVED',
+                },
+            })
+            .catch((err) => logger.error('[DRR_CONSENT] Failed to add consent comment:', err));
+    }
 
     await prisma.debtReviewRemovalConsent.update({
         where: { id: consentId },

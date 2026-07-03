@@ -24,7 +24,11 @@ import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
 import { addWorkingDays } from '../statuses/workingDays';
 import { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT } from './accepted-email';
-import { createDrrConsentRequest, buildConsentLink } from './consent-service';
+import { createDrrConsentRequest, buildConsentLink, buildCredoConsentLink } from './consent-service';
+import {
+    provisionConsumerForClient,
+    createPasswordResetTokenForConsumer,
+} from '../credo/consumer-provisioning';
 
 const logger = createLogger('dhs/accepted-handler');
 
@@ -139,7 +143,10 @@ export async function handleDhsAccepted(params: {
         });
         if (existing) {
             result.skipped = true;
-            result.consentLink = buildConsentLink(existing.token);
+            result.consentLink =
+                existing.channel === 'CREDO'
+                    ? buildCredoConsentLink(existing.token)
+                    : buildConsentLink(existing.token);
             if (existing.status === 'PENDING') {
                 // Still waiting on the consumer — keep (or restore) the case parked at
                 // "Ready to Consent" so a re-check doesn't downgrade it, and refresh the
@@ -168,13 +175,48 @@ export async function handleDhsAccepted(params: {
             return result;
         }
 
+        // ── Provision the Credo profile (username = 13-digit ID number) ──────
+        // The consent is approved INSIDE Credo, so the consumer needs a portal
+        // profile. Auto-provision is idempotent and returns null when the client
+        // has no valid 13-digit ID number — in that case we fall back to the
+        // public token link so the consumer can still consent.
+        let credoConsumerId: string | null = null;
+        let credoSetPasswordLink: string | null = null;
+        try {
+            const provision = await provisionConsumerForClient(caseData.clientId);
+            if (provision) {
+                credoConsumerId = provision.consumerId;
+                let activationToken = provision.activationToken;
+                if (!activationToken) {
+                    // Existing profile — if it has never been activated (no password),
+                    // issue a fresh set-password token so the login instructions work.
+                    const account = await prisma.consumerAccount.findUnique({
+                        where: { id: provision.consumerId },
+                        select: { password: true },
+                    });
+                    if (account && !account.password) {
+                        activationToken = await createPasswordResetTokenForConsumer(provision.consumerId);
+                    }
+                }
+                if (activationToken) {
+                    const credoUrl = (process.env.CREDO_URL || 'https://credo.zenowethu.co.za').replace(/\/+$/, '');
+                    credoSetPasswordLink = `${credoUrl}/reset-password?token=${activationToken}`;
+                }
+            }
+        } catch (err) {
+            logger.error(`[DHS Accepted] Credo provisioning failed for case ${caseId} (falling back to public consent link):`, err);
+        }
+
         // ── Create the consent request (token + secure link) ─────────────────
         const consent = await createDrrConsentRequest({
             caseId,
             clientId: caseData.clientId,
-            channel: 'EMAIL',
+            consumerId: credoConsumerId,
+            channel: credoConsumerId ? 'CREDO' : 'EMAIL',
         });
-        result.consentLink = consent.link;
+        result.consentLink = credoConsumerId
+            ? buildCredoConsentLink(consent.token)
+            : consent.link;
 
         // ── Resolve the previous DC name from the database ───────────────────
         // The firm the file transferred FROM. Prefer the values on the case;
@@ -197,9 +239,13 @@ export async function handleDhsAccepted(params: {
         const body = buildAcceptedViaDhsEmail({
             clientFirstName: caseData.client.firstName,
             fileNumber: caseData.fileNumber,
-            consentLink: consent.link,
+            consentLink: result.consentLink,
             previousDcName,
             previousDcTradingName,
+            credo:
+                credoConsumerId && caseData.client.idNumber
+                    ? { idNumber: caseData.client.idNumber, setPasswordLink: credoSetPasswordLink }
+                    : null,
         });
 
         const emailResult = await sendManualMessage(
