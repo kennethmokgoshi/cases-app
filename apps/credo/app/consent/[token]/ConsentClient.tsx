@@ -185,7 +185,8 @@ export default function ConsentClient({ token }: { token: string }) {
             </h1>
             <p style={{ fontSize: "0.9375rem", color: "#475569", lineHeight: 1.6, marginBottom: 20 }}>
               Your debt review file{view.fileNumber ? ` (${view.fileNumber})` : ""} has been transferred to Zenowethu
-              Debt Management. Before our team can start working on it, we need your consent below.
+              Debt Management. This approval confirms that you know Zenowethu is now working on your file, so there is
+              a clear record before our team continues.
             </p>
 
             <div
@@ -222,8 +223,8 @@ export default function ConsentClient({ token }: { token: string }) {
                 style={{ marginTop: 3, width: 16, height: 16, accentColor: "#0B1D35" }}
               />
               <span>
-                I have read and understood the consent above, and I approve Zenowethu Debt Management to continue
-                working on my file.
+                I have read and understood the consent above, and I confirm Zenowethu Debt Management is authorised to
+                continue working on my file.
               </span>
             </label>
 
@@ -240,7 +241,7 @@ export default function ConsentClient({ token }: { token: string }) {
                 boxShadow: !agreed || submitting ? "none" : "0 4px 14px rgba(11,29,53,0.2)",
               }}
             >
-              {submitting ? "Recording your approval…" : "I Approve — continue with my file"}
+              {submitting ? "Recording your approval..." : "I Approve - Zenowethu may continue"}
             </button>
 
             <p style={{ textAlign: "center", marginTop: 18, fontSize: "0.75rem", color: "#94A3B8", lineHeight: 1.6 }}>

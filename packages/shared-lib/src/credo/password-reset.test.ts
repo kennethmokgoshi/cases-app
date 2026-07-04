@@ -12,10 +12,11 @@ vi.mock('@zenowethu/database', () => ({ prisma: prismaMock }));
 vi.mock('../logger', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }));
-vi.mock('../notifications/templates', () => ({ renderBrandedEmail: () => '<html></html>' }));
+vi.mock('../notifications/templates', () => ({ renderBrandedEmail: (content: string) => content }));
 vi.mock('../notifications/service', () => ({ sendTransactionalEmail: (...a: unknown[]) => sendTransactionalEmail(...a) }));
 
 import {
+  formatConsumerGreetingName,
   requestPasswordReset,
   validateResetToken,
   resetPasswordWithToken,
@@ -27,6 +28,20 @@ const VALID_ID = '8001015009087';
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.passwordResetToken.create.mockResolvedValue({ id: 'tok1' });
+});
+
+describe('formatConsumerGreetingName', () => {
+  it('uses the first given name plus surname when the stored firstName has multiple names', () => {
+    expect(formatConsumerGreetingName({ firstName: 'NOFDA MMUSHO', lastName: 'MOKGOSHI' })).toBe('NOFDA MOKGOSHI');
+  });
+
+  it('falls back to only the first given name when no surname is available', () => {
+    expect(formatConsumerGreetingName({ firstName: 'NOFDA MMUSHO', lastName: '' })).toBe('NOFDA');
+  });
+
+  it('escapes unsafe characters before rendering the email greeting', () => {
+    expect(formatConsumerGreetingName({ firstName: '<Nofda>', lastName: 'M & M' })).toBe('&lt;Nofda&gt; M &amp; M');
+  });
 });
 
 describe('requestPasswordReset', () => {
@@ -54,11 +69,14 @@ describe('requestPasswordReset', () => {
 
   it('creates a token and emails the reset link for a real account', async () => {
     prismaMock.consumerAccount.findUnique.mockResolvedValue({
-      id: 'c1', email: 'real@person.co.za', firstName: 'Sipho',
+      id: 'c1', email: 'real@person.co.za', firstName: 'Sipho Thabo', lastName: 'Dlamini',
     });
     const res = await requestPasswordReset(VALID_ID);
     expect(prismaMock.passwordResetToken.create).toHaveBeenCalledOnce();
     expect(sendTransactionalEmail).toHaveBeenCalledOnce();
+    expect(sendTransactionalEmail.mock.calls[0]?.[0]).toMatchObject({
+      html: expect.stringContaining('Hi Sipho Dlamini,'),
+    });
     expect(res.emailSent).toBe(true);
   });
 });

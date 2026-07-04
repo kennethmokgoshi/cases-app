@@ -89,7 +89,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
             expired: c.expiresAt < new Date(),
             consumerFirstName: c.client?.firstName ?? null,
             fileNumber: c.case?.fileNumber ?? null,
-            consentText: c.consentText ?? DRR_CONSENT_TEXT,
+            consentText: c.status === "PENDING" ? DRR_CONSENT_TEXT : c.consentText ?? DRR_CONSENT_TEXT,
             consentedAt: c.consentedAt,
         });
     } catch (error) {
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             success: true,
             alreadyConsented: result.alreadyConsented,
             message:
-                "Thank you. Your approval has been recorded — our team will now continue working on your file and will keep you updated.",
+                "Thank you. Your approval has been recorded and Zenowethu Debt Management is confirmed as the team authorised to continue working on your file.",
         });
     } catch (error) {
         logger.error("[CREDO_CONSENT] POST error", error);

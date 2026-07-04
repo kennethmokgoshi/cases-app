@@ -57,6 +57,11 @@ describe('buildCredoConsentLink', () => {
 });
 
 describe('createDrrConsentRequest', () => {
+    it('makes the Zenowethu file-handling acknowledgement explicit', () => {
+        expect(DRR_CONSENT_TEXT).toContain('Zenowethu Debt Management is the debt counsellor authorised to work on my file');
+        expect(DRR_CONSENT_TEXT).toContain('creates a clear record that Zenowethu Debt Management is handling my file');
+    });
+
     it('reuses an existing un-expired PENDING request', async () => {
         drr.findFirst.mockResolvedValue({ id: 'c1', token: 'existing', expiresAt: new Date(Date.now() + 1e6) });
         const r = await createDrrConsentRequest({ caseId: 'case1' });
@@ -78,13 +83,24 @@ describe('getDrrConsentByToken', () => {
     it('returns a sanitised view (first name + file number only)', async () => {
         drr.findUnique.mockResolvedValue({
             token: 't', status: 'PENDING', expiresAt: new Date(Date.now() + 1e6),
-            consentText: DRR_CONSENT_TEXT, consentedAt: null,
+            consentText: 'OLD PENDING TEXT', consentedAt: null,
             case: { fileNumber: 'ZDM-1' }, client: { firstName: 'Thabo' },
         });
         const v = await getDrrConsentByToken('t');
         expect(v?.consumerFirstName).toBe('Thabo');
         expect(v?.fileNumber).toBe('ZDM-1');
         expect(v?.expired).toBe(false);
+        expect(v?.consentText).toBe(DRR_CONSENT_TEXT);
+    });
+
+    it('keeps historical text for already-consented records', async () => {
+        drr.findUnique.mockResolvedValue({
+            token: 't', status: 'CONSENTED', expiresAt: new Date(Date.now() + 1e6),
+            consentText: 'TEXT ALREADY AGREED TO', consentedAt: new Date(),
+            case: { fileNumber: 'ZDM-1' }, client: { firstName: 'Thabo' },
+        });
+        const v = await getDrrConsentByToken('t');
+        expect(v?.consentText).toBe('TEXT ALREADY AGREED TO');
     });
 
     it('returns null for an unknown token', async () => {
@@ -104,6 +120,7 @@ describe('recordDrrConsent', () => {
         expect(r).toEqual({ ok: true, alreadyConsented: false, caseId: 'case1' });
 
         const consentUpdate = drr.update.mock.calls.find(c => c[0].data.status === 'CONSENTED');
+        expect(consentUpdate?.[0].data.consentText).toBe(DRR_CONSENT_TEXT);
         expect(consentUpdate?.[0].data.ipAddress).toBe('1.2.3.4');
         const triggerUpdate = drr.update.mock.calls.find(c => c[0].data.triggeredAt);
         expect(triggerUpdate).toBeTruthy();

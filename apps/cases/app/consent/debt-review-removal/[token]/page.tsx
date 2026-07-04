@@ -90,8 +90,8 @@ export default function DebtReviewRemovalConsentPage() {
         <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
         <h2 style={{ color: NAVY, margin: '0 0 8px' }}>Thank you{data?.consumerFirstName ? `, ${data.consumerFirstName}` : ''}!</h2>
         <p style={{ color: '#334155', lineHeight: 1.6 }}>
-          Your consent has been recorded and we will now proceed with the removal of your debt review flag
-          {data?.fileNumber ? ` (File: ${data.fileNumber})` : ''}. Our team will keep you updated on the progress.
+          Your approval has been recorded and Zenowethu Debt Management is confirmed as the team authorised to continue
+          working on your file{data?.fileNumber ? ` (File: ${data.fileNumber})` : ''}. Our team will keep you updated on the progress.
         </p>
       </Shell>
     );
@@ -105,8 +105,9 @@ export default function DebtReviewRemovalConsentPage() {
     <Shell>
       <h2 style={{ color: NAVY, margin: '0 0 6px' }}>Hello{data?.consumerFirstName ? ` ${data.consumerFirstName}` : ''},</h2>
       <p style={{ color: '#334155', lineHeight: 1.6, marginTop: 0 }}>
-        Your debt review file{data?.fileNumber ? ` (${data.fileNumber})` : ''} has been accepted. Before we proceed with
-        removing the debt review flag from your credit profile, we need your consent.
+        Your debt review file{data?.fileNumber ? ` (${data.fileNumber})` : ''} has been accepted by Zenowethu Debt
+        Management. This approval confirms that you know Zenowethu is now working on your file, so there is a clear
+        record before our team continues.
       </p>
 
       <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, margin: '16px 0', color: '#334155', fontSize: 14, lineHeight: 1.6 }}>
@@ -115,7 +116,7 @@ export default function DebtReviewRemovalConsentPage() {
 
       <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', color: '#1E293B', fontSize: 14 }}>
         <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: 3, width: 18, height: 18, accentColor: ACCENT }} />
-        <span>I have read and I agree to the above. I give my consent to proceed with debt review removal.</span>
+        <span>I have read and I agree to the above. I confirm Zenowethu Debt Management is authorised to continue working on my file.</span>
       </label>
 
       {error && <div style={{ color: '#B91C1C', marginTop: 12, fontSize: 14 }}>{error}</div>}
@@ -129,7 +130,7 @@ export default function DebtReviewRemovalConsentPage() {
           fontWeight: 700, fontSize: 15, cursor: !agreed || submitting ? 'not-allowed' : 'pointer',
         }}
       >
-        {submitting ? 'Submitting…' : 'I Consent — Proceed'}
+        {submitting ? 'Submitting...' : 'I Approve - Zenowethu may continue'}
       </button>
 
       <p style={{ color: '#94A3B8', fontSize: 12, marginTop: 16, textAlign: 'center' }}>

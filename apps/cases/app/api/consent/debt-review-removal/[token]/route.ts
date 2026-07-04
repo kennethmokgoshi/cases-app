@@ -54,7 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({
             success: true,
             alreadyConsented: result.alreadyConsented,
-            message: 'Thank you. Your consent has been recorded and we will proceed with your debt review removal.',
+            message: 'Thank you. Your approval has been recorded and Zenowethu Debt Management is confirmed as the team authorised to continue working on your file.',
         });
     } catch (error) {
         logger.error('[DRR_CONSENT] POST error', error);

@@ -16,6 +16,26 @@ export interface RequestResetResult {
   emailSent: boolean;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function formatConsumerGreetingName(consumer: {
+  firstName: string;
+  lastName?: string | null;
+}): string {
+  const firstGivenName = consumer.firstName.trim().split(/\s+/).filter(Boolean)[0];
+  const surname = consumer.lastName?.trim();
+  const displayName = [firstGivenName, surname].filter(Boolean).join(' ');
+
+  return escapeHtml(displayName || 'there');
+}
+
 /**
  * Start a password reset / "get my password" flow. The username is the 13-digit SA ID
  * number (email/phone are not unique and cannot identify a single consumer). We look the
@@ -32,7 +52,7 @@ export async function requestPasswordReset(idNumber: string): Promise<RequestRes
 
   const consumer = await prisma.consumerAccount.findUnique({
     where: { idNumber: id },
-    select: { id: true, email: true, firstName: true },
+    select: { id: true, email: true, firstName: true, lastName: true },
   });
 
   if (!consumer || !consumer.email || consumer.email.endsWith('@no-email.zenowethu.co.za')) {
@@ -49,7 +69,7 @@ export async function requestPasswordReset(idNumber: string): Promise<RequestRes
     `
       <h2 style="margin:0 0 15px;color:#0B1D35;font-size:22px;">Reset your Credo password</h2>
       <p style="margin:0 0 20px;color:#475569;font-size:16px;line-height:1.6">
-        Hi ${consumer.firstName}, we received a request to set or reset the password for your
+        Hi ${formatConsumerGreetingName(consumer)}, we received a request to set or reset the password for your
         Credo profile. Click the button below to choose a new password.
       </p>
       <p style="margin:0 0 8px;color:#94A3B8;font-size:13px;">

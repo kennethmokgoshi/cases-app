@@ -19,13 +19,15 @@ export const CONSENT_EXPIRY_DAYS = 30;
 
 /** The exact wording the consumer agrees to — snapshotted onto each consent record. */
 export const DRR_CONSENT_TEXT =
-    'I confirm that I am the consumer named above and I give Zenowethu Debt Management ' +
-    '(NCRDC3693) my consent to proceed with the removal of the debt review flag from my ' +
-    'credit profile. I authorise Zenowethu to act on my behalf and to communicate with the ' +
-    'relevant credit bureaus and the National Credit Regulator for this purpose. I understand ' +
-    'this is a regulated process and that timelines depend on the bureaus and authorities. ' +
-    'My personal information will be handled in accordance with the Protection of Personal ' +
-    'Information Act (POPIA).';
+    'I confirm that I am the consumer named above and I acknowledge that my debt review file ' +
+    'has been transferred to Zenowethu Debt Management (NCRDC3693). I confirm that Zenowethu ' +
+    'Debt Management is the debt counsellor authorised to work on my file from this point ' +
+    'and to continue with the debt review removal process. I authorise Zenowethu to act on ' +
+    'my behalf, manage and communicate about my file, and communicate with the relevant ' +
+    'credit bureaus, the National Credit Regulator, and any relevant debt counsellor where ' +
+    'needed. I understand that this approval creates a clear record that Zenowethu Debt ' +
+    'Management is handling my file. My personal information will be handled in accordance ' +
+    'with the Protection of Personal Information Act (POPIA).';
 
 export function getConsentBaseUrl(): string {
     return (
@@ -117,7 +119,7 @@ export async function getDrrConsentByToken(token: string): Promise<ConsentView |
         expired: c.expiresAt < new Date(),
         consumerFirstName: c.client?.firstName ?? null,
         fileNumber: c.case?.fileNumber ?? null,
-        consentText: c.consentText ?? DRR_CONSENT_TEXT,
+        consentText: c.status === 'PENDING' ? DRR_CONSENT_TEXT : c.consentText ?? DRR_CONSENT_TEXT,
         consentedAt: c.consentedAt,
     };
 }
@@ -163,6 +165,7 @@ export async function recordDrrConsent(params: {
         where: { id: c.id },
         data: {
             status: 'CONSENTED',
+            consentText: DRR_CONSENT_TEXT,
             consentedAt: new Date(),
             ipAddress: ipAddress ?? null,
             userAgent: userAgent ?? null,

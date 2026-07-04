@@ -65,7 +65,7 @@ describe('GET /api/consumer/consent/[token]', () => {
 
     it('returns the consent view and links the profile when the ID number matches', async () => {
         vi.mocked(auth).mockResolvedValue({ user: { id: 'cons1' } } as never);
-        db.debtReviewRemovalConsent.findUnique.mockResolvedValue(baseConsent);
+        db.debtReviewRemovalConsent.findUnique.mockResolvedValue({ ...baseConsent, consentText: 'OLD PENDING TEXT' });
         db.consumerAccount.findUnique.mockResolvedValue({ idNumber: '8001015009087' });
 
         const res = await GET(request(), { params });
@@ -78,6 +78,22 @@ describe('GET /api/consumer/consent/[token]', () => {
         expect(db.debtReviewRemovalConsent.update).toHaveBeenCalledWith(
             expect.objectContaining({ data: { consumerId: 'cons1' } }),
         );
+    });
+
+    it('keeps historical text once consent has already been recorded', async () => {
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'cons1' } } as never);
+        db.debtReviewRemovalConsent.findUnique.mockResolvedValue({
+            ...baseConsent,
+            status: 'CONSENTED',
+            consumerId: 'cons1',
+            consentText: 'TEXT ALREADY AGREED TO',
+        });
+
+        const res = await GET(request(), { params });
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.consentText).toBe('TEXT ALREADY AGREED TO');
     });
 
     it('rejects a consumer whose ID number does not match', async () => {
