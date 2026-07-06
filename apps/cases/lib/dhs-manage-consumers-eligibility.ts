@@ -7,6 +7,8 @@ export interface DhsManageConsumersEligibilityInput {
 const MANAGE_CONSUMERS_STATUSES = new Set([
     'ACCEPTEDVIADHS',
     'READYTOCONSENT',
+    'CONSENTRECEIVED',
+    'AWAITINGDRRDOCS',
     'ACCEPTED',
     'AUTOTRANSFERRED',
     'ZDMCLIENT',

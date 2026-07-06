@@ -42,6 +42,8 @@ const CONSENT_FOLLOWUP_DAYS = 3;
  * that mean a file is "Accepted via DHS" and therefore eligible for the
  * Manage Consumers post-acceptance follow-on.
  *   • ACCEPTED_VIA_DHS / READY_TO_CONSENT — our workflow statuses
+ *   • CONSENT_RECEIVED / AWAITING_DRR_DOCS — post-consent statuses; the button
+ *     re-runs the document readiness + clearance check
  *   • Accepted / Auto Transferred         — the DHS request-status labels
  *   • ZDM_CLIENT / ZDM Client             — the file is already under our own
  *     NCRDC, so no transfer is needed and the follow-on is available immediately
@@ -49,6 +51,8 @@ const CONSENT_FOLLOWUP_DAYS = 3;
 const MANAGE_CONSUMERS_ELIGIBLE = new Set<string>([
     'ACCEPTEDVIADHS',
     'READYTOCONSENT',
+    'CONSENTRECEIVED',
+    'AWAITINGDRRDOCS',
     'ACCEPTED',
     'AUTOTRANSFERRED',
     'ZDMCLIENT',

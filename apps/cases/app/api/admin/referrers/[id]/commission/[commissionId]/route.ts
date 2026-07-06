@@ -3,6 +3,7 @@ import { auth, createLogger, isCommissionEligible } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
 import type { ReferrerCommissionStage } from '@zenowethu/database';
+import { canAccessReferrer } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers/[id]/commission/[commissionId]');
 
@@ -38,9 +39,15 @@ export async function PATCH(
 
         const existing = await prisma.referrerCommission.findUnique({
             where: { id: commissionId },
+            include: { referrer: { select: { projectId: true } } },
         });
         if (!existing || existing.referrerId !== id) {
             return NextResponse.json({ error: 'Commission record not found' }, { status: 404 });
+        }
+
+        // Non-admins may only edit commissions for referrers whose sub-project they belong to
+        if (!(await canAccessReferrer(session.user, existing.referrer.projectId))) {
+            return NextResponse.json({ error: 'Forbidden — you are not a member of this referrer' }, { status: 403 });
         }
 
         const body = await request.json();

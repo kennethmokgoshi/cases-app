@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, renderTemplate, auth } from '@zenowethu/shared-lib';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted, isManageConsumersEligible } from '@zenowethu/shared-lib/src/dhs';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted, isManageConsumersEligible, runDrrDocumentReadiness } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
 import path, { join } from 'path';
@@ -993,33 +993,71 @@ export async function POST(request: Request) {
                 });
             }
 
-            logger.info('[DHS Lookup] manage_consumers: firing accepted handler (consumer acceptance + consent email)');
-            const acceptedResult = await handleDhsAccepted({
-                caseId,
-                triggeredByUserId: actingUserId,
-            });
-            logger.info('[DHS Lookup] manage_consumers accepted handler result:', {
-                emailSent: acceptedResult.emailSent,
-                skipped: acceptedResult.skipped,
-                errors: acceptedResult.errors,
+            // Post-consent? Then "Manage Consumers" means the NEXT step: verify the
+            // required documents (credit report / payslip / bank statement — chasing
+            // the referrer/B2B partner for the credit report if it is missing) and,
+            // when everything is on file, run the DHS clearance status-history check.
+            const consented = await prisma.debtReviewRemovalConsent.findFirst({
+                where: { caseId, status: 'CONSENTED' },
+                select: { id: true },
             });
 
-            result = {
-                success: acceptedResult.errors.length === 0,
-                emailSent: acceptedResult.emailSent,
-                skipped: acceptedResult.skipped,
-                consentLink: acceptedResult.consentLink,
-                statusUpdatedTo: acceptedResult.statusUpdatedTo,
-                actionsPerformed: acceptedResult.actionsPerformed,
-                errors: acceptedResult.errors,
-                message: acceptedResult.errors.length
-                    ? `Manage Consumers completed with issues: ${acceptedResult.errors.join(', ')}`
-                    : acceptedResult.skipped
-                        ? (acceptedResult.reason || 'Consumer already notified — consent link is still active.')
-                        : acceptedResult.emailSent
-                            ? 'Acceptance + consent email sent to consumer. Case moved to Ready to Consent.'
-                            : 'Manage Consumers ran — no email was sent.',
-            };
+            if (consented) {
+                logger.info('[DHS Lookup] manage_consumers: consent already granted — running document readiness + clearance check');
+                const readiness = await runDrrDocumentReadiness({
+                    caseId,
+                    triggeredByUserId: actingUserId,
+                });
+
+                const missingLabels = readiness.missingAfter.join(', ').replace(/_/g, ' ').toLowerCase();
+                result = {
+                    success: readiness.errors.length === 0,
+                    ready: readiness.ready,
+                    missingDocuments: readiness.missingAfter,
+                    creditReportRequestedFrom: readiness.creditReportRequestedFrom,
+                    statusUpdatedTo: readiness.statusUpdatedTo,
+                    clearance: readiness.clearance,
+                    actionsPerformed: readiness.actionsPerformed,
+                    errors: readiness.errors,
+                    message: readiness.ready
+                        ? readiness.clearance
+                            ? `Documents verified. DHS clearance check: ${readiness.clearance.message || 'completed'}${readiness.statusUpdatedTo ? ` Case status → ${readiness.statusUpdatedTo}.` : ''}`
+                            : 'All required documents are on file.'
+                        : `Documents outstanding (${missingLabels}). ` +
+                          (readiness.creditReportRequestedFrom
+                              ? `Credit report requested from ${readiness.creditReportRequestedFrom}. `
+                              : '') +
+                          'Case parked at Awaiting DRR Documents — see the case timeline for details.',
+                };
+            } else {
+                logger.info('[DHS Lookup] manage_consumers: firing accepted handler (consumer acceptance + consent email)');
+                const acceptedResult = await handleDhsAccepted({
+                    caseId,
+                    triggeredByUserId: actingUserId,
+                });
+                logger.info('[DHS Lookup] manage_consumers accepted handler result:', {
+                    emailSent: acceptedResult.emailSent,
+                    skipped: acceptedResult.skipped,
+                    errors: acceptedResult.errors,
+                });
+
+                result = {
+                    success: acceptedResult.errors.length === 0,
+                    emailSent: acceptedResult.emailSent,
+                    skipped: acceptedResult.skipped,
+                    consentLink: acceptedResult.consentLink,
+                    statusUpdatedTo: acceptedResult.statusUpdatedTo,
+                    actionsPerformed: acceptedResult.actionsPerformed,
+                    errors: acceptedResult.errors,
+                    message: acceptedResult.errors.length
+                        ? `Manage Consumers completed with issues: ${acceptedResult.errors.join(', ')}`
+                        : acceptedResult.skipped
+                            ? (acceptedResult.reason || 'Consumer already notified — consent link is still active.')
+                            : acceptedResult.emailSent
+                                ? 'Acceptance + consent email sent to consumer. Case moved to Ready to Consent.'
+                                : 'Manage Consumers ran — no email was sent.',
+                };
+            }
         }
 
         // Close browser after operation

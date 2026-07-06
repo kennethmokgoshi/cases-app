@@ -15,8 +15,10 @@
  *      project's billing email — and log the request on the case.
  *   4. Payslip / bank statement still missing → open Credo DocumentRequests so
  *      the consumer (who has just logged in) is asked to upload them.
- *   5. Everything present → post a case comment telling staff to click
- *      "Manage Consumers" to proceed.
+ *   5. Everything present → run the Manage Consumers DHS clearance check
+ *      automatically (see clearance-automation.ts) so the case advances without
+ *      staff having to click anything. Documents outstanding → the case is
+ *      parked at AWAITING_DRR_DOCS so the header reflects reality.
  *
  * IMPORTANT: steps 2 reads case files from local disk (storage/uploads), so
  * this pipeline must run inside the CASES app process. The Credo consent route
@@ -34,8 +36,27 @@ import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
 import { sendManualMessage } from '../notifications/service';
 import { identifyDocumentPages, splitPdf } from '../openai/pdf-process';
+import { addWorkingDays } from '../statuses/workingDays';
+import { runManageConsumersClearance, type ClearanceRunResult } from './clearance-automation';
 
 const logger = createLogger('dhs/drr-readiness');
+
+/** Workflow status a case is parked at while required documents are chased. */
+export const AWAITING_DRR_DOCS_STATUS = 'AWAITING_DRR_DOCS';
+/** Working-day follow-up window while documents are outstanding. */
+const AWAITING_DOCS_FOLLOWUP_DAYS = 3;
+
+/**
+ * Statuses the readiness pipeline may park a case FROM at Awaiting DRR
+ * Documents. A manual staff move to any other status is never overwritten.
+ */
+const READINESS_PARK_FROM_STATUSES = new Set([
+    'READY_TO_CONSENT',
+    'CONSENT_RECEIVED',
+    'AWAITING_DRR_DOCS',
+    'ACCEPTED_VIA_DHS',
+    'ZDM_CLIENT',
+]);
 
 /** The three document kinds a file needs before Manage Consumers can proceed. */
 export type RequiredDocKind = 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT';
@@ -77,6 +98,10 @@ export interface DrrReadinessResult {
     creditReportRequestedFrom: string | null;
     /** Labels of Credo DocumentRequests opened for the consumer on this run. */
     documentRequestsCreated: string[];
+    /** Workflow status the case was moved to on this run, if any. */
+    statusUpdatedTo: string | null;
+    /** Outcome of the automatic Manage Consumers clearance run (when ready). */
+    clearance: ClearanceRunResult | null;
     actionsPerformed: string[];
     errors: string[];
 }
@@ -111,8 +136,15 @@ export function resolveDocumentFilePath(fileUrl: string, cwd: string = process.c
 export async function runDrrDocumentReadiness(params: {
     caseId: string;
     triggeredByUserId?: string;
+    /**
+     * Run the Manage Consumers DHS clearance check automatically when all
+     * documents are present (default true). Pass false for callers that only
+     * want the document check (e.g. previews / dry runs).
+     */
+    runClearanceWhenReady?: boolean;
 }): Promise<DrrReadinessResult> {
     const { caseId } = params;
+    const runClearanceWhenReady = params.runClearanceWhenReady !== false;
     const result: DrrReadinessResult = {
         caseId,
         ready: false,
@@ -122,6 +154,8 @@ export async function runDrrDocumentReadiness(params: {
         splitAttempted: false,
         creditReportRequestedFrom: null,
         documentRequestsCreated: [],
+        statusUpdatedTo: null,
+        clearance: null,
         actionsPerformed: [],
         errors: [],
     };
@@ -179,9 +213,47 @@ export async function runDrrDocumentReadiness(params: {
             await openConsumerDocumentRequests(caseId, caseData.clientId, consumerKinds, userId, result);
         }
 
-        // ── Step 5: verdict on the case timeline ─────────────────────────────
+        // ── Step 5: verdict on the case timeline + workflow status ───────────
         result.ready = missing.length === 0;
         await postReadinessComment(caseId, userId, result);
+
+        if (!result.ready) {
+            // Park the case at Awaiting DRR Documents so the header stops
+            // saying "Ready to Consent" once the consumer has approved.
+            if (READINESS_PARK_FROM_STATUSES.has(caseData.status ?? '')) {
+                await prisma.case
+                    .update({
+                        where: { id: caseId },
+                        data: {
+                            status: AWAITING_DRR_DOCS_STATUS,
+                            nextUpdate: addWorkingDays(new Date(), AWAITING_DOCS_FOLLOWUP_DAYS),
+                        },
+                    })
+                    .then(() => {
+                        result.statusUpdatedTo = AWAITING_DRR_DOCS_STATUS;
+                        result.actionsPerformed.push('Case status → Awaiting DRR Documents.');
+                    })
+                    .catch((err) => {
+                        logger.error(`[DRR Readiness] Failed to park case ${caseId} at Awaiting DRR Documents:`, err);
+                        result.errors.push('Failed to update the case status to Awaiting DRR Documents.');
+                    });
+            }
+        } else if (runClearanceWhenReady) {
+            // All documents on file → run the Manage Consumers DHS clearance
+            // check automatically. It advances the workflow itself
+            // (Ready for Clearance / Completed) and never throws.
+            result.clearance = await runManageConsumersClearance({
+                caseId,
+                triggeredByUserId: params.triggeredByUserId,
+            });
+            result.statusUpdatedTo = result.clearance.statusUpdatedTo;
+            result.actionsPerformed.push(
+                result.clearance.statusUpdatedTo
+                    ? `Manage Consumers clearance check ran — case status → ${result.clearance.statusUpdatedTo}.`
+                    : 'Manage Consumers clearance check ran — no status change (see case timeline).',
+            );
+            result.errors.push(...result.clearance.errors);
+        }
 
         logger.info({ result: { ...result } }, `[DRR Readiness] Completed for case ${caseId}`);
         return result;
@@ -453,9 +525,9 @@ async function postReadinessComment(
         checklist,
     ];
     if (result.ready) {
-        lines.push('', 'All required documents are on file. ➜ Please click "Manage Consumers" on this case to proceed with the next DHS step.');
+        lines.push('', 'All required documents are on file. ➜ Running the Manage Consumers DHS clearance check automatically — its outcome will be posted here.');
     } else {
-        lines.push('', `Still missing: ${result.missingAfter.map((k) => KIND_LABELS[k]).join(', ')}. The case cannot proceed to Manage Consumers yet.`);
+        lines.push('', `Still missing: ${result.missingAfter.map((k) => KIND_LABELS[k]).join(', ')}. The case cannot proceed to Manage Consumers yet — parked at Awaiting DRR Documents.`);
     }
     if (result.actionsPerformed.length) lines.push('', `Actions: ${result.actionsPerformed.join(' ')}`);
     if (result.errors.length) lines.push('', `Errors: ${result.errors.join(' | ')}`);

@@ -226,7 +226,7 @@ export async function GET(request: NextRequest) {
 
         const hierarchy = await getProjectWithChildren(rootProject.id);
 
-        const independent = await prisma.project.findMany({
+        const independentRoots = await prisma.project.findMany({
             where: {
                 parentId: null,
                 id: { not: rootProject.id }
@@ -235,6 +235,16 @@ export async function GET(request: NextRequest) {
                 members: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } } }
             }
         });
+
+        // Top-level projects outside the ROOT tree (e.g. the B2C "Referrals"
+        // acquisition source) need their subtree expanded too - destination
+        // pickers walk children to offer branch/referrer subprojects.
+        const independent = await Promise.all(
+            independentRoots.map(async (p) => {
+                const withChildren = await getProjectWithChildren(p.id);
+                return withChildren ? { ...(withChildren as Record<string, unknown>), members: p.members } : p;
+            })
+        );
 
         return NextResponse.json({ hierarchy, independent });
     } catch (error) {

@@ -8,6 +8,7 @@ vi.mock('@zenowethu/database', () => ({
             create: vi.fn(),
             update: vi.fn(),
         },
+        case: { update: vi.fn() },
         caseComment: { create: vi.fn() },
     },
 }));
@@ -21,6 +22,7 @@ import {
     buildConsentLink,
     buildCredoConsentLink,
     createDrrConsentRequest,
+    formatConsentConsumerDisplayName,
     getDrrConsentByToken,
     recordDrrConsent,
     DRR_CONSENT_TEXT,
@@ -36,12 +38,14 @@ const drr = prisma.debtReviewRemovalConsent as unknown as {
     update: ReturnType<typeof vi.fn>;
 };
 const caseComment = (prisma as unknown as { caseComment: { create: ReturnType<typeof vi.fn> } }).caseComment;
+const caseModel = (prisma as unknown as { case: { update: ReturnType<typeof vi.fn> } }).case;
 
 beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = 'https://cases.zenowethu.co.za';
     process.env.CREDO_URL = 'https://credo.zenowethu.co.za';
     caseComment.create.mockResolvedValue({});
+    caseModel.update.mockResolvedValue({});
 });
 
 describe('buildConsentLink', () => {
@@ -80,14 +84,15 @@ describe('createDrrConsentRequest', () => {
 });
 
 describe('getDrrConsentByToken', () => {
-    it('returns a sanitised view (first name + file number only)', async () => {
+    it('returns a sanitised view (display name + file number only)', async () => {
         drr.findUnique.mockResolvedValue({
             token: 't', status: 'PENDING', expiresAt: new Date(Date.now() + 1e6),
             consentText: 'OLD PENDING TEXT', consentedAt: null,
-            case: { fileNumber: 'ZDM-1' }, client: { firstName: 'Thabo' },
+            case: { fileNumber: 'ZDM-1' }, client: { firstName: 'Thabo', lastName: 'Mokoena' },
         });
         const v = await getDrrConsentByToken('t');
-        expect(v?.consumerFirstName).toBe('Thabo');
+        expect(v?.consumerFirstName).toBe('Thabo Mokoena');
+        expect(v?.consumerDisplayName).toBe('Thabo Mokoena');
         expect(v?.fileNumber).toBe('ZDM-1');
         expect(v?.expired).toBe(false);
         expect(v?.consentText).toBe(DRR_CONSENT_TEXT);
@@ -97,7 +102,7 @@ describe('getDrrConsentByToken', () => {
         drr.findUnique.mockResolvedValue({
             token: 't', status: 'CONSENTED', expiresAt: new Date(Date.now() + 1e6),
             consentText: 'TEXT ALREADY AGREED TO', consentedAt: new Date(),
-            case: { fileNumber: 'ZDM-1' }, client: { firstName: 'Thabo' },
+            case: { fileNumber: 'ZDM-1' }, client: { firstName: 'Thabo', lastName: 'Mokoena' },
         });
         const v = await getDrrConsentByToken('t');
         expect(v?.consentText).toBe('TEXT ALREADY AGREED TO');
@@ -106,6 +111,17 @@ describe('getDrrConsentByToken', () => {
     it('returns null for an unknown token', async () => {
         drr.findUnique.mockResolvedValue(null);
         expect(await getDrrConsentByToken('nope')).toBeNull();
+    });
+});
+
+describe('formatConsentConsumerDisplayName', () => {
+    it('uses first given name plus surname when firstName contains multiple given names', () => {
+        expect(formatConsentConsumerDisplayName({ firstName: 'NOFDA MMUSHO', lastName: 'MOKGOSHI' }))
+            .toBe('NOFDA MOKGOSHI');
+    });
+
+    it('falls back to first given name when surname is missing', () => {
+        expect(formatConsentConsumerDisplayName({ firstName: 'NOFDA MMUSHO', lastName: null })).toBe('NOFDA');
     });
 });
 
@@ -130,6 +146,39 @@ describe('recordDrrConsent', () => {
                 data: expect.objectContaining({ caseId: 'case1', activityType: 'DRR_CONSENT_RECEIVED' }),
             }),
         );
+    });
+
+    it('advances the case from Ready to Consent → Consent Received when the hook fires', async () => {
+        drr.findUnique
+            .mockResolvedValueOnce({ id: 'c1', token: 't', status: 'PENDING', caseId: 'case1', expiresAt: new Date(Date.now() + 1e6) })
+            .mockResolvedValueOnce({
+                id: 'c1', caseId: 'case1',
+                case: { fileNumber: 'ZDM-1', status: 'READY_TO_CONSENT' },
+                client: null, consumer: null,
+            });
+        drr.update.mockResolvedValue({ id: 'c1', caseId: 'case1' });
+
+        await recordDrrConsent({ token: 't' });
+
+        const statusUpdate = caseModel.update.mock.calls.find(c => c[0].data.status === 'CONSENT_RECEIVED');
+        expect(statusUpdate).toBeTruthy();
+        expect(statusUpdate?.[0].where).toEqual({ id: 'case1' });
+        expect(statusUpdate?.[0].data.nextUpdate).toBeInstanceOf(Date);
+    });
+
+    it('does NOT clobber a manual staff status when consent arrives', async () => {
+        drr.findUnique
+            .mockResolvedValueOnce({ id: 'c1', token: 't', status: 'PENDING', caseId: 'case1', expiresAt: new Date(Date.now() + 1e6) })
+            .mockResolvedValueOnce({
+                id: 'c1', caseId: 'case1',
+                case: { fileNumber: 'ZDM-1', status: 'READY_COURT_DATE' },
+                client: null, consumer: null,
+            });
+        drr.update.mockResolvedValue({ id: 'c1', caseId: 'case1' });
+
+        await recordDrrConsent({ token: 't' });
+
+        expect(caseModel.update).not.toHaveBeenCalled();
     });
 
     it('stamps the Credo consumer id when the approval comes from the portal', async () => {

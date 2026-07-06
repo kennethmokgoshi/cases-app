@@ -323,6 +323,11 @@ describe('isManageConsumersEligible', () => {
         expect(isManageConsumersEligible({ dhsStatus: 'Auto Transferred' })).toBe(true);
     });
 
+    it('treats a ZDM Client file as eligible — already under our own NCRDC, no transfer needed', () => {
+        expect(isManageConsumersEligible({ status: 'ZDM_CLIENT' })).toBe(true);
+        expect(isManageConsumersEligible({ dhsStatus: 'ZDM Client' })).toBe(true);
+    });
+
     it('is true when either status or dhsStatus qualifies', () => {
         expect(isManageConsumersEligible({ status: 'REQUESTED_VIA_DHS', dhsStatus: 'Accepted' })).toBe(true);
     });

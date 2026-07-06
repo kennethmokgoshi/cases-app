@@ -8,6 +8,7 @@ interface ConsentView {
   status: string;
   expired: boolean;
   consumerFirstName: string | null;
+  consumerDisplayName?: string | null;
   fileNumber: string | null;
   consentText: string;
   consentedAt: string | null;
@@ -26,6 +27,7 @@ export default function DebtReviewRemovalConsentPage() {
   const [data, setData] = useState<ConsentView | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [done, setDone] = useState(false);
+  const consumerDisplayName = data?.consumerDisplayName ?? data?.consumerFirstName ?? null;
 
   useEffect(() => {
     (async () => {
@@ -88,7 +90,7 @@ export default function DebtReviewRemovalConsentPage() {
     return (
       <Shell>
         <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
-        <h2 style={{ color: NAVY, margin: '0 0 8px' }}>Thank you{data?.consumerFirstName ? `, ${data.consumerFirstName}` : ''}!</h2>
+        <h2 style={{ color: NAVY, margin: '0 0 8px' }}>Thank you{consumerDisplayName ? `, ${consumerDisplayName}` : ''}!</h2>
         <p style={{ color: '#334155', lineHeight: 1.6 }}>
           Your approval has been recorded and Zenowethu Debt Management is confirmed as the team authorised to continue
           working on your file{data?.fileNumber ? ` (File: ${data.fileNumber})` : ''}. Our team will keep you updated on the progress.
@@ -103,7 +105,7 @@ export default function DebtReviewRemovalConsentPage() {
 
   return (
     <Shell>
-      <h2 style={{ color: NAVY, margin: '0 0 6px' }}>Hello{data?.consumerFirstName ? ` ${data.consumerFirstName}` : ''},</h2>
+      <h2 style={{ color: NAVY, margin: '0 0 6px' }}>Hello{consumerDisplayName ? ` ${consumerDisplayName}` : ''},</h2>
       <p style={{ color: '#334155', lineHeight: 1.6, marginTop: 0 }}>
         Your debt review file{data?.fileNumber ? ` (${data.fileNumber})` : ''} has been accepted by Zenowethu Debt
         Management. This approval confirms that you know Zenowethu is now working on your file, so there is a clear

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { generateCommissionStatementPdf, CommissionStatementData } from '@/lib/commission-statement-pdf';
+import { canAccessReferrer } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers/[id]/statement');
 
@@ -43,6 +44,11 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
 
         if (!referrer) {
             return new NextResponse('Referrer not found', { status: 404 });
+        }
+
+        // Non-admins may only download statements for referrers whose sub-project they belong to
+        if (!(await canAccessReferrer(session.user, referrer.projectId))) {
+            return new NextResponse('Forbidden — you are not a member of this referrer', { status: 403 });
         }
 
         let totalPaid = 0;

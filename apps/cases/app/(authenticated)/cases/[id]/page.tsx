@@ -2378,11 +2378,21 @@ export default function CaseDetailPage() {
 
                     {/* Project card — always visible */}
                     <div className="bg-zeno-blue/20 rounded-xl border border-white/5 px-5 py-4">
-                        <div className="flex items-center gap-2 mb-3">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                            </svg>
-                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Project</span>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                </svg>
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Project</span>
+                            </div>
+                            {(isAdmin || isExecutive || userRole === 'MANAGER') && (
+                                <button
+                                    onClick={() => setIsMoveModalOpen(true)}
+                                    className="text-[10px] text-zeno-cyan hover:underline uppercase font-bold tracking-wider"
+                                >
+                                    Move
+                                </button>
+                            )}
                         </div>
                         {caseData.projects.length === 0 ? (
                             <p className="text-sm text-gray-600 italic">No project assigned</p>

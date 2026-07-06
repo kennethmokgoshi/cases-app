@@ -1,6 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import {
+    DestinationProject,
+    flattenProjectResponse,
+    filterSourcesByClientType,
+    getSubprojects
+} from './destination-path-logic';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -10,14 +16,7 @@ const logger = {
     debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
 };
 
-type Project = {
-    id: string;
-    name: string;
-    type: string;
-    clientType?: string | null;
-    parentId?: string | null;
-    children?: Project[];
-};
+type Project = DestinationProject;
 
 interface DestinationPathSelectorProps {
     onChange: (targetProjectId: string | null, details: { year: string; month: string; sourceId: string; subprojectId?: string }) => void;
@@ -37,6 +36,7 @@ export function DestinationPathSelector({ onChange, onError, onLoading }: Destin
 
     const [fetchingProjects, setFetchingProjects] = useState(true);
     const [parentProjects, setParentProjects] = useState<Project[]>([]);
+    const [allProjects, setAllProjects] = useState<Project[]>([]);
 
     const [selectedYear, setSelectedYear] = useState(String(currentYearVal));
     const [selectedMonth, setSelectedMonth] = useState(currentMonthVal);
@@ -50,25 +50,12 @@ export function DestinationPathSelector({ onChange, onError, onLoading }: Destin
         fetch('/api/projects')
             .then(res => res.json())
             .then(data => {
-                const mainProjects: Project[] = [];
-
-                // Add from hierarchy
-                if (data.hierarchy?.children) {
-                    mainProjects.push(...data.hierarchy.children.filter(
-                        (p: Project) => p.type === 'ACQUISITION_SOURCE'
-                    ));
-                }
-
-                // Add from independent projects
-                if (data.independent) {
-                    mainProjects.push(...data.independent.filter(
-                        (p: Project) => p.type === 'ACQUISITION_SOURCE'
-                    ));
-                }
-
-                // Deduplicate just in case
-                const uniqueProjects = Array.from(new Map(mainProjects.map(p => [p.id, p])).values());
-                setParentProjects(uniqueProjects);
+                // Flat list of every visible project — needed to walk descendants
+                // for the subproject dropdown (works for both the admin nested
+                // hierarchy and the member-scoped flat response).
+                const flat = flattenProjectResponse(data.hierarchy, data.independent);
+                setAllProjects(flat);
+                setParentProjects(flat.filter(p => p.type === 'ACQUISITION_SOURCE'));
             })
             .catch(err => {
                 logger.error('Failed to load projects', err);
@@ -104,17 +91,9 @@ export function DestinationPathSelector({ onChange, onError, onLoading }: Destin
         }
     }, [selectedYear, selectedMonth, selectedParentId, selectedSubprojectId]);
 
-    const filteredParentProjects = parentProjects.filter(p => {
-        if (p.clientType) {
-            return p.clientType === acquisitionType;
-        }
-        return true;
-    });
+    const filteredParentProjects = filterSourcesByClientType(parentProjects, acquisitionType);
 
-    const selectedParent = parentProjects.find(p => p.id === selectedParentId);
-    const subprojects = selectedParent?.children?.filter(c =>
-        c.type === 'BRANCH' || c.type === 'FOLDER'
-    ) || [];
+    const subprojects = selectedParentId ? getSubprojects(selectedParentId, allProjects) : [];
 
     if (fetchingProjects) {
         return <div className="flex items-center justify-center py-8 text-gray-400">Loading hierarchy...</div>;

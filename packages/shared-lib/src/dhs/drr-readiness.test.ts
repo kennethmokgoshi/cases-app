@@ -2,12 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@zenowethu/database', () => ({
     prisma: {
-        case: { findUnique: vi.fn() },
+        case: { findUnique: vi.fn(), update: vi.fn() },
         document: { create: vi.fn() },
         caseComment: { findFirst: vi.fn(), create: vi.fn() },
         consumerAccount: { findUnique: vi.fn() },
         documentRequest: { findFirst: vi.fn(), create: vi.fn() },
     },
+}));
+
+vi.mock('./clearance-automation', () => ({
+    runManageConsumersClearance: vi.fn(),
 }));
 
 vi.mock('../notifications/service', () => ({
@@ -36,10 +40,11 @@ vi.mock('fs', () => ({
 import { prisma } from '@zenowethu/database';
 import { sendManualMessage } from '../notifications/service';
 import { identifyDocumentPages, splitPdf } from '../openai/pdf-process';
+import { runManageConsumersClearance } from './clearance-automation';
 import { runDrrDocumentReadiness, docTypeToKind, resolveDocumentFilePath } from './drr-readiness';
 
 const db = prisma as unknown as {
-    case: { findUnique: ReturnType<typeof vi.fn> };
+    case: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
     document: { create: ReturnType<typeof vi.fn> };
     caseComment: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
     consumerAccount: { findUnique: ReturnType<typeof vi.fn> };
@@ -48,6 +53,7 @@ const db = prisma as unknown as {
 const sendMsg = sendManualMessage as unknown as ReturnType<typeof vi.fn>;
 const identify = identifyDocumentPages as unknown as ReturnType<typeof vi.fn>;
 const split = splitPdf as unknown as ReturnType<typeof vi.fn>;
+const clearance = runManageConsumersClearance as unknown as ReturnType<typeof vi.fn>;
 
 const doc = (type: string, overrides: Record<string, unknown> = {}) => ({
     id: `doc-${type.toLowerCase()}`,
@@ -63,6 +69,7 @@ const baseCase = (documents: unknown[], overrides: Record<string, unknown> = {})
     id: 'case1',
     clientId: 'cl1',
     fileNumber: 'ZDM-2026-001',
+    status: 'CONSENT_RECEIVED',
     client: { firstName: 'Sipho', lastName: 'Dlamini', idNumber: '8001015009087' },
     documents,
     referrer: null,
@@ -72,12 +79,22 @@ const baseCase = (documents: unknown[], overrides: Record<string, unknown> = {})
 
 beforeEach(() => {
     vi.clearAllMocks();
+    db.case.update.mockResolvedValue({});
     db.caseComment.findFirst.mockResolvedValue(null);
     db.caseComment.create.mockResolvedValue({});
     db.consumerAccount.findUnique.mockResolvedValue({ id: 'cons1' });
     db.documentRequest.findFirst.mockResolvedValue(null);
     db.documentRequest.create.mockResolvedValue({});
     sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+    clearance.mockResolvedValue({
+        caseId: 'case1',
+        checked: true,
+        currentCode: 'G',
+        statusUpdatedTo: 'READY_CLEARANCE',
+        message: 'Clearance-eligible code "G" → Ready for Clearance.',
+        actionsPerformed: [],
+        errors: [],
+    });
 });
 
 describe('docTypeToKind', () => {
@@ -104,7 +121,7 @@ describe('resolveDocumentFilePath', () => {
 });
 
 describe('runDrrDocumentReadiness', () => {
-    it('reports READY (click Manage Consumers) when all three documents are on file', async () => {
+    it('runs the Manage Consumers clearance check automatically when all three documents are on file', async () => {
         db.case.findUnique.mockResolvedValue(
             baseCase([doc('CREDIT_REPORT'), doc('PAYSLIP'), doc('BANK_STATEMENT')]),
         );
@@ -121,6 +138,55 @@ describe('runDrrDocumentReadiness', () => {
         );
         expect(readyComment).toBeTruthy();
         expect(readyComment?.[0].data.content).toContain('Manage Consumers');
+        // The clearance automation ran and its status propagated to the result
+        expect(clearance).toHaveBeenCalledWith({ caseId: 'case1', triggeredByUserId: undefined });
+        expect(r.clearance?.statusUpdatedTo).toBe('READY_CLEARANCE');
+        expect(r.statusUpdatedTo).toBe('READY_CLEARANCE');
+    });
+
+    it('skips the clearance run when runClearanceWhenReady is false', async () => {
+        db.case.findUnique.mockResolvedValue(
+            baseCase([doc('CREDIT_REPORT'), doc('PAYSLIP'), doc('BANK_STATEMENT')]),
+        );
+
+        const r = await runDrrDocumentReadiness({ caseId: 'case1', runClearanceWhenReady: false });
+
+        expect(r.ready).toBe(true);
+        expect(clearance).not.toHaveBeenCalled();
+        expect(r.clearance).toBeNull();
+    });
+
+    it('parks the case at AWAITING_DRR_DOCS when documents are still missing', async () => {
+        db.case.findUnique.mockResolvedValue(
+            baseCase([doc('PAYSLIP'), doc('BANK_STATEMENT')], {
+                referrer: { firstName: 'Lebo', lastName: 'M', email: 'lebo@partner.co.za' },
+            }),
+        );
+
+        const r = await runDrrDocumentReadiness({ caseId: 'case1' });
+
+        expect(r.ready).toBe(false);
+        expect(clearance).not.toHaveBeenCalled();
+        const parkUpdate = db.case.update.mock.calls.find(
+            (c) => c[0].data.status === 'AWAITING_DRR_DOCS',
+        );
+        expect(parkUpdate).toBeTruthy();
+        expect(r.statusUpdatedTo).toBe('AWAITING_DRR_DOCS');
+    });
+
+    it('does not park a case whose status was manually moved elsewhere', async () => {
+        db.case.findUnique.mockResolvedValue(
+            baseCase([doc('PAYSLIP'), doc('BANK_STATEMENT')], { status: 'READY_COURT_DATE' }),
+        );
+
+        const r = await runDrrDocumentReadiness({ caseId: 'case1' });
+
+        expect(r.ready).toBe(false);
+        const parkUpdate = db.case.update.mock.calls.find(
+            (c) => c[0].data.status === 'AWAITING_DRR_DOCS',
+        );
+        expect(parkUpdate).toBeFalsy();
+        expect(r.statusUpdatedTo).toBeNull();
     });
 
     it('splits the combined document to recover missing documents, and opens a Credo request for what remains', async () => {

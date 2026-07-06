@@ -321,6 +321,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         slaDays: 3,
         isOverdueState: false },
     {
+        code: 'AWAITING_DRR_DOCS',
+        name: 'Awaiting DRR Documents',
+        category: 'ADVANCED_DETOUR',
+        description: 'Consent received but required documents (credit report / payslip / bank statement) are outstanding — requested from referrer/partner or consumer',
+        slaEnabled: true,
+        slaDays: 3,
+        isOverdueState: false },
+    {
         code: 'NEGATIVE_OUTCOME',
         name: 'Negative dispute outcome',
         category: 'ADVANCED_DETOUR',
@@ -379,6 +387,14 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         isOverdueState: false },
 
     // 7. ADVANCED PROGRESS
+    {
+        code: 'CONSENT_RECEIVED',
+        name: 'Consent Received',
+        category: 'ADVANCED_PROGRESS',
+        description: 'Consumer approved debt review removal — verifying required documents before Manage Consumers',
+        slaEnabled: true,
+        slaDays: 2,
+        isOverdueState: false },
     {
         code: 'FOLLOWED_UP',
         name: 'Followed up on Outcome',

@@ -20,6 +20,11 @@ vi.mock('@zenowethu/database', () => ({
 
 vi.mock('@zenowethu/shared-lib/src/dhs/consent-service', () => ({
     recordDrrConsent: vi.fn(),
+    formatConsentConsumerDisplayName: (client: { firstName?: string | null; lastName?: string | null } | null | undefined) => {
+        const firstGivenName = client?.firstName?.trim().split(/\s+/)[0] ?? '';
+        const surname = client?.lastName?.trim() ?? '';
+        return [firstGivenName, surname].filter(Boolean).join(' ') || null;
+    },
     DRR_CONSENT_TEXT: 'CONSENT TEXT',
 }));
 
@@ -47,7 +52,7 @@ const baseConsent = {
     consentedAt: null,
     expiresAt: new Date(Date.now() + 1e9),
     case: { id: 'case1', fileNumber: 'ZDM-2026-001' },
-    client: { firstName: 'Sipho', idNumber: '8001015009087' },
+    client: { firstName: 'Sipho Themba', lastName: 'Dlamini', idNumber: '8001015009087' },
 };
 
 beforeEach(() => {
@@ -73,6 +78,8 @@ describe('GET /api/consumer/consent/[token]', () => {
 
         expect(res.status).toBe(200);
         expect(json.fileNumber).toBe('ZDM-2026-001');
+        expect(json.consumerDisplayName).toBe('Sipho Dlamini');
+        expect(json.consumerFirstName).toBe('Sipho Dlamini');
         expect(json.consentText).toBe('CONSENT TEXT');
         // Ownership established by ID number → consent linked to this profile
         expect(db.debtReviewRemovalConsent.update).toHaveBeenCalledWith(

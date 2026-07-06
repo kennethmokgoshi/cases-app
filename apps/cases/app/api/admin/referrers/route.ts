@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
+import { hasFullReferrerVisibility, getVisibleReferrerProjectIds } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers');
 
@@ -56,7 +57,17 @@ export async function GET(request: Request) {
         const search = searchParams.get('search') ?? '';
         const isActiveParam = searchParams.get('isActive') ?? '';
 
+        // Membership scoping: admins see every referrer; everyone else only
+        // sees referrers whose sub-project they are a member of.
+        // null = unrestricted (admin).
+        const visibleProjectIds = hasFullReferrerVisibility(session.user)
+            ? null
+            : await getVisibleReferrerProjectIds(session.user.id);
+
         const where: Record<string, unknown> = {};
+        if (visibleProjectIds !== null) {
+            where.projectId = { in: visibleProjectIds };
+        }
         if (search) {
             where.OR = [
                 { firstName: { contains: search, mode: 'insensitive' } },
@@ -84,9 +95,14 @@ export async function GET(request: Request) {
             prisma.referrer.count({ where }),
         ]);
 
+        // Meta counts respect the same visibility scope so non-admins never
+        // see totals for referrers they cannot access.
+        const scopeWhere: Record<string, unknown> = visibleProjectIds !== null
+            ? { projectId: { in: visibleProjectIds } }
+            : {};
         const [totalCount, activeCount] = await Promise.all([
-            prisma.referrer.count(),
-            prisma.referrer.count({ where: { isActive: true } }),
+            prisma.referrer.count({ where: scopeWhere }),
+            prisma.referrer.count({ where: { ...scopeWhere, isActive: true } }),
         ]);
 
         const referrerIds = referrers.map(r => r.id);
@@ -98,7 +114,12 @@ export async function GET(request: Request) {
             }),
             prisma.referrerCommission.groupBy({
                 by: ['isPaid'],
-                where: { isEligible: true },
+                where: {
+                    isEligible: true,
+                    ...(visibleProjectIds !== null
+                        ? { referrer: { projectId: { in: visibleProjectIds } } }
+                        : {}),
+                },
                 _sum: { commissionAmount: true },
             })
         ]);
@@ -186,13 +207,18 @@ export async function POST(request: Request) {
             subProjectParentId = referralsRoot.id;
         }
 
-        // Create sub-project named after the referrer
+        // Create sub-project named after the referrer. The creator becomes its
+        // first member so non-admin staff keep visibility of referrers they add
+        // (membership is what scopes the referrer registry).
         const subProject = await prisma.project.create({
             data: {
                 name: `${data.firstName} ${data.lastName}`,
                 type: 'REFERRER',
                 description: `Referral sub-project for ${data.firstName} ${data.lastName}${data.idNumber ? ` (ID: ${data.idNumber})` : ''}`,
                 parentId: subProjectParentId,
+                members: {
+                    create: [{ userId: session.user.id, role: 'MANAGER' }],
+                },
             },
         });
 

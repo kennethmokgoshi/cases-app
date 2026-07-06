@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from '@zenowethu/ui';
+import { useSession, toast } from '@zenowethu/ui';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
@@ -81,6 +81,22 @@ type Referrer = {
     } | null;
 };
 
+type Member = {
+    id: string;
+    userId: string;
+    role: string;
+    user: { id: string; firstName: string; lastName: string; email: string; role: string };
+};
+
+type StaffUser = {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    userType: string;
+    isLocked: boolean;
+};
+
 type Summary = {
     total: number;
     eligible: number;
@@ -120,7 +136,16 @@ export default function ReferrerDetailPage() {
     const [portalMessage, setPortalMessage] = useState('');
     const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
+    // Team members (staff who can see this referrer)
+    const [members, setMembers] = useState<Member[]>([]);
+    const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+    const [selectedUserId, setSelectedUserId] = useState('');
+    const [memberSaving, setMemberSaving] = useState(false);
+    const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
+
     const isManager = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'MANAGER';
+    // Only Admin/Executive can change who is a member of this referrer
+    const canManageMembers = session?.user?.isAdmin || session?.user?.isExecutive;
 
     useEffect(() => {
         if (status === 'authenticated' && !isManager) router.push('/');
@@ -143,6 +168,65 @@ export default function ReferrerDetailPage() {
     }, [referrerId]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    const fetchMembers = useCallback(async () => {
+        try {
+            const res = await fetch(`/api/admin/referrers/${referrerId}/members`);
+            if (!res.ok) return; // non-members / older referrers without a project just see nothing
+            const data = await res.json();
+            setMembers(data.members ?? []);
+        } catch { /* silent */ }
+    }, [referrerId]);
+
+    useEffect(() => { fetchMembers(); }, [fetchMembers]);
+
+    // Staff picker is only needed by users who can edit membership
+    useEffect(() => {
+        if (!canManageMembers) return;
+        (async () => {
+            try {
+                const res = await fetch('/api/users');
+                if (!res.ok) return;
+                const users: StaffUser[] = await res.json();
+                setStaffUsers(users.filter((u) => u.userType === 'STAFF' && !u.isLocked));
+            } catch { /* silent */ }
+        })();
+    }, [canManageMembers]);
+
+    async function saveMembers(userIds: string[], successMessage: string) {
+        setMemberSaving(true);
+        try {
+            const res = await fetch(`/api/admin/referrers/${referrerId}/members`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userIds }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                toast.error(json.error ?? 'Could not update members');
+                return;
+            }
+            setMembers(json.members ?? []);
+            toast.success(successMessage);
+        } catch {
+            toast.error('Network error while updating members');
+        } finally {
+            setMemberSaving(false);
+        }
+    }
+
+    async function handleAddMember() {
+        if (!selectedUserId) return;
+        const userIds = [...members.map((m) => m.userId), selectedUserId];
+        await saveMembers(userIds, 'Member added');
+        setSelectedUserId('');
+    }
+
+    async function handleRemoveMember(member: Member) {
+        const userIds = members.filter((m) => m.userId !== member.userId).map((m) => m.userId);
+        await saveMembers(userIds, 'Member removed');
+        setRemoveTarget(null);
+    }
 
     function openEdit(c: Commission) {
         setEditTarget(c);
@@ -347,6 +431,93 @@ export default function ReferrerDetailPage() {
                         ) : (
                             <p className="text-gray-500 text-xs">Not configured</p>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Team members — who can see this referrer */}
+            <div className="bg-zeno-blue/20 border border-zeno-blue/40 rounded-xl mb-6 overflow-hidden">
+                <div className="px-5 py-3 border-b border-zeno-blue/40 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-sm font-semibold text-white">Team Members</h2>
+                        <p className="text-xs text-gray-400 mt-0.5">Only members (and admins) can see this referrer and its commissions.</p>
+                    </div>
+                    <span className="text-xs text-gray-400">{members.length} member{members.length === 1 ? '' : 's'}</span>
+                </div>
+                <div className="p-5">
+                    {members.length === 0 ? (
+                        <p className="text-gray-400 text-sm mb-4">No members yet — only admins can see this referrer.</p>
+                    ) : (
+                        <ul className="space-y-2 mb-4">
+                            {members.map((m) => (
+                                <li key={m.id} className="flex items-center justify-between bg-zeno-blue/20 border border-zeno-blue/40 rounded-lg px-4 py-2">
+                                    <div>
+                                        <p className="text-white text-sm">{m.user.firstName} {m.user.lastName}</p>
+                                        <p className="text-gray-500 text-xs">{m.user.email}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-300">{m.role}</span>
+                                        {canManageMembers && (
+                                            <button
+                                                onClick={() => setRemoveTarget(m)}
+                                                disabled={memberSaving}
+                                                className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+
+                    {canManageMembers && (
+                        <div className="flex items-center gap-3">
+                            <select
+                                value={selectedUserId}
+                                onChange={(e) => setSelectedUserId(e.target.value)}
+                                className="flex-1 max-w-sm bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zeno-cyan/50"
+                            >
+                                <option value="">Select a staff member to add…</option>
+                                {staffUsers
+                                    .filter((u) => !members.some((m) => m.userId === u.id))
+                                    .map((u) => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.firstName} {u.lastName} — {u.email}
+                                        </option>
+                                    ))}
+                            </select>
+                            <button
+                                onClick={handleAddMember}
+                                disabled={!selectedUserId || memberSaving}
+                                className="bg-zeno-cyan text-zeno-dark font-semibold px-4 py-2 rounded-lg hover:bg-zeno-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                            >
+                                {memberSaving ? 'Saving…' : 'Add Member'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Remove member confirmation */}
+            {removeTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setRemoveTarget(null)}>
+                    <div className="bg-zeno-dark border border-zeno-blue/40 rounded-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-white font-semibold mb-2">Remove member?</h3>
+                        <p className="text-gray-400 text-sm mb-5">
+                            {removeTarget.user.firstName} {removeTarget.user.lastName} will no longer see this referrer or its commissions.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button onClick={() => setRemoveTarget(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                            <button
+                                onClick={() => handleRemoveMember(removeTarget)}
+                                disabled={memberSaving}
+                                className="bg-red-500/80 text-white font-semibold px-4 py-2 rounded-lg hover:bg-red-500 disabled:opacity-50 transition-colors text-sm"
+                            >
+                                {memberSaving ? 'Removing…' : 'Remove'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

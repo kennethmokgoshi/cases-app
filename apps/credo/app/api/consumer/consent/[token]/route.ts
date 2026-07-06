@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@zenowethu/database";
 import { auth } from "@/auth";
 import { createLogger } from "@zenowethu/shared-lib";
-import { recordDrrConsent, DRR_CONSENT_TEXT } from "@zenowethu/shared-lib/src/dhs/consent-service";
+import {
+    recordDrrConsent,
+    DRR_CONSENT_TEXT,
+    formatConsentConsumerDisplayName,
+} from "@zenowethu/shared-lib/src/dhs/consent-service";
 
 const logger = createLogger("credo/api/consumer/consent");
 
@@ -31,7 +35,7 @@ function loadConsent(token: string) {
         where: { token },
         include: {
             case: { select: { id: true, fileNumber: true } },
-            client: { select: { firstName: true, idNumber: true } },
+            client: { select: { firstName: true, lastName: true, idNumber: true } },
         },
     });
 }
@@ -83,11 +87,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         }
 
         const c = ownership.consent;
+        const consumerDisplayName = formatConsentConsumerDisplayName(c.client);
         return NextResponse.json({
             token: c.token,
             status: c.status,
             expired: c.expiresAt < new Date(),
-            consumerFirstName: c.client?.firstName ?? null,
+            consumerFirstName: consumerDisplayName,
+            consumerDisplayName,
             fileNumber: c.case?.fileNumber ?? null,
             consentText: c.status === "PENDING" ? DRR_CONSENT_TEXT : c.consentText ?? DRR_CONSENT_TEXT,
             consentedAt: c.consentedAt,

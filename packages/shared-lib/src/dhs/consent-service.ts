@@ -11,11 +11,29 @@
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
+import { addWorkingDays } from '../statuses/workingDays';
 
 const logger = createLogger('dhs/consent-service');
 
 /** Default link validity. */
 export const CONSENT_EXPIRY_DAYS = 30;
+
+/** Workflow status a case moves to the moment the consumer approves. */
+export const CONSENT_RECEIVED_STATUS = 'CONSENT_RECEIVED';
+/** Working-day follow-up window while the document readiness check runs. */
+const CONSENT_RECEIVED_FOLLOWUP_DAYS = 2;
+
+/**
+ * Statuses a case may legitimately be parked at while waiting on consent.
+ * The consent hook only advances the workflow from one of these — if staff have
+ * manually moved the case elsewhere, the consent is still recorded but the
+ * workflow status is left alone.
+ */
+const CONSENT_ADVANCE_FROM_STATUSES = new Set([
+    'READY_TO_CONSENT',
+    'ACCEPTED_VIA_DHS',
+    'ZDM_CLIENT',
+]);
 
 /** The exact wording the consumer agrees to — snapshotted onto each consent record. */
 export const DRR_CONSENT_TEXT =
@@ -101,23 +119,34 @@ export interface ConsentView {
     status: string;
     expired: boolean;
     consumerFirstName: string | null;
+    consumerDisplayName: string | null;
     fileNumber: string | null;
     consentText: string;
     consentedAt: Date | null;
 }
 
-/** Resolve a token for the public consent page (read-only, no PII beyond first name + file number). */
+export function formatConsentConsumerDisplayName(
+    client: { firstName?: string | null; lastName?: string | null } | null | undefined,
+): string | null {
+    const firstGivenName = client?.firstName?.trim().split(/\s+/)[0] ?? '';
+    const surname = client?.lastName?.trim() ?? '';
+    return [firstGivenName, surname].filter(Boolean).join(' ') || null;
+}
+
+/** Resolve a token for the public consent page (read-only, no PII beyond display name + file number). */
 export async function getDrrConsentByToken(token: string): Promise<ConsentView | null> {
     const c = await prisma.debtReviewRemovalConsent.findUnique({
         where: { token },
-        include: { case: { select: { fileNumber: true } }, client: { select: { firstName: true } } },
+        include: { case: { select: { fileNumber: true } }, client: { select: { firstName: true, lastName: true } } },
     });
     if (!c) return null;
+    const consumerDisplayName = formatConsentConsumerDisplayName(c.client);
     return {
         token: c.token,
         status: c.status,
         expired: c.expiresAt < new Date(),
-        consumerFirstName: c.client?.firstName ?? null,
+        consumerFirstName: consumerDisplayName,
+        consumerDisplayName,
         fileNumber: c.case?.fileNumber ?? null,
         consentText: c.status === 'PENDING' ? DRR_CONSENT_TEXT : c.consentText ?? DRR_CONSENT_TEXT,
         consentedAt: c.consentedAt,
@@ -206,6 +235,26 @@ export async function onDebtReviewRemovalConsent(consentId: string): Promise<voi
         `[DRR_CONSENT] Consent granted for case ${consent.caseId} ` +
         `(file ${consent.case?.fileNumber ?? '?'}, channel ${consent.channel}) — recording on case timeline.`
     );
+
+    // Advance the workflow off "Ready to Consent" so the case header reflects
+    // reality the moment the consumer approves. Only advance from the expected
+    // parking statuses — never clobber a manual staff move.
+    if (consent.case && CONSENT_ADVANCE_FROM_STATUSES.has(consent.case.status ?? '')) {
+        await prisma.case
+            .update({
+                where: { id: consent.caseId },
+                data: {
+                    status: CONSENT_RECEIVED_STATUS,
+                    nextUpdate: addWorkingDays(new Date(), CONSENT_RECEIVED_FOLLOWUP_DAYS),
+                },
+            })
+            .then(() =>
+                logger.info(`[DRR_CONSENT] Case ${consent.caseId} status → ${CONSENT_RECEIVED_STATUS}`)
+            )
+            .catch((err) =>
+                logger.error(`[DRR_CONSENT] Failed to set Consent Received status for ${consent.caseId}:`, err)
+            );
+    }
 
     const automationUserId = await getAutomationUserId().catch(() => null);
     if (automationUserId) {

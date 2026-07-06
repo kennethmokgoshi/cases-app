@@ -38,6 +38,7 @@ export {
     onDebtReviewRemovalConsent,
     DRR_CONSENT_TEXT,
     CONSENT_EXPIRY_DAYS,
+    CONSENT_RECEIVED_STATUS,
 } from './consent-service';
 export type { CreateConsentResult, ConsentView, RecordConsentResult } from './consent-service';
 export {
@@ -45,8 +46,11 @@ export {
     docTypeToKind,
     resolveDocumentFilePath,
     REQUIRED_DOC_KINDS,
+    AWAITING_DRR_DOCS_STATUS,
 } from './drr-readiness';
 export type { DrrReadinessResult, RequiredDocKind } from './drr-readiness';
+export { runManageConsumersClearance } from './clearance-automation';
+export type { ClearanceRunResult } from './clearance-automation';
 export {
     getConsumerStatusHistory,
     evaluateConsumerClearance,

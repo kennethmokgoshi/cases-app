@@ -8,6 +8,7 @@ interface ConsentView {
   status: string;
   expired: boolean;
   consumerFirstName: string | null;
+  consumerDisplayName?: string | null;
   fileNumber: string | null;
   consentText: string;
   consentedAt: string | null;
@@ -30,6 +31,7 @@ export default function ConsentClient({ token }: { token: string }) {
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [approved, setApproved] = useState(false);
+  const consumerDisplayName = view?.consumerDisplayName ?? view?.consumerFirstName ?? null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,7 +129,7 @@ export default function ConsentClient({ token }: { token: string }) {
               </svg>
             </div>
             <h1 style={{ fontSize: "1.375rem", fontWeight: 700, color: "#0F172A", marginBottom: 10 }}>
-              Approval recorded — thank you{view?.consumerFirstName ? `, ${view.consumerFirstName}` : ""}
+              Approval recorded — thank you{consumerDisplayName ? `, ${consumerDisplayName}` : ""}
             </h1>
             <p style={{ fontSize: "0.9375rem", color: "#475569", lineHeight: 1.6, marginBottom: 8 }}>
               Our team will now continue working on your file
@@ -181,7 +183,7 @@ export default function ConsentClient({ token }: { token: string }) {
         ) : view ? (
           <div>
             <h1 style={{ fontSize: "1.375rem", fontWeight: 700, color: "#0F172A", marginBottom: 6 }}>
-              {view.consumerFirstName ? `${view.consumerFirstName}, your` : "Your"} approval is needed
+              {consumerDisplayName ? `${consumerDisplayName}, your` : "Your"} approval is needed
             </h1>
             <p style={{ fontSize: "0.9375rem", color: "#475569", lineHeight: 1.6, marginBottom: 20 }}>
               Your debt review file{view.fileNumber ? ` (${view.fileNumber})` : ""} has been transferred to Zenowethu

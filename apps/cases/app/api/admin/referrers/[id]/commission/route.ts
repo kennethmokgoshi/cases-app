@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { canAccessReferrer } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers/[id]/commission');
 
@@ -25,6 +26,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             },
         });
         if (!referrer) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
+
+        // Non-admins may only view referrers whose sub-project they belong to
+        if (!(await canAccessReferrer(session.user, referrer.projectId))) {
+            return NextResponse.json({ error: 'Forbidden — you are not a member of this referrer' }, { status: 403 });
+        }
 
         const commissions = await prisma.referrerCommission.findMany({
             where: { referrerId: id },
