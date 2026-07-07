@@ -205,6 +205,18 @@ export function calculateNextUpdate(basePeriod: number, declineFirstDetectedAt: 
     return addWorkingDays(now, remainingDays);
 }
 
+export function formatDhsDeclineDate(value: Date | string | null | undefined): string {
+    if (!value) return 'not recorded';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return 'not recorded';
+
+    return new Intl.DateTimeFormat('en-ZA', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+    }).format(date);
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 
 /**
@@ -300,6 +312,11 @@ export async function handleDHSDecline(params: {
         };
 
         const clientCc = caseData.client.email ? [caseData.client.email] : [];
+        const handledAt = new Date();
+        const transferRequestedDate = formatDhsDeclineDate(
+            caseData.dhsApplicationDate ?? caseData.statusEntryDate ?? caseData.createdAt
+        );
+        const declineRecordedDate = formatDhsDeclineDate(handledAt);
 
         // Calculate nextUpdate based on category and time elapsed since first decline
         const basePeriod = getBasePeriodForCategory(category);
@@ -309,7 +326,7 @@ export async function handleDHSDecline(params: {
             const updateData: any = {
                 status: 'REJECTED_EMAIL_DOCS',
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: new Date(),
+                declineLastDetectedAt: handledAt,
             };
             // Set first detection time if this is the first decline
             if (!caseData.declineFirstDetectedAt) {
@@ -378,8 +395,9 @@ export async function handleDHSDecline(params: {
                     result.actionsPerformed.push(`Documents emailed to DC at ${dcEmail}${withNCR}${ccNote}`);
                     const updateData: any = {
                         status: 'DOCUMENTS_EMAILED',
+                        lastKnownEmail: dcEmail,
                         nextUpdate: addWorkingDays(new Date(), 5),
-                        declineLastDetectedAt: new Date(),
+                        declineLastDetectedAt: handledAt,
                     };
                     if (!caseData.declineFirstDetectedAt) {
                         updateData.declineFirstDetectedAt = new Date();
@@ -396,6 +414,30 @@ export async function handleDHSDecline(params: {
                         triggeredByUserId,
                         `[SYSTEM] DHS Decline Handler: Documents emailed to ${dcEmail}${withNCR}${ccNote}. Status → Documents Emailed. DHS decline reason: "${declineReason}"`
                     );
+                    if (caseData.client.email) {
+                        const clientEmailResult = await sendManualMessage(
+                            caseId,
+                            'EMAIL',
+                            caseData.client.email,
+                            buildSendDocsClientEmail({
+                                clientFirstName,
+                                dcName,
+                                fileNumber,
+                                declineReason,
+                                transferRequestedDate,
+                                declineRecordedDate,
+                                solutionSummary: ncrCertUrl
+                                    ? 'We emailed your signed Power of Attorney, ID copy, and our NCR certificate to the Debt Counsellor and requested that they proceed with the transfer.'
+                                    : 'We emailed your signed Power of Attorney and ID copy to the Debt Counsellor and requested that they proceed with the transfer.',
+                            }),
+                            `Update: DHS Transfer Declined (File: ${fileNumber})`
+                        );
+                        if (clientEmailResult.emailSuccess) {
+                            result.actionsPerformed.push(`Client decline update email sent (${caseData.client.email})`);
+                        } else {
+                            result.errors.push(...clientEmailResult.errors);
+                        }
+                    }
                 } else {
                     result.errors.push(...emailResult.errors);
                 }
@@ -409,7 +451,7 @@ export async function handleDHSDecline(params: {
             const updateData: any = {
                 status: 'REJECTED_NOT_CONSENT',
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: new Date(),
+                declineLastDetectedAt: handledAt,
             };
             if (!caseData.declineFirstDetectedAt) {
                 updateData.declineFirstDetectedAt = new Date();
@@ -428,6 +470,8 @@ export async function handleDHSDecline(params: {
                 dcName,
                 dcContactLine,
                 declineReason,
+                transferRequestedDate,
+                declineRecordedDate,
             });
             const smsBody = buildConsentSms({ clientFirstName, dcName, dcContactLine });
             const subject = `Action Required: Please Contact Your Debt Counsellor – ${clientName}`;
@@ -448,7 +492,7 @@ export async function handleDHSDecline(params: {
                 const updateData: any = {
                     status: 'CONSUMER_CONTACTED_DC',
                     nextUpdate: nextUpdateDate,
-                    declineLastDetectedAt: new Date(),
+                    declineLastDetectedAt: handledAt,
                 };
                 if (!caseData.declineFirstDetectedAt) {
                     updateData.declineFirstDetectedAt = new Date();
@@ -473,7 +517,7 @@ export async function handleDHSDecline(params: {
             const updateData: any = {
                 status: 'REJECTED_OWES_FEES',
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: new Date(),
+                declineLastDetectedAt: handledAt,
             };
             if (!caseData.declineFirstDetectedAt) {
                 updateData.declineFirstDetectedAt = new Date();
@@ -491,6 +535,8 @@ export async function handleDHSDecline(params: {
                 dcName,
                 fileNumber,
                 declineReason,
+                transferRequestedDate,
+                declineRecordedDate,
             });
             const feesSmsBody = buildFeesSms({ clientFirstName, dcName });
             const feesSubject = `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`;
@@ -524,7 +570,15 @@ export async function handleDHSDecline(params: {
                 if (caseData.client.email) {
                     const r = await sendManualMessage(
                         caseId, 'EMAIL', caseData.client.email,
-                        buildAttorneyClientEmail({ clientFirstName, dcName, fileNumber, declineReason, attorneyEmail: null }),
+                        buildAttorneyClientEmail({
+                            clientFirstName,
+                            dcName,
+                            fileNumber,
+                            declineReason,
+                            attorneyEmail: null,
+                            transferRequestedDate,
+                            declineRecordedDate,
+                        }),
                         `Update on Your Debt Review Transfer – ${clientName}`
                     );
                     if (r.emailSuccess) result.actionsPerformed.push(`Client notified of attorney involvement (${caseData.client.email})`);
@@ -561,7 +615,15 @@ export async function handleDHSDecline(params: {
                     if (caseData.client.email) {
                         const r = await sendManualMessage(
                             caseId, 'EMAIL', caseData.client.email,
-                            buildAttorneyClientEmail({ clientFirstName, dcName, fileNumber, declineReason, attorneyEmail }),
+                            buildAttorneyClientEmail({
+                                clientFirstName,
+                                dcName,
+                                fileNumber,
+                                declineReason,
+                                attorneyEmail,
+                                transferRequestedDate,
+                                declineRecordedDate,
+                            }),
                             `Update on Your Debt Review Transfer – ${clientName}`
                         );
                         if (r.emailSuccess) result.actionsPerformed.push(`Client update email sent (${caseData.client.email})`);
@@ -581,7 +643,7 @@ export async function handleDHSDecline(params: {
         else if (category === 'RESUBMIT_LATER') {
             const updateData: any = {
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: new Date(),
+                declineLastDetectedAt: handledAt,
             };
             if (!caseData.declineFirstDetectedAt) {
                 updateData.declineFirstDetectedAt = new Date();
@@ -598,7 +660,14 @@ export async function handleDHSDecline(params: {
             if (caseData.client.email) {
                 const r = await sendManualMessage(
                     caseId, 'EMAIL', caseData.client.email,
-                    buildResubmitClientEmail({ clientFirstName, dcName, fileNumber, declineReason }),
+                    buildResubmitClientEmail({
+                        clientFirstName,
+                        dcName,
+                        fileNumber,
+                        declineReason,
+                        transferRequestedDate,
+                        declineRecordedDate,
+                    }),
                     `Update on Your Debt Review Transfer (File: ${fileNumber})`
                 );
                 if (r.emailSuccess) {
@@ -733,6 +802,51 @@ Yours sincerely,
 ${SIGNATURE}`;
 }
 
+function buildConsumerDeclineStatusBlock(p: {
+    transferRequestedDate: string;
+    declineRecordedDate: string;
+    declineReason: string;
+    solutionSummary: string;
+}): string {
+    return `Transfer request date: ${p.transferRequestedDate}
+Decline recorded date: ${p.declineRecordedDate}
+
+Reason given by the current Debt Counsellor:
+"${p.declineReason}"
+
+What we have done to handle the decline:
+${p.solutionSummary}`;
+}
+
+function buildSendDocsClientEmail(p: {
+    clientFirstName: string;
+    dcName: string;
+    fileNumber: string;
+    declineReason: string;
+    transferRequestedDate: string;
+    declineRecordedDate: string;
+    solutionSummary: string;
+}): string {
+    return `Dear ${p.clientFirstName},
+
+We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
+
+Your current Debt Counsellor (${p.dcName}) declined the DHS transfer request.
+
+${buildConsumerDeclineStatusBlock({
+    transferRequestedDate: p.transferRequestedDate,
+    declineRecordedDate: p.declineRecordedDate,
+    declineReason: p.declineReason,
+    solutionSummary: p.solutionSummary,
+})}
+
+We will monitor the response and follow up until the transfer can proceed. You do not need to take any action on this item right now.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}
+
 function buildSendDocsSms(p: {
     clientFirstName: string;
     dcName: string;
@@ -746,6 +860,8 @@ function buildConsumerConsentEmail(p: {
     dcName: string;
     dcContactLine: string;
     declineReason: string;
+    transferRequestedDate: string;
+    declineRecordedDate: string;
 }): string {
     return `Dear ${p.clientFirstName},
 
@@ -756,6 +872,13 @@ We are reaching out regarding the transfer of your debt review file to Zenowethu
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request and their DHS response reads:
 
 "${p.declineReason}"
+
+${buildConsumerDeclineStatusBlock({
+    transferRequestedDate: p.transferRequestedDate,
+    declineRecordedDate: p.declineRecordedDate,
+    declineReason: p.declineReason,
+    solutionSummary: `We are asking you to contact ${p.dcName}${p.dcContactLine} directly to confirm that you consent to the transfer, after which we can resubmit the DHS request.`,
+})}
 
 ─────────────────────────────────────────
 ACTION REQUIRED
@@ -786,6 +909,8 @@ function buildOutstandingFeesEmail(p: {
     dcName: string;
     fileNumber: string;
     declineReason: string;
+    transferRequestedDate: string;
+    declineRecordedDate: string;
 }): string {
     return `Dear ${p.clientFirstName},
 
@@ -796,6 +921,13 @@ We are writing regarding your debt review file (File No: ${p.fileNumber}) and th
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request. Their DHS response reads:
 
 "${p.declineReason}"
+
+${buildConsumerDeclineStatusBlock({
+    transferRequestedDate: p.transferRequestedDate,
+    declineRecordedDate: p.declineRecordedDate,
+    declineReason: p.declineReason,
+    solutionSummary: 'We are requesting an invoice or statement for the outstanding amount from your Debt Counsellor so we can forward it to you with clear next steps.',
+})}
 
 ─────────────────────────────────────────
 NEXT STEPS
@@ -856,6 +988,8 @@ function buildAttorneyClientEmail(p: {
     fileNumber: string;
     declineReason: string;
     attorneyEmail: string | null;
+    transferRequestedDate: string;
+    declineRecordedDate: string;
 }): string {
     const attorneyLine = p.attorneyEmail
         ? `We have contacted the attorney at ${p.attorneyEmail} and requested their guidance on the next steps. You have been copied on that email.`
@@ -867,6 +1001,15 @@ We are writing with an update on the transfer of your debt review file (File No:
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request and indicated that a legal matter is involved. Their DHS response reads:
 
 "${p.declineReason}"
+
+${buildConsumerDeclineStatusBlock({
+    transferRequestedDate: p.transferRequestedDate,
+    declineRecordedDate: p.declineRecordedDate,
+    declineReason: p.declineReason,
+    solutionSummary: p.attorneyEmail
+        ? `We contacted the attorney at ${p.attorneyEmail} and requested guidance on the steps required before the DHS transfer can proceed.`
+        : 'Attorney involvement is required, but no attorney email was found in the DHS response. Our team will contact the relevant party manually and keep you updated.',
+})}
 
 ─────────────────────────────────────────
 WHAT WE ARE DOING
@@ -889,6 +1032,8 @@ function buildResubmitClientEmail(p: {
     dcName: string;
     fileNumber: string;
     declineReason: string;
+    transferRequestedDate: string;
+    declineRecordedDate: string;
 }): string {
     return `Dear ${p.clientFirstName},
 
@@ -897,6 +1042,13 @@ We are writing with an update on the transfer of your debt review file (File No:
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has indicated that the request cannot be processed immediately. Their DHS response reads:
 
 "${p.declineReason}"
+
+${buildConsumerDeclineStatusBlock({
+    transferRequestedDate: p.transferRequestedDate,
+    declineRecordedDate: p.declineRecordedDate,
+    declineReason: p.declineReason,
+    solutionSummary: 'We have diarised the case for another DHS check and will resubmit or follow up within the next 5-7 working days.',
+})}
 
 ─────────────────────────────────────────
 WHAT HAPPENS NEXT
@@ -923,6 +1075,7 @@ function buildResubmitSms(p: { clientFirstName: string }): string {
 export {
     SIGNATURE,
     buildSendDocsEmail,
+    buildSendDocsClientEmail,
     buildSendDocsSms,
     buildConsumerConsentEmail,
     buildConsentSms,

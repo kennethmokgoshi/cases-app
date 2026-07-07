@@ -39,6 +39,9 @@ const CreateSchema = z.object({
     fixedCommissionAmount: z.number().min(1).max(99999).nullable().optional(),
     // Hierarchy — who referred this referrer (optional)
     parentReferrerId: z.string().nullable().optional(),
+    // Initial staff members of the referrer sub-project (optional). Membership
+    // is what grants non-admin staff visibility of this referrer.
+    memberUserIds: z.array(z.string().min(1)).max(100).optional(),
 });
 
 // GET /api/admin/referrers — paginated list with search and status filters
@@ -176,6 +179,24 @@ export async function POST(request: Request) {
             }
         }
 
+        // Validate initial members if provided — only internal staff accounts
+        // can be referrer members (same rule as PUT /[id]/members)
+        const memberUserIds = Array.from(new Set(data.memberUserIds ?? [])).filter(
+            (userId) => userId !== session.user.id // creator is always added separately as MANAGER
+        );
+        if (memberUserIds.length > 0) {
+            const users = await prisma.user.findMany({
+                where: { id: { in: memberUserIds } },
+                select: { id: true, userType: true },
+            });
+            if (users.length !== memberUserIds.length) {
+                return NextResponse.json({ error: 'One or more selected members do not exist' }, { status: 422 });
+            }
+            if (users.some((u) => u.userType !== 'STAFF')) {
+                return NextResponse.json({ error: 'Only staff users can be members of a referrer' }, { status: 422 });
+            }
+        }
+
         // Validate parent referrer if provided
         let parentProjectId: string | null = null;
         if (data.parentReferrerId) {
@@ -209,7 +230,8 @@ export async function POST(request: Request) {
 
         // Create sub-project named after the referrer. The creator becomes its
         // first member so non-admin staff keep visibility of referrers they add
-        // (membership is what scopes the referrer registry).
+        // (membership is what scopes the referrer registry). Any selected
+        // initial members join alongside the creator as MEMBER.
         const subProject = await prisma.project.create({
             data: {
                 name: `${data.firstName} ${data.lastName}`,
@@ -217,12 +239,15 @@ export async function POST(request: Request) {
                 description: `Referral sub-project for ${data.firstName} ${data.lastName}${data.idNumber ? ` (ID: ${data.idNumber})` : ''}`,
                 parentId: subProjectParentId,
                 members: {
-                    create: [{ userId: session.user.id, role: 'MANAGER' }],
+                    create: [
+                        { userId: session.user.id, role: 'MANAGER' },
+                        ...memberUserIds.map((userId) => ({ userId, role: 'MEMBER' })),
+                    ],
                 },
             },
         });
 
-        const { parentReferrerId, ...restData } = data;
+        const { parentReferrerId, memberUserIds: _memberUserIds, ...restData } = data;
         const referrer = await prisma.referrer.create({
             data: {
                 ...restData,

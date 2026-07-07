@@ -307,7 +307,7 @@ export default function CaseDetailPage() {
     const [sendingFileRequests, setSendingFileRequests] = useState(false);
     const [fileRequestResult, setFileRequestResult] = useState<{ bureausSent: number; providersSent: number; failures: number; message: string } | null>(null);
     const [sendingAllRequests, setSendingAllRequests] = useState(false);
-    const [allRequestsResult, setAllRequestsResult] = useState<{ dcSent: boolean; bureausSent: number; providersSent: number; failures: number; lines: string[] } | null>(null);
+    const [allRequestsResult, setAllRequestsResult] = useState<{ dcSent: boolean; failures: number; lines: string[] } | null>(null);
     const [sendingDrrRequests, setSendingDrrRequests] = useState(false);
     const [drrRequestResult, setDrrRequestResult] = useState<{ bureausSent: number; providersSent: number; dcSent: boolean; failures: number; message: string } | null>(null);
     const [useAiDraft, setUseAiDraft] = useState(true);
@@ -839,39 +839,34 @@ export default function CaseDetailPage() {
         setSendingAllRequests(true);
         setAllRequestsResult(null);
 
-        const [dcRes, bureauRes] = await Promise.allSettled([
-            // DC file request — only if dcEmail is set
-            caseData.dcEmail
-                ? fetch(`/api/cases/${params.id}/dc-notification`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ type: 'FILE_REQUEST' }),
-                  })
-                : Promise.resolve(null),
-            // Bureau + provider emails
-            fetch(`/api/cases/${params.id}/send-file-requests`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ useAiDraft }),
-            }),
-        ]);
+        const displayDcEmail = caseData.preferredDcEmail || caseData.lastKnownEmail || caseData.dcEmail;
+        const dcRes = displayDcEmail
+            ? await fetch(`/api/cases/${params.id}/dc-notification`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ type: 'FILE_REQUEST' }),
+              }).then(
+                  value => ({ status: 'fulfilled' as const, value }),
+                  reason => ({ status: 'rejected' as const, reason })
+              )
+            : null;
 
         const lines: string[] = [];
         let dcSent = false;
-        let bureausSent = 0;
-        let providersSent = 0;
         let failures = 0;
 
         // DC result
-        if (caseData.dcEmail) {
-            if (dcRes.status === 'fulfilled' && dcRes.value !== null) {
+        if (displayDcEmail) {
+            if (dcRes?.status === 'fulfilled') {
                 const r = dcRes.value as Response;
+                const d = await r.json().catch(() => ({}));
                 if (r.ok) {
                     dcSent = true;
-                    lines.push(`DC (${caseData.dcEmail}): sent`);
+                    lines.push(`DC (${(d as any).dcEmail || displayDcEmail}): sent`);
+                    if (caseData.client.email) lines.push(`Consumer (${caseData.client.email}): copied`);
+                    lines.push('Bcc: notifications@zenowethu.co.za');
                 } else {
                     failures++;
-                    const d = await r.json().catch(() => ({}));
                     lines.push(`DC: failed — ${(d as any).error || 'unknown error'}`);
                 }
             } else {
@@ -882,37 +877,15 @@ export default function CaseDetailPage() {
             lines.push(`DC: skipped (no email on file)`);
         }
 
-        // Bureau + provider result
-        if (bureauRes.status === 'fulfilled') {
-            const r = bureauRes.value as Response;
-            const d = await r.json().catch(() => ({}));
-            if (r.ok) {
-                bureausSent = (d as any).summary?.bureausSent ?? 0;
-                providersSent = (d as any).summary?.providersSent ?? 0;
-                const bfailures = (d as any).summary?.totalFailures ?? 0;
-                failures += bfailures;
-                if (bureausSent > 0) lines.push(`Bureaus: sent to ${bureausSent}`);
-                else lines.push(`Bureaus: no recipients configured`);
-                if (providersSent > 0) lines.push(`Providers: sent to ${providersSent}`);
-                else lines.push(`Providers: none with email on file`);
-                if (bfailures > 0) lines.push(`${bfailures} delivery failure(s)`);
-            } else {
-                failures++;
-                lines.push(`Bureaus/Providers: failed — ${(d as any).error || 'unknown error'}`);
-            }
-        } else {
-            failures++;
-            lines.push(`Bureaus/Providers: failed — connection error`);
-        }
-
-        setAllRequestsResult({ dcSent, bureausSent, providersSent, failures, lines });
-        if (dcSent || bureausSent > 0 || providersSent > 0) setActivityUpdate(prev => prev + 1);
+        lines.push('Bureaus/providers: paused');
+        setAllRequestsResult({ dcSent, failures, lines });
+        if (dcSent) setActivityUpdate(prev => prev + 1);
         setSendingAllRequests(false);
     };
 
     // Show confirmation modal before sending — actual send happens in confirmDCNotification
     const handleDCNotification = (type: 'FILE_REQUEST' | 'INVOICE_REQUEST') => {
-        if (!caseData || !caseData.dcEmail) return;
+        if (!caseData || !(caseData.preferredDcEmail || caseData.lastKnownEmail || caseData.dcEmail)) return;
         setDcConfirmPending(type);
     };
 
@@ -3243,7 +3216,7 @@ export default function CaseDetailPage() {
                                             </button>
                                         </div>
                                         <p className="text-[10px] text-gray-400 mb-2 leading-relaxed">
-                                            Sends file-request emails to the Debt Counsellor{caseData.dcEmail ? ` (${caseData.dcEmail})` : ' (no email on file)'}, credit bureaus and all linked credit providers in one action.
+                                            Sends the file request to the Debt Counsellor{(caseData.preferredDcEmail || caseData.lastKnownEmail || caseData.dcEmail) ? ` (${caseData.preferredDcEmail || caseData.lastKnownEmail || caseData.dcEmail})` : ' (no email on file)'}, copies the consumer and Bccs notifications@zenowethu.co.za. Bureau/provider requests are paused.
                                         </p>
                                         
                                         {/* Validation Check */}
@@ -3315,7 +3288,7 @@ export default function CaseDetailPage() {
                                         })()}
                                         {allRequestsResult && (
                                             <div className={`mt-2 text-[10px] px-2 py-1.5 rounded leading-relaxed space-y-0.5 ${
-                                                allRequestsResult.failures > 0 && !allRequestsResult.dcSent && allRequestsResult.bureausSent === 0 && allRequestsResult.providersSent === 0
+                                                allRequestsResult.failures > 0 && !allRequestsResult.dcSent
                                                     ? 'text-red-400 bg-red-500/10 border border-red-500/20'
                                                     : allRequestsResult.failures > 0
                                                         ? 'text-yellow-400 bg-yellow-500/10 border border-yellow-500/20'
@@ -3332,7 +3305,7 @@ export default function CaseDetailPage() {
                                     <div className="p-3 bg-black/20 space-y-2">
                                         <span className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider">Individual Actions</span>
                                         {/* DC actions */}
-                                        {caseData.dcEmail && (
+                                        {(caseData.preferredDcEmail || caseData.lastKnownEmail || caseData.dcEmail) && (
                                             <div className="grid grid-cols-2 gap-2">
                                                 <button
                                                     onClick={() => handleDCNotification('FILE_REQUEST')}
@@ -3372,21 +3345,12 @@ export default function CaseDetailPage() {
 
                                         {/* Bureau + provider only */}
                                         <button
-                                            onClick={handleSendFileRequests}
-                                            disabled={sendingFileRequests || sendingAllRequests}
-                                            className="w-full py-1.5 px-3 bg-cyan-600/20 border border-cyan-600/40 text-cyan-300 rounded text-xs font-semibold hover:bg-cyan-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            disabled
+                                            title="Paused: no bureau or provider file requests will be sent until further notice."
+                                            className="w-full py-1.5 px-3 bg-zinc-800/60 border border-zinc-700 text-zinc-500 rounded text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-not-allowed"
                                         >
-                                            {sendingFileRequests ? (
-                                                <>
-                                                    <span className="animate-spin h-3 w-3 border-2 border-cyan-300 border-t-transparent rounded-full" />
-                                                    Sending...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                                                    Bureaus &amp; Providers Only
-                                                </>
-                                            )}
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728" /></svg>
+                                            Bureaus &amp; Providers Paused
                                         </button>
                                         {fileRequestResult && (
                                             <div className={`text-[10px] px-2 py-1 rounded leading-relaxed ${
@@ -4988,7 +4952,7 @@ export default function CaseDetailPage() {
                             )}
 
                             <p className="text-[10px] text-gray-500">
-                                Email will be sent to: <span className="text-zeno-cyan font-mono">{caseData.dcEmail}</span>
+                                Email will be sent to: <span className="text-zeno-cyan font-mono">{caseData.preferredDcEmail || caseData.lastKnownEmail || caseData.dcEmail}</span>
                             </p>
                         </div>
 

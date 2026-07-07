@@ -20,6 +20,7 @@ import {
     getBasePeriodForCategory,
     type DeclineCategory,
     buildSendDocsEmail,
+    buildSendDocsClientEmail,
     buildSendDocsSms,
     buildConsumerConsentEmail,
     buildConsentSms,
@@ -30,6 +31,7 @@ import {
     buildAttorneySms,
     buildResubmitClientEmail,
     buildResubmitSms,
+    formatDhsDeclineDate,
 } from './decline-handler';
 
 export interface PreviewMessage {
@@ -114,6 +116,10 @@ export async function previewDHSDecline(params: {
         .map(d => `${baseUrl}${d.fileUrl}`);
 
     const clientCc = caseData.client.email ? [caseData.client.email] : [];
+    const transferRequestedDate = formatDhsDeclineDate(
+        caseData.dhsApplicationDate ?? caseData.statusEntryDate ?? caseData.createdAt
+    );
+    const declineRecordedDate = formatDhsDeclineDate(new Date());
 
     // The consumer SMS/WhatsApp channel handleDHSDecline would pick (WhatsApp preferred).
     const clientMobileChannel: 'WHATSAPP' | 'SMS' | null =
@@ -147,6 +153,26 @@ export async function previewDHSDecline(params: {
                 body: buildSendDocsEmail({ clientName, idNumber, fileNumber, dcName, declineReason, ncrLine }),
                 attachments: docAttachments,
             });
+            if (caseData.client.email) {
+                preview.messages.push({
+                    channel: 'EMAIL',
+                    to: caseData.client.email,
+                    subject: `Update: DHS Transfer Declined (File: ${fileNumber})`,
+                    body: buildSendDocsClientEmail({
+                        clientFirstName,
+                        dcName,
+                        fileNumber,
+                        declineReason,
+                        transferRequestedDate,
+                        declineRecordedDate,
+                        solutionSummary: category === 'SEND_DOCS_WITH_NCR'
+                            ? 'We will email your signed Power of Attorney, ID copy, and our NCR certificate to the Debt Counsellor and request that they proceed with the transfer.'
+                            : 'We will email your signed Power of Attorney and ID copy to the Debt Counsellor and request that they proceed with the transfer.',
+                    }),
+                });
+            } else {
+                preview.notes.push('Consumer has no email on file — only SMS/WhatsApp would be attempted.');
+            }
             pushClientMobile(buildSendDocsSms({ clientFirstName, dcName, declineReason }));
         }
     }
@@ -159,7 +185,14 @@ export async function previewDHSDecline(params: {
                 channel: 'EMAIL',
                 to: caseData.client.email,
                 subject: `Action Required: Please Contact Your Debt Counsellor – ${clientName}`,
-                body: buildConsumerConsentEmail({ clientFirstName, dcName, dcContactLine, declineReason }),
+                body: buildConsumerConsentEmail({
+                    clientFirstName,
+                    dcName,
+                    dcContactLine,
+                    declineReason,
+                    transferRequestedDate,
+                    declineRecordedDate,
+                }),
             });
         } else {
             preview.notes.push('Consumer has no email on file — only SMS/WhatsApp would be attempted.');
@@ -174,7 +207,14 @@ export async function previewDHSDecline(params: {
                 channel: 'EMAIL',
                 to: caseData.client.email,
                 subject: `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`,
-                body: buildOutstandingFeesEmail({ clientFirstName, dcName, fileNumber, declineReason }),
+                body: buildOutstandingFeesEmail({
+                    clientFirstName,
+                    dcName,
+                    fileNumber,
+                    declineReason,
+                    transferRequestedDate,
+                    declineRecordedDate,
+                }),
             });
         } else {
             preview.notes.push('Consumer has no email on file — only SMS/WhatsApp would be attempted.');
@@ -198,7 +238,15 @@ export async function previewDHSDecline(params: {
                     channel: 'EMAIL',
                     to: caseData.client.email,
                     subject: `Update on Your Debt Review Transfer – ${clientName}`,
-                    body: buildAttorneyClientEmail({ clientFirstName, dcName, fileNumber, declineReason, attorneyEmail: extractedEmail }),
+                    body: buildAttorneyClientEmail({
+                        clientFirstName,
+                        dcName,
+                        fileNumber,
+                        declineReason,
+                        attorneyEmail: extractedEmail,
+                        transferRequestedDate,
+                        declineRecordedDate,
+                    }),
                 });
             }
         } else {
@@ -208,7 +256,15 @@ export async function previewDHSDecline(params: {
                     channel: 'EMAIL',
                     to: caseData.client.email,
                     subject: `Update on Your Debt Review Transfer – ${clientName}`,
-                    body: buildAttorneyClientEmail({ clientFirstName, dcName, fileNumber, declineReason, attorneyEmail: null }),
+                    body: buildAttorneyClientEmail({
+                        clientFirstName,
+                        dcName,
+                        fileNumber,
+                        declineReason,
+                        attorneyEmail: null,
+                        transferRequestedDate,
+                        declineRecordedDate,
+                    }),
                 });
             }
         }
@@ -224,7 +280,14 @@ export async function previewDHSDecline(params: {
                 channel: 'EMAIL',
                 to: caseData.client.email,
                 subject: `Update on Your Debt Review Transfer (File: ${fileNumber})`,
-                body: buildResubmitClientEmail({ clientFirstName, dcName, fileNumber, declineReason }),
+                body: buildResubmitClientEmail({
+                    clientFirstName,
+                    dcName,
+                    fileNumber,
+                    declineReason,
+                    transferRequestedDate,
+                    declineRecordedDate,
+                }),
             });
         }
         pushClientMobile(buildResubmitSms({ clientFirstName }));

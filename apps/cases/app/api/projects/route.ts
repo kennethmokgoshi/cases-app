@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
         let cachedIndex: ReturnType<typeof buildChildIndex> | null = null;
         const loadProjectGraph = async () => {
             if (!cachedIndex) {
-                const all = await prisma.project.findMany({ select: { id: true, parentId: true } });
+                const all = await prisma.project.findMany({ select: { id: true, parentId: true, type: true } });
                 cachedIndex = buildChildIndex(all);
             }
             return cachedIndex;
@@ -144,12 +144,33 @@ export async function GET(request: NextRequest) {
                 // User has no projects
                 whereClause.id = { in: [] };
             } else {
-                // Include ancestors (to build the tree up) and descendants (to see
-                // everything under a project the user belongs to).
+                // Include ancestors to build the tree up. Descendants remain
+                // visible for ordinary project folders, but REFERRER projects
+                // require direct membership before they can appear in new-case
+                // referral assignment pickers.
                 const { byId, childrenByParent } = await loadProjectGraph();
                 const allowed = new Set<string>(explicitProjectIds);
                 addAncestors(explicitProjectIds, byId, allowed);
                 addDescendants(explicitProjectIds, childrenByParent, allowed);
+                if (isMemberOnly) {
+                    const directMemberships = new Set(explicitProjectIds);
+                    for (const projectId of Array.from(allowed)) {
+                        const project = byId.get(projectId);
+                        if (project?.type !== 'REFERRER' || directMemberships.has(projectId)) {
+                            continue;
+                        }
+
+                        allowed.delete(projectId);
+                        const queue = [projectId];
+                        while (queue.length > 0) {
+                            const childIds = childrenByParent.get(queue.shift()!) || [];
+                            for (const childId of childIds) {
+                                allowed.delete(childId);
+                                queue.push(childId);
+                            }
+                        }
+                    }
+                }
                 whereClause.id = { in: Array.from(allowed) };
             }
         }
@@ -222,21 +243,6 @@ export async function GET(request: NextRequest) {
 
             // Copy so we don't mutate the memoized membership list.
             const memberProjectIds = [...(await loadMembershipIds())];
-
-            // When memberOnly=true, also include ALL REFERRER-type projects and their
-            // ancestors so staff can assign cases to any referrer regardless of membership.
-            if (isMemberOnly) {
-                const referrerProjects = await prisma.project.findMany({
-                    where: { type: 'REFERRER' },
-                    select: { id: true }
-                });
-                const referrerIds = referrerProjects.map(p => p.id);
-
-                const { byId } = await loadProjectGraph();
-                const referrerAndAncestors = new Set<string>(referrerIds);
-                addAncestors(referrerIds, byId, referrerAndAncestors);
-                memberProjectIds.push(...referrerAndAncestors);
-            }
 
             // Slim projection — the New Case dropdown (the only memberOnly consumer)
             // reads just these fields. Dropping the members→user joins, _count and the
@@ -442,4 +448,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
-

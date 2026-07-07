@@ -38,6 +38,15 @@ type Referrer = {
     fixedCommissionAmount: number | null;
 };
 
+type StaffUser = {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    userType: string;
+    isLocked: boolean;
+};
+
 const EMPLOYMENT_TYPES = ['EMPLOYED', 'SELF_EMPLOYED', 'CONTRACT', 'UNEMPLOYED', 'RETIRED'];
 const ACCOUNT_TYPES = ['CHEQUE', 'SAVINGS', 'CURRENT'];
 
@@ -66,6 +75,7 @@ const emptyForm = {
     commissionType: 'FIXED' as 'FIXED' | 'VOLUME_BASED',
     fixedCommissionAmount: '',
     parentReferrerId: '',
+    memberUserIds: [] as string[],
 };
 
 type FormState = typeof emptyForm;
@@ -93,6 +103,7 @@ export default function ReferrersPage() {
     const [deleting, setDeleting] = useState(false);
 
     const [detailTarget, setDetailTarget] = useState<Referrer | null>(null);
+    const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
     const [allReferrers, setAllReferrers] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
     const [unregisteredFolders, setUnregisteredFolders] = useState<{ id: string; name: string; type: string; parent: { id: string; name: string } | null; _count: { cases: number } }[]>([]);
     const [loadingFolders, setLoadingFolders] = useState(false);
@@ -132,8 +143,20 @@ export default function ReferrersPage() {
         setEditTarget(null);
         setForm(emptyForm);
         setFormError('');
-        await loadAllReferrers();
+        await Promise.all([loadAllReferrers(), loadStaffUsers()]);
         setModalOpen(true);
+    }
+
+    // Staff list for the initial-members picker (create mode only)
+    async function loadStaffUsers() {
+        try {
+            const res = await fetch('/api/users');
+            if (!res.ok) return;
+            const users: StaffUser[] = await res.json();
+            setStaffUsers(users.filter((u) => u.userType === 'STAFF' && !u.isLocked));
+        } catch {
+            // non-critical — picker just stays empty
+        }
     }
 
     async function openEdit(r: Referrer) {
@@ -160,6 +183,7 @@ export default function ReferrersPage() {
             commissionType: (r.commissionType as 'FIXED' | 'VOLUME_BASED') ?? 'FIXED',
             fixedCommissionAmount: r.fixedCommissionAmount != null ? String(r.fixedCommissionAmount) : '',
             parentReferrerId: r.parentReferrer?.id ?? '',
+            memberUserIds: [], // members are managed on the referrer detail page after creation
         });
         setFormError('');
         await loadAllReferrers();
@@ -246,6 +270,9 @@ export default function ReferrersPage() {
                     : null,
                 parentReferrerId: form.parentReferrerId || null,
             };
+            if (!editTarget) {
+                payload.memberUserIds = form.memberUserIds;
+            }
 
             const url = editTarget ? `/api/admin/referrers/${editTarget.id}` : '/api/admin/referrers';
             const method = editTarget ? 'PATCH' : 'POST';
@@ -636,6 +663,52 @@ export default function ReferrersPage() {
                                         ))
                                     }
                                 </select>
+                            </section>
+
+                            {/* Team Members — create mode only; edits happen on the detail page */}
+                            <section>
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Team Members</h3>
+                                {editTarget ? (
+                                    <p className="text-xs text-gray-500">
+                                        Members are managed on the referrer&apos;s{' '}
+                                        <Link href={`/admin/referrers/${editTarget.id}`} className="text-zeno-cyan hover:underline">detail page</Link>.
+                                    </p>
+                                ) : (
+                                    <>
+                                        <p className="text-xs text-gray-500 mb-2">
+                                            Only members of the referrer&apos;s sub-project can see this referrer and its cases.
+                                            You will be added automatically as manager; select any other staff who need access.
+                                        </p>
+                                        {staffUsers.length === 0 ? (
+                                            <p className="text-xs text-gray-500 bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg px-4 py-3">No staff users available.</p>
+                                        ) : (
+                                            <div className="bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
+                                                {staffUsers
+                                                    .filter((u) => u.id !== session?.user?.id)
+                                                    .map((u) => (
+                                                        <label key={u.id} className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-zeno-blue/30 transition-colors">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={form.memberUserIds.includes(u.id)}
+                                                                onChange={(e) => setForm((f) => ({
+                                                                    ...f,
+                                                                    memberUserIds: e.target.checked
+                                                                        ? [...f.memberUserIds, u.id]
+                                                                        : f.memberUserIds.filter((id) => id !== u.id),
+                                                                }))}
+                                                                className="w-4 h-4 accent-zeno-cyan"
+                                                            />
+                                                            <span className="text-sm text-gray-300">{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.email}</span>
+                                                            <span className="text-xs text-gray-500 ml-auto">{u.email}</span>
+                                                        </label>
+                                                    ))}
+                                            </div>
+                                        )}
+                                        {form.memberUserIds.length > 0 && (
+                                            <p className="text-xs text-zeno-cyan mt-2">{form.memberUserIds.length} member{form.memberUserIds.length !== 1 ? 's' : ''} selected (plus you as manager)</p>
+                                        )}
+                                    </>
+                                )}
                             </section>
 
                             {/* Status & Notes */}

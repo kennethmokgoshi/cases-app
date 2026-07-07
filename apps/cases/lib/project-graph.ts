@@ -1,7 +1,7 @@
 // Pure helpers for walking the project hierarchy without N+1 / O(n²) work.
 // Extracted from app/api/projects/route.ts so they can be unit-tested without a DB.
 
-export type RawProject = { id: string; parentId: string | null };
+export type RawProject = { id: string; parentId: string | null; type?: string | null };
 
 /** Build O(1) lookup indexes from a flat list of all projects. */
 export function buildChildIndex(all: RawProject[]) {

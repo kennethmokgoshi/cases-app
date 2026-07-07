@@ -922,6 +922,7 @@ export async function POST(request: Request) {
                     await prisma.case.update({
                         where: { id: caseId },
                         data: {
+                            lastKnownEmail: resolvedEmail,
                             nextUpdate: addWorkingDays(new Date(), 5),
                             updatedBy: attribution
                         }

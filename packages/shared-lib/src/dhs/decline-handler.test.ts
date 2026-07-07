@@ -1,5 +1,20 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { classifyDeclineReason, extractEmailFromReason, getBasePeriodForCategory, calculateNextUpdate } from './decline-handler';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@zenowethu/database', () => ({
+    prisma: {},
+}));
+
+vi.mock('../notifications/service', () => ({
+    sendManualMessage: vi.fn(),
+}));
+import {
+    buildSendDocsClientEmail,
+    calculateNextUpdate,
+    classifyDeclineReason,
+    extractEmailFromReason,
+    formatDhsDeclineDate,
+    getBasePeriodForCategory,
+} from './decline-handler';
 
 describe('classifyDeclineReason', () => {
     // SEND_DOCS
@@ -198,5 +213,30 @@ describe('calculateNextUpdate', () => {
         // Should be approximately 2 days remaining (3 - 1)
         expect(daysDiff).toBeGreaterThanOrEqual(0);
         expect(daysDiff).toBeLessThanOrEqual(6);
+    });
+});
+
+describe('consumer decline email copy', () => {
+    it('formats dates in the consumer-facing decline notice', () => {
+        expect(formatDhsDeclineDate(new Date('2026-07-06T12:00:00.000Z'))).toContain('2026');
+        expect(formatDhsDeclineDate(null)).toBe('not recorded');
+    });
+
+    it('summarises transfer date, decline date, reason, and solution for SEND_DOCS declines', () => {
+        const body = buildSendDocsClientEmail({
+            clientFirstName: 'Maria',
+            dcName: 'YMA Consulting',
+            fileNumber: 'ZDM-2026-1001',
+            declineReason: 'Kindly forward POA & ID copy to transfers@yma-consulting.co.za',
+            transferRequestedDate: '01 Jul 2026',
+            declineRecordedDate: '06 Jul 2026',
+            solutionSummary: 'We emailed your signed Power of Attorney and ID copy to the Debt Counsellor and requested that they proceed with the transfer.',
+        });
+
+        expect(body).toContain('Transfer request date: 01 Jul 2026');
+        expect(body).toContain('Decline recorded date: 06 Jul 2026');
+        expect(body).toContain('Kindly forward POA & ID copy');
+        expect(body).toContain('What we have done to handle the decline');
+        expect(body).toContain('Power of Attorney and ID copy');
     });
 });

@@ -627,11 +627,15 @@ class GhlBaseProvider {
         type: 'SMS' | 'Email' | 'WhatsApp',
         subject?: string,
         attachments?: string[],
+        cc?: string[],
+        bcc?: string[],
     ): Promise<{ success: boolean; messageId?: string; error?: string }> {
         try {
             const body: Record<string, any> = { type, contactId, message };
             if (type === 'Email' && subject) body.subject = subject;
             if (type === 'Email' && attachments?.length) body.attachments = attachments;
+            if (type === 'Email' && cc?.length) body.cc = cc;
+            if (type === 'Email' && bcc?.length) body.bcc = bcc;
 
             const response = await fetch(`${GHL_BASE_URL}/conversations/messages`, {
                 method: 'POST',
@@ -673,7 +677,15 @@ export class GhlEmailProvider extends GhlBaseProvider implements EmailProvider {
             ?.map(a => a.url ?? (typeof a.content === 'string' && (a.content.startsWith('http') || a.content.startsWith('/')) ? a.content : null))
             .filter((u): u is string => u !== null);
 
-        const res = await this.sendMessage(contactId, htmlBody, 'Email', subject, attachmentUrls);
+        const res = await this.sendMessage(
+            contactId,
+            htmlBody,
+            'Email',
+            subject,
+            attachmentUrls,
+            options?.cc,
+            options?.bcc
+        );
         return { ...res, contactId, provider: this.name };
     }
 }

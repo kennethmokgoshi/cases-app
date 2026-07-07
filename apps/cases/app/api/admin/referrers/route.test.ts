@@ -25,6 +25,9 @@ vi.mock('@zenowethu/database', () => ({
         projectMember: {
             findMany: vi.fn(),
         },
+        user: {
+            findMany: vi.fn(),
+        },
         caseProject: {
             count: vi.fn(),
         },
@@ -218,6 +221,56 @@ describe('POST /api/admin/referrers', () => {
         vi.mocked(prisma.referrer.create).mockResolvedValueOnce({ ...sampleReferrer } as never);
         const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', { firstName: 'John', lastName: 'Doe', idNumber: '8001015009087' }));
         expect(res.status).toBe(201);
+    });
+
+    it('creates the sub-project with selected staff as initial members', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
+        vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+            { id: 'staff-1', userType: 'STAFF' },
+            { id: 'staff-2', userType: 'STAFF' },
+        ] as never);
+        vi.mocked(prisma.project.findFirst).mockResolvedValueOnce({ id: 'root-proj', name: 'Referrals' } as never);
+        vi.mocked(prisma.project.create).mockResolvedValueOnce({ id: 'proj-1', name: 'John Doe' } as never);
+        vi.mocked(prisma.referrer.create).mockResolvedValueOnce({ ...sampleReferrer } as never);
+        const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', {
+            firstName: 'John', lastName: 'Doe', idNumber: '8001015009087',
+            memberUserIds: ['staff-1', 'staff-2', 'u1'], // creator id is filtered out, not duplicated
+        }));
+        expect(res.status).toBe(201);
+        const [createArgs] = vi.mocked(prisma.project.create).mock.calls;
+        const members = (createArgs[0].data as { members: { create: { userId: string; role: string }[] } }).members.create;
+        expect(members).toEqual([
+            { userId: 'u1', role: 'MANAGER' },
+            { userId: 'staff-1', role: 'MEMBER' },
+            { userId: 'staff-2', role: 'MEMBER' },
+        ]);
+    });
+
+    it('returns 422 when a selected member is not a staff user', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
+        vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+            { id: 'consumer-1', userType: 'CONSUMER' },
+        ] as never);
+        const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', {
+            firstName: 'John', lastName: 'Doe', idNumber: '8001015009087',
+            memberUserIds: ['consumer-1'],
+        }));
+        expect(res.status).toBe(422);
+        expect(vi.mocked(prisma.project.create)).not.toHaveBeenCalled();
+    });
+
+    it('returns 422 when a selected member does not exist', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
+        vi.mocked(prisma.user.findMany).mockResolvedValueOnce([] as never);
+        const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', {
+            firstName: 'John', lastName: 'Doe', idNumber: '8001015009087',
+            memberUserIds: ['ghost-user'],
+        }));
+        expect(res.status).toBe(422);
+        expect(vi.mocked(prisma.project.create)).not.toHaveBeenCalled();
     });
 
     it('creates root Referrals project if none exists', async () => {

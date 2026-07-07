@@ -225,6 +225,7 @@ export interface NotificationPayload {
     // File request recipients (used for DHS post-acceptance outreach)
     creditBureauEmails?: string[];
     creditProviderContacts?: CreditProviderContact[];
+    dcCcEmails?: string[];
 }
 
 export interface FileRequestResult {
@@ -549,6 +550,7 @@ async function sendNotificationByTemplate(
         const emailSubject = renderTemplate(template.emailSubject, variables);
         const emailBody = renderTemplate(template.emailTemplate, variables);
         const htmlBody = emailBody.replace(/\n/g, '<br>');
+        const dcCcEmails = payload.dcCcEmails?.filter(Boolean);
 
         if (EMAIL_ENABLED) {
             const emailProvider = await getEmailProvider();
@@ -564,8 +566,18 @@ async function sendNotificationByTemplate(
                 emailSubject,
                 brandedHtml,
                 emailBody,
-                addBccToOptions({})
+                addBccToOptions({
+                    cc: dcCcEmails?.length ? dcCcEmails : undefined,
+                    bcc: ['notifications@zenowethu.co.za'],
+                })
             );
+
+            result.emailSuccess = emailResult.success;
+            result.emailMessageId = emailResult.messageId;
+
+            if (!emailResult.success && emailResult.error) {
+                result.errors.push(`Email failed: ${emailResult.error}`);
+            }
 
             if (emailResult.success) {
                 await logNotification({
@@ -578,6 +590,18 @@ async function sendNotificationByTemplate(
                     success: true,
                     messageId: emailResult.messageId,
                     provider: emailResult.provider });
+                for (const ccEmail of dcCcEmails ?? []) {
+                    await logNotification({
+                        caseId: payload.caseId,
+                        channel: 'EMAIL',
+                        recipient: ccEmail,
+                        recipientType: 'CLIENT',
+                        statusCode: `${payload.statusCode}_CC`,
+                        message: emailSubject,
+                        success: true,
+                        messageId: emailResult.messageId,
+                        provider: emailResult.provider });
+                }
             } else {
                 await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: payload.dcEmail, subject: emailSubject, body: emailBody, htmlBody: brandedHtml, error: emailResult.error });
             }
@@ -1273,5 +1297,4 @@ export async function executeNotificationRetry(queueId: string): Promise<Notific
 
     return result;
 }
-
 

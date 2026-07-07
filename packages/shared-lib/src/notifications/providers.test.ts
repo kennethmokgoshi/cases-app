@@ -9,6 +9,7 @@ vi.mock('nodemailer', () => ({
 
 import {
     FallbackEmailProvider,
+    GhlEmailProvider,
     SmtpEmailProvider,
     TwilioSmsProvider,
     TwilioWhatsAppProvider,
@@ -153,6 +154,40 @@ describe('toZaE164', () => {
 describe('Messaging providers (fetch mocked)', () => {
     beforeEach(() => vi.unstubAllGlobals());
     afterEach(() => vi.unstubAllGlobals());
+
+    describe('GhlEmailProvider', () => {
+        it('passes cc and bcc through to the GHL email message payload', async () => {
+            const fetchMock = vi.fn()
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        contacts: [{ id: 'contact-1', email: 'client@example.com' }],
+                    }),
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: () => Promise.resolve({ messageId: 'msg-1' }),
+                });
+            vi.stubGlobal('fetch', fetchMock);
+
+            const provider = new GhlEmailProvider('ghl-token', 'location-1');
+            const res = await provider.send(
+                'client@example.com',
+                'Subject',
+                '<p>Hello</p>',
+                'Hello',
+                {
+                    cc: ['consumer@example.com'],
+                    bcc: ['notifications@zenowethu.co.za'],
+                }
+            );
+
+            expect(res.success).toBe(true);
+            const messageBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
+            expect(messageBody.cc).toEqual(['consumer@example.com']);
+            expect(messageBody.bcc).toEqual(['notifications@zenowethu.co.za']);
+        });
+    });
 
     describe('TwilioSmsProvider', () => {
         it('returns success and messageId on a Twilio sid response', async () => {

@@ -65,7 +65,7 @@ import type { NotificationPayload } from './service';
 // ─── sendStatusChangeNotification: NEW_LEAD template selection ────────────────
 
 describe('sendStatusChangeNotification — NEW_LEAD template selection', () => {
-    let sentEmails: Array<{ to: string; subject: string }>;
+    let sentEmails: Array<{ to: string; subject: string; options?: any }>;
 
     beforeEach(async () => {
         vi.clearAllMocks();
@@ -79,8 +79,8 @@ describe('sendStatusChangeNotification — NEW_LEAD template selection', () => {
         const { MockEmailProvider } = await import('./providers');
         (MockEmailProvider as any).mockImplementation(() => ({
             name: 'mock',
-            send: vi.fn().mockImplementation((to: string, subject: string) => {
-                sentEmails.push({ to, subject });
+            send: vi.fn().mockImplementation((to: string, subject: string, _html?: string, _text?: string, options?: any) => {
+                sentEmails.push({ to, subject, options });
                 return Promise.resolve({ success: true, messageId: 'mock-001', provider: 'mock' });
             }),
         }));
@@ -114,6 +114,27 @@ describe('sendStatusChangeNotification — NEW_LEAD template selection', () => {
         await sendStatusChangeNotification(basePayload({ isB2B: false, isCreatedByPartner: false }));
         expect(sentEmails).toHaveLength(1);
         expect(sentEmails[0].subject).not.toContain('Letsatsi');
+    });
+
+    it('sends DC file request to the DC, copies the consumer, and BCCs notifications', async () => {
+        const result = await sendStatusChangeNotification({
+            caseId: 'case-002',
+            clientName: 'Thabo Mokoena',
+            clientEmail: 'thabo@example.com',
+            fileNumber: 'ZDM-2026-002-ABC',
+            statusCode: 'REQUEST_FILE_DC',
+            dcName: 'Example Debt Counsellor',
+            dcEmail: 'preferred-dc@example.com',
+            dcCcEmails: ['thabo@example.com'],
+            idNumber: '8001015009087',
+            isB2B: false,
+        });
+
+        expect(result.emailSuccess).toBe(true);
+        expect(sentEmails).toHaveLength(1);
+        expect(sentEmails[0].to).toBe('preferred-dc@example.com');
+        expect(sentEmails[0].options?.cc).toEqual(['thabo@example.com']);
+        expect(sentEmails[0].options?.bcc).toContain('notifications@zenowethu.co.za');
     });
 });
 

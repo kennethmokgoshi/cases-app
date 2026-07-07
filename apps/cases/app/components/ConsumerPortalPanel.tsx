@@ -141,7 +141,7 @@ export function ConsumerPortalPanel({ caseId }: { caseId: string }) {
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 [color-scheme:light]"
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c.key} value={c.key}>{c.label}</option>
@@ -153,7 +153,7 @@ export function ConsumerPortalPanel({ caseId }: { caseId: string }) {
                   onChange={(e) => setLabel(e.target.value)}
                   placeholder="e.g. Latest 3 months' payslips"
                   maxLength={200}
-                  className="flex-1 min-w-[220px] rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  className="flex-1 min-w-[220px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 [color-scheme:light]"
                 />
               </div>
               <input
@@ -162,7 +162,7 @@ export function ConsumerPortalPanel({ caseId }: { caseId: string }) {
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Optional note for the consumer"
                 maxLength={1000}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 [color-scheme:light]"
               />
               <button
                 type="submit"
