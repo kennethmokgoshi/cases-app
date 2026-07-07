@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, renderTemplate, auth } from '@zenowethu/shared-lib';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted, isManageConsumersEligible, runDrrDocumentReadiness } from '@zenowethu/shared-lib/src/dhs';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted, isManageConsumersEligible, runDrrDocumentReadiness, getConsumerSuspensionIndicator, unsuspendConsumerServices } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
 import path, { join } from 'path';
@@ -339,16 +339,35 @@ export async function POST(request: Request) {
                     }
                 }
 
-                // ── Accepted via DHS: detection ends here ───────────────────
-                // "Check Request Status" deliberately STOPS once it has detected the
-                // outcome (Accepted / Declined / Pending) and parked the case at the
-                // right status. The post-acceptance follow-on — the consumer
-                // acceptance + debt-review-removal consent email — has moved to the
-                // dedicated "Manage Consumers" action (action: 'manage_consumers'),
-                // so this button no longer carries that extra work. Decline handling
-                // (above) stays here as the "rejected" branch.
+                // ── Accepted via DHS: send the acceptance + consent email ────
+                // "Check Request Status" owns the "Good News – Your Debt Review File
+                // Transfer Has Been Accepted" email: as soon as it detects an
+                // Accepted / Auto Transferred outcome it fires the accepted handler
+                // (same as the workflow-automation cron). handleDhsAccepted is
+                // idempotent, so re-checks never re-email the consumer. The
+                // "Manage Consumers" action no longer sends this email — it is the
+                // post-consent DHS Search & Manage Consumer follow-on.
                 if (result.status === 'ACCEPTED' || result.status === 'AUTO_TRANSFERRED') {
-                    (result as any).acceptedReadyForManage = true;
+                    logger.info('[DHS Lookup] check_status: Accepted detected — firing accepted handler (consumer acceptance + consent email)');
+                    try {
+                        const acceptedResult = await handleDhsAccepted({
+                            caseId,
+                            triggeredByUserId: actingUserId,
+                        });
+                        (result as any).acceptedEmailSent = acceptedResult.emailSent;
+                        (result as any).acceptedSkipped = acceptedResult.skipped;
+                        (result as any).acceptedErrors = acceptedResult.errors;
+                        (result as any).acceptedMessage = acceptedResult.errors.length
+                            ? `Acceptance email issue: ${acceptedResult.errors.join(', ')}`
+                            : acceptedResult.skipped
+                                ? (acceptedResult.reason || 'Consumer already notified — consent link still active.')
+                                : acceptedResult.emailSent
+                                    ? 'Acceptance + consent email sent to consumer.'
+                                    : 'Accepted detected — no email was sent.';
+                    } catch (acceptedErr) {
+                        logger.error('[DHS Lookup] check_status accepted handler failed (non-fatal):', acceptedErr);
+                        (result as any).acceptedMessage = 'Accepted detected but the acceptance email failed — see logs.';
+                    }
                 }
             }
         } else if (action === 'auto_fill') {
@@ -975,14 +994,15 @@ export async function POST(request: Request) {
             }
 
         } else if (action === 'manage_consumers') {
-            // ── Manage Consumers: post-acceptance follow-on ─────────────────────
-            // Carries on from where "Check Request Status" now stops. Only valid
-            // once the file is Accepted via DHS. Today it runs the consumer
-            // acceptance + debt-review-removal consent email (idempotent — safe to
-            // click more than once). The deeper Search & Manage Consumer clearance
-            // status-history check (Ready for Clearance / Completed detection via
-            // evaluateConsumerClearance) will be wired in here next, pending sign-off
-            // on its exact scope.
+            // ── Manage Consumers: post-CONSENT follow-on ────────────────────────
+            // Only valid once the file is Accepted via DHS. This action does NOT
+            // send the consumer acceptance + consent email — that is owned by
+            // "Check Request Status" (and the Resend Confirmation Link button).
+            // Manage Consumers checks whether the consumer has CONSENTED to the
+            // debt review flag removal; if yes it logs into DHS, opens Search &
+            // Manage Consumer(s) for the ID number, reads the services-suspension
+            // indicator (far-right action button: red = not suspended, green =
+            // suspended) and runs the document readiness + clearance check.
             if (!caseId || !caseData) {
                 return NextResponse.json({ success: false, message: 'Case ID not provided or case not found' }, { status: 400 });
             }
@@ -994,35 +1014,88 @@ export async function POST(request: Request) {
                 });
             }
 
-            // Post-consent? Then "Manage Consumers" means the NEXT step: verify the
-            // required documents (credit report / payslip / bank statement — chasing
-            // the referrer/B2B partner for the credit report if it is missing) and,
-            // when everything is on file, run the DHS clearance status-history check.
+            // Gate: the consumer must have CONSENTED to the debt review flag
+            // removal before anything runs. Without consent this action does
+            // nothing — it never emails the consumer (that is Check Request
+            // Status / Resend Confirmation Link territory).
             const consented = await prisma.debtReviewRemovalConsent.findFirst({
                 where: { caseId, status: 'CONSENTED' },
                 select: { id: true },
             });
 
-            if (consented) {
-                logger.info('[DHS Lookup] manage_consumers: consent already granted — running document readiness + clearance check');
+            if (!consented) {
+                const pending = await prisma.debtReviewRemovalConsent.findFirst({
+                    where: { caseId, status: 'PENDING', expiresAt: { gt: new Date() } },
+                    select: { id: true },
+                });
+                result = {
+                    success: true,
+                    skipped: true,
+                    consented: false,
+                    message: pending
+                        ? 'Consumer has not yet consented to the debt review flag removal — the consent request is still pending. Manage Consumers only proceeds after consent. Use "Resend Confirmation Link" if the consumer needs the email again.'
+                        : 'Consumer has not consented yet and no active consent request exists. Run "Check Request Status" — it sends the acceptance + consent email when the file is Accepted via DHS.',
+                };
+            } else {
+                logger.info('[DHS Lookup] manage_consumers: consent already granted — checking DHS suspension before readiness');
+                const suspensionCheck = await getConsumerSuspensionIndicator(idNumber);
+                const suspension = suspensionCheck.suspension ?? null;
+
+                if (suspension?.status === 'SUSPENDED') {
+                    if (actingUserId) {
+                        await prisma.caseComment.create({
+                            data: {
+                                caseId,
+                                userId: actingUserId,
+                                activityType: 'DRR_SUSPENSION_CHECK',
+                                content: `[SYSTEM] Manage Consumers stopped: DHS services for this consumer are SUSPENDED (${suspension.signal}). Staff must click Unsuspend Consumer Services before continuing.`,
+                            },
+                        }).catch((err) => logger.error('[DHS Lookup] Failed to write suspension stop comment:', err));
+                    }
+
+                    result = {
+                        success: true,
+                        skipped: true,
+                        consented: true,
+                        blockedBySuspension: true,
+                        canUnsuspend: true,
+                        suspension,
+                        message: `File is suspended on DHS (${suspension.signal}). Click "Unsuspend Consumer Services" before running Manage Consumers again.`,
+                    };
+                    await closeBrowser();
+                    return NextResponse.json({
+                        success: true,
+                        ...result,
+                    });
+                }
+
+                logger.info('[DHS Lookup] manage_consumers: suspension clear — running document readiness + clearance check');
                 const readiness = await runDrrDocumentReadiness({
                     caseId,
                     triggeredByUserId: actingUserId,
                 });
 
                 const missingLabels = readiness.missingAfter.join(', ').replace(/_/g, ' ').toLowerCase();
+                const finalSuspension = readiness.clearance?.suspension ?? suspension;
+                const suspensionNote = finalSuspension && finalSuspension.status !== 'UNKNOWN'
+                    ? ` Services ${finalSuspension.status === 'SUSPENDED' ? 'are SUSPENDED' : 'are NOT suspended'} (${finalSuspension.signal}).`
+                    : '';
                 result = {
                     success: readiness.errors.length === 0,
                     ready: readiness.ready,
+                    consented: true,
                     missingDocuments: readiness.missingAfter,
                     creditReportRequestedFrom: readiness.creditReportRequestedFrom,
                     statusUpdatedTo: readiness.statusUpdatedTo,
                     clearance: readiness.clearance,
+                    suspension: finalSuspension,
+                    blockedBySuspension: false,
+                    canUnsuspend: false,
                     actionsPerformed: readiness.actionsPerformed,
                     errors: readiness.errors,
                     message: readiness.ready
                         ? readiness.clearance
-                            ? `Documents verified. DHS clearance check: ${readiness.clearance.message || 'completed'}${readiness.statusUpdatedTo ? ` Case status → ${readiness.statusUpdatedTo}.` : ''}`
+                            ? `Documents verified. DHS clearance check: ${readiness.clearance.message || 'completed'}${suspensionNote}${readiness.statusUpdatedTo ? ` Case status → ${readiness.statusUpdatedTo}.` : ''}`
                             : 'All required documents are on file.'
                         : `Documents outstanding (${missingLabels}). ` +
                           (readiness.creditReportRequestedFrom
@@ -1030,33 +1103,57 @@ export async function POST(request: Request) {
                               : '') +
                           'Case parked at Awaiting DRR Documents — see the case timeline for details.',
                 };
+            }
+        } else if (action === 'unsuspend_consumer_services') {
+            if (!caseId || !caseData) {
+                return NextResponse.json({ success: false, message: 'Case ID not provided or case not found' }, { status: 400 });
+            }
+
+            if (!isManageConsumersEligible(caseData)) {
+                return NextResponse.json({
+                    success: false,
+                    message: `Unsuspend can only run once the file is Accepted via DHS. Current status: ${caseData.dhsStatus || caseData.status || 'unknown'}.`,
+                });
+            }
+
+            const consented = await prisma.debtReviewRemovalConsent.findFirst({
+                where: { caseId, status: 'CONSENTED' },
+                select: { id: true },
+            });
+
+            if (!consented) {
+                result = {
+                    success: false,
+                    consented: false,
+                    message: 'Unsuspend is only available after the consumer has consented to the debt review flag removal.',
+                };
             } else {
-                logger.info('[DHS Lookup] manage_consumers: firing accepted handler (consumer acceptance + consent email)');
-                const acceptedResult = await handleDhsAccepted({
-                    caseId,
-                    triggeredByUserId: actingUserId,
-                });
-                logger.info('[DHS Lookup] manage_consumers accepted handler result:', {
-                    emailSent: acceptedResult.emailSent,
-                    skipped: acceptedResult.skipped,
-                    errors: acceptedResult.errors,
-                });
+                logger.info('[DHS Lookup] unsuspend_consumer_services: clicking DHS unsuspend action');
+                const unsuspend = await unsuspendConsumerServices(idNumber);
+
+                if (actingUserId) {
+                    await prisma.caseComment.create({
+                        data: {
+                            caseId,
+                            userId: actingUserId,
+                            activityType: unsuspend.unsuspended ? 'DRR_UNSUSPEND_SERVICES' : 'DRR_UNSUSPEND_SERVICES_FAILED',
+                            content: unsuspend.unsuspended
+                                ? `[SYSTEM] DHS consumer services were unsuspended successfully. Please run Manage Consumers again to continue readiness and clearance.`
+                                : `[SYSTEM] DHS consumer services unsuspend did not complete automatically: ${unsuspend.message}`,
+                        },
+                    }).catch((err) => logger.error('[DHS Lookup] Failed to write unsuspend comment:', err));
+                }
 
                 result = {
-                    success: acceptedResult.errors.length === 0,
-                    emailSent: acceptedResult.emailSent,
-                    skipped: acceptedResult.skipped,
-                    consentLink: acceptedResult.consentLink,
-                    statusUpdatedTo: acceptedResult.statusUpdatedTo,
-                    actionsPerformed: acceptedResult.actionsPerformed,
-                    errors: acceptedResult.errors,
-                    message: acceptedResult.errors.length
-                        ? `Manage Consumers completed with issues: ${acceptedResult.errors.join(', ')}`
-                        : acceptedResult.skipped
-                            ? (acceptedResult.reason || 'Consumer already notified — consent link is still active.')
-                            : acceptedResult.emailSent
-                                ? 'Acceptance + consent email sent to consumer. Case moved to Ready to Consent.'
-                                : 'Manage Consumers ran — no email was sent.',
+                    success: unsuspend.success,
+                    consented: true,
+                    unsuspended: unsuspend.unsuspended,
+                    suspension: unsuspend.after ?? unsuspend.before,
+                    before: unsuspend.before,
+                    after: unsuspend.after,
+                    message: unsuspend.unsuspended
+                        ? 'DHS consumer services were unsuspended. Run Manage Consumers again to continue.'
+                        : unsuspend.message,
                 };
             }
         }

@@ -23,7 +23,8 @@ import { sendManualMessage } from '../notifications/service';
 import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
 import { addWorkingDays } from '../statuses/workingDays';
-import { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT } from './accepted-email';
+import { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT, type CredoLoginDetails } from './accepted-email';
+import { buildConsentReminderEmail, CONSENT_REMINDER_SUBJECT } from './consent-reminder-email';
 import { createDrrConsentRequest, buildConsentLink, buildCredoConsentLink } from './consent-service';
 import {
     provisionConsumerForClient,
@@ -250,35 +251,52 @@ export async function handleDhsAccepted(params: {
                 .catch((err) => logger.error(`[DHS Accepted] Failed to sync consent channel for ${caseId}:`, err));
         }
 
-        // ── Resolve the previous DC name from the database ───────────────────
-        // The firm the file transferred FROM. Prefer the values on the case;
-        // when those are blank, fall back to the DebtCounsellor master table
-        // keyed by the case's NCRDC number.
-        let previousDcName = (caseData.debtCounsellorName || caseData.previousDebtCounsellor || '').trim();
-        let previousDcTradingName = (caseData.dcTradingName || '').trim();
-        if (!previousDcName && !previousDcTradingName && caseData.ncrdcNo) {
-            const dc = await prisma.debtCounsellor.findUnique({
-                where: { ncrdcNo: caseData.ncrdcNo },
-                select: { fullName: true, tradingName: true },
-            });
-            if (dc) {
-                previousDcName = (dc.fullName || '').trim();
-                previousDcTradingName = (dc.tradingName || '').trim();
-            }
-        }
+        const credoDetails: CredoLoginDetails | null =
+            credoConsumerId && caseData.client.idNumber
+                ? { idNumber: caseData.client.idNumber, setPasswordLink: credoSetPasswordLink }
+                : null;
 
-        const subject = ACCEPTED_VIA_DHS_SUBJECT(caseData.fileNumber);
-        const body = buildAcceptedViaDhsEmail({
-            clientFirstName: caseData.client.firstName,
-            fileNumber: caseData.fileNumber,
-            consentLink: result.consentLink,
-            previousDcName,
-            previousDcTradingName,
-            credo:
-                credoConsumerId && caseData.client.idNumber
-                    ? { idNumber: caseData.client.idNumber, setPasswordLink: credoSetPasswordLink }
-                    : null,
-        });
+        let subject: string;
+        let body: string;
+        if (forceResend) {
+            // Resend / Manage Consumers nudge: the consumer already received the
+            // acceptance news — send the consent REMINDER instead, which tells
+            // them plainly that flag removal cannot continue without consent.
+            subject = CONSENT_REMINDER_SUBJECT(caseData.fileNumber);
+            body = buildConsentReminderEmail({
+                clientFirstName: caseData.client.firstName,
+                fileNumber: caseData.fileNumber,
+                consentLink: result.consentLink,
+                credo: credoDetails,
+            });
+        } else {
+            // First send: the "Good News – transfer accepted" email.
+            // Resolve the previous DC name (the firm the file transferred FROM):
+            // prefer the values on the case, else the DebtCounsellor master
+            // table keyed by the case's NCRDC number.
+            let previousDcName = (caseData.debtCounsellorName || caseData.previousDebtCounsellor || '').trim();
+            let previousDcTradingName = (caseData.dcTradingName || '').trim();
+            if (!previousDcName && !previousDcTradingName && caseData.ncrdcNo) {
+                const dc = await prisma.debtCounsellor.findUnique({
+                    where: { ncrdcNo: caseData.ncrdcNo },
+                    select: { fullName: true, tradingName: true },
+                });
+                if (dc) {
+                    previousDcName = (dc.fullName || '').trim();
+                    previousDcTradingName = (dc.tradingName || '').trim();
+                }
+            }
+
+            subject = ACCEPTED_VIA_DHS_SUBJECT(caseData.fileNumber);
+            body = buildAcceptedViaDhsEmail({
+                clientFirstName: caseData.client.firstName,
+                fileNumber: caseData.fileNumber,
+                consentLink: result.consentLink,
+                previousDcName,
+                previousDcTradingName,
+                credo: credoDetails,
+            });
+        }
 
         const emailResult = await sendManualMessage(
             caseId,
@@ -291,8 +309,8 @@ export async function handleDhsAccepted(params: {
         if (emailResult.emailSuccess) {
             result.emailSent = true;
             result.actionsPerformed.push(
-                existing
-                    ? `Consent email RE-SENT to consumer (${caseData.client.email})`
+                forceResend
+                    ? `Consent REMINDER email ${existing ? 'RE-SENT' : 'sent'} to consumer (${caseData.client.email})`
                     : `Acceptance + consent email sent to consumer (${caseData.client.email})`
             );
             // Park the workflow at "Ready to Consent" with a +3 working-day follow-up.
@@ -301,8 +319,8 @@ export async function handleDhsAccepted(params: {
             await addComment(
                 caseId,
                 triggeredByUserId,
-                existing
-                    ? `[SYSTEM] Consent confirmation link RE-SENT to consumer (${caseData.client.email}) at staff request. The existing secure link remains valid. Still awaiting consumer consent before flag removal proceeds.`
+                forceResend
+                    ? `[SYSTEM] Consent REMINDER ${existing ? 'RE-SENT' : 'sent'} to consumer (${caseData.client.email}) — the email reminds them that the debt review flag removal cannot continue until they consent. ${existing ? 'The existing secure link remains valid.' : 'A new secure consent link was issued.'} Still awaiting consumer consent before flag removal proceeds.`
                     : `[SYSTEM] DHS Accepted: Transfer accepted — file is now with Zenowethu Debt Management. Acceptance + debt-review-removal consent email sent to consumer (${caseData.client.email}). Status → Ready to Consent. Next update +${CONSENT_FOLLOWUP_DAYS} working days. Awaiting consumer consent via the secure link before flag removal proceeds.`
             );
         } else {

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { getCredoSupportContact } from "@/lib/support-contact";
+
 interface ConsentView {
   token: string;
   status: string;
@@ -24,6 +26,34 @@ const card: React.CSSProperties = {
   boxShadow: "0 10px 30px rgba(11,29,53,0.08)",
 };
 
+const contactActions: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+  marginTop: 18,
+};
+
+const primaryContactLink: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 40,
+  padding: "10px 16px",
+  background: "#0B1D35",
+  color: "#FFFFFF",
+  fontWeight: 700,
+  fontSize: "0.875rem",
+  borderRadius: 9,
+  textDecoration: "none",
+};
+
+const secondaryContactLink: React.CSSProperties = {
+  ...primaryContactLink,
+  background: "#F8FAFC",
+  color: "#0B1D35",
+  border: "1px solid #CBD5E1",
+};
+
 export default function ConsentClient({ token }: { token: string }) {
   const [view, setView] = useState<ConsentView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +62,8 @@ export default function ConsentClient({ token }: { token: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [approved, setApproved] = useState(false);
   const consumerDisplayName = view?.consumerDisplayName ?? view?.consumerFirstName ?? null;
+  const supportContact = getCredoSupportContact();
+  const expiredSupportContact = getCredoSupportContact("expired-consent-link");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -149,6 +181,17 @@ export default function ConsentClient({ token }: { token: string }) {
             >
               Go to my dashboard
             </Link>
+            <p style={{ fontSize: "0.8125rem", color: "#64748B", lineHeight: 1.6, marginTop: 18, marginBottom: 0 }}>
+              Need help?{" "}
+              <a href={supportContact.whatsappHref} target="_blank" rel="noopener noreferrer" style={{ color: "#0B1D35", fontWeight: 700 }}>
+                WhatsApp us
+              </a>{" "}
+              or contact{" "}
+              <a href={supportContact.supportHref} style={{ color: "#0B1D35", fontWeight: 700 }}>
+                Support
+              </a>
+              .
+            </p>
           </div>
         ) : error && !view ? (
           <div>
@@ -164,9 +207,30 @@ export default function ConsentClient({ token }: { token: string }) {
               {error}
             </div>
             <p style={{ fontSize: "0.875rem", color: "#64748B", lineHeight: 1.6 }}>
-              If you believe this is a mistake, please contact us on <strong>081 747 7616</strong> or reply to the
-              email we sent you.
+              If you believe this is a mistake, please call{" "}
+              <a href={supportContact.phoneHref} style={{ color: "#0B1D35", fontWeight: 700 }}>
+                {supportContact.phoneDisplay}
+              </a>
+              , reply to the email we sent you, or use one of the quick contact options below.
             </p>
+            <div style={contactActions}>
+              <a
+                href={supportContact.whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Contact Zenowethu staff on WhatsApp"
+                style={primaryContactLink}
+              >
+                WhatsApp us
+              </a>
+              <a
+                href={supportContact.supportHref}
+                aria-label="Email Zenowethu support"
+                style={secondaryContactLink}
+              >
+                Support
+              </a>
+            </div>
           </div>
         ) : view && (view.expired || view.status === "EXPIRED" || view.status === "CANCELLED") ? (
           <div>
@@ -177,8 +241,30 @@ export default function ConsentClient({ token }: { token: string }) {
               {view.status === "CANCELLED"
                 ? "This consent request has been cancelled."
                 : "This consent link has expired."}{" "}
-              Please contact us on <strong>081 747 7616</strong> and we will send you a new one.
+              Please call{" "}
+              <a href={expiredSupportContact.phoneHref} style={{ color: "#0B1D35", fontWeight: 700 }}>
+                {expiredSupportContact.phoneDisplay}
+              </a>
+              , WhatsApp us, or contact Support and we will send you a new one.
             </p>
+            <div style={contactActions}>
+              <a
+                href={expiredSupportContact.whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Request a new consent link on WhatsApp"
+                style={primaryContactLink}
+              >
+                WhatsApp us
+              </a>
+              <a
+                href={expiredSupportContact.supportHref}
+                aria-label="Email Zenowethu support for a new consent link"
+                style={secondaryContactLink}
+              >
+                Support
+              </a>
+            </div>
           </div>
         ) : view ? (
           <div>
@@ -248,6 +334,16 @@ export default function ConsentClient({ token }: { token: string }) {
 
             <p style={{ textAlign: "center", marginTop: 18, fontSize: "0.75rem", color: "#94A3B8", lineHeight: 1.6 }}>
               Your personal information is protected under POPIA. Your approval is recorded with a secure audit trail.
+              {" "}
+              Need help?{" "}
+              <a href={supportContact.whatsappHref} target="_blank" rel="noopener noreferrer" style={{ color: "#0B1D35", fontWeight: 700 }}>
+                WhatsApp us
+              </a>{" "}
+              or contact{" "}
+              <a href={supportContact.supportHref} style={{ color: "#0B1D35", fontWeight: 700 }}>
+                Support
+              </a>
+              .
             </p>
           </div>
         ) : null}

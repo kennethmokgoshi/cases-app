@@ -1,5 +1,10 @@
 import type { NextAuthConfig } from "next-auth";
 
+import {
+  CREDO_IDLE_TIMEOUT_SECONDS,
+  isCredoProtectedPathname,
+} from "./lib/session-security";
+
 // Edge-safe config — no Node.js imports (bcryptjs, prisma, etc.)
 // Used by middleware.ts which runs on Edge Runtime.
 // The full config (with Credentials provider) is in auth.ts.
@@ -11,8 +16,8 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const isDashboard = nextUrl.pathname.startsWith("/dashboard");
-      if (isDashboard && !isLoggedIn) return false;
+      const isProtected = isCredoProtectedPathname(nextUrl.pathname);
+      if (isProtected && !isLoggedIn) return false;
       return true;
     },
     jwt({ token, user }) {
@@ -30,7 +35,14 @@ export const authConfig: NextAuthConfig = {
     },
   },
   providers: [], // Credentials provider added in auth.ts (Node.js only)
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: CREDO_IDLE_TIMEOUT_SECONDS,
+    updateAge: 60,
+  },
+  jwt: {
+    maxAge: CREDO_IDLE_TIMEOUT_SECONDS,
+  },
   trustHost: true,
   cookies: {
     sessionToken: {

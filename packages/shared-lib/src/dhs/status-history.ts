@@ -86,11 +86,75 @@ export interface ClearanceEvaluation {
     entries: StatusHistoryEntry[];
 }
 
+/** Services-suspension state read off the Search & Manage Consumer grid. */
+export type SuspensionStatus = 'SUSPENDED' | 'NOT_SUSPENDED' | 'UNKNOWN';
+
+/**
+ * The services-suspension indicator for a consumer row on the DHS Search &
+ * Manage Consumer page. Business rule (per operations): the FAR-RIGHT action
+ * button on the consumer's row is the source of truth —
+ *   • RED   → services are NOT suspended
+ *   • GREEN → services ARE suspended
+ * The SUSP IND grid column (Y/N) is captured as a secondary signal and used
+ * only when the button colour cannot be determined.
+ */
+export interface SuspensionIndicator {
+    status: SuspensionStatus;
+    /** Which signal decided the status, e.g. "far-right action button is red". */
+    signal: string | null;
+    /** Colour classified from the far-right action button: 'red' | 'green' | null. */
+    buttonColor: 'red' | 'green' | null;
+    /** Raw class attribute of the far-right action button, for transparency. */
+    buttonClass: string | null;
+    /** Tooltip/title of the far-right action button, if any. */
+    buttonTitle: string | null;
+    /** Raw value of the SUSP IND column cell (usually "Y"/"N"), if found. */
+    suspIndCell: string | null;
+    notes: string[];
+}
+
+/** Raw signals harvested from the consumer's grid row (input to the classifier). */
+export interface SuspensionRowSignals {
+    /** class attribute of the far-right action button in the row's ACTION cell. */
+    buttonClass?: string | null;
+    /** Computed background-color of that button, e.g. "rgb(217, 83, 79)". */
+    buttonBgColor?: string | null;
+    /** title attribute of that button. */
+    buttonTitle?: string | null;
+    /** Text of the SUSP IND column cell for the row, if the header was found. */
+    suspIndCell?: string | null;
+}
+
 /** Result of a live DHS consumer status-history check. */
 export interface ConsumerStatusHistoryResult {
     found: boolean;
     idNumber: string;
     evaluation: ClearanceEvaluation;
+    /** Services-suspension indicator from the consumer's grid row (null if the row was not read). */
+    suspension: SuspensionIndicator | null;
+    /** Raw cells of the consumer's grid row (surname, names, status, DC, ...), for reporting. */
+    rowCells: string[] | null;
+    message: string;
+    screenshot?: string;
+}
+
+/** Result of reading only the Search & Manage Consumer suspension indicator. */
+export interface ConsumerSuspensionCheckResult {
+    found: boolean;
+    idNumber: string;
+    suspension: SuspensionIndicator | null;
+    rowCells: string[] | null;
+    message: string;
+    screenshot?: string;
+}
+
+/** Result of clicking the DHS "Unsuspend Consumer Services" toggle. */
+export interface UnsuspendConsumerServicesResult {
+    success: boolean;
+    idNumber: string;
+    unsuspended: boolean;
+    before: SuspensionIndicator | null;
+    after: SuspensionIndicator | null;
     message: string;
     screenshot?: string;
 }
@@ -261,6 +325,96 @@ export function evaluateConsumerClearance(
     return evaluation;
 }
 
+/**
+ * Classify a colour from a button's class attribute and/or computed background.
+ * DHS uses Bootstrap-style button classes (btn-danger = red, btn-success = green);
+ * the RGB fallback handles inline-styled buttons.
+ */
+export function classifyButtonColor(
+    buttonClass?: string | null,
+    buttonBgColor?: string | null
+): 'red' | 'green' | null {
+    const cls = (buttonClass ?? '').toLowerCase();
+    if (/\b(btn-danger|red)\b/.test(cls)) return 'red';
+    if (/\b(btn-success|green)\b/.test(cls)) return 'green';
+
+    const m = (buttonBgColor ?? '').match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (m) {
+        const r = Number(m[1]);
+        const g = Number(m[2]);
+        const b = Number(m[3]);
+        if (r > g + 40 && r > b + 40) return 'red';
+        if (g > r + 40 && g > b + 40) return 'green';
+    }
+    return null;
+}
+
+/**
+ * Classify a consumer's services-suspension state from the raw row signals.
+ *
+ * Business rule: the far-right action button decides —
+ *   RED → NOT suspended, GREEN → suspended.
+ * When the button colour cannot be determined, the SUSP IND column (Y/N) is
+ * used as a fallback; otherwise UNKNOWN.
+ */
+export function classifySuspension(signals: SuspensionRowSignals): SuspensionIndicator {
+    const notes: string[] = [];
+    const buttonColor = classifyButtonColor(signals.buttonClass, signals.buttonBgColor);
+    const suspIndCell = (signals.suspIndCell ?? '').trim() || null;
+
+    const indicator: SuspensionIndicator = {
+        status: 'UNKNOWN',
+        signal: null,
+        buttonColor,
+        buttonClass: signals.buttonClass ?? null,
+        buttonTitle: signals.buttonTitle ?? null,
+        suspIndCell,
+        notes,
+    };
+
+    if (buttonColor === 'red') {
+        indicator.status = 'NOT_SUSPENDED';
+        indicator.signal = 'far-right action button is red';
+        notes.push('Far-right action button on the consumer row is RED → services are NOT suspended.');
+        return indicator;
+    }
+    if (buttonColor === 'green') {
+        indicator.status = 'SUSPENDED';
+        indicator.signal = 'far-right action button is green';
+        notes.push('Far-right action button on the consumer row is GREEN → services ARE suspended.');
+        return indicator;
+    }
+
+    // Secondary signal: the toggle's tooltip states the ACTION it offers —
+    // "Unsuspend Consumer Services" means services are currently suspended.
+    const title = (signals.buttonTitle ?? '').toLowerCase();
+    if (title.includes('unsuspend')) {
+        indicator.status = 'SUSPENDED';
+        indicator.signal = `button tooltip is "${signals.buttonTitle}" (colour unreadable)`;
+        notes.push('Suspend-services button offers "Unsuspend" → services ARE suspended.');
+        return indicator;
+    }
+    if (title.includes('suspend')) {
+        indicator.status = 'NOT_SUSPENDED';
+        indicator.signal = `button tooltip is "${signals.buttonTitle}" (colour unreadable)`;
+        notes.push('Suspend-services button offers "Suspend" → services are NOT suspended.');
+        return indicator;
+    }
+
+    const suspInd = (suspIndCell ?? '').toUpperCase();
+    if (suspInd === 'Y' || suspInd === 'N') {
+        indicator.status = suspInd === 'Y' ? 'SUSPENDED' : 'NOT_SUSPENDED';
+        indicator.signal = `SUSP IND column is "${suspInd}" (button colour unreadable)`;
+        notes.push(
+            `Far-right action button colour could not be determined — fell back to the SUSP IND column ("${suspInd}").`
+        );
+        return indicator;
+    }
+
+    notes.push('Neither the far-right action button colour nor the SUSP IND column could be read — suspension state unknown.');
+    return indicator;
+}
+
 // ─── Live DHS scraper ─────────────────────────────────────────────────────────
 
 function emptyEvaluation(): ClearanceEvaluation {
@@ -299,7 +453,7 @@ export async function getConsumerStatusHistory(idNumber: string): Promise<Consum
 
         const loggedIn = await loginToDHS(page, credentials);
         if (!loggedIn) {
-            return { found: false, idNumber, evaluation: emptyEvaluation(), message: 'Failed to login to DHS' };
+            return { found: false, idNumber, evaluation: emptyEvaluation(), suspension: null, rowCells: null, message: 'Failed to login to DHS' };
         }
 
         logger.info('Navigating to Search & Manage Consumer:', DHS_CONFIG.searchManageConsumerUrl);
@@ -314,6 +468,8 @@ export async function getConsumerStatusHistory(idNumber: string): Promise<Consum
                 found: false,
                 idNumber,
                 evaluation: emptyEvaluation(),
+                suspension: null,
+                rowCells: null,
                 message: 'Could not search consumer on DHS (RSA ID input not found)',
                 screenshot: screenshotPath,
             };
@@ -321,6 +477,17 @@ export async function getConsumerStatusHistory(idNumber: string): Promise<Consum
 
         // Wait for the filtered results to load.
         await delay(5000);
+
+        // Read the consumer's grid row FIRST (services-suspension indicator +
+        // row cells) — opening the status-history popup can obscure the grid.
+        const rowRead = await readConsumerRow(page, idNumber);
+        const suspension = rowRead ? classifySuspension(rowRead.signals) : null;
+        const rowCells = rowRead?.cells ?? null;
+        if (suspension) {
+            logger.info(`[DHS StatusHistory] Suspension indicator: ${suspension.status} (${suspension.signal ?? 'no signal'})`);
+        } else {
+            logger.warn('[DHS StatusHistory] Consumer grid row not found — suspension state not read');
+        }
 
         const rows = await openAndReadStatusHistory(page, idNumber);
 
@@ -343,7 +510,7 @@ export async function getConsumerStatusHistory(idNumber: string): Promise<Consum
                 ? 'No status history found for this consumer on DHS.'
                 : evaluation.notes[0] ?? 'Status history read.';
 
-        return { found: entries.length > 0, idNumber, evaluation, message, screenshot: screenshotPath };
+        return { found: entries.length > 0, idNumber, evaluation, suspension, rowCells, message, screenshot: screenshotPath };
     } catch (error) {
         logger.error('Error reading DHS consumer status history:', error);
         try {
@@ -356,12 +523,388 @@ export async function getConsumerStatusHistory(idNumber: string): Promise<Consum
             found: false,
             idNumber,
             evaluation: emptyEvaluation(),
+            suspension: null,
+            rowCells: null,
             message: `Error: ${error instanceof Error ? error.message : String(error)}`,
             screenshot: screenshotPath,
         };
     } finally {
         await page.close();
     }
+}
+
+/**
+ * Read the services-suspension state before any clearance/document work runs.
+ * This is intentionally narrower than getConsumerStatusHistory(): it stops after
+ * the Search & Manage Consumer grid row is read.
+ */
+export async function getConsumerSuspensionIndicator(idNumber: string): Promise<ConsumerSuspensionCheckResult> {
+    const browserInstance = await getBrowser();
+    const page = await browserInstance.newPage();
+    let screenshotPath = '';
+
+    try {
+        const prepared = await openSearchManageConsumer(page, idNumber);
+        if (prepared.ok === false) {
+            return {
+                found: false,
+                idNumber,
+                suspension: null,
+                rowCells: null,
+                message: prepared.message,
+                screenshot: prepared.screenshot,
+            };
+        }
+
+        const rowRead = await readConsumerRow(page, idNumber);
+        screenshotPath = `storage/uploads/dhs-suspension-check-${Date.now()}.png`;
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+
+        if (!rowRead) {
+            return {
+                found: false,
+                idNumber,
+                suspension: null,
+                rowCells: null,
+                message: 'Consumer row not found on DHS Search & Manage Consumer.',
+                screenshot: screenshotPath,
+            };
+        }
+
+        const suspension = classifySuspension(rowRead.signals);
+        return {
+            found: true,
+            idNumber,
+            suspension,
+            rowCells: rowRead.cells,
+            message: suspension.status === 'UNKNOWN'
+                ? 'DHS consumer row found, but services-suspension state could not be determined.'
+                : `DHS services are ${suspension.status === 'SUSPENDED' ? 'SUSPENDED' : 'NOT suspended'}.`,
+            screenshot: screenshotPath,
+        };
+    } catch (error) {
+        logger.error('Error reading DHS consumer suspension indicator:', error);
+        try {
+            screenshotPath = `storage/uploads/dhs-suspension-check-error-${Date.now()}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+        } catch {
+            // ignore screenshot failure
+        }
+        return {
+            found: false,
+            idNumber,
+            suspension: null,
+            rowCells: null,
+            message: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            screenshot: screenshotPath,
+        };
+    } finally {
+        await page.close();
+    }
+}
+
+/**
+ * Click DHS' "Unsuspend Consumer Services" action when the row is definitely
+ * suspended. It refuses to click when the state is unknown or already active.
+ */
+export async function unsuspendConsumerServices(idNumber: string): Promise<UnsuspendConsumerServicesResult> {
+    const browserInstance = await getBrowser();
+    const page = await browserInstance.newPage();
+    let screenshotPath = '';
+
+    try {
+        page.on('dialog', async (dialog) => {
+            await dialog.accept().catch(() => null);
+        });
+
+        const prepared = await openSearchManageConsumer(page, idNumber);
+        if (prepared.ok === false) {
+            return {
+                success: false,
+                idNumber,
+                unsuspended: false,
+                before: null,
+                after: null,
+                message: prepared.message,
+                screenshot: prepared.screenshot,
+            };
+        }
+
+        const beforeRead = await readConsumerRow(page, idNumber);
+        const before = beforeRead ? classifySuspension(beforeRead.signals) : null;
+        if (!beforeRead || !before) {
+            screenshotPath = `storage/uploads/dhs-unsuspend-no-row-${Date.now()}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            return {
+                success: false,
+                idNumber,
+                unsuspended: false,
+                before,
+                after: null,
+                message: 'Consumer row not found on DHS Search & Manage Consumer.',
+                screenshot: screenshotPath,
+            };
+        }
+
+        if (before.status === 'NOT_SUSPENDED') {
+            return {
+                success: true,
+                idNumber,
+                unsuspended: false,
+                before,
+                after: before,
+                message: 'Consumer services are already not suspended.',
+            };
+        }
+
+        if (before.status !== 'SUSPENDED') {
+            return {
+                success: false,
+                idNumber,
+                unsuspended: false,
+                before,
+                after: null,
+                message: 'DHS suspension state is unknown, so the unsuspend button was not clicked.',
+            };
+        }
+
+        const clicked = await clickSuspensionToggle(page, idNumber);
+        if (!clicked) {
+            screenshotPath = `storage/uploads/dhs-unsuspend-no-button-${Date.now()}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            return {
+                success: false,
+                idNumber,
+                unsuspended: false,
+                before,
+                after: null,
+                message: 'Could not find the DHS Unsuspend Consumer Services button.',
+                screenshot: screenshotPath,
+            };
+        }
+
+        await delay(5000);
+        const afterRead = await readConsumerRow(page, idNumber);
+        const after = afterRead ? classifySuspension(afterRead.signals) : null;
+        screenshotPath = `storage/uploads/dhs-unsuspend-${Date.now()}.png`;
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+
+        const unsuspended = after?.status === 'NOT_SUSPENDED';
+        return {
+            success: unsuspended,
+            idNumber,
+            unsuspended,
+            before,
+            after,
+            message: unsuspended
+                ? 'DHS consumer services were unsuspended successfully.'
+                : 'DHS unsuspend was clicked, but the consumer still appears suspended. Please verify manually.',
+            screenshot: screenshotPath,
+        };
+    } catch (error) {
+        logger.error('Error unsuspending DHS consumer services:', error);
+        try {
+            screenshotPath = `storage/uploads/dhs-unsuspend-error-${Date.now()}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+        } catch {
+            // ignore screenshot failure
+        }
+        return {
+            success: false,
+            idNumber,
+            unsuspended: false,
+            before: null,
+            after: null,
+            message: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            screenshot: screenshotPath,
+        };
+    } finally {
+        await page.close();
+    }
+}
+
+async function openSearchManageConsumer(
+    page: Page,
+    idNumber: string
+): Promise<{ ok: true } | { ok: false; message: string; screenshot?: string }> {
+    const credentials = await getDHSCredentials();
+    logger.info('=== Starting DHS Search & Manage Consumer Suspension Check ===');
+    logger.info('ID Number:', idNumber);
+
+    const loggedIn = await loginToDHS(page, credentials);
+    if (!loggedIn) {
+        return { ok: false, message: 'Failed to login to DHS' };
+    }
+
+    logger.info('Navigating to Search & Manage Consumer:', DHS_CONFIG.searchManageConsumerUrl);
+    await page.goto(DHS_CONFIG.searchManageConsumerUrl, { waitUntil: 'load', timeout: DHS_CONFIG.timeout });
+    await delay(2000);
+
+    const searched = await fillIdAndApplyFilter(page, idNumber);
+    if (!searched) {
+        const screenshot = `storage/uploads/dhs-suspension-no-input-${Date.now()}.png`;
+        await page.screenshot({ path: screenshot, fullPage: true });
+        return { ok: false, message: 'Could not search consumer on DHS (RSA ID input not found)', screenshot };
+    }
+
+    await delay(5000);
+    return { ok: true };
+}
+
+/**
+ * Find the consumer's row on the Search & Manage Consumer results grid and
+ * harvest (a) all its cell texts and (b) the far-right action button's class,
+ * computed background colour and title — the services-suspension signals.
+ *
+ * The ACTION cell is the row's first cell; its LAST button/link is the
+ * suspension toggle. The SUSP IND column is located via the header row when
+ * present. Searches every frame (the grid may render inside one).
+ */
+async function readConsumerRow(
+    page: Page,
+    idNumber: string
+): Promise<{ cells: string[]; signals: SuspensionRowSignals } | null> {
+    const harvest = `(function () {
+        var target = ${JSON.stringify(idNumber)};
+        var clean = function (s) { return (s || '').replace(/\\s+/g, ' ').trim(); };
+
+        // Find the INNERMOST row whose own (direct) cells contain the ID as a
+        // whole cell value. Outer layout rows also contain the ID in their text,
+        // so among matches keep the one with the least total text.
+        var best = null;
+        var trs = document.querySelectorAll('tr');
+        for (var i = 0; i < trs.length; i++) {
+            var tds = trs[i].querySelectorAll(':scope > td');
+            if (!tds.length) continue;
+            var cells = [];
+            var hit = false;
+            for (var c = 0; c < tds.length; c++) {
+                var t = clean(tds[c].innerText);
+                cells.push(t);
+                if (t.replace(/\\s/g, '') === target) hit = true;
+            }
+            if (!hit) continue;
+            var len = (trs[i].innerText || '').length;
+            if (!best || len < best.len) best = { tr: trs[i], tds: tds, cells: cells, len: len };
+        }
+        if (!best) return null;
+
+        // SUSP IND cell: try the header row of the row's own table first, then
+        // fall back to the known grid layout (ID → +7: SURNAME, NAME(S), GENDER,
+        // RACE, STATUS, TRNS IND, SUSP IND).
+        var suspCell = null;
+        var table = best.tr.closest('table');
+        if (table) {
+            var headRows = table.querySelectorAll('tr');
+            for (var hr = 0; hr < headRows.length; hr++) {
+                var hcs = headRows[hr].querySelectorAll(':scope > th, :scope > td');
+                var headerTexts = [];
+                var suspCol = -1;
+                for (var h = 0; h < hcs.length; h++) {
+                    var ht = clean(hcs[h].innerText).toUpperCase();
+                    headerTexts.push(ht);
+                    if (ht.indexOf('SUSP') > -1 && ht.length < 20) suspCol = h;
+                }
+                if (suspCol > -1 && suspCol < best.cells.length) {
+                    suspCell = best.cells[suspCol];
+                    break;
+                }
+            }
+        }
+        if (suspCell === null || suspCell.length > 3) {
+            var idIdx = -1;
+            for (var k = 0; k < best.cells.length; k++) {
+                if (best.cells[k].replace(/\\s/g, '') === target) { idIdx = k; break; }
+            }
+            if (idIdx > -1 && idIdx + 7 < best.cells.length) {
+                var candidate = best.cells[idIdx + 7].toUpperCase();
+                suspCell = candidate === 'Y' || candidate === 'N' ? candidate : suspCell;
+            }
+        }
+
+        // The services-suspension toggle is the far-right button of the ACTION
+        // cell. DHS renders it as <div id="btnSuspendServices_<ncrRef>"
+        // class="btn btn-danger|btn-success btn-xs" title="(Un)suspend Consumer
+        // Services"> — target it by id first, then fall back to the last
+        // button-like element in the ACTION cell / row.
+        var btn = best.tr.querySelector('[id^="btnSuspendServices"]');
+        if (!btn) {
+            var scope = best.tds[0].querySelectorAll('a, button, div[class*="btn"], input[type="button"], input[type="submit"], span[onclick], i[onclick]');
+            if (!scope.length) {
+                scope = best.tr.querySelectorAll('a, button, div[class*="btn"], input[type="button"], input[type="submit"]');
+            }
+            if (scope.length) btn = scope[scope.length - 1];
+        }
+        var btnClass = null, btnBg = null, btnTitle = null;
+        if (btn) {
+            btnClass = btn.getAttribute('class');
+            btnTitle = btn.getAttribute('title') || btn.getAttribute('data-original-title');
+            try { btnBg = window.getComputedStyle(btn).backgroundColor; } catch (e) {}
+        }
+        return {
+            cells: best.cells,
+            signals: {
+                buttonClass: btnClass,
+                buttonBgColor: btnBg,
+                buttonTitle: btnTitle,
+                suspIndCell: suspCell
+            }
+        };
+    })()`;
+
+    for (const frame of page.frames()) {
+        try {
+            const found = (await frame.evaluate(harvest)) as
+                | { cells: string[]; signals: SuspensionRowSignals }
+                | null;
+            if (found) return found;
+        } catch {
+            // Frame detached / cross-origin — skip.
+        }
+    }
+    return null;
+}
+
+async function clickSuspensionToggle(page: Page, idNumber: string): Promise<boolean> {
+    const clickScript = `(function () {
+        var target = ${JSON.stringify(idNumber)};
+        var clean = function (s) { return (s || '').replace(/\\s+/g, ' ').trim(); };
+        var best = null;
+        var trs = document.querySelectorAll('tr');
+        for (var i = 0; i < trs.length; i++) {
+            var tds = trs[i].querySelectorAll(':scope > td');
+            if (!tds.length) continue;
+            var hit = false;
+            for (var c = 0; c < tds.length; c++) {
+                if (clean(tds[c].innerText).replace(/\\s/g, '') === target) hit = true;
+            }
+            if (!hit) continue;
+            var len = (trs[i].innerText || '').length;
+            if (!best || len < best.len) best = { tr: trs[i], tds: tds, len: len };
+        }
+        if (!best) return false;
+        var btn = best.tr.querySelector('[id^="btnSuspendServices"]');
+        if (!btn) {
+            var scope = best.tds[0].querySelectorAll('a, button, div[class*="btn"], input[type="button"], input[type="submit"], span[onclick], i[onclick]');
+            if (!scope.length) {
+                scope = best.tr.querySelectorAll('a, button, div[class*="btn"], input[type="button"], input[type="submit"]');
+            }
+            if (scope.length) btn = scope[scope.length - 1];
+        }
+        if (!btn) return false;
+        btn.click();
+        return true;
+    })()`;
+
+    for (const frame of page.frames()) {
+        try {
+            const clicked = (await frame.evaluate(clickScript)) as boolean;
+            if (clicked) return true;
+        } catch {
+            // Frame detached / cross-origin — skip.
+        }
+    }
+    return false;
 }
 
 /** Fill the RSA ID field and click Apply Filter on the Search & Manage Consumer page. */

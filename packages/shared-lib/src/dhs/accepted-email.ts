@@ -22,7 +22,7 @@
  * counsellor name (per request) — it leads with the NCRDC registration number.
  * Scoped to this email; other emails keep the shared `SIGNATURE`.
  */
-const ACCEPTED_SIGNATURE = `NCRDC3693
+export const ACCEPTED_SIGNATURE = `NCRDC3693
 Zenowethu Debt Management
 Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
 Tel: +27 81 747 7616 | Cell: 082 363 8207
@@ -42,6 +42,45 @@ function previousDcLabel(name?: string | null, tradingName?: string | null): str
     return 'your previous debt counsellor on record';
 }
 
+/**
+ * Credo portal login details — present when the consent is approved inside
+ * the Credo portal (the preferred flow). The username is ALWAYS the
+ * consumer's 13-digit SA ID number.
+ */
+export interface CredoLoginDetails {
+    /** The consumer's 13-digit SA ID number — their Credo username. */
+    idNumber: string;
+    /** Set-password/activation link when the profile has no password yet. */
+    setPasswordLink?: string | null;
+}
+
+/**
+ * The "HOW TO LOG IN TO YOUR CREDO PORTAL" email section. Shared by the
+ * acceptance email and the consent reminder email so login instructions
+ * never drift apart. Empty string when the consumer has no Credo profile
+ * (public-link fallback flow).
+ */
+export function buildCredoLoginSection(credo?: CredoLoginDetails | null): string {
+    if (!credo) return '';
+    return `
+─────────────────────────────────────────
+HOW TO LOG IN TO YOUR CREDO PORTAL
+─────────────────────────────────────────
+Your consent is given inside Credo, your secure Zenowethu consumer portal. Logging in is simple:
+
+  Your username:  your 13-digit SA ID number (${credo.idNumber})
+${credo.setPasswordLink
+            ? `  Your password:  you have not set one yet — please set it first using this link:
+
+  ${credo.setPasswordLink}
+
+Once your password is set, click the consent link above (or again at any time) and sign in with your ID number and your new password.`
+            : `  Your password:  the password you chose for Credo. If you have forgotten it, click "Forgot password?" on the login page.`}
+
+After signing in you will see your consent page — read it and press "I Approve" so our team can start working on your file.
+`;
+}
+
 export function buildAcceptedViaDhsEmail(p: {
     clientFirstName: string;
     fileNumber: string;
@@ -50,40 +89,12 @@ export function buildAcceptedViaDhsEmail(p: {
     /** Previous debt counsellor (the firm the file transferred FROM), if known. */
     previousDcName?: string | null;
     previousDcTradingName?: string | null;
-    /**
-     * Credo portal login details — present when the consent is approved inside
-     * the Credo portal (the preferred flow). The username is ALWAYS the
-     * consumer's 13-digit SA ID number.
-     */
-    credo?: {
-        /** The consumer's 13-digit SA ID number — their Credo username. */
-        idNumber: string;
-        /** Set-password/activation link when the profile has no password yet. */
-        setPasswordLink?: string | null;
-    } | null;
+    credo?: CredoLoginDetails | null;
 }): string {
     const firstName = (p.clientFirstName || '').trim() || 'Sir/Madam';
     const fromDc = previousDcLabel(p.previousDcName, p.previousDcTradingName);
 
-    const credoSection = p.credo
-        ? `
-─────────────────────────────────────────
-HOW TO LOG IN TO YOUR CREDO PORTAL
-─────────────────────────────────────────
-Your consent is given inside Credo, your secure Zenowethu consumer portal. Logging in is simple:
-
-  Your username:  your 13-digit SA ID number (${p.credo.idNumber})
-${p.credo.setPasswordLink
-            ? `  Your password:  you have not set one yet — please set it first using this link:
-
-  ${p.credo.setPasswordLink}
-
-Once your password is set, click the consent link above (or again at any time) and sign in with your ID number and your new password.`
-            : `  Your password:  the password you chose for Credo. If you have forgotten it, click "Forgot password?" on the login page.`}
-
-After signing in you will see your consent page — read it and press "I Approve" so our team can start working on your file.
-`
-        : '';
+    const credoSection = buildCredoLoginSection(p.credo);
 
     return `Dear ${firstName},
 

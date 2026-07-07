@@ -53,6 +53,8 @@ export { runManageConsumersClearance } from './clearance-automation';
 export type { ClearanceRunResult } from './clearance-automation';
 export {
     getConsumerStatusHistory,
+    getConsumerSuspensionIndicator,
+    unsuspendConsumerServices,
     evaluateConsumerClearance,
     parseStatusHistoryRows,
     parseDhsDate,
@@ -61,6 +63,8 @@ export {
     isClearanceEligibleCode,
     isAcceptedViaDhsCode,
     normalizeStatusCode,
+    classifySuspension,
+    classifyButtonColor,
     CLEARANCE_ELIGIBLE_CODES,
     CLEARANCE_READY_WINDOW_DAYS,
     ACCEPTED_VIA_DHS_CODES,
@@ -71,4 +75,9 @@ export type {
     ClearanceEligibleCode,
     AcceptedViaDhsCode,
     ConsumerStatusHistoryResult,
+    ConsumerSuspensionCheckResult,
+    UnsuspendConsumerServicesResult,
+    SuspensionIndicator,
+    SuspensionRowSignals,
+    SuspensionStatus,
 } from './status-history';

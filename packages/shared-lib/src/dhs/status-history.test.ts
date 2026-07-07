@@ -8,6 +8,8 @@ import {
     classifyClearanceWorkflowStatus,
     parseStatusHistoryRows,
     evaluateConsumerClearance,
+    classifyButtonColor,
+    classifySuspension,
     CLEARANCE_ELIGIBLE_CODES,
     CLEARANCE_READY_WINDOW_DAYS,
     ACCEPTED_VIA_DHS_CODES,
@@ -236,5 +238,69 @@ describe('evaluateConsumerClearance', () => {
         expect(result.eligible).toBe(false);
         expect(result.currentCode).toBeNull();
         expect(result.notes.join(' ')).toMatch(/no status history/i);
+    });
+});
+
+describe('classifyButtonColor', () => {
+    it('classifies Bootstrap danger/success classes', () => {
+        expect(classifyButtonColor('btn btn-xs btn-danger')).toBe('red');
+        expect(classifyButtonColor('btn btn-xs btn-success')).toBe('green');
+    });
+
+    it('classifies literal red/green class tokens', () => {
+        expect(classifyButtonColor('action red')).toBe('red');
+        expect(classifyButtonColor('action green')).toBe('green');
+    });
+
+    it('falls back to the computed background colour', () => {
+        expect(classifyButtonColor(null, 'rgb(217, 83, 79)')).toBe('red');   // bootstrap danger
+        expect(classifyButtonColor(null, 'rgb(92, 184, 92)')).toBe('green'); // bootstrap success
+        expect(classifyButtonColor(null, 'rgba(217, 83, 79, 1)')).toBe('red');
+    });
+
+    it('returns null for indeterminate colours', () => {
+        expect(classifyButtonColor('btn btn-info', 'rgb(91, 192, 222)')).toBeNull(); // blue
+        expect(classifyButtonColor(null, null)).toBeNull();
+        expect(classifyButtonColor('', 'rgb(128, 128, 128)')).toBeNull(); // grey
+    });
+});
+
+describe('classifySuspension', () => {
+    it('RED far-right button → services NOT suspended (business rule)', () => {
+        const s = classifySuspension({ buttonClass: 'btn btn-xs btn-danger', buttonTitle: 'Suspend Services' });
+        expect(s.status).toBe('NOT_SUSPENDED');
+        expect(s.buttonColor).toBe('red');
+        expect(s.signal).toMatch(/red/i);
+    });
+
+    it('GREEN far-right button → services ARE suspended (business rule)', () => {
+        const s = classifySuspension({ buttonClass: 'btn btn-xs btn-success', buttonTitle: 'Activate Services' });
+        expect(s.status).toBe('SUSPENDED');
+        expect(s.buttonColor).toBe('green');
+        expect(s.signal).toMatch(/green/i);
+    });
+
+    it('button colour wins over a conflicting SUSP IND cell', () => {
+        const s = classifySuspension({ buttonClass: 'btn-danger', suspIndCell: 'Y' });
+        expect(s.status).toBe('NOT_SUSPENDED');
+        expect(s.suspIndCell).toBe('Y');
+    });
+
+    it('falls back to the button tooltip when the colour is unreadable', () => {
+        expect(classifySuspension({ buttonTitle: 'Unsuspend Consumer Services' }).status).toBe('SUSPENDED');
+        expect(classifySuspension({ buttonTitle: 'Suspend Consumer Services' }).status).toBe('NOT_SUSPENDED');
+    });
+
+    it('falls back to the SUSP IND column when the button colour is unreadable', () => {
+        expect(classifySuspension({ suspIndCell: 'Y' }).status).toBe('SUSPENDED');
+        expect(classifySuspension({ suspIndCell: 'n' }).status).toBe('NOT_SUSPENDED');
+        expect(classifySuspension({ suspIndCell: 'Y' }).signal).toMatch(/SUSP IND/);
+    });
+
+    it('is UNKNOWN when no signal is readable', () => {
+        const s = classifySuspension({});
+        expect(s.status).toBe('UNKNOWN');
+        expect(s.signal).toBeNull();
+        expect(s.notes.join(' ')).toMatch(/unknown/i);
     });
 });

@@ -5,6 +5,8 @@ import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
+import { markCredoBrowserSession } from "@/lib/session-security";
+
 function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -29,6 +31,7 @@ function LoginForm() {
       setError("Incorrect ID number or password. Please try again.");
       setLoading(false);
     } else {
+      markCredoBrowserSession(window.sessionStorage);
       window.location.href = callbackUrl;
     }
   };

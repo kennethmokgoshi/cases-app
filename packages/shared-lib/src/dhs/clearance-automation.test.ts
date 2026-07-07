@@ -158,6 +158,38 @@ describe('runManageConsumersClearance', () => {
         expect(escalation).toBeTruthy();
     });
 
+    it('records the services-suspension state read from the Search & Manage Consumer row', async () => {
+        db.case.findUnique.mockResolvedValue(caseRow());
+        history.mockResolvedValue({
+            found: true,
+            idNumber: '8001015009087',
+            message: 'ok',
+            suspension: {
+                status: 'SUSPENDED',
+                signal: 'far-right action button is green',
+                buttonColor: 'green',
+                buttonClass: 'btn btn-success',
+                buttonTitle: null,
+                suspIndCell: 'Y',
+                notes: [],
+            },
+            evaluation: evaluation({
+                currentCode: 'C',
+                workflowStatus: 'ACCEPTED_VIA_DHS',
+                notes: ['Current status code "C" means the consumer is in active debt review → Accepted via DHS.'],
+            }),
+        });
+
+        const r = await runManageConsumersClearance({ caseId: 'case1', triggeredByUserId: 'staff-1' });
+
+        expect(r.suspension?.status).toBe('SUSPENDED');
+        expect(r.actionsPerformed.join(' ')).toContain('SUSPENDED');
+        const suspComment = db.caseComment.create.mock.calls.find(
+            (c) => c[0].data.activityType === 'DRR_SUSPENSION_CHECK',
+        );
+        expect(suspComment?.[0].data.content).toContain('SUSPENDED');
+    });
+
     it('escalates when the client has no valid 13-digit ID number', async () => {
         db.case.findUnique.mockResolvedValue(caseRow({ client: { idNumber: '123', firstName: 'S', lastName: 'D' } }));
 

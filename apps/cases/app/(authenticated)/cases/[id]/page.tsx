@@ -322,6 +322,8 @@ export default function CaseDetailPage() {
     const [dhsLoading, setDhsLoading] = useState(false);
     const [checkRequestLoading, setCheckRequestLoading] = useState(false);
     const [manageConsumersLoading, setManageConsumersLoading] = useState(false);
+    const [unsuspendServicesLoading, setUnsuspendServicesLoading] = useState(false);
+    const [showUnsuspendServicesAction, setShowUnsuspendServicesAction] = useState(false);
     const [resendConsentLoading, setResendConsentLoading] = useState(false);
     const [nctLoading, setNctLoading] = useState(false);
     const [dhsMessage, setDhsMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
@@ -1129,7 +1131,7 @@ export default function CaseDetailPage() {
             setDhsMessage({
                 type: 'success',
                 text: checked
-                    ? 'Marked Accepted via DHS — you can now run Manage Consumers to send the consumer acceptance + consent email.'
+                    ? 'Marked Accepted via DHS — run "Check Request Status" to send the consumer acceptance + consent email, and "Manage Consumers" once the consumer has consented.'
                     : 'Cleared the manual "Accepted via DHS" flag.'
             });
         } catch (error) {
@@ -1614,6 +1616,7 @@ export default function CaseDetailPage() {
             return;
         }
         setDhsLoading(true);
+        setShowUnsuspendServicesAction(false);
         setDhsMessage(null);
         try {
             const res = await fetch('/api/dhs/lookup', {
@@ -1662,6 +1665,7 @@ export default function CaseDetailPage() {
             return;
         }
         setCheckRequestLoading(true);
+        setShowUnsuspendServicesAction(false);
         setDhsMessage(null);
         try {
             const res = await fetch('/api/dhs/lookup', {
@@ -1694,11 +1698,10 @@ export default function CaseDetailPage() {
                         statusText += ` Reason: ${result.declineReason}`;
                     }
 
-                    // Accepted detection ends here. The consumer acceptance + consent
-                    // email follow-on now lives on the dedicated "Manage Consumers"
-                    // button — prompt staff to run it.
-                    if (result.acceptedReadyForManage) {
-                        statusText += ' File is Accepted via DHS — click "Manage Consumers" to send the consumer acceptance + consent email.';
+                    // Accepted / Auto Transferred → the API has already fired the
+                    // acceptance + consent email (idempotent) — report its outcome.
+                    if (result.acceptedMessage) {
+                        statusText += ` ${result.acceptedMessage}`;
                     }
                 } else {
                     statusText = result.message || 'No transfer request found in DHS';
@@ -1720,15 +1723,18 @@ export default function CaseDetailPage() {
         }
     };
 
-    // DHS Manage Consumers — post-acceptance follow-on (carries on once the file
-    // is Accepted via DHS). Today: consumer acceptance + debt-review-removal consent
-    // email. Later: Search & Manage Consumer clearance status-history check.
+    // DHS Manage Consumers — post-CONSENT follow-on. Requires the consumer to have
+    // consented to the debt review flag removal; then reads DHS Search & Manage
+    // Consumer: services suspension indicator + document readiness + clearance
+    // status-history check. It never sends the acceptance/consent email — that is
+    // owned by "Check Request Status" (and "Resend Confirmation Link").
     const handleManageConsumers = async () => {
         if (!caseData?.client.idNumber) {
             setDhsMessage({ type: 'error', text: 'Client ID number is required' });
             return;
         }
         setManageConsumersLoading(true);
+        setShowUnsuspendServicesAction(false);
         setDhsMessage(null);
         try {
             const res = await fetch('/api/dhs/lookup', {
@@ -1749,9 +1755,10 @@ export default function CaseDetailPage() {
                 setCaseData(updatedCase);
             }
             setActivityUpdate(prev => prev + 1);
+            setShowUnsuspendServicesAction(result.blockedBySuspension === true && result.canUnsuspend === true);
 
             setDhsMessage({
-                type: result.success ? (result.skipped ? 'info' : 'success') : 'error',
+                type: result.blockedBySuspension ? 'warning' : result.success ? (result.skipped ? 'info' : 'success') : 'error',
                 text: result.message || (result.success ? 'Manage Consumers completed.' : 'Manage Consumers failed.')
             });
         } catch (error) {
@@ -1762,10 +1769,49 @@ export default function CaseDetailPage() {
         }
     };
 
+    const handleUnsuspendConsumerServices = async () => {
+        if (!caseData?.client.idNumber) {
+            setDhsMessage({ type: 'error', text: 'Client ID number is required' });
+            return;
+        }
+        setUnsuspendServicesLoading(true);
+        try {
+            const res = await fetch('/api/dhs/lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    idNumber: caseData.client.idNumber,
+                    caseId: caseData.id,
+                    action: 'unsuspend_consumer_services'
+                })
+            });
+            const result = await res.json();
+
+            const caseRes = await fetch(`/api/cases/${params.id}`);
+            if (caseRes.ok) {
+                const updatedCase = await caseRes.json();
+                setCaseData(updatedCase);
+            }
+            setActivityUpdate(prev => prev + 1);
+            setShowUnsuspendServicesAction(!result.unsuspended);
+
+            setDhsMessage({
+                type: result.success ? 'success' : 'error',
+                text: result.message || (result.success ? 'DHS consumer services were unsuspended.' : 'Failed to unsuspend DHS consumer services.')
+            });
+        } catch (error) {
+            log.error({ err: error }, 'Unsuspend consumer services error:', error);
+            setDhsMessage({ type: 'error', text: 'Failed to connect to DHS' });
+        } finally {
+            setUnsuspendServicesLoading(false);
+        }
+    };
+
     // Resend the acceptance + consent confirmation link (Credo login-gated) to the
     // consumer. Reuses the existing consent token — earlier emailed links stay valid.
     const handleResendConsentLink = async () => {
         setResendConsentLoading(true);
+        setShowUnsuspendServicesAction(false);
         setDhsMessage(null);
         try {
             const res = await fetch(`/api/cases/${params.id}/resend-consent`, { method: 'POST' });
@@ -3654,7 +3700,7 @@ export default function CaseDetailPage() {
                                                                 <button
                                                                     onClick={handleManageConsumers}
                                                                     disabled={manageConsumersLoading}
-                                                                    title="Carry on from Accepted via DHS — send the consumer acceptance + debt-review-removal consent email."
+                                                                    title="Post-consent follow-on: checks the consumer has consented, then reads DHS Search & Manage Consumer — services suspension (far-right button: red = not suspended, green = suspended), documents and clearance status. Does not email the consumer."
                                                                     className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
                                                                 >
                                                                     {manageConsumersLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Manage Consumers'}
@@ -3815,7 +3861,17 @@ export default function CaseDetailPage() {
                                         dhsMessage.type === 'warning' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
                                         'bg-red-500/20 text-red-400 border border-red-500/30'
                                     }`}>
-                                        {dhsMessage.text}
+                                        <div>{dhsMessage.text}</div>
+                                        {showUnsuspendServicesAction && (
+                                            <button
+                                                type="button"
+                                                onClick={handleUnsuspendConsumerServices}
+                                                disabled={unsuspendServicesLoading}
+                                                className="mt-2 px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-xs font-semibold disabled:opacity-60"
+                                            >
+                                                {unsuspendServicesLoading ? 'Unsuspending...' : 'Unsuspend Consumer Services'}
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 

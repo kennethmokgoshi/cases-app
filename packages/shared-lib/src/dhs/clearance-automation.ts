@@ -24,7 +24,7 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
 import { addWorkingDays } from '../statuses/workingDays';
-import { getConsumerStatusHistory } from './status-history';
+import { getConsumerStatusHistory, type SuspensionIndicator } from './status-history';
 
 const logger = createLogger('dhs/clearance-automation');
 
@@ -53,6 +53,11 @@ export interface ClearanceRunResult {
     checked: boolean;
     /** The consumer's current DHS status code (e.g. "G", "A1", "C"), if read. */
     currentCode: string | null;
+    /**
+     * Services-suspension indicator from the Search & Manage Consumer grid
+     * (far-right action button: red = not suspended, green = suspended).
+     */
+    suspension: SuspensionIndicator | null;
     /** Workflow status the case was moved to, if any. */
     statusUpdatedTo: string | null;
     /** Human-readable summary of the outcome. */
@@ -75,6 +80,7 @@ export async function runManageConsumersClearance(params: {
         caseId,
         checked: false,
         currentCode: null,
+        suspension: null,
         statusUpdatedTo: null,
         message: '',
         actionsPerformed: [],
@@ -108,6 +114,26 @@ export async function runManageConsumersClearance(params: {
         logger.info(`[DRR Clearance] Reading DHS status history for case ${caseId} (ID ${idNumber.slice(0, 6)}***)`);
         const history = await getConsumerStatusHistory(idNumber);
         result.currentCode = history.evaluation.currentCode;
+        result.suspension = history.suspension;
+
+        // Record the services-suspension state on the timeline whenever the
+        // consumer's row was readable — staff must know it before clearance.
+        if (history.suspension && history.suspension.status !== 'UNKNOWN') {
+            const suspended = history.suspension.status === 'SUSPENDED';
+            result.actionsPerformed.push(
+                `DHS services suspension check: ${suspended ? 'SUSPENDED' : 'NOT suspended'} (${history.suspension.signal}).`,
+            );
+            await addComment(
+                caseId,
+                userId,
+                `[SYSTEM] Manage Consumers (DHS Search & Manage Consumer): services for this consumer are ` +
+                `${suspended ? 'SUSPENDED' : 'NOT suspended'} — determined from the ${history.suspension.signal}.` +
+                (suspended ? ' Please review before proceeding with clearance.' : ''),
+                'DRR_SUSPENSION_CHECK',
+            );
+        } else if (history.suspension) {
+            result.actionsPerformed.push('DHS services suspension check: state could not be determined.');
+        }
 
         if (!history.found) {
             result.errors.push(`DHS status history not readable: ${history.message}`);
