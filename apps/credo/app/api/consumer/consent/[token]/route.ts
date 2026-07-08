@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@zenowethu/database";
 import { auth } from "@/auth";
 import { createLogger } from "@zenowethu/shared-lib";
@@ -6,9 +7,14 @@ import {
     recordDrrConsent,
     DRR_CONSENT_TEXT,
     formatConsentConsumerDisplayName,
+    getDrrConsentVerificationState,
+    verifyDrrConsentIdentity,
 } from "@zenowethu/shared-lib/src/dhs/consent-service";
 
 const logger = createLogger("credo/api/consumer/consent");
+const VerifyIdentitySchema = z.object({
+    idNumber: z.string().trim().regex(/^\d{13}$/, "Enter a valid 13-digit SA ID number."),
+});
 
 /**
  * GET  /api/consumer/consent/[token]  — login-gated; consent details for the page.
@@ -77,10 +83,14 @@ async function resolveOwnership(token: string, consumerId: string): Promise<Owne
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
         const { token } = await params;
+        const session = await auth();
+        if (!session?.user?.id) {
+            const state = await getDrrConsentVerificationState(token);
+            if (!state) return NextResponse.json({ error: "This consent link is not valid." }, { status: 404 });
+            return NextResponse.json(state);
+        }
+
         const ownership = await resolveOwnership(token, session.user.id);
         if (!ownership.consent) {
             return NextResponse.json({ error: ownership.error ?? "Unable to verify this consent link." }, { status: ownership.status ?? 400 });
@@ -106,20 +116,35 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
         const { token } = await params;
-        const ownership = await resolveOwnership(token, session.user.id);
-        if (!ownership.consent) {
-            return NextResponse.json({ error: ownership.error ?? "Unable to verify this consent link." }, { status: ownership.status ?? 400 });
+        const session = await auth();
+        let consumerId: string | undefined;
+        let verifiedIdNumber: string | undefined;
+
+        if (session?.user?.id) {
+            const ownership = await resolveOwnership(token, session.user.id);
+            if (!ownership.consent) {
+                return NextResponse.json({ error: ownership.error ?? "Unable to verify this consent link." }, { status: ownership.status ?? 400 });
+            }
+            consumerId = session.user.id;
+        } else {
+            const parsed = VerifyIdentitySchema.safeParse(await request.json().catch(() => ({})));
+            if (!parsed.success) {
+                return NextResponse.json({ error: "Enter a valid 13-digit SA ID number." }, { status: 400 });
+            }
+
+            const verification = await verifyDrrConsentIdentity({ token, idNumber: parsed.data.idNumber });
+            if (!verification.ok) {
+                return NextResponse.json({ error: verification.error ?? "Unable to verify this consent link." }, { status: verification.status ?? 400 });
+            }
+            verifiedIdNumber = parsed.data.idNumber;
         }
 
         const ipAddress =
             request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
         const userAgent = request.headers.get("user-agent") || "unknown";
 
-        const result = await recordDrrConsent({ token, ipAddress, userAgent, consumerId: session.user.id });
+        const result = await recordDrrConsent({ token, ipAddress, userAgent, consumerId, verifiedIdNumber });
         if (!result.ok) {
             return NextResponse.json({ error: result.error ?? "Unable to record consent." }, { status: result.status ?? 400 });
         }

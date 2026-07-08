@@ -125,6 +125,21 @@ export interface ConsentView {
     consentedAt: Date | null;
 }
 
+export interface ConsentVerificationState {
+    requiresVerification: true;
+    token: string;
+}
+
+export interface VerifyConsentIdentityResult {
+    ok: boolean;
+    view?: ConsentView;
+    error?: string;
+    status?: number;
+}
+
+export const DRR_CONSENT_VERIFY_ERROR =
+    'We could not verify this consent link. Please check the ID number and try again.';
+
 export function formatConsentConsumerDisplayName(
     client: { firstName?: string | null; lastName?: string | null } | null | undefined,
 ): string | null {
@@ -133,13 +148,17 @@ export function formatConsentConsumerDisplayName(
     return [firstGivenName, surname].filter(Boolean).join(' ') || null;
 }
 
-/** Resolve a token for the public consent page (read-only, no PII beyond display name + file number). */
-export async function getDrrConsentByToken(token: string): Promise<ConsentView | null> {
-    const c = await prisma.debtReviewRemovalConsent.findUnique({
-        where: { token },
-        include: { case: { select: { fileNumber: true } }, client: { select: { firstName: true, lastName: true } } },
-    });
-    if (!c) return null;
+type ConsentRecordForView = {
+    token: string;
+    status: string;
+    expiresAt: Date;
+    consentText: string | null;
+    consentedAt: Date | null;
+    case?: { fileNumber: string | null } | null;
+    client?: { firstName?: string | null; lastName?: string | null; idNumber?: string | null } | null;
+};
+
+function buildConsentView(c: ConsentRecordForView): ConsentView {
     const consumerDisplayName = formatConsentConsumerDisplayName(c.client);
     return {
         token: c.token,
@@ -151,6 +170,52 @@ export async function getDrrConsentByToken(token: string): Promise<ConsentView |
         consentText: c.status === 'PENDING' ? DRR_CONSENT_TEXT : c.consentText ?? DRR_CONSENT_TEXT,
         consentedAt: c.consentedAt,
     };
+}
+
+/** Resolve whether a consent token exists without exposing consumer details. */
+export async function getDrrConsentVerificationState(token: string): Promise<ConsentVerificationState | null> {
+    const c = await prisma.debtReviewRemovalConsent.findUnique({
+        where: { token },
+        select: { token: true },
+    });
+    return c ? { requiresVerification: true, token: c.token } : null;
+}
+
+/** Resolve a token for the public consent page (read-only, no PII beyond display name + file number). */
+export async function getDrrConsentByToken(token: string): Promise<ConsentView | null> {
+    const c = await prisma.debtReviewRemovalConsent.findUnique({
+        where: { token },
+        include: { case: { select: { fileNumber: true } }, client: { select: { firstName: true, lastName: true } } },
+    });
+    if (!c) return null;
+    return buildConsentView(c);
+}
+
+/** Verify that a public token and typed SA ID number belong to the same consumer. */
+export async function verifyDrrConsentIdentity(params: {
+    token: string;
+    idNumber: string;
+}): Promise<VerifyConsentIdentityResult> {
+    const c = await prisma.debtReviewRemovalConsent.findUnique({
+        where: { token: params.token },
+        include: {
+            case: { select: { fileNumber: true } },
+            client: { select: { firstName: true, lastName: true, idNumber: true } },
+        },
+    });
+
+    if (!c) return { ok: false, error: 'This consent link is not valid.', status: 404 };
+    if (c.client?.idNumber !== params.idNumber) {
+        return { ok: false, error: DRR_CONSENT_VERIFY_ERROR, status: 403 };
+    }
+    if (c.status === 'CANCELLED') {
+        return { ok: false, error: 'This consent request has been cancelled.', status: 410 };
+    }
+    if (c.status === 'EXPIRED' || (c.status !== 'CONSENTED' && c.expiresAt < new Date())) {
+        return { ok: false, error: 'This consent link has expired. Please contact us for a new link.', status: 410 };
+    }
+
+    return { ok: true, view: buildConsentView(c) };
 }
 
 export interface RecordConsentResult {
@@ -176,11 +241,22 @@ export async function recordDrrConsent(params: {
     userAgent?: string;
     /** Credo consumer id when the consent is approved from inside the portal. */
     consumerId?: string;
+    /** SA ID number already verified against the token for public, signed-out approvals. */
+    verifiedIdNumber?: string;
 }): Promise<RecordConsentResult> {
-    const { token, ipAddress, userAgent, consumerId } = params;
-    const c = await prisma.debtReviewRemovalConsent.findUnique({ where: { token } });
+    const { token, ipAddress, userAgent, consumerId, verifiedIdNumber } = params;
+    const c = await prisma.debtReviewRemovalConsent.findUnique({
+        where: { token },
+        include: { client: { select: { idNumber: true } } },
+    });
 
     if (!c) return { ok: false, error: 'This consent link is not valid.', status: 404 };
+    if (!consumerId) {
+        if (!verifiedIdNumber) return { ok: false, error: DRR_CONSENT_VERIFY_ERROR, status: 400 };
+        if (c.client?.idNumber !== verifiedIdNumber) {
+            return { ok: false, error: DRR_CONSENT_VERIFY_ERROR, status: 403 };
+        }
+    }
     if (c.status === 'CANCELLED') return { ok: false, error: 'This consent request has been cancelled.', status: 410 };
     if (c.status === 'CONSENTED') return { ok: true, alreadyConsented: true, caseId: c.caseId };
     if (c.expiresAt < new Date()) {

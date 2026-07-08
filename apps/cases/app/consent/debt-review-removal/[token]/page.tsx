@@ -12,6 +12,7 @@ interface ConsentView {
   fileNumber: string | null;
   consentText: string;
   consentedAt: string | null;
+  requiresVerification?: true;
 }
 
 const NAVY = '#0B1D35';
@@ -27,6 +28,10 @@ export default function DebtReviewRemovalConsentPage() {
   const [data, setData] = useState<ConsentView | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [done, setDone] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [idNumber, setIdNumber] = useState('');
+  const [verifiedIdNumber, setVerifiedIdNumber] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const consumerDisplayName = data?.consumerDisplayName ?? data?.consumerFirstName ?? null;
 
   useEffect(() => {
@@ -36,8 +41,12 @@ export default function DebtReviewRemovalConsentPage() {
         const body = await res.json();
         if (!res.ok) {
           setError(body.error || 'This consent link is not valid.');
+        } else if (body.requiresVerification) {
+          setVerificationRequired(true);
+          setData(null);
         } else {
           setData(body);
+          setVerificationRequired(false);
           if (body.status === 'CONSENTED') setDone(true);
         }
       } catch {
@@ -48,11 +57,40 @@ export default function DebtReviewRemovalConsentPage() {
     })();
   }, [token]);
 
+  const verify = async () => {
+    setVerifying(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/consent/debt-review-removal/${token}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idNumber }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error || 'We could not verify this consent link.');
+      } else {
+        setData(body);
+        setVerificationRequired(false);
+        setVerifiedIdNumber(idNumber.trim());
+        if (body.status === 'CONSENTED') setDone(true);
+      }
+    } catch {
+      setError('We could not verify this consent link. Please try again.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const submit = async () => {
     setSubmitting(true);
     setError('');
     try {
-      const res = await fetch(`/api/consent/debt-review-removal/${token}`, { method: 'POST' });
+      const res = await fetch(`/api/consent/debt-review-removal/${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idNumber: verifiedIdNumber }),
+      });
       const body = await res.json();
       if (!res.ok) {
         setError(body.error || 'Could not record your consent. Please try again.');
@@ -80,6 +118,60 @@ export default function DebtReviewRemovalConsentPage() {
 
   if (loadingData) {
     return <Shell><p style={{ color: '#475569' }}>Loading…</p></Shell>;
+  }
+
+  if (verificationRequired) {
+    return (
+      <Shell>
+        <h2 style={{ color: NAVY, margin: '0 0 8px' }}>Enter your ID number to verify this consent link</h2>
+        <p style={{ color: '#334155', lineHeight: 1.6, marginTop: 0 }}>
+          This secure link belongs to one consumer. Please type your 13-digit South African ID number before we show
+          the consent details.
+        </p>
+        <label style={{ display: 'block', color: '#1E293B', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+          South African ID number
+        </label>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={idNumber}
+          onChange={(e) => setIdNumber(e.target.value.replace(/\D/g, '').slice(0, 13))}
+          placeholder="13-digit ID number"
+          style={{
+            width: '100%',
+            minHeight: 44,
+            border: '1px solid #CBD5E1',
+            borderRadius: 10,
+            padding: '10px 12px',
+            fontSize: 16,
+            color: '#0F172A',
+            marginBottom: 12,
+          }}
+        />
+        {error && <div style={{ color: '#B91C1C', marginBottom: 12, fontSize: 14 }}>{error}</div>}
+        <button
+          onClick={verify}
+          disabled={idNumber.length !== 13 || verifying}
+          style={{
+            width: '100%',
+            padding: '13px 16px',
+            borderRadius: 10,
+            border: 'none',
+            background: idNumber.length !== 13 || verifying ? '#CBD5E1' : ACCENT,
+            color: idNumber.length !== 13 || verifying ? '#64748B' : '#1A1206',
+            fontWeight: 700,
+            fontSize: 15,
+            cursor: idNumber.length !== 13 || verifying ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {verifying ? 'Verifying...' : 'Verify and continue'}
+        </button>
+        <p style={{ color: '#94A3B8', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
+          Need help? Contact us on 081 747 7616 or info@zenowethu.co.za.
+        </p>
+      </Shell>
+    );
   }
 
   if (error && !data) {

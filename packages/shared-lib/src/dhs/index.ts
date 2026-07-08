@@ -36,13 +36,22 @@ export {
     buildCredoConsentLink,
     getCredoBaseUrl,
     getDrrConsentByToken,
+    getDrrConsentVerificationState,
     recordDrrConsent,
     onDebtReviewRemovalConsent,
+    verifyDrrConsentIdentity,
     DRR_CONSENT_TEXT,
+    DRR_CONSENT_VERIFY_ERROR,
     CONSENT_EXPIRY_DAYS,
     CONSENT_RECEIVED_STATUS,
 } from './consent-service';
-export type { CreateConsentResult, ConsentView, RecordConsentResult } from './consent-service';
+export type {
+    ConsentVerificationState,
+    CreateConsentResult,
+    ConsentView,
+    RecordConsentResult,
+    VerifyConsentIdentityResult,
+} from './consent-service';
 export {
     runDrrDocumentReadiness,
     docTypeToKind,

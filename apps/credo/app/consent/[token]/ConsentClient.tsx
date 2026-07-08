@@ -14,6 +14,7 @@ interface ConsentView {
   fileNumber: string | null;
   consentText: string;
   consentedAt: string | null;
+  requiresVerification?: true;
 }
 
 const card: React.CSSProperties = {
@@ -61,6 +62,10 @@ export default function ConsentClient({ token }: { token: string }) {
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [idNumber, setIdNumber] = useState("");
+  const [verifiedIdNumber, setVerifiedIdNumber] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const consumerDisplayName = view?.consumerDisplayName ?? view?.consumerFirstName ?? null;
   const supportContact = getCredoSupportContact();
   const expiredSupportContact = getCredoSupportContact("expired-consent-link");
@@ -73,8 +78,12 @@ export default function ConsentClient({ token }: { token: string }) {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "We could not load this consent request.");
+      } else if (data.requiresVerification) {
+        setVerificationRequired(true);
+        setView(null);
       } else {
         setView(data);
+        setVerificationRequired(false);
         if (data.status === "CONSENTED") setApproved(true);
       }
     } catch {
@@ -88,11 +97,44 @@ export default function ConsentClient({ token }: { token: string }) {
     void load();
   }, [load]);
 
+  const verify = async () => {
+    setVerifying(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/consumer/consent/${token}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "We could not verify this consent link.");
+      } else {
+        setView(data);
+        setVerificationRequired(false);
+        setVerifiedIdNumber(idNumber.trim());
+        if (data.status === "CONSENTED") setApproved(true);
+      }
+    } catch {
+      setError("We could not verify this consent link. Please check your connection and try again.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const approve = async () => {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/consumer/consent/${token}`, { method: "POST" });
+      const res = await fetch(`/api/consumer/consent/${token}`, {
+        method: "POST",
+        ...(verifiedIdNumber
+          ? {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idNumber: verifiedIdNumber }),
+          }
+          : {}),
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "We could not record your approval. Please try again.");
@@ -146,6 +188,76 @@ export default function ConsentClient({ token }: { token: string }) {
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#64748B", fontSize: "0.9375rem" }}>
             Loading your consent request…
+          </div>
+        ) : verificationRequired ? (
+          <div>
+            <h1 style={{ fontSize: "1.375rem", fontWeight: 700, color: "#0F172A", marginBottom: 10 }}>
+              Enter your ID number to verify this consent link
+            </h1>
+            <p style={{ fontSize: "0.9375rem", color: "#475569", lineHeight: 1.6, marginBottom: 18 }}>
+              This secure link belongs to one consumer. Please type your 13-digit South African ID number before we
+              show the consent details.
+            </p>
+            <label style={{ display: "block", fontSize: "0.8125rem", color: "#334155", fontWeight: 700, marginBottom: 8 }}>
+              South African ID number
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={idNumber}
+              onChange={(event) => setIdNumber(event.target.value.replace(/\D/g, "").slice(0, 13))}
+              placeholder="13-digit ID number"
+              style={{
+                width: "100%",
+                minHeight: 44,
+                border: "1px solid #CBD5E1",
+                borderRadius: 9,
+                padding: "10px 12px",
+                fontSize: "1rem",
+                color: "#0F172A",
+                marginBottom: 14,
+              }}
+            />
+            {error && (
+              <div
+                style={{
+                  background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 9,
+                  padding: "10px 14px", fontSize: "0.8125rem", color: "#DC2626", marginBottom: 14,
+                }}
+              >
+                {error}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={verify}
+              disabled={idNumber.length !== 13 || verifying}
+              style={{
+                width: "100%",
+                padding: "13px 0",
+                background: idNumber.length !== 13 || verifying ? "#94A3B8" : "#0B1D35",
+                color: "#FFFFFF",
+                fontWeight: 600,
+                fontSize: "0.9375rem",
+                border: "none",
+                borderRadius: 9,
+                cursor: idNumber.length !== 13 || verifying ? "not-allowed" : "pointer",
+              }}
+            >
+              {verifying ? "Verifying..." : "Verify and continue"}
+            </button>
+            <p style={{ fontSize: "0.8125rem", color: "#64748B", lineHeight: 1.6, marginTop: 18, marginBottom: 0 }}>
+              Need help?{" "}
+              <a href={supportContact.whatsappHref} target="_blank" rel="noopener noreferrer" style={{ color: "#0B1D35", fontWeight: 700 }}>
+                WhatsApp us
+              </a>{" "}
+              or contact{" "}
+              <a href={supportContact.supportHref} style={{ color: "#0B1D35", fontWeight: 700 }}>
+                Support
+              </a>
+              .
+            </p>
           </div>
         ) : approved ? (
           <div style={{ textAlign: "center", padding: "12px 0" }}>

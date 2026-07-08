@@ -1,23 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { createLogger } from '@zenowethu/shared-lib';
-import { getDrrConsentByToken, recordDrrConsent } from '@zenowethu/shared-lib/src/dhs/consent-service';
+import {
+    getDrrConsentVerificationState,
+    recordDrrConsent,
+    verifyDrrConsentIdentity,
+} from '@zenowethu/shared-lib/src/dhs/consent-service';
 import { runDrrDocumentReadiness } from '@zenowethu/shared-lib/src/dhs/drr-readiness';
 
 const logger = createLogger('api/consent/debt-review-removal/[token]');
+const VerifyIdentitySchema = z.object({
+    idNumber: z.string().trim().regex(/^\d{13}$/, 'Enter a valid 13-digit SA ID number.'),
+});
 
 /**
  * GET  /api/consent/debt-review-removal/[token]  — public; fetch consent details for the page.
  * POST /api/consent/debt-review-removal/[token]  — public; record the consumer's consent.
  *
- * No auth: the unguessable token IS the credential (same model as POA signing links).
+ * No auth: the token identifies the consent, but the consumer must type the
+ * matching SA ID number before details are shown or approval can be recorded.
  */
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
     try {
         const { token } = await params;
-        const view = await getDrrConsentByToken(token);
-        if (!view) return NextResponse.json({ error: 'This consent link is not valid.' }, { status: 404 });
-        return NextResponse.json(view);
+        const state = await getDrrConsentVerificationState(token);
+        if (!state) return NextResponse.json({ error: 'This consent link is not valid.' }, { status: 404 });
+        return NextResponse.json(state);
     } catch (error) {
         logger.error('[DRR_CONSENT] GET error', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -30,8 +39,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const ipAddress =
             request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
         const userAgent = request.headers.get('user-agent') || 'unknown';
+        const parsed = VerifyIdentitySchema.safeParse(await request.json().catch(() => ({})));
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Enter a valid 13-digit SA ID number.' }, { status: 400 });
+        }
 
-        const result = await recordDrrConsent({ token, ipAddress, userAgent });
+        const verification = await verifyDrrConsentIdentity({ token, idNumber: parsed.data.idNumber });
+        if (!verification.ok) {
+            return NextResponse.json(
+                { error: verification.error ?? 'Unable to verify this consent link.' },
+                { status: verification.status ?? 400 },
+            );
+        }
+
+        const result = await recordDrrConsent({
+            token,
+            ipAddress,
+            userAgent,
+            verifiedIdNumber: parsed.data.idNumber,
+        });
         if (!result.ok) {
             return NextResponse.json(
                 { error: result.error ?? 'Unable to record consent.' },
