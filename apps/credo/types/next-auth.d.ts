@@ -14,10 +14,15 @@ declare module "@auth/core/types" {
       lastName: string | null;
       organization: string | null;
       avatarUrl: string | null;
+      mustChangePassword?: boolean;
   }
 }
 
 declare module "next-auth" {
+  interface User {
+    mustChangePassword?: boolean;
+  }
+
   interface Session {
     user: {
       id: string;
@@ -32,6 +37,7 @@ declare module "next-auth" {
       lastName: string | null;
       organization: string | null;
       avatarUrl: string | null;
+      mustChangePassword: boolean;
     } & DefaultSession["user"]
   }
 
@@ -50,5 +56,6 @@ declare module "@auth/core/adapters" {
       lastName: string | null;
       organization: string | null;
       avatarUrl: string | null;
+      mustChangePassword?: boolean;
   }
 }

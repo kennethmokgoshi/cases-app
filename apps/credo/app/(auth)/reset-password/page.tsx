@@ -69,8 +69,8 @@ function ResetPasswordForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+      setError("Password must be at least 8 characters with an uppercase letter, a lowercase letter and a number.");
       return;
     }
     if (password !== confirm) {
@@ -158,7 +158,7 @@ function ResetPasswordForm() {
                   <input
                     type={showPassword ? "text" : "password"}
                     className="credo-input"
-                    placeholder="At least 8 characters"
+                    placeholder="8+ chars with upper, lower & number"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="new-password"

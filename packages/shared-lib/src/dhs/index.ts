@@ -26,7 +26,9 @@ export { handleDHSDecline, classifyDeclineReason, extractEmailFromReason } from 
 export type { DeclineCategory, DeclineHandlerResult } from './decline-handler';
 export { handleDhsAccepted, isManageConsumersEligible, READY_TO_CONSENT_STATUS } from './accepted-handler';
 export type { AcceptedHandlerResult } from './accepted-handler';
-export { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT } from './accepted-email';
+export { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT, buildCredoLoginSection } from './accepted-email';
+export type { CredoLoginDetails } from './accepted-email';
+export { buildConsentReminderEmail, CONSENT_REMINDER_SUBJECT } from './consent-reminder-email';
 export {
     createDrrConsentRequest,
     buildConsentLink,

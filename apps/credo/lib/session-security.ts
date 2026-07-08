@@ -22,6 +22,7 @@ const PREFIX_PROTECTED_PATHS = [
   "/admin",
   "/upgrade",
   "/consent",
+  "/change-password",
 ] as const;
 
 const EXACT_PROTECTED_PATHS = ["/quote"] as const;

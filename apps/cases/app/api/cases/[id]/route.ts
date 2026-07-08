@@ -70,6 +70,41 @@ export async function GET(
                     firstName: true,
                     lastName: true
                 }
+            },
+            // Latest debt-review-removal consent — lets staff see at a glance
+            // whether the consumer has consented for work to proceed.
+            drrConsents: {
+                orderBy: { createdAt: 'desc' as const },
+                take: 1,
+                select: {
+                    id: true,
+                    status: true,
+                    channel: true,
+                    createdAt: true,
+                    consentedAt: true,
+                    expiresAt: true
+                }
+            },
+            // Client quotations for this case — the case page shows staff whether a
+            // quote went out and whether the client accepted or rejected it.
+            // DC fee quotes are excluded: those are addressed to another debt
+            // counsellor, not this client.
+            invoices: {
+                where: { type: 'QUOTE' as const },
+                orderBy: { issuedAt: 'desc' as const },
+                select: {
+                    id: true,
+                    invoiceNumber: true,
+                    status: true,
+                    total: true,
+                    issuedAt: true,
+                    sentAt: true,
+                    sentTo: true,
+                    acceptedAt: true,
+                    rejectedAt: true,
+                    decisionNote: true,
+                    convertedToInvoiceId: true
+                }
             }
         };
 
@@ -118,52 +153,12 @@ export async function GET(
         const allProjects = await prisma.project.findMany({
             select: { id: true, name: true, parentId: true, type: true }
         });
-        type ProjectMapType = { id: string; name: string; parentId: string | null; type: string };
-        const projectMap = new Map<string, ProjectMapType>(allProjects.map(p => [p.id, p]));
-
-        const getPath = (projectId: string): string => {
-            const parts: { name: string; type: string }[] = [];
-            let curr: ProjectMapType | undefined = projectMap.get(projectId);
-
-            while (curr) {
-                if (curr.type !== 'ROOT') {
-                    parts.unshift({ name: curr.name, type: curr.type });
-                }
-                if (curr.parentId) {
-                    curr = projectMap.get(curr.parentId);
-                } else {
-                    break;
-                }
-            }
-
-            const clean = (name: string) => {
-                let s = name;
-                if (s.startsWith('Letsatsi') || s === 'Letsatsi Referrals' || s === 'Letsatsi Finance') s = 'Letsatsi';
-                s = s.replace(/My Cases\s*-?\s*/gi, '').trim();
-                return s;
-            };
-
-            const year = clean(parts.filter(p => p.type === 'YEAR').pop()?.name || '');
-            const month = clean(parts.filter(p => p.type === 'MONTH').pop()?.name || '');
-            const allSources = parts.filter(p => p.type === 'ACQUISITION_SOURCE');
-            const specificSource = allSources.filter(p => p.name !== 'Cases').pop();
-            const source = clean(specificSource?.name || allSources[0]?.name || '');
-            const branches = parts
-                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
-                .map(p => clean(p.name));
-            const branch = branches.join(' ');
-
-            if (year || month || source || branch) {
-                return [source, branch, month, year].filter(Boolean).join(' ');
-            }
-            return parts.map(p => clean(p.name)).filter(Boolean).join(' ');
-        };
 
         const projectsWithPath = (caseDetail as any).projects.map((cp: any) => ({
             ...cp,
             project: {
                 ...cp.project,
-                fullPath: getPath(cp.project.id)
+                fullPath: buildProjectDisplayName(cp.project.id, allProjects)
             }
         }));
 
@@ -182,10 +177,13 @@ export async function GET(
             }
         }
 
+        const { invoices: caseQuotes, ...caseRest } = caseDetail as any;
+
         return NextResponse.json({
-            ...caseDetail,
+            ...caseRest,
             projects: projectsWithPath,
-            savingsAudit
+            savingsAudit,
+            quotes: caseQuotes ?? []
         });
     } catch (error) {
         logger.error('Error fetching case:', error);
@@ -827,52 +825,12 @@ export async function PATCH(
         const allProjects = await prisma.project.findMany({
             select: { id: true, name: true, parentId: true, type: true }
         });
-        type ProjectMapType = { id: string; name: string; parentId: string | null; type: string };
-        const projectMap = new Map<string, ProjectMapType>(allProjects.map(p => [p.id, p]));
-
-        const getPath = (projectId: string): string => {
-            const parts: { name: string; type: string }[] = [];
-            let curr: ProjectMapType | undefined = projectMap.get(projectId);
-
-            while (curr) {
-                if (curr.type !== 'ROOT') {
-                    parts.unshift({ name: curr.name, type: curr.type });
-                }
-                if (curr.parentId) {
-                    curr = projectMap.get(curr.parentId);
-                } else {
-                    break;
-                }
-            }
-
-            const clean = (name: string) => {
-                let s = name;
-                if (s === 'Letsatsi Referrals') s = 'Letsatsi';
-                s = s.replace(/My Cases\s*-?\s*/gi, '').trim();
-                return s;
-            };
-
-            const year = clean(parts.filter(p => p.type === 'YEAR').pop()?.name || '');
-            const month = clean(parts.filter(p => p.type === 'MONTH').pop()?.name || '');
-            const allSources = parts.filter(p => p.type === 'ACQUISITION_SOURCE');
-            const specificSource = allSources.filter(p => p.name !== 'Cases').pop();
-            const source = clean(specificSource?.name || allSources[0]?.name || '');
-            const branches = parts
-                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
-                .map(p => clean(p.name));
-            const branch = branches.join(' ');
-
-            if (year || month || source || branch) {
-                return [source, branch, month, year].filter(Boolean).join(' ');
-            }
-            return parts.map(p => clean(p.name)).filter(Boolean).join(' ');
-        };
 
         const projectsWithPaths = updatedCase.projects.map((cp) => ({
             ...cp,
             project: {
                 ...cp.project,
-                fullPath: getPath(cp.project.id)
+                fullPath: buildProjectDisplayName(cp.project.id, allProjects)
             }
         }));
 

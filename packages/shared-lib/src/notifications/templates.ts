@@ -26,6 +26,7 @@ export interface NotificationTemplate {
 // {virtualAssistantName} - Virtual assistant name (e.g., "Thandi")
 // {services} - Required services (e.g., "Debt Review Flag Removal")
 // {mainSource} - Main source/referral (e.g., "Letsatsi")
+// {projectUrl} - Direct link to the project that needs attention
 
 const TEMPLATES: NotificationTemplate[] = [
     // ===== INTAKE & PAYMENT =====
@@ -509,6 +510,7 @@ System Robot`,
 The system has detected that the following project currently has NO manager assigned:
 
 Project: {projectName}
+Project Link: {projectUrl}
 
 Please assign a manager to this project immediately to ensure cases are handled correctly and notifications are received.
 
@@ -866,5 +868,4 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
 </html>
     `;
 }
-
 

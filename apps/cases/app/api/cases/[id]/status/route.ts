@@ -9,6 +9,7 @@ import {
     getCommissionStageForCaseStatus,
     isCommissionEligible,
     calculateCommissionAmount,
+    buildProjectUrl,
 } from '@zenowethu/shared-lib';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { CaseStatusSchema, parseBody } from '@/lib/schemas';
@@ -259,7 +260,8 @@ export async function PATCH(
                     role: 'ADMIN',
                     statusCode: 'NO_MANAGER_ADMIN',
                     variables: {
-                        projectName: primaryProject.name
+                        projectName: primaryProject.name,
+                        projectUrl: buildProjectUrl(primaryProject.id)
                     }
                 });
             }

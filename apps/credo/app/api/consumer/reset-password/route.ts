@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { validateResetToken, resetPasswordWithToken } from "@zenowethu/shared-lib";
+import {
+  validateResetToken,
+  resetPasswordWithToken,
+  checkRateLimit,
+  clientIpFromHeaders,
+} from "@zenowethu/shared-lib";
 
 // GET /api/consumer/reset-password?token=... — check a token's validity before
 // showing the reset form (so the consumer sees expired/used messaging up front).
@@ -17,6 +22,16 @@ const schema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // Guard against token brute-forcing.
+    const ip = clientIpFromHeaders(req.headers);
+    const rate = checkRateLimit(`reset-password:${ip}`, 10, 15 * 60 * 1000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } }
+      );
+    }
+
     const body = await req.json();
     const parsed = schema.safeParse(body);
     if (!parsed.success) {

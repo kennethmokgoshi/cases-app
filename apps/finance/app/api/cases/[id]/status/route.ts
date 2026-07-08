@@ -16,6 +16,13 @@ export async function PATCH(
 ) {
     try {
         const session = await auth();
+        if (!session?.user) {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+        if (session.user.userType === 'B2B_PARTNER') {
+            return NextResponse.json({ error: 'Only staff can update workflow status' }, { status: 403 });
+        }
+
         const { id } = await params;
         const parsed = parseBody(CaseStatusSchema, await request.json());
         if (!parsed.success) return parsed.response;
@@ -28,6 +35,9 @@ export async function PATCH(
 
         // Get the status configuration
         const statusInfo = getStatusByCode(newStatus);
+        if (!statusInfo) {
+            return NextResponse.json({ error: 'Invalid workflow status' }, { status: 422 });
+        }
 
         // Get current case with client info for notification
         const currentCase = await prisma.case.findUnique({

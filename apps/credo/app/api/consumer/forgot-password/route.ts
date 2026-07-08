@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requestPasswordReset } from "@zenowethu/shared-lib";
+import { requestPasswordReset, checkRateLimit, clientIpFromHeaders } from "@zenowethu/shared-lib";
 
 const schema = z.object({
   idNumber: z.string().regex(/^\d{13}$/, "Enter your 13-digit ID number"),
@@ -8,6 +8,16 @@ const schema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // Reset emails are expensive and abusable — cap requests per IP.
+    const ip = clientIpFromHeaders(req.headers);
+    const rate = checkRateLimit(`forgot-password:${ip}`, 5, 15 * 60 * 1000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many reset requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } }
+      );
+    }
+
     const body = await req.json();
     const parsed = schema.safeParse(body);
     if (!parsed.success) {

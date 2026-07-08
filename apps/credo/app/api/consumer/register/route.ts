@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@zenowethu/database";
+import {
+  validatePasswordStrength,
+  checkRateLimit,
+  clientIpFromHeaders,
+  createLogger,
+} from "@zenowethu/shared-lib";
 import { sendEmail, welcomeEmailHtml } from "@/lib/email";
+
+const logger = createLogger("credo/register");
 
 const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -18,8 +26,22 @@ const registerSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = clientIpFromHeaders(req.headers);
+    const rate = checkRateLimit(`register:${ip}`, 5, 60 * 60 * 1000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many registration attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } }
+      );
+    }
+
     const body = await req.json();
     const data = registerSchema.parse(body);
+
+    const strength = validatePasswordStrength(data.password);
+    if (!strength.ok) {
+      return NextResponse.json({ error: strength.error, field: "password" }, { status: 400 });
+    }
 
     // Email and cell number are intentionally NOT unique — two different people
     // (e.g. a parent helping a child) may legitimately share them. Only the ID
@@ -66,6 +88,8 @@ export async function POST(req: NextRequest) {
           language: data.language,
           source: "SELF_REGISTERED",
           activatedAt: new Date(),
+          mustChangePassword: false,
+          passwordChangedAt: new Date(),
         },
         select: consumerSelect,
       });
@@ -127,7 +151,7 @@ export async function POST(req: NextRequest) {
         <p><a href="https://cases.zenowethu.co.za/clients/${consumer.linkedClientId || ''}">View Client in Cases App</a></p>
         <p>Please pull and upload the 4-bureau credit reports to the client's case to activate their dashboard.</p>
       `,
-    }).catch((err) => console.error("Staff notification email failed:", err));
+    }).catch((err) => logger.error("Staff notification email failed:", err));
 
     return NextResponse.json(
       { success: true, consumer, linkedToExistingClient: consumer.linkedClientId !== null },
@@ -156,8 +180,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Never echo internal error details (SQL, stack fragments) to the client.
+    logger.error("Registration failed:", error);
     return NextResponse.json(
-      { error: `Registration failed: ${prismaError.message ?? "Unknown error"}. Please try again or contact support.` },
+      { error: "Registration failed. Please try again or contact support." },
       { status: 500 }
     );
   }

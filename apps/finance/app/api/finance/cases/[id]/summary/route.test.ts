@@ -90,7 +90,11 @@ describe('GET /api/finance/cases/[id]/summary', () => {
         expect(body.client.idNumber).toBe('9204275246089');
         expect(body.summary.totalPaid).toBe(3000);
         expect(body.summary.outstanding).toBe(1500);
+        expect(body.summary.feeBasisTotal).toBe(4500);
+        expect(body.summary.feeBasisSource).toBe('CASE_SERVICE_FEE');
+        expect(body.summary.feeBasisOutstanding).toBe(1500);
         expect(body.summary.percentCollected).toBe(67);
+        expect(body.summary.feeBasisPercentCollected).toBe(67);
         expect(body.payments).toHaveLength(2);
         expect(body.invoices).toHaveLength(1);
 
@@ -100,6 +104,31 @@ describe('GET /api/finance/cases/[id]/summary', () => {
             { caseId: 'case-1' },
             { clientId: 'client-1', caseId: null },
         ]);
+    });
+
+    it('uses an accepted quote as the fee basis when the case service fee is blank', async () => {
+        vi.mocked(auth as any).mockResolvedValue(session);
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({ ...caseRecord, serviceFee: null } as any);
+        vi.mocked(prisma.payment.findMany).mockResolvedValue([
+            { id: 'p1', amount: 2250, date: new Date(), method: 'EFT', reference: null, category: 'INSTALLMENT', status: 'COMPLETED', recordedBy: null, batch: null },
+        ] as any);
+        vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+            { id: 'q1', invoiceNumber: 'QUO-2026-0059', status: 'SENT', type: 'QUOTE', total: 4500, issuedAt: new Date(), dueAt: new Date(), sentAt: null, acceptedAt: new Date('2026-07-07') },
+        ] as any);
+
+        const res = await GET(makeRequest(), { params });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+
+        expect(body.case.serviceFee).toBeNull();
+        expect(body.summary.serviceFee).toBeNull();
+        expect(body.summary.feeBasisTotal).toBe(4500);
+        expect(body.summary.feeBasisSource).toBe('ACCEPTED_QUOTE');
+        expect(body.summary.outstanding).toBe(2250);
+        expect(body.summary.feeBasisOutstanding).toBe(2250);
+        expect(body.summary.feeBasisPercentCollected).toBe(50);
+        expect(body.summary.quoteBalance).toBe(2250);
+        expect(body.summary.overCollected).toBe(0);
     });
 
     it('returns 500 with the error message when the database fails', async () => {

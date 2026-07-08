@@ -3,6 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { renderBrandedEmail } from '../notifications/templates';
 import { sendTransactionalEmail } from '../notifications/service';
+import { getDefaultPasswordHash } from './password-policy';
 
 const logger = createLogger('credo/provisioning');
 
@@ -26,8 +27,9 @@ export interface ProvisionResult {
 /**
  * Ensure a Credo ConsumerAccount exists for the given Client. Idempotent: if the
  * client already has a linked account (or one already exists for the same ID
- * number) nothing is created. Auto-provisioned accounts have NO password — the
- * consumer activates by following the emailed reset/activation link.
+ * number) nothing is created. Auto-provisioned accounts get the shared default
+ * password with `mustChangePassword` set, so first login forces a personal
+ * password. The emailed activation link remains an alternative first-login path.
  *
  * The ID number is the canonical Credo username, so it is required to provision.
  */
@@ -71,7 +73,8 @@ export async function provisionConsumerForClient(clientId: string): Promise<Prov
   const consumer = await prisma.consumerAccount.create({
     data: {
       email: client.email || `${client.idNumber}@no-email.zenowethu.co.za`,
-      password: null,
+      password: await getDefaultPasswordHash(),
+      mustChangePassword: true,
       firstName: client.firstName,
       lastName: client.lastName,
       idNumber: client.idNumber,

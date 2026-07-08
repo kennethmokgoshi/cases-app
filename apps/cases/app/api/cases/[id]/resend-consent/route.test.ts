@@ -63,7 +63,8 @@ describe('POST /api/cases/[id]/resend-consent', () => {
         expect(res.status).toBe(200);
         expect(json.success).toBe(true);
         expect(json.emailSent).toBe(true);
-        expect(json.message).toContain('re-sent');
+        expect(json.message).toContain('Consent reminder sent');
+        expect(json.message).toContain('cannot continue');
         expect(handler).toHaveBeenCalledWith({
             caseId: 'case1',
             triggeredByUserId: 'staff1',

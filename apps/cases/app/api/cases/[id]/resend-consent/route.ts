@@ -9,11 +9,13 @@ const logger = createLogger('api/cases/[id]/resend-consent');
 /**
  * POST /api/cases/[id]/resend-consent — the "Resend Confirmation Link" button.
  *
- * Re-sends the acceptance + debt-review-removal consent email (the login-gated
- * Credo confirmation link, with ID-number login instructions). Reuses the existing
- * consent token so links already in the consumer's inbox stay valid. If no consent
- * exists yet it sends the first one; if the consumer has already consented, nothing
- * is sent and the response says so. No Puppeteer/DHS session involved — email only.
+ * Sends the consumer the debt-review-removal consent REMINDER email (the
+ * login-gated Credo confirmation link with ID-number login instructions) — worded
+ * as a reminder that flag removal cannot continue without their consent, NOT as a
+ * fresh "transfer accepted" announcement. Reuses the existing consent token so
+ * links already in the consumer's inbox stay valid; issues a new link if the old
+ * one expired. If the consumer has already consented, nothing is sent and the
+ * response says so. No Puppeteer/DHS session involved — email only.
  */
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -54,7 +56,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
                     ? 'The consumer has already confirmed — no email was sent.'
                     : result.reason || 'No email was sent.')
                 : result.emailSent
-                    ? 'Confirmation link re-sent to the consumer.'
+                    ? 'Consent reminder sent to the consumer — it makes clear the flag removal cannot continue until they approve. The existing secure link remains valid.'
                     : 'No email was sent.';
 
         return NextResponse.json({

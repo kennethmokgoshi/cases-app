@@ -219,7 +219,7 @@ describe('checkQuoteFulfilment', () => {
 
         const result = await checkQuoteFulfilment('case-1', 'u1');
 
-        expect(result).toEqual({ checked: true, quoteTotal: 5000, captured: 3000, fulfilled: false });
+        expect(result).toEqual({ checked: true, quoteTotal: 5000, captured: 3000, fulfilled: false, overpaidBy: 0 });
         expect(prisma.case.update).not.toHaveBeenCalled();
     });
 
@@ -236,11 +236,31 @@ describe('checkQuoteFulfilment', () => {
         const result = await checkQuoteFulfilment('case-1', 'u1');
 
         expect(result.fulfilled).toBe(true);
+        expect(result.overpaidBy).toBe(0);
         expect(result.caseSync).toEqual({
             moved: true, fromStatus: 'QUOTE_ACCEPTED', toStatus: 'SETTLED_SUCCESS',
         });
         const updateArgs = vi.mocked(prisma.case.update).mock.calls[0][0] as any;
         expect(updateArgs.data.status).toBe('SETTLED_SUCCESS');
+    });
+
+    it('still settles when the client overpays and reports the overpaid amount', async () => {
+        vi.mocked(prisma.invoice.findFirst).mockResolvedValue({
+            id: 'q1', invoiceNumber: 'QUO-2026-0058', total: 5000, convertedToInvoice: null,
+        } as any);
+        vi.mocked(prisma.payment.aggregate).mockResolvedValue({ _sum: { amount: 6500 } } as any);
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            id: 'case-1', status: 'QUOTE_ACCEPTED', referrerId: null,
+        } as any);
+        vi.mocked(prisma.case.update).mockResolvedValue({} as any);
+
+        const result = await checkQuoteFulfilment('case-1', 'u1');
+
+        expect(result.fulfilled).toBe(true);
+        expect(result.overpaidBy).toBe(1500);
+        const updateArgs = vi.mocked(prisma.case.update).mock.calls[0][0] as any;
+        expect(updateArgs.data.status).toBe('SETTLED_SUCCESS');
+        expect(updateArgs.data.workflowLogs.create.notes).toContain('overpaid by R1500.00');
     });
 
     it('counts a converted invoice marked PAID without payment rows as captured', async () => {

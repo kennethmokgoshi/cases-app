@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { auth } from '@zenowethu/shared-lib';
+import { getOverpaymentSummary, type OverpaymentSummary } from '@zenowethu/shared-lib/src/finance/overpayments';
 import { prisma } from '@zenowethu/database';
 
 export const metadata = { title: 'Finance Dashboard | Zenowethu' };
@@ -54,9 +55,20 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+async function getOverpaymentsForAdmin(isAdmin: boolean): Promise<OverpaymentSummary | null> {
+  if (!isAdmin) return null;
+  try {
+    return await getOverpaymentSummary({ limit: 8 });
+  } catch {
+    return null;
+  }
+}
+
 export default async function FinanceDashboard() {
   const session = await auth();
-  const { totalCollected, percentChange, pendingBatches, unallocated, recentBatches } = await getStats();
+  const isAdmin = session?.user?.role === 'ADMIN' || session?.user?.isAdmin === true;
+  const [{ totalCollected, percentChange, pendingBatches, unallocated, recentBatches }, overpayments] =
+    await Promise.all([getStats(), getOverpaymentsForAdmin(isAdmin)]);
 
   return (
     <div className="p-6 space-y-8 max-w-7xl mx-auto">
@@ -133,6 +145,66 @@ export default async function FinanceDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Client Overpayments — visible to admins only */}
+      {isAdmin && overpayments && (
+        <div className="bg-[var(--color-bg-secondary)] rounded-2xl border border-amber-500/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-white">Client Overpayments</h2>
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                Admin only
+              </span>
+            </div>
+            {overpayments.count > 0 && (
+              <p className="text-sm text-gray-400">
+                {overpayments.count} client{overpayments.count !== 1 ? 's have' : ' has'} overpaid —{' '}
+                <span className="text-amber-400 font-semibold">{formatZAR(overpayments.totalOverpaid)}</span> in total
+              </p>
+            )}
+          </div>
+          {overpayments.count === 0 ? (
+            <p className="px-6 py-6 text-sm text-gray-500">
+              No overpayments detected — every settled quote and invoice matches what was collected. ✓
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-white/5 text-gray-400 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3">Document</th>
+                    <th className="px-6 py-3">Client</th>
+                    <th className="px-6 py-3">Case</th>
+                    <th className="px-6 py-3 text-right">Expected</th>
+                    <th className="px-6 py-3 text-right">Collected</th>
+                    <th className="px-6 py-3 text-right">Overpaid By</th>
+                    <th className="px-6 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {overpayments.items.map((item) => (
+                    <tr key={item.invoiceId} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-4 font-mono text-xs text-white">{item.number}</td>
+                      <td className="px-6 py-4 text-gray-300">{item.clientName ?? '—'}</td>
+                      <td className="px-6 py-4 text-emerald-400 font-mono text-xs">
+                        {item.caseFileNumber ? `#${item.caseFileNumber}` : '—'}
+                      </td>
+                      <td className="px-6 py-4 text-right text-gray-400">{formatZAR(item.expected)}</td>
+                      <td className="px-6 py-4 text-right text-gray-300">{formatZAR(item.captured)}</td>
+                      <td className="px-6 py-4 text-right text-amber-400 font-semibold">{formatZAR(item.overpaidBy)}</td>
+                      <td className="px-6 py-4">
+                        <Link href={`/invoices/${item.invoiceId}`} className="text-cyan-400 hover:text-cyan-300 text-xs transition-colors">
+                          View →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

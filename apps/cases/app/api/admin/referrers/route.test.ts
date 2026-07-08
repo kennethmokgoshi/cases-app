@@ -26,6 +26,7 @@ vi.mock('@zenowethu/database', () => ({
             findMany: vi.fn(),
         },
         user: {
+            findUnique: vi.fn(),
             findMany: vi.fn(),
         },
         caseProject: {
@@ -37,8 +38,13 @@ vi.mock('@zenowethu/database', () => ({
     },
 }));
 
+vi.mock('@/lib/referrer-portal-access', () => ({
+    provisionReferrerPortalUser: vi.fn(),
+}));
+
 import { auth } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { provisionReferrerPortalUser } from '@/lib/referrer-portal-access';
 import { GET, POST } from './route';
 import { GET as GET_ID, PATCH, DELETE } from './[id]/route';
 
@@ -203,6 +209,15 @@ describe('POST /api/admin/referrers', () => {
         expect(res.status).toBe(409);
     });
 
+    it('returns 409 when the ID-number username belongs to a non-referrer user', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
+        vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ userType: 'STAFF' } as never);
+        const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', { firstName: 'John', lastName: 'Doe', idNumber: '8001015009087' }));
+        expect(res.status).toBe(409);
+        expect(prisma.project.create).not.toHaveBeenCalled();
+    });
+
     it('allows manager to create a referrer (add-only role)', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockManager as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
@@ -221,6 +236,11 @@ describe('POST /api/admin/referrers', () => {
         vi.mocked(prisma.referrer.create).mockResolvedValueOnce({ ...sampleReferrer } as never);
         const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', { firstName: 'John', lastName: 'Doe', idNumber: '8001015009087' }));
         expect(res.status).toBe(201);
+        expect(provisionReferrerPortalUser).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'ref-1',
+            idNumber: '8001015009087',
+            portalUser: null,
+        }));
     });
 
     it('creates the sub-project with selected staff as initial members', async () => {

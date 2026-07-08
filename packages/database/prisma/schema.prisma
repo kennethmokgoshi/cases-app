@@ -1029,6 +1029,12 @@ model ConsumerAccount {
   password             String?
   // Tracks whether the consumer has ever set a password (activated their login).
   activatedAt          DateTime?
+  // Forces a password change on next login (set for default/staff-issued passwords).
+  mustChangePassword   Boolean                    @default(false)
+  passwordChangedAt    DateTime?
+  // Brute-force protection: consecutive failed logins and optional lockout window.
+  failedLoginAttempts  Int                        @default(0)
+  lockedUntil          DateTime?
   // How the profile was created: SELF_REGISTERED | AUTO_PROVISIONED
   source               String                     @default("SELF_REGISTERED")
   firstName            String
@@ -1058,10 +1064,23 @@ model ConsumerAccount {
   otpSession           CredoOtpSession?
   passwordResetTokens  PasswordResetToken[]
   documentRequests     DocumentRequest[]
+  passwordHistory      ConsumerPasswordHistory[]
 
   @@index([email])
   @@index([tenantId])
   @@index([idNumber])
+}
+
+// Retains recent bcrypt hashes so a consumer cannot reuse any of their last
+// 5 passwords (POPIA-aligned credential hygiene). Rows are trimmed on write.
+model ConsumerPasswordHistory {
+  id           String          @id @default(cuid())
+  consumerId   String
+  passwordHash String
+  createdAt    DateTime        @default(now())
+  consumer     ConsumerAccount @relation(fields: [consumerId], references: [id], onDelete: Cascade)
+
+  @@index([consumerId, createdAt])
 }
 
 model PasswordResetToken {

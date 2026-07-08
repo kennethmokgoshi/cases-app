@@ -39,8 +39,8 @@ function LoginContent() {
                 if (result.error === 'CredentialsSignin' || result.error === 'Configuration') {
                     // NextAuth v5 returns "Configuration" for invalid credentials or config issues
                     setError('Invalid email or password');
-                } else if (result.error.includes('Email not recognised')) {
-                    setError('Email not recognised');
+                } else if (result.error.includes('Login not recognised')) {
+                    setError('Login not recognised');
                 } else if (result.error.includes('Invalid password')) {
                     setError('Invalid password');
                 } else if (result.error.includes('Account is locked')) {
@@ -86,15 +86,15 @@ function LoginContent() {
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                                Email Address
+                                Email or ID Number
                             </label>
                             <input
                                 id="email"
-                                type="email"
+                                type="text"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full px-4 py-3 bg-zeno-navy border border-zeno-blue rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-zeno-cyan focus:border-transparent transition-all"
-                                placeholder="you@zenowethu.co.za"
+                                placeholder="you@zenowethu.co.za or 8001015009087"
                                 required
                             />
                         </div>

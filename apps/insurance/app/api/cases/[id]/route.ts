@@ -86,7 +86,7 @@ export async function GET(
             const specificSource = allSources.filter(p => p.name !== 'Cases').pop();
             const source = clean(specificSource?.name || allSources[0]?.name || '');
             const branches = parts
-                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
+                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER' || p.type === 'REFERRER') && p.name !== source)
                 .map(p => clean(p.name));
             const branch = branches.join(' ');
 
@@ -624,7 +624,7 @@ export async function PATCH(
             const specificSource = allSources.filter(p => p.name !== 'Cases').pop();
             const source = clean(specificSource?.name || allSources[0]?.name || '');
             const branches = parts
-                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
+                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER' || p.type === 'REFERRER') && p.name !== source)
                 .map(p => clean(p.name));
             const branch = branches.join(' ');
 

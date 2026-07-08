@@ -16,5 +16,6 @@ export const config = {
     "/admin/:path*",
     "/upgrade/:path*",
     "/consent/:path*",
+    "/change-password",
   ],
 };

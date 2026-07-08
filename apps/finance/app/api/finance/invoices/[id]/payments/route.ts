@@ -40,7 +40,8 @@ export async function GET(
     return NextResponse.json({
       payments,
       amountPaid,
-      balanceDue: Math.max(0, Number(invoice.total) - amountPaid),
+      balanceDue:  Math.max(0, Number(invoice.total) - amountPaid),
+      overpaidBy:  Math.max(0, amountPaid - Number(invoice.total)),
     })
   } catch (err) {
     logger.error('[GET /api/finance/invoices/[id]/payments]', err)
@@ -126,6 +127,7 @@ export async function POST(
     return NextResponse.json({
       ...result,
       balanceDue: Math.max(0, Number(result.invoice.total) - result.amountPaid),
+      overpaidBy: Math.max(0, result.amountPaid - Number(result.invoice.total)),
       quoteFulfilment,
     }, { status: 201 })
   } catch (err) {

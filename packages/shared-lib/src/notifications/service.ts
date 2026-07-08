@@ -220,6 +220,7 @@ export interface NotificationPayload {
     idNumber?: string | null;
     caseUrl?: string | null;
     projectName?: string | null;
+    projectUrl?: string | null;
     senderName?: string;
     senderEmail?: string;
     // File request recipients (used for DHS post-acceptance outreach)
@@ -285,6 +286,7 @@ export async function sendStatusChangeNotification(
         idNumber: payload.idNumber || '',
         caseUrl: payload.caseUrl || '',
         projectName: payload.projectName || '',
+        projectUrl: payload.projectUrl || '',
         partnerUserName: payload.partnerUserName || payload.senderName || 'Partner' };
 
     return sendNotificationByTemplate(template, variables, payload);
@@ -1297,4 +1299,3 @@ export async function executeNotificationRetry(queueId: string): Promise<Notific
 
     return result;
 }
-

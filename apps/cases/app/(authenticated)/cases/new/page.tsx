@@ -1,10 +1,15 @@
 'use client';
-import { toast } from '@zenowethu/ui';
+import {
+    flattenProjectResponse,
+    getSubprojects,
+    resolveProjectSelectionFromPath,
+    toast,
+    useSession,
+} from '@zenowethu/ui';
 
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
 import { ClientOnly } from './ClientOnly';
 import { buildManualCaseCreatePayload, buildManualCasePatchPayload } from '@/lib/manual-case-payload';
@@ -27,25 +32,6 @@ type Project = {
     // Linked referrer — present when project is a registered referral sub-project
     referrer?: { id: string; firstName: string; lastName: string } | null;
 };
-
-function getDescendants(parentId: string, allProjects: Project[]): Project[] {
-    const result: Project[] = [];
-    const queue = [parentId];
-    const visited = new Set<string>();
-    while (queue.length > 0) {
-        const pid = queue.shift()!;
-        if (visited.has(pid)) continue;
-        visited.add(pid);
-        for (const p of allProjects) {
-            if (p.parentId === pid && !visited.has(p.id)) {
-                result.push(p);
-                queue.push(p.id);
-            }
-        }
-    }
-    return result;
-}
-
 
 type ExtractedData = {
     validation?: {
@@ -396,15 +382,7 @@ function NewCaseWithAIComponent() {
     // Get selected parent project and its children
     const selectedParent = parentProjects.find(p => p.id === selectedParentId);
     const subprojects = selectedParentId
-        ? Array.from(
-            new Map(
-              getDescendants(selectedParentId, allFlatProjects)
-                .filter(c =>
-                  c.type === 'REFERRER'  // Only show REFERRER-type subprojects, not FOLDER
-                )
-                .map(p => [p.id, p])
-            ).values()
-          ).sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }))
+        ? getSubprojects(selectedParentId, allFlatProjects) as Project[]
         : [];
 
     // Helper functions to get partner and branch names from selected projects
@@ -431,39 +409,12 @@ function NewCaseWithAIComponent() {
                 const res = await fetch('/api/projects?memberOnly=true');
                 const data = await res.json();
 
+                const flat = flattenProjectResponse(data.hierarchy, data.independent) as Project[];
+
                 // Get ACQUISITION_SOURCE projects (main parent projects)
-                const mainProjects: Project[] = [];
-                if (data.hierarchy?.children) {
-                    mainProjects.push(...data.hierarchy.children.filter(
-                        (p: Project) => p.type === 'ACQUISITION_SOURCE'
-                    ));
-                }
-
-                if (data.independent) {
-                    mainProjects.push(...data.independent.filter(
-                        (p: Project) => p.type === 'ACQUISITION_SOURCE'
-                    ));
-                }
-
-                // Remove duplicates by ID
-                const uniqueProjects = Array.from(new Map(mainProjects.map(p => [p.id, p])).values());
+                const uniqueProjects = flat.filter((p) => p.type === 'ACQUISITION_SOURCE');
 
                 setParentProjects(uniqueProjects);
-
-                // Build a flat project list for recursive descendant lookups
-                function flattenTree(node: any, result: any[]) {
-                    result.push(node);
-                    if (node.children) node.children.forEach((c: any) => flattenTree(c, result));
-                }
-                const flat: Project[] = [];
-                if (data.hierarchy) {
-                    flattenTree(data.hierarchy, flat);
-                }
-                if (data.independent) {
-                    data.independent.forEach((p: any) => {
-                        if (!flat.some(f => f.id === p.id)) flat.push(p);
-                    });
-                }
                 setAllFlatProjects(flat);
 
                 // Auto-select based on projectId param
@@ -471,7 +422,7 @@ function NewCaseWithAIComponent() {
                 if (projectIdParam) {
                     isAutoSelecting.current = true;
                     logger.info('Project ID detected in URL, resolving hierarchy...', projectIdParam);
-                    await resolveProjectHierarchy(projectIdParam, uniqueProjects);
+                    await resolveProjectHierarchy(projectIdParam, flat);
                     // Give it a tick to let the renders settle before re-enabling resets
                     setTimeout(() => { isAutoSelecting.current = false; }, 100);
                 }
@@ -482,10 +433,10 @@ function NewCaseWithAIComponent() {
             }
         }
 
-        async function resolveProjectHierarchy(id: string, allParentProjects: Project[]) {
+        async function resolveProjectHierarchy(id: string, flatProjects: Project[]) {
             try {
                 let currentId = id;
-                const path: any[] = [];
+                const path: Project[] = [];
                 
                 // Fetch up the chain
                 while (currentId) {
@@ -500,20 +451,19 @@ function NewCaseWithAIComponent() {
 
                 logger.info('Resolved path:', path.map(p => `${p.name} (${p.type})`));
 
-                // Process path levels
-                path.forEach(p => {
-                    if (p.type === 'ACQUISITION_SOURCE') {
-                        setSelectedParentId(p.id);
-                        if (p.clientType === 'B2B') setAcquisitionType('B2B');
-                        else if (p.clientType === 'B2C') setAcquisitionType('B2C');
-                    } else if (p.type === 'BRANCH' || p.type === 'FOLDER') {
-                        setSelectedSubprojectId(p.id);
-                    } else if (p.type === 'YEAR') {
-                        setSelectedYear(p.name);
-                    } else if (p.type === 'MONTH') {
-                        setSelectedMonth(p.name);
-                    }
-                });
+                const selection = resolveProjectSelectionFromPath(path);
+                if (selection.parentId) setSelectedParentId(selection.parentId);
+                if (selection.acquisitionType) setAcquisitionType(selection.acquisitionType);
+                if (selection.subprojectId) setSelectedSubprojectId(selection.subprojectId);
+                if (selection.year) setSelectedYear(selection.year);
+                if (selection.month) setSelectedMonth(selection.month);
+
+                const selectedSubproject = path.find(p => p.id === selection.subprojectId)
+                    ?? flatProjects.find(p => p.id === selection.subprojectId);
+                if (selectedSubproject?.referrer) {
+                    setAutoDetectedReferrerId(selectedSubproject.referrer.id);
+                    setAutoDetectedReferrerName(`${selectedSubproject.referrer.firstName} ${selectedSubproject.referrer.lastName}`);
+                }
             } catch (e) {
                 logger.error('Error resolving project hierarchy:', e);
             }

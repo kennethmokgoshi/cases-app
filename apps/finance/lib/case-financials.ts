@@ -9,17 +9,27 @@ export type InvoiceLike = {
     total: number | string;
     status: string;
     type?: string;
+    acceptedAt?: Date | string | null;
+    convertedToInvoiceId?: string | null;
 };
 
 export type CaseFinancialSummary = {
+    /** Explicit service fee stored on the case. */
     serviceFee: number | null;
+    /** Fee basis for the summary cards: case service fee, or accepted quotes when the case fee is blank. */
+    feeBasisTotal: number | null;
+    feeBasisSource: 'CASE_SERVICE_FEE' | 'ACCEPTED_QUOTE' | null;
     totalPaid: number;
-    /** serviceFee - totalPaid, floored at 0. Null when no fee is set. */
+    /** Payable total - totalPaid, floored at 0. Uses accepted quotes when no case service fee is set. */
     outstanding: number | null;
+    /** feeBasisTotal - totalPaid, floored at 0. Null when no fee basis exists. */
+    feeBasisOutstanding: number | null;
     /** Amount collected beyond the agreed fee. 0 when within the fee or no fee set. */
     overCollected: number;
-    /** 0–100, capped at 100. Null when no fee is set. */
+    /** 0-100, capped at 100. Null when no fee is set. */
     percentCollected: number | null;
+    /** 0-100 against feeBasisTotal, capped at 100. Null when no fee basis exists. */
+    feeBasisPercentCollected: number | null;
     paymentCount: number;
     invoicedTotal: number;
     invoiceCount: number;
@@ -29,10 +39,17 @@ export type CaseFinancialSummary = {
     acceptedQuoteCount: number;
     /** Remaining owed on accepted quotes: acceptedQuotesTotal - totalPaid, floored at 0. Null when there are no accepted quotes. */
     quoteBalance: number | null;
+    /** Amount collected above accepted quotes. 0 unless there are accepted quotes and payments exceed them. */
+    quoteOverpaid: number;
 };
 
 const COUNTED_PAYMENT_STATUSES = new Set(['COMPLETED']);
 const COUNTED_INVOICE_STATUSES = new Set(['DRAFT', 'SENT', 'PAID', 'PARTIALLY_PAID', 'OVERDUE']);
+const NON_PAYABLE_STATUSES = new Set(['CANCELLED', 'REJECTED']);
+
+export function isAcceptedQuote(invoice: InvoiceLike): boolean {
+    return invoice.type === 'QUOTE' && (invoice.status === 'ACCEPTED' || Boolean(invoice.acceptedAt));
+}
 
 export function summariseCaseFinancials(input: {
     serviceFee: number | string | null;
@@ -47,24 +64,72 @@ export function summariseCaseFinancials(input: {
     const invoicesCounted = input.invoices.filter(i => COUNTED_INVOICE_STATUSES.has(i.status));
     const invoicedTotal = invoicesCounted.reduce((sum, i) => sum + Number(i.total), 0);
 
-    const acceptedQuotes = input.invoices.filter(i => i.type === 'QUOTE' && i.status === 'ACCEPTED');
+    const acceptedQuotes = input.invoices.filter(isAcceptedQuote);
     const acceptedQuotesTotal = acceptedQuotes.reduce((sum, i) => sum + Number(i.total), 0);
 
     const hasFee = serviceFee !== null && serviceFee > 0;
     const hasAcceptedQuotes = acceptedQuotes.length > 0;
+    const feeBasisTotal = hasFee
+        ? serviceFee
+        : hasAcceptedQuotes
+            ? acceptedQuotesTotal
+            : null;
+    const feeBasisSource = hasFee
+        ? 'CASE_SERVICE_FEE'
+        : hasAcceptedQuotes
+            ? 'ACCEPTED_QUOTE'
+            : null;
+    const hasFeeBasis = feeBasisTotal !== null && feeBasisTotal > 0;
 
     return {
         serviceFee,
+        feeBasisTotal: feeBasisTotal === null ? null : round2(feeBasisTotal),
+        feeBasisSource,
         totalPaid: round2(totalPaid),
-        outstanding: hasFee ? round2(Math.max(0, serviceFee - totalPaid)) : null,
+        outstanding: hasFeeBasis ? round2(Math.max(0, feeBasisTotal - totalPaid)) : null,
+        feeBasisOutstanding: hasFeeBasis ? round2(Math.max(0, feeBasisTotal - totalPaid)) : null,
         overCollected: hasFee ? round2(Math.max(0, totalPaid - serviceFee)) : 0,
         percentCollected: hasFee ? Math.min(100, Math.round((totalPaid / serviceFee) * 100)) : null,
+        feeBasisPercentCollected: hasFeeBasis ? Math.min(100, Math.round((totalPaid / feeBasisTotal) * 100)) : null,
         paymentCount: input.payments.length,
         invoicedTotal: round2(invoicedTotal),
         invoiceCount: input.invoices.length,
         acceptedQuotesTotal: round2(acceptedQuotesTotal),
         acceptedQuoteCount: acceptedQuotes.length,
         quoteBalance: hasAcceptedQuotes ? round2(Math.max(0, acceptedQuotesTotal - totalPaid)) : null,
+        quoteOverpaid: hasAcceptedQuotes ? round2(Math.max(0, totalPaid - acceptedQuotesTotal)) : 0,
+    };
+}
+
+export function summariseClientFinancials(input: {
+    payments: PaymentLike[];
+    invoices: InvoiceLike[];
+}): {
+    totalExpected: number;
+    totalCollected: number;
+    balanceDue: number;
+    acceptedQuoteCount: number;
+    invoiceCount: number;
+} {
+    const countedPayments = input.payments.filter(p => COUNTED_PAYMENT_STATUSES.has(p.status));
+    const totalCollected = countedPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const activeInvoices = input.invoices.filter(i => i.type === 'INVOICE' && !NON_PAYABLE_STATUSES.has(i.status));
+    const openAcceptedQuotes = input.invoices.filter(i =>
+        isAcceptedQuote(i) &&
+        !NON_PAYABLE_STATUSES.has(i.status) &&
+        !i.convertedToInvoiceId
+    );
+
+    const totalExpected = [...activeInvoices, ...openAcceptedQuotes]
+        .reduce((sum, i) => sum + Number(i.total), 0);
+
+    return {
+        totalExpected: round2(totalExpected),
+        totalCollected: round2(totalCollected),
+        balanceDue: round2(Math.max(0, totalExpected - totalCollected)),
+        acceptedQuoteCount: openAcceptedQuotes.length,
+        invoiceCount: activeInvoices.length,
     };
 }
 

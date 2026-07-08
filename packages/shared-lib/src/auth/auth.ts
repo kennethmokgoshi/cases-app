@@ -38,6 +38,7 @@ import bcrypt from "bcryptjs"
 import { prisma } from "@zenowethu/database"
 import { authConfig } from "./auth.config"
 import { createLogger } from "../logger"
+import { buildUserLoginLookup, normalizeLoginIdentifier } from "./login-identifier"
 
 const log = createLogger('auth');
 
@@ -47,7 +48,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         Credentials({
             name: "credentials",
             credentials: {
-                email: { label: "Email", type: "email" },
+                email: { label: "Email or username", type: "text" },
                 password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
@@ -57,19 +58,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         throw new Error('Missing credentials');
                     }
 
-                    // Convert email to lowercase for case-insensitive login
-                    const emailLowerCase = (credentials.email as string).toLowerCase();
+                    const loginIdentifier = normalizeLoginIdentifier(credentials.email as string);
 
                     log.info('Login attempt received');
 
-                    const user = await prisma.user.findUnique({
-                        where: { email: emailLowerCase }
+                    const user = await prisma.user.findFirst({
+                        where: buildUserLoginLookup(loginIdentifier)
                     });
 
                     if (!user) {
                         // Generic log — do not reveal whether the email exists
                         log.warn('Login failed: unrecognised credentials');
-                        throw new Error('Email not recognised');
+                        throw new Error('Login not recognised');
                     }
 
                     if (user.isLocked) {

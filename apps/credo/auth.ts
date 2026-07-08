@@ -2,6 +2,11 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@zenowethu/database";
+import {
+  isAccountLocked,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+} from "@zenowethu/shared-lib";
 import { z } from "zod";
 import { authConfig } from "./auth.config";
 
@@ -39,17 +44,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             isAdmin: true,
             tenantId: true,
             idNumber: true,
+            mustChangePassword: true,
+            lockedUntil: true,
           },
         });
 
         if (!consumer) return null;
 
-        // Auto-provisioned profiles have no password until the consumer activates
-        // via the emailed reset link. Block login until then.
+        // Older auto-provisioned profiles may still have no password (pre
+        // default-password rollout) — they activate via the emailed reset link.
         if (!consumer.password) return null;
 
+        // Brute-force lockout: reject even a correct password inside the window.
+        if (isAccountLocked(consumer)) return null;
+
         const valid = await bcrypt.compare(parsed.data.password, consumer.password);
-        if (!valid) return null;
+        if (!valid) {
+          await recordFailedLogin(consumer.id);
+          return null;
+        }
+
+        await recordSuccessfulLogin(consumer.id);
 
         return {
           id: consumer.id,
@@ -66,6 +81,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           b2bPartnerId: consumer.tenantId,
           organization: null,
           avatarUrl: null,
+          mustChangePassword: consumer.mustChangePassword,
         };
       },
     }),

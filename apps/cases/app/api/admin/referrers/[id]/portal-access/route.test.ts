@@ -48,13 +48,13 @@ describe('POST /api/admin/referrers/[id]/portal-access', () => {
         expect(res.status).toBe(401);
     });
 
-    it('requires the referrer to have an email address', async () => {
+    it('requires the referrer to have an ID number', async () => {
         vi.mocked(auth).mockResolvedValueOnce(adminSession as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({
             id: 'ref-1',
             firstName: 'Nomsa',
             lastName: 'Dube',
-            email: null,
+            idNumber: null,
             portalUser: null,
         } as never);
 
@@ -64,23 +64,32 @@ describe('POST /api/admin/referrers/[id]/portal-access', () => {
         expect(prisma.user.create).not.toHaveBeenCalled();
     });
 
-    it('links an existing referrer user without returning a temporary password', async () => {
+    it('links an existing referrer user by ID-number username without returning a temporary password', async () => {
         vi.mocked(auth).mockResolvedValueOnce(adminSession as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({
             id: 'ref-1',
             firstName: 'Nomsa',
             lastName: 'Dube',
-            email: 'Nomsa@Example.com',
+            idNumber: '8001015009087',
             portalUser: null,
         } as never);
         vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
             id: 'user-1',
-            email: 'nomsa@example.com',
+            username: '8001015009087',
+            email: 'referrer.8001015009087@portal.zenowethu.local',
             userType: 'REFERRER',
+            lastLogin: null,
+            isLocked: false,
         } as never);
         vi.mocked(prisma.referrer.update).mockResolvedValueOnce({
             id: 'ref-1',
-            portalUser: { id: 'user-1', email: 'nomsa@example.com', lastLogin: null, isLocked: false },
+            portalUser: {
+                id: 'user-1',
+                username: '8001015009087',
+                email: 'referrer.8001015009087@portal.zenowethu.local',
+                lastLogin: null,
+                isLocked: false,
+            },
         } as never);
 
         const res = await POST(new Request('http://localhost/api/admin/referrers/ref-1/portal-access'), ctx());
@@ -93,13 +102,12 @@ describe('POST /api/admin/referrers/[id]/portal-access', () => {
         }));
     });
 
-    it('creates a new referrer portal user and returns the one-time temporary password', async () => {
+    it('creates a new referrer portal user and returns Agent@1 as the default password', async () => {
         vi.mocked(auth).mockResolvedValueOnce(adminSession as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({
             id: 'ref-1',
             firstName: 'Nomsa',
             lastName: 'Dube',
-            email: 'Nomsa@Example.com',
             cellNumber: '0820000000',
             idNumber: '8001015009087',
             portalUser: null,
@@ -107,7 +115,8 @@ describe('POST /api/admin/referrers/[id]/portal-access', () => {
         vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(null);
         vi.mocked(prisma.user.create).mockResolvedValueOnce({
             id: 'user-1',
-            email: 'nomsa@example.com',
+            username: '8001015009087',
+            email: 'referrer.8001015009087@portal.zenowethu.local',
             lastLogin: null,
             isLocked: false,
         } as never);
@@ -117,14 +126,16 @@ describe('POST /api/admin/referrers/[id]/portal-access', () => {
         const json = await res.json();
 
         expect(res.status).toBe(201);
-        expect(json.temporaryPassword).toMatch(/^Zeno-/);
-        expect(bcrypt.hash).toHaveBeenCalledWith(expect.stringMatching(/^Zeno-/), 10);
+        expect(json.temporaryPassword).toBe('Agent@1');
+        expect(bcrypt.hash).toHaveBeenCalledWith('Agent@1', 10);
         expect(prisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({
-                email: 'nomsa@example.com',
+                username: '8001015009087',
+                email: 'referrer.8001015009087@portal.zenowethu.local',
                 userType: 'REFERRER',
                 role: 'MEMBER',
                 isAdmin: false,
+                emailNotificationsEnabled: false,
             }),
         }));
     });

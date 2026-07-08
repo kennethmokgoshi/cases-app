@@ -245,10 +245,16 @@ export default function ReferrersPage() {
         setSaving(true);
         setFormError('');
         try {
+            const normalizedIdNumber = (form.idNumber ?? '').trim();
+            if (!editTarget && !/^\d{13}$/.test(normalizedIdNumber)) {
+                setFormError('A 13-digit SA ID number is required to create the referrer login.');
+                return;
+            }
+
             const payload: Record<string, unknown> = {
                 firstName: form.firstName.trim(),
                 lastName: form.lastName.trim(),
-                idNumber: (form.idNumber ?? '').trim() || null,
+                idNumber: normalizedIdNumber || null,
                 email: (form.email ?? '').trim() || null,
                 cellNumber: (form.cellNumber ?? '').trim() || null,
                 employerName: (form.employerName ?? '').trim() || null,
@@ -534,7 +540,7 @@ export default function ReferrersPage() {
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field label="First Name *" value={form.firstName} onChange={(v) => setForm((f) => ({ ...f, firstName: v }))} />
                                     <Field label="Last Name *" value={form.lastName} onChange={(v) => setForm((f) => ({ ...f, lastName: v }))} />
-                                    <Field label="SA ID Number" value={form.idNumber} onChange={(v) => setForm((f) => ({ ...f, idNumber: v }))} placeholder="13-digit SA ID (Optional)" />
+                                    <Field label="SA ID Number *" value={form.idNumber} onChange={(v) => setForm((f) => ({ ...f, idNumber: v }))} placeholder="13-digit SA ID" />
                                     <Field label="Email Address" value={form.email} onChange={(v) => setForm((f) => ({ ...f, email: v }))} type="email" />
                                     <Field label="Cell Number" value={form.cellNumber} onChange={(v) => setForm((f) => ({ ...f, cellNumber: v }))} placeholder="e.g. 082 000 0000" />
                                 </div>

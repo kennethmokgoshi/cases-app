@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { getStatusByCode } from '@zenowethu/shared-lib';
+import { getStatusByCode, STATUS_CATEGORIES, WORKFLOW_STATUSES } from '@zenowethu/shared-lib';
 import { formatRand, type CaseFinancialSummary } from '../../../../lib/case-financials';
 import MandateForm from './MandateForm';
 import PaymentArrangements from './PaymentArrangements';
@@ -105,6 +105,8 @@ export default function FinanceCaseDetailPage() {
     const [data, setData] = useState<SummaryResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -126,6 +128,33 @@ export default function FinanceCaseDetailPage() {
     useEffect(() => {
         load();
     }, [load]);
+
+    const handleStatusChange = useCallback(async (newStatus: string) => {
+        if (!newStatus || !data || newStatus === data.case.status) return;
+
+        setUpdatingStatus(true);
+        setStatusMessage(null);
+        try {
+            const res = await fetch(`/api/cases/${data.case.id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newStatus }),
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(body?.error || `Failed to update status (${res.status})`);
+            }
+
+            setData(prev => prev
+                ? { ...prev, case: { ...prev.case, status: body?.status ?? newStatus } }
+                : prev);
+            setStatusMessage(`Workflow status updated to ${getStatusByCode(newStatus)?.name ?? newStatus}.`);
+        } catch (e: unknown) {
+            setStatusMessage(e instanceof Error ? e.message : 'Failed to update workflow status.');
+        } finally {
+            setUpdatingStatus(false);
+        }
+    }, [data]);
 
     if (loading) {
         return (
@@ -158,7 +187,8 @@ export default function FinanceCaseDetailPage() {
 
     const { case: caseInfo, client, summary, payments, invoices } = data;
     const status = getStatusByCode(caseInfo.status);
-    const fullyCollected = summary.outstanding === 0 && summary.serviceFee !== null && summary.serviceFee > 0;
+    const fullyCollected = summary.feeBasisOutstanding === 0 && summary.feeBasisTotal !== null && summary.feeBasisTotal > 0;
+    const quoteOverpaid = summary.quoteOverpaid > 0;
 
     return (
         <div className="max-w-7xl mx-auto">
@@ -176,10 +206,47 @@ export default function FinanceCaseDetailPage() {
                         <span className="text-gray-500">File: {caseInfo.fileNumber}</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-3 self-start flex-wrap">
+                <div className="flex items-center gap-3 self-start flex-wrap justify-start sm:justify-end">
                     <span className="px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 uppercase tracking-wide">
                         {status?.name ?? caseInfo.status}
                     </span>
+                    {quoteOverpaid && (
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 uppercase tracking-wide">
+                            Over Paid
+                        </span>
+                    )}
+                    <div className="flex flex-col gap-1 min-w-[220px]">
+                        <select
+                            value={caseInfo.status}
+                            onChange={(e) => handleStatusChange(e.target.value)}
+                            disabled={updatingStatus}
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:border-cyan-400 focus:outline-none disabled:opacity-50 [color-scheme:dark]"
+                        >
+                            {STATUS_CATEGORIES.map(cat => (
+                                <optgroup key={cat.code} label={cat.name}>
+                                    {WORKFLOW_STATUSES.filter(s => s.category === cat.code).map(workflowStatus => (
+                                        <option key={workflowStatus.code} value={workflowStatus.code}>
+                                            {workflowStatus.name}
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            ))}
+                        </select>
+                        {statusMessage && (
+                            <p className={`text-xs ${statusMessage.startsWith('Workflow') ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {statusMessage}
+                            </p>
+                        )}
+                    </div>
+                    {quoteOverpaid && caseInfo.status !== 'SETTLED_SUCCESS' && (
+                        <button
+                            onClick={() => handleStatusChange('SETTLED_SUCCESS')}
+                            disabled={updatingStatus}
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors"
+                        >
+                            Mark Settled
+                        </button>
+                    )}
                     <a
                         href={casesAppUrl(`/cases/${caseInfo.id}`)}
                         target="_blank"
@@ -207,29 +274,46 @@ export default function FinanceCaseDetailPage() {
                 </div>
             )}
 
+            {quoteOverpaid && (
+                <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
+                    <svg className="w-5 h-5 text-amber-300 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    </svg>
+                    <div>
+                        <p className="text-amber-300 font-semibold text-sm">Over Paid</p>
+                        <p className="text-gray-400 text-sm mt-0.5">
+                            {formatRand(summary.totalPaid)} has been collected against accepted quotes of {formatRand(summary.acceptedQuotesTotal)}.
+                            The client paid {formatRand(summary.quoteOverpaid)} more than quoted.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Financial summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-[var(--color-bg-secondary)] rounded-xl p-5 border border-white/5">
                     <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Service Fee</p>
-                    <p className="text-2xl font-bold text-white">{formatRand(summary.serviceFee)}</p>
+                    <p className="text-2xl font-bold text-white">{formatRand(summary.feeBasisTotal)}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                        {summary.serviceFee === null
-                            ? 'No fee set on this case'
-                            : `${caseInfo.instalments} instalment${caseInfo.instalments === 1 ? '' : 's'}`}
+                        {summary.feeBasisSource === 'ACCEPTED_QUOTE'
+                            ? `${summary.acceptedQuoteCount} accepted quote${summary.acceptedQuoteCount === 1 ? '' : 's'}`
+                            : summary.serviceFee === null
+                                ? 'No fee set on this case'
+                                : `${caseInfo.instalments} instalment${caseInfo.instalments === 1 ? '' : 's'}`}
                     </p>
                 </div>
                 <div className="bg-[var(--color-bg-secondary)] rounded-xl p-5 border border-white/5">
                     <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Collected</p>
                     <p className="text-2xl font-bold text-emerald-400">{formatRand(summary.totalPaid)}</p>
-                    {summary.percentCollected !== null && (
+                    {summary.feeBasisPercentCollected !== null && (
                         <div className="mt-2">
                             <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                                 <div
                                     className={`h-full rounded-full ${summary.overCollected > 0 ? 'bg-red-400' : 'bg-emerald-400'}`}
-                                    style={{ width: `${summary.percentCollected}%` }}
+                                    style={{ width: `${summary.feeBasisPercentCollected}%` }}
                                 />
                             </div>
-                            <p className="text-xs text-gray-500 mt-1">{summary.percentCollected}% of fee</p>
+                            <p className="text-xs text-gray-500 mt-1">{summary.feeBasisPercentCollected}% of fee</p>
                         </div>
                     )}
                 </div>
@@ -238,7 +322,7 @@ export default function FinanceCaseDetailPage() {
                         {summary.overCollected > 0 ? 'Over-collected' : 'Outstanding'}
                     </p>
                     <p className={`text-2xl font-bold ${summary.overCollected > 0 ? 'text-red-400' : fullyCollected ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        {summary.overCollected > 0 ? formatRand(summary.overCollected) : formatRand(summary.outstanding)}
+                        {summary.overCollected > 0 ? formatRand(summary.overCollected) : formatRand(summary.feeBasisOutstanding)}
                     </p>
                     {fullyCollected && summary.overCollected === 0 && (
                         <p className="text-xs text-emerald-500 mt-1">Fully collected ✓</p>
@@ -259,12 +343,14 @@ export default function FinanceCaseDetailPage() {
                             </p>
                         </div>
                         <div className="bg-[var(--color-bg-secondary)] rounded-xl p-5 border border-white/5">
-                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Available Balance</p>
-                            <p className={`text-2xl font-bold ${summary.quoteBalance === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                {formatRand(summary.quoteBalance)}
+                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{quoteOverpaid ? 'Over Paid' : 'Available Balance'}</p>
+                            <p className={`text-2xl font-bold ${quoteOverpaid ? 'text-amber-300' : summary.quoteBalance === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                {quoteOverpaid ? formatRand(summary.quoteOverpaid) : formatRand(summary.quoteBalance)}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                                {summary.quoteBalance === 0
+                                {quoteOverpaid
+                                    ? `Over the quoted ${formatRand(summary.acceptedQuotesTotal)}`
+                                    : summary.quoteBalance === 0
                                     ? 'Accepted quotes fully paid ✓'
                                     : `Remaining of ${formatRand(summary.acceptedQuotesTotal)} after ${formatRand(summary.totalPaid)} paid`}
                             </p>

@@ -3,7 +3,8 @@ import {
     DestinationProject,
     flattenProjectResponse,
     filterSourcesByClientType,
-    getSubprojects
+    getSubprojects,
+    resolveProjectSelectionFromPath
 } from './destination-path-logic';
 
 const p = (
@@ -126,5 +127,41 @@ describe('getSubprojects', () => {
 
     it('returns empty for a source with no subprojects', () => {
         expect(getSubprojects('missing', all)).toEqual([]);
+    });
+});
+
+describe('resolveProjectSelectionFromPath', () => {
+    it('preserves a REFERRER sub-project when opening a month project link', () => {
+        const path = [
+            p('root', 'ROOT'),
+            p('referrals', 'ACQUISITION_SOURCE', { name: 'Referrals', clientType: 'B2C' }),
+            p('william', 'REFERRER', { name: 'William Maesela', parentId: 'referrals' }),
+            p('2025', 'YEAR', { parentId: 'william' }),
+            p('may', 'MONTH', { name: 'May', parentId: '2025' }),
+        ];
+
+        expect(resolveProjectSelectionFromPath(path)).toEqual({
+            parentId: 'referrals',
+            subprojectId: 'william',
+            acquisitionType: 'B2C',
+            year: '2025',
+            month: 'May',
+        });
+    });
+
+    it('supports branch and folder sub-projects without requiring a referrer', () => {
+        const path = [
+            p('source', 'ACQUISITION_SOURCE', { clientType: 'B2B' }),
+            p('folder', 'FOLDER', { parentId: 'source' }),
+            p('branch', 'BRANCH', { parentId: 'folder' }),
+            p('2026', 'YEAR', { parentId: 'branch' }),
+        ];
+
+        expect(resolveProjectSelectionFromPath(path)).toMatchObject({
+            parentId: 'source',
+            subprojectId: 'branch',
+            acquisitionType: 'B2B',
+            year: '2026',
+        });
     });
 });

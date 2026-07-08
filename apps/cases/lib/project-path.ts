@@ -46,7 +46,7 @@ export function buildProjectDisplayName(
     const specificSource = allSources.filter(p => p.name !== 'Cases').pop();
     const source = clean(specificSource?.name || allSources[0]?.name || '');
     const branch = parts
-        .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
+        .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER' || p.type === 'REFERRER') && p.name !== source)
         .map(p => clean(p.name))
         .join(' ');
 

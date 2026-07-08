@@ -1,9 +1,9 @@
-import bcrypt from 'bcryptjs';
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { renderBrandedEmail } from '../notifications/templates';
 import { sendTransactionalEmail } from '../notifications/service';
 import { createPasswordResetTokenForConsumer, hashResetToken } from './consumer-provisioning';
+import { setConsumerPassword } from './password-policy';
 
 const logger = createLogger('credo/password-reset');
 
@@ -119,10 +119,6 @@ export async function resetPasswordWithToken(
   rawToken: string,
   newPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!newPassword || newPassword.length < 8) {
-    return { ok: false, error: 'Password must be at least 8 characters' };
-  }
-
   const tokenHash = hashResetToken(rawToken);
   const record = await prisma.passwordResetToken.findUnique({
     where: { tokenHash },
@@ -132,14 +128,13 @@ export async function resetPasswordWithToken(
   if (record.usedAt) return { ok: false, error: 'This reset link has already been used.' };
   if (record.expiresAt.getTime() < Date.now()) return { ok: false, error: 'This reset link has expired.' };
 
-  const hashed = await bcrypt.hash(newPassword, 12);
-  const now = new Date();
+  // Enforces strength + last-5 reuse policy, archives the old hash, activates
+  // the account and clears mustChangePassword + lockout counters.
+  const result = await setConsumerPassword(record.consumerId, newPassword);
+  if (!result.ok) return result;
 
+  const now = new Date();
   await prisma.$transaction([
-    prisma.consumerAccount.update({
-      where: { id: record.consumerId },
-      data: { password: hashed, activatedAt: now, isVerified: true },
-    }),
     prisma.passwordResetToken.update({
       where: { id: record.id },
       data: { usedAt: now },

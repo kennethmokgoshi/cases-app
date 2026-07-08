@@ -100,6 +100,22 @@ describe('POST /api/finance/invoices/[id]/payments', () => {
         const body = await res.json();
         expect(body.invoice.status).toBe('PAID');
         expect(body.balanceDue).toBe(0);
+        expect(body.overpaidBy).toBe(0);
+    });
+
+    it('still settles as PAID when the client overpays and reports the overpaid amount', async () => {
+        vi.mocked(auth as any).mockResolvedValue(session);
+        vi.mocked(prisma.invoice.findUnique).mockResolvedValue(invoice as any);
+        tx.payment.create.mockResolvedValue({ id: 'pay-3' } as any);
+        tx.payment.aggregate.mockResolvedValue({ _sum: { amount: 1200 } } as any);
+        tx.invoice.update.mockImplementation(async (args: any) => ({ ...invoice, ...args.data }));
+
+        const res = await POST(makePost({ amount: 1200, method: 'EFT' }), { params });
+        expect(res.status).toBe(201);
+        const body = await res.json();
+        expect(body.invoice.status).toBe('PAID');
+        expect(body.balanceDue).toBe(0);
+        expect(body.overpaidBy).toBe(200);
     });
 });
 

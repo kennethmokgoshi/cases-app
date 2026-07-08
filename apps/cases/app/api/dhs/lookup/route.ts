@@ -995,14 +995,17 @@ export async function POST(request: Request) {
 
         } else if (action === 'manage_consumers') {
             // ── Manage Consumers: post-CONSENT follow-on ────────────────────────
-            // Only valid once the file is Accepted via DHS. This action does NOT
-            // send the consumer acceptance + consent email — that is owned by
-            // "Check Request Status" (and the Resend Confirmation Link button).
-            // Manage Consumers checks whether the consumer has CONSENTED to the
-            // debt review flag removal; if yes it logs into DHS, opens Search &
-            // Manage Consumer(s) for the ID number, reads the services-suspension
-            // indicator (far-right action button: red = not suspended, green =
-            // suspended) and runs the document readiness + clearance check.
+            // Only valid once the file is Accepted via DHS. This action never
+            // sends the "transfer accepted" acceptance email — that is owned by
+            // "Check Request Status". Manage Consumers checks whether the consumer
+            // has CONSENTED to the debt review flag removal:
+            //   • not yet consented → sends the consent REMINDER email (same
+            //     reminder as the Resend Confirmation Link button);
+            //   • consented → logs into DHS, opens Search & Manage Consumer(s) for
+            //     the ID number, reads the services-suspension indicator (far-right
+            //     action button: red = not suspended, green = suspended; stops and
+            //     offers Unsuspend when suspended) and runs the document readiness
+            //     + clearance check.
             if (!caseId || !caseData) {
                 return NextResponse.json({ success: false, message: 'Case ID not provided or case not found' }, { status: 400 });
             }
@@ -1015,26 +1018,37 @@ export async function POST(request: Request) {
             }
 
             // Gate: the consumer must have CONSENTED to the debt review flag
-            // removal before anything runs. Without consent this action does
-            // nothing — it never emails the consumer (that is Check Request
-            // Status / Resend Confirmation Link territory).
+            // removal before the DHS work runs. Without consent, the only thing
+            // this action does is remind the consumer to consent.
             const consented = await prisma.debtReviewRemovalConsent.findFirst({
                 where: { caseId, status: 'CONSENTED' },
                 select: { id: true },
             });
 
             if (!consented) {
-                const pending = await prisma.debtReviewRemovalConsent.findFirst({
-                    where: { caseId, status: 'PENDING', expiresAt: { gt: new Date() } },
-                    select: { id: true },
+                // Consent still outstanding → the DHS work cannot start. Send the
+                // consent REMINDER email (same reminder the Resend Confirmation
+                // Link button sends — NOT the "transfer accepted" news email):
+                // handleDhsAccepted with forceResend reuses the existing secure
+                // link when one is pending, or issues a fresh one if it expired.
+                logger.info('[DHS Lookup] manage_consumers: consent outstanding — sending consent reminder email');
+                const reminder = await handleDhsAccepted({
+                    caseId,
+                    triggeredByUserId: actingUserId,
+                    forceResend: true,
                 });
                 result = {
-                    success: true,
+                    success: reminder.errors.length === 0,
                     skipped: true,
                     consented: false,
-                    message: pending
-                        ? 'Consumer has not yet consented to the debt review flag removal — the consent request is still pending. Manage Consumers only proceeds after consent. Use "Resend Confirmation Link" if the consumer needs the email again.'
-                        : 'Consumer has not consented yet and no active consent request exists. Run "Check Request Status" — it sends the acceptance + consent email when the file is Accepted via DHS.',
+                    reminderEmailSent: reminder.emailSent,
+                    consentLink: reminder.consentLink,
+                    errors: reminder.errors,
+                    message: reminder.errors.length
+                        ? `Consumer has not yet consented, and the consent reminder email could not be sent: ${reminder.errors.join(', ')}`
+                        : reminder.emailSent
+                            ? 'Consumer has not yet consented to the debt review flag removal — a consent reminder email has been sent to them. The DHS work continues automatically once they approve.'
+                            : 'Consumer has not yet consented to the debt review flag removal — no email was sent (see the case timeline). The DHS work continues once they approve.',
                 };
             } else {
                 logger.info('[DHS Lookup] manage_consumers: consent already granted — checking DHS suspension before readiness');

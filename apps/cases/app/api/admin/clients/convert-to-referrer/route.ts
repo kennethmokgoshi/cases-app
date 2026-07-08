@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
+import { provisionReferrerPortalUser } from '@/lib/referrer-portal-access';
 
 const logger = createLogger('api/admin/clients/convert-to-referrer');
 
@@ -46,6 +47,14 @@ export async function POST(request: Request) {
 
         if (!client) {
             return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+        }
+
+        const existingPortalUser = await prisma.user.findUnique({
+            where: { username: client.idNumber },
+            select: { userType: true },
+        });
+        if (existingPortalUser && existingPortalUser.userType !== 'REFERRER') {
+            return NextResponse.json({ error: 'A non-referrer user already exists with this ID number username' }, { status: 409 });
         }
 
         // Check if this client is already a referrer
@@ -132,6 +141,7 @@ export async function POST(request: Request) {
                 _count: { select: { cases: true } },
             },
         });
+        await provisionReferrerPortalUser({ ...referrer, portalUser: null });
 
         // Create an audit log entry
         await prisma.auditLog.create({

@@ -1,4 +1,5 @@
 import { auth } from '@zenowethu/shared-lib'
+import { getCaseQuoteCapture } from '@zenowethu/shared-lib/src/finance/overpayments'
 import { prisma } from '@zenowethu/database'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -63,6 +64,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const amountPaid = invoice.status === 'PAID' && recorded === 0 ? Number(invoice.total) : recorded
   const balanceDue = invoice.status === 'PAID' ? 0 : Math.max(0, Number(invoice.total) - amountPaid)
 
+  // Accepted quotes measure all payments captured on the case against the
+  // quoted amount — the same rule that settles the case (SETTLED_SUCCESS).
+  const quoteCapture = isQuote && invoice.caseId && (invoice.acceptedAt || invoice.status === 'ACCEPTED')
+    ? await getCaseQuoteCapture(invoice.caseId)
+    : null
+
+  const invoiceSettled = !isQuote && Number(invoice.total) > 0 && amountPaid >= Number(invoice.total)
+  const settled    = isQuote ? (quoteCapture?.settled ?? false) : invoiceSettled
+  const overpaidBy = isQuote
+    ? (quoteCapture?.overpaidBy ?? 0)
+    : Math.max(0, amountPaid - Number(invoice.total))
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Breadcrumb / back navigation */}
@@ -96,6 +109,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[invoice.status] ?? STATUS_COLORS.DRAFT}`}>
                 {STATUS_LABELS[invoice.status] ?? invoice.status}
               </span>
+              {settled && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  Settled{overpaidBy > 0 ? ' · Overpaid' : ''}
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
               Issued {formatDate(invoice.issuedAt)} · {isQuote ? 'Valid until' : 'Due'} {formatDate(invoice.dueAt)}
@@ -184,6 +202,20 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <Link href={`/invoices/${invoice.convertedFromQuote.id}`} className="font-mono underline">
             {invoice.convertedFromQuote.invoiceNumber}
           </Link>
+        </div>
+      )}
+
+      {/* Settled / overpaid banner */}
+      {settled && (
+        <div className="rounded-lg px-4 py-3 text-sm border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+          <span className="font-semibold">Settled</span> — captured payments of{' '}
+          {formatZAR(isQuote ? quoteCapture!.captured : amountPaid)} cover this{' '}
+          {isQuote ? 'quotation' : 'invoice'} in full.
+          {overpaidBy > 0 && (
+            <span className="block mt-1 text-amber-400">
+              The client has overpaid by <span className="font-bold">{formatZAR(overpaidBy)}</span>.
+            </span>
+          )}
         </div>
       )}
 
@@ -320,6 +352,32 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   <span className="text-gray-400">Balance Due</span>
                   <span className={balanceDue > 0 ? 'text-amber-400' : 'text-gray-500'}>{formatZAR(balanceDue)}</span>
                 </div>
+                {overpaidBy > 0 && (
+                  <div className="flex justify-between font-semibold">
+                    <span className="text-gray-400">Overpaid By</span>
+                    <span className="text-amber-400">{formatZAR(overpaidBy)}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {isQuote && quoteCapture && (
+              <>
+                <div className="flex justify-between text-gray-400 pt-1">
+                  <span>Collected on Case</span>
+                  <span className="text-emerald-400">{formatZAR(quoteCapture.captured)}</span>
+                </div>
+                <div className="flex justify-between font-semibold">
+                  <span className="text-gray-400">Balance Remaining</span>
+                  <span className={quoteCapture.settled ? 'text-gray-500' : 'text-amber-400'}>
+                    {formatZAR(Math.max(0, quoteCapture.quoteTotal - quoteCapture.captured))}
+                  </span>
+                </div>
+                {quoteCapture.overpaidBy > 0 && (
+                  <div className="flex justify-between font-semibold">
+                    <span className="text-gray-400">Overpaid By</span>
+                    <span className="text-amber-400">{formatZAR(quoteCapture.overpaidBy)}</span>
+                  </div>
+                )}
               </>
             )}
           </div>

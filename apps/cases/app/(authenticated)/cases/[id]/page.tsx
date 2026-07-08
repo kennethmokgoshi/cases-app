@@ -63,6 +63,19 @@ const isDebtReviewSelected = (servicesJson: string | null) => {
     }
 };
 
+// Quote lifecycle → staff-facing label + badge styling for the case page
+const QUOTE_STATUS_BADGES: Record<string, { label: string; className: string }> = {
+    DRAFT: { label: 'Pending — Not Yet Sent', className: 'bg-amber-500/20 text-amber-400' },
+    SENT: { label: 'Sent — Awaiting Client', className: 'bg-sky-500/20 text-sky-400' },
+    ACCEPTED: { label: 'Accepted', className: 'bg-emerald-500/20 text-emerald-400' },
+    CONVERTED: { label: 'Accepted — Invoiced', className: 'bg-emerald-500/20 text-emerald-400' },
+    REJECTED: { label: 'Rejected', className: 'bg-red-500/20 text-red-400' },
+    CANCELLED: { label: 'Cancelled', className: 'bg-gray-500/20 text-gray-400' },
+};
+
+const quoteStatusBadge = (status: string) =>
+    QUOTE_STATUS_BADGES[status] ?? { label: status, className: 'bg-gray-500/20 text-gray-400' };
+
 type CaseDetail = {
     id: string;
     fileNumber: string;
@@ -131,6 +144,31 @@ type CaseDetail = {
     debtReviewDate: string | null;
     lastKnownEmail: string | null;
     preferredDcEmail: string | null;
+
+    // Latest debt-review-removal consent (from GET /api/cases/[id])
+    drrConsents?: Array<{
+        id: string;
+        status: string; // PENDING | CONSENTED | EXPIRED | CANCELLED
+        channel: string;
+        createdAt: string;
+        consentedAt: string | null;
+        expiresAt: string;
+    }>;
+
+    // Client quotations for this case, newest first (from GET /api/cases/[id])
+    quotes?: Array<{
+        id: string;
+        invoiceNumber: string;
+        status: string; // DRAFT | SENT | ACCEPTED | REJECTED | CONVERTED | CANCELLED
+        total: string | number;
+        issuedAt: string;
+        sentAt: string | null;
+        sentTo: string | null;
+        acceptedAt: string | null;
+        rejectedAt: string | null;
+        decisionNote: string | null;
+        convertedToInvoiceId: string | null;
+    }>;
 
     createdAt: string;
     updatedAt: string;
@@ -2395,6 +2433,67 @@ export default function CaseDetailPage() {
                         )}
                     </div>
 
+                    {/* Quote Status — shows staff whether a quote went out and what the client decided */}
+                    <div className="bg-zeno-blue/20 rounded-xl border border-white/5 px-5 py-4">
+                        <div className="flex items-center gap-2 mb-3">
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Quote Status</span>
+                        </div>
+                        {(!caseData.quotes || caseData.quotes.length === 0) ? (
+                            <p className="text-sm text-gray-600 italic">No quote has been sent to this client yet</p>
+                        ) : (() => {
+                            const [latest, ...older] = caseData.quotes;
+                            const badge = quoteStatusBadge(latest.status);
+                            return (
+                                <div className="space-y-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <p className="text-white font-semibold">{latest.invoiceNumber}</p>
+                                            <p className="text-xs text-gray-500">
+                                                R {parseFloat(String(latest.total)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </p>
+                                        </div>
+                                        <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${badge.className}`}>
+                                            {badge.label}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-gray-400 space-y-1">
+                                        {latest.sentAt ? (
+                                            <p>Sent {new Date(latest.sentAt).toLocaleDateString('en-ZA')}{latest.sentTo ? ` to ${latest.sentTo}` : ''}</p>
+                                        ) : (
+                                            <p className="italic text-gray-500">Quote created but not yet sent to the client</p>
+                                        )}
+                                        {latest.acceptedAt && (
+                                            <p className="text-emerald-400">Accepted by client on {new Date(latest.acceptedAt).toLocaleDateString('en-ZA')}</p>
+                                        )}
+                                        {latest.rejectedAt && (
+                                            <p className="text-red-400">Rejected by client on {new Date(latest.rejectedAt).toLocaleDateString('en-ZA')}</p>
+                                        )}
+                                        {latest.decisionNote && (
+                                            <p className="italic text-gray-500">&ldquo;{latest.decisionNote}&rdquo;</p>
+                                        )}
+                                    </div>
+                                    {older.length > 0 && (
+                                        <div className="pt-2 border-t border-white/5 space-y-1.5">
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">Previous quotes</span>
+                                            {older.map((q) => {
+                                                const b = quoteStatusBadge(q.status);
+                                                return (
+                                                    <div key={q.id} className="flex items-center justify-between gap-2 text-xs">
+                                                        <span className="text-gray-400">{q.invoiceNumber}</span>
+                                                        <span className={`px-2 py-0.5 rounded-full whitespace-nowrap ${b.className}`}>{b.label}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+
                     {/* Project card — always visible */}
                     <div className="bg-zeno-blue/20 rounded-xl border border-white/5 px-5 py-4">
                         <div className="flex items-center justify-between mb-3">
@@ -3700,7 +3799,7 @@ export default function CaseDetailPage() {
                                                                 <button
                                                                     onClick={handleManageConsumers}
                                                                     disabled={manageConsumersLoading}
-                                                                    title="Post-consent follow-on: checks the consumer has consented, then reads DHS Search & Manage Consumer — services suspension (far-right button: red = not suspended, green = suspended), documents and clearance status. Does not email the consumer."
+                                                                    title="Post-acceptance follow-on: if the consumer has consented, reads DHS Search & Manage Consumer — services suspension (far-right button: red = not suspended, green = suspended), documents and clearance status. If consent is still outstanding, sends them a consent reminder email instead."
                                                                     className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
                                                                 >
                                                                     {manageConsumersLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Manage Consumers'}
@@ -3708,7 +3807,7 @@ export default function CaseDetailPage() {
                                                                 <button
                                                                     onClick={handleResendConsentLink}
                                                                     disabled={resendConsentLoading}
-                                                                    title="Re-send the Credo confirmation link email (with ID-number login instructions) to the consumer. The existing secure link stays valid; does nothing if they have already confirmed."
+                                                                    title="Send the consumer a consent REMINDER email (with the Credo confirmation link and ID-number login instructions) — it makes clear the debt review flag removal cannot continue until they consent. The existing secure link stays valid; does nothing if they have already confirmed."
                                                                     className="px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
                                                                 >
                                                                     {resendConsentLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Resend Confirmation Link'}
@@ -3730,6 +3829,42 @@ export default function CaseDetailPage() {
                                                         );
                                                     })()}
                                                 </div>
+
+                                                {/* Debt-review-removal CONSENT status — staff must see at a glance
+                                                    whether the consumer has consented before work can proceed. */}
+                                                {(() => {
+                                                    const consent = caseData.drrConsents?.[0] ?? null;
+                                                    const eligible = canShowDhsManageConsumers({
+                                                        status: caseData.status,
+                                                        dhsStatus: caseData.dhsStatus,
+                                                        manuallyAcceptedViaDhs: caseData.manuallyAcceptedViaDhs,
+                                                    });
+                                                    if (!consent && !eligible) return null;
+                                                    const fmt = (d: string | null | undefined) =>
+                                                        d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                                                    const pendingAlive = consent?.status === 'PENDING' && new Date(consent.expiresAt) > new Date();
+                                                    const style = consent?.status === 'CONSENTED'
+                                                        ? { box: 'border-emerald-500/30 bg-emerald-500/10', label: 'text-emerald-300', icon: '✓' }
+                                                        : pendingAlive
+                                                            ? { box: 'border-amber-500/30 bg-amber-500/10', label: 'text-amber-300', icon: '⏳' }
+                                                            : consent
+                                                                ? { box: 'border-red-500/30 bg-red-500/10', label: 'text-red-300', icon: '✕' }
+                                                                : { box: 'border-white/10 bg-white/5', label: 'text-gray-300', icon: '•' };
+                                                    return (
+                                                        <div className={`mt-3 p-2.5 rounded-lg border ${style.box}`}>
+                                                            <p className={`text-xs font-semibold ${style.label}`}>
+                                                                {style.icon} DRR Consent:{' '}
+                                                                {consent?.status === 'CONSENTED'
+                                                                    ? `Consented on ${fmt(consent.consentedAt)} — work on the debt review flag removal may proceed.`
+                                                                    : pendingAlive
+                                                                        ? `Awaiting consumer consent — link sent ${fmt(consent!.createdAt)}, expires ${fmt(consent!.expiresAt)}. Work cannot proceed until they approve.`
+                                                                        : consent
+                                                                            ? `Consent link ${consent.status === 'CANCELLED' ? 'cancelled' : 'expired'} (sent ${fmt(consent.createdAt)}) — use "Resend Confirmation Link" to issue a new one.`
+                                                                            : 'Not yet requested — "Check Request Status" sends the acceptance + consent email once the file is Accepted via DHS.'}
+                                                            </p>
+                                                        </div>
+                                                    );
+                                                })()}
 
                                                 {/* Manual "Accepted via DHS" override — DHS sometimes drops a file into our
                                                     DC profile without a formal Accepted/Auto Transferred status. Only relevant

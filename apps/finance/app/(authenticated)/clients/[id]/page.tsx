@@ -2,6 +2,7 @@ import { auth } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { summariseClientFinancials } from '../../../../lib/case-financials'
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT:          'bg-gray-500/20 text-gray-400 border border-gray-500/30',
@@ -52,18 +53,24 @@ export default async function ClientFinancialFilePage({ params }: { params: Prom
 
   // The full document history for this client — every quote ever sent
   // (including rejected ones) and every invoice, with payment allocations.
-  const documents = await prisma.invoice.findMany({
-    where:   { clientId: id },
-    orderBy: { issuedAt: 'desc' },
-    include: {
-      createdBy: { select: { firstName: true, lastName: true } },
-      decidedBy: { select: { firstName: true, lastName: true } },
-      convertedToInvoice: { select: { id: true, invoiceNumber: true } },
-      payments:  {
-        where:  { status: { not: 'CANCELLED' } },
-        select: { amount: true } },
-    },
-  })
+  const [documents, clientPayments] = await Promise.all([
+    prisma.invoice.findMany({
+      where:   { clientId: id },
+      orderBy: { issuedAt: 'desc' },
+      include: {
+        createdBy: { select: { firstName: true, lastName: true } },
+        decidedBy: { select: { firstName: true, lastName: true } },
+        convertedToInvoice: { select: { id: true, invoiceNumber: true } },
+        payments:  {
+          where:  { status: { not: 'CANCELLED' } },
+          select: { amount: true } },
+      },
+    }),
+    prisma.payment.findMany({
+      where: { clientId: id, status: { not: 'CANCELLED' } },
+      select: { amount: true, status: true },
+    }),
+  ])
 
   const quotes   = documents.filter(d => d.type === 'QUOTE')
   const invoices = documents.filter(d => d.type === 'INVOICE')
@@ -75,10 +82,16 @@ export default async function ClientFinancialFilePage({ params }: { params: Prom
     return { ...inv, amountPaid, balanceDue }
   })
 
-  const activeInvoices = invoiceRows.filter(i => i.status !== 'CANCELLED')
-  const totalInvoiced  = activeInvoices.reduce((s, i) => s + Number(i.total), 0)
-  const totalCollected = activeInvoices.reduce((s, i) => s + i.amountPaid, 0)
-  const totalDue       = activeInvoices.reduce((s, i) => s + i.balanceDue, 0)
+  const clientSummary = summariseClientFinancials({
+    payments: clientPayments.map(p => ({ amount: Number(p.amount), status: p.status })),
+    invoices: documents.map(d => ({
+      total: Number(d.total),
+      status: d.status,
+      type: d.type,
+      acceptedAt: d.acceptedAt,
+      convertedToInvoiceId: d.convertedToInvoice?.id ?? null,
+    })),
+  })
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -116,9 +129,9 @@ export default async function ClientFinancialFilePage({ params }: { params: Prom
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Invoiced', value: formatZAR(totalInvoiced), color: 'text-white' },
-          { label: 'Collected', value: formatZAR(totalCollected), color: 'text-emerald-400' },
-          { label: 'Balance Due', value: formatZAR(totalDue), color: totalDue > 0 ? 'text-amber-400' : 'text-gray-400' },
+          { label: 'Total Expected', value: formatZAR(clientSummary.totalExpected), color: 'text-white' },
+          { label: 'Collected', value: formatZAR(clientSummary.totalCollected), color: 'text-emerald-400' },
+          { label: 'Balance Due', value: formatZAR(clientSummary.balanceDue), color: clientSummary.balanceDue > 0 ? 'text-amber-400' : 'text-gray-400' },
           { label: 'Quotes Sent', value: String(quotes.length), color: 'text-white' },
         ].map(card => (
           <div key={card.label} className="bg-[var(--color-bg-secondary)] rounded-xl border border-white/5 p-4">

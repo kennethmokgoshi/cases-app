@@ -89,6 +89,7 @@ export async function GET(
                     issuedAt: true,
                     dueAt: true,
                     sentAt: true,
+                    acceptedAt: true,
                 },
             }),
         ]);
@@ -96,7 +97,7 @@ export async function GET(
         const summary = summariseCaseFinancials({
             serviceFee: caseRecord.serviceFee === null ? null : Number(caseRecord.serviceFee),
             payments: payments.map(p => ({ amount: Number(p.amount), status: p.status })),
-            invoices: invoices.map(i => ({ total: Number(i.total), status: i.status, type: i.type })),
+            invoices: invoices.map(i => ({ total: Number(i.total), status: i.status, type: i.type, acceptedAt: i.acceptedAt })),
         });
 
         return NextResponse.json({

@@ -3,6 +3,7 @@ import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
 import { hasFullReferrerVisibility, getVisibleReferrerProjectIds } from '@/lib/referrer-access';
+import { provisionReferrerPortalUser } from '@/lib/referrer-portal-access';
 
 const logger = createLogger('api/admin/referrers');
 
@@ -16,7 +17,7 @@ export const COMMISSION_TYPES = ['FIXED', 'VOLUME_BASED'] as const;
 const CreateSchema = z.object({
     firstName: z.string().min(1).max(100),
     lastName: z.string().min(1).max(100),
-    idNumber: z.string().trim().length(13).or(z.literal('')).transform(val => val === '' ? null : val).nullable().optional(),
+    idNumber: z.string().trim().regex(/^\d{13}$/, 'ID number must be 13 digits'),
     email: z.string().email().nullable().optional(),
     cellNumber: z.string().max(20).nullable().optional(),
     // Employment
@@ -177,6 +178,13 @@ export async function POST(request: Request) {
             if (existing) {
                 return NextResponse.json({ error: 'A referrer with this ID number already exists' }, { status: 409 });
             }
+            const existingPortalUser = await prisma.user.findUnique({
+                where: { username: data.idNumber },
+                select: { userType: true },
+            });
+            if (existingPortalUser && existingPortalUser.userType !== 'REFERRER') {
+                return NextResponse.json({ error: 'A non-referrer user already exists with this ID number username' }, { status: 409 });
+            }
         }
 
         // Validate initial members if provided — only internal staff accounts
@@ -264,6 +272,8 @@ export async function POST(request: Request) {
         });
 
         logger.info(`Referrer created: ${referrer.id} — ${referrer.firstName} ${referrer.lastName}`);
+        await provisionReferrerPortalUser({ ...referrer, portalUser: null });
+
         return NextResponse.json(referrer, { status: 201 });
     } catch (error) {
         logger.error('Error creating referrer:', error);

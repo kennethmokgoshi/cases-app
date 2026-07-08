@@ -28,6 +28,18 @@ describe('buildProjectDisplayName', () => {
         expect(buildProjectDisplayName('b', t)).toBe('Letsatsi Tembisa');
     });
 
+    it('includes REFERRER sub-projects between source and month', () => {
+        // Hierarchy: ROOT › Referrals (source) › William Maesela (referrer) › 2025 (year) › May (month)
+        const t: ProjectNode[] = [
+            { id: 'root', name: 'Zenowethu', parentId: null, type: 'ROOT' },
+            { id: 'src', name: 'Referrals', parentId: 'root', type: 'ACQUISITION_SOURCE' },
+            { id: 'ref', name: 'William Maesela', parentId: 'src', type: 'REFERRER' },
+            { id: 'year', name: '2025', parentId: 'ref', type: 'YEAR' },
+            { id: 'month', name: 'May', parentId: 'year', type: 'MONTH' },
+        ];
+        expect(buildProjectDisplayName('month', t)).toBe('Referrals William Maesela May 2025');
+    });
+
     it('returns empty string when the project id is missing or not found', () => {
         expect(buildProjectDisplayName(null, tree)).toBe('');
         expect(buildProjectDisplayName(undefined, tree)).toBe('');

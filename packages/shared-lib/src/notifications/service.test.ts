@@ -10,6 +10,10 @@ vi.mock('@zenowethu/database', () => ({
         systemSettings: {
             findMany: vi.fn().mockResolvedValue([]),
         },
+        user: {
+            findMany: vi.fn().mockResolvedValue([]),
+            findUnique: vi.fn().mockResolvedValue(null),
+        },
     },
 }));
 
@@ -59,13 +63,13 @@ vi.mock('./providers', async (importOriginal) => {
     };
 });
 
-import { sendManualMessage, sendStatusChangeNotification } from './service';
+import { sendInternalNotification, sendManualMessage, sendStatusChangeNotification } from './service';
 import type { NotificationPayload } from './service';
 
 // ─── sendStatusChangeNotification: NEW_LEAD template selection ────────────────
 
 describe('sendStatusChangeNotification — NEW_LEAD template selection', () => {
-    let sentEmails: Array<{ to: string; subject: string; options?: any }>;
+    let sentEmails: Array<{ to: string; subject: string; html?: string; text?: string; options?: any }>;
 
     beforeEach(async () => {
         vi.clearAllMocks();
@@ -79,8 +83,8 @@ describe('sendStatusChangeNotification — NEW_LEAD template selection', () => {
         const { MockEmailProvider } = await import('./providers');
         (MockEmailProvider as any).mockImplementation(() => ({
             name: 'mock',
-            send: vi.fn().mockImplementation((to: string, subject: string, _html?: string, _text?: string, options?: any) => {
-                sentEmails.push({ to, subject, options });
+            send: vi.fn().mockImplementation((to: string, subject: string, html?: string, text?: string, options?: any) => {
+                sentEmails.push({ to, subject, html, text, options });
                 return Promise.resolve({ success: true, messageId: 'mock-001', provider: 'mock' });
             }),
         }));
@@ -135,6 +139,27 @@ describe('sendStatusChangeNotification — NEW_LEAD template selection', () => {
         expect(sentEmails[0].to).toBe('preferred-dc@example.com');
         expect(sentEmails[0].options?.cc).toEqual(['thabo@example.com']);
         expect(sentEmails[0].options?.bcc).toContain('notifications@zenowethu.co.za');
+    });
+
+    it('includes the direct project link in missing-manager admin alerts', async () => {
+        const { prisma } = await import('@zenowethu/database');
+        vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+            { email: 'admin@zenowethu.co.za', role: 'ADMIN', phone: null },
+        ] as never);
+
+        await sendInternalNotification({
+            role: 'ADMIN',
+            statusCode: 'NO_MANAGER_ADMIN',
+            variables: {
+                projectName: 'May',
+                projectUrl: 'https://cases.test/projects?id=proj-may',
+            },
+        });
+
+        expect(sentEmails).toHaveLength(1);
+        expect(sentEmails[0].to).toBe('admin@zenowethu.co.za');
+        expect(sentEmails[0].subject).toBe('URGENT: No Manager Assigned to Project May');
+        expect(sentEmails[0].text).toContain('Project Link: https://cases.test/projects?id=proj-may');
     });
 });
 

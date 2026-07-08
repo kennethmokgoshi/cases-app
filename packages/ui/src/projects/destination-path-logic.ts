@@ -8,6 +8,7 @@ export type DestinationProject = {
     clientType?: string | null;
     parentId?: string | null;
     children?: DestinationProject[];
+    referrer?: { id: string; firstName: string; lastName: string } | null;
 };
 
 // Project types that count as a selectable branch/subproject under a main
@@ -81,4 +82,39 @@ export function getSubprojects(
     return result
         .filter(p => (SUBPROJECT_TYPES as readonly string[]).includes(p.type))
         .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+}
+
+export type ProjectPathSelection = {
+    parentId: string;
+    subprojectId: string;
+    acquisitionType: 'B2B' | 'B2C' | null;
+    year: string;
+    month: string;
+};
+
+export function resolveProjectSelectionFromPath(path: DestinationProject[]): ProjectPathSelection {
+    const selection: ProjectPathSelection = {
+        parentId: '',
+        subprojectId: '',
+        acquisitionType: null,
+        year: '',
+        month: '',
+    };
+
+    for (const project of path) {
+        if (project.type === 'ACQUISITION_SOURCE') {
+            selection.parentId = project.id;
+            if (project.clientType === 'B2B' || project.clientType === 'B2C') {
+                selection.acquisitionType = project.clientType;
+            }
+        } else if ((SUBPROJECT_TYPES as readonly string[]).includes(project.type)) {
+            selection.subprojectId = project.id;
+        } else if (project.type === 'YEAR') {
+            selection.year = project.name;
+        } else if (project.type === 'MONTH') {
+            selection.month = project.name;
+        }
+    }
+
+    return selection;
 }

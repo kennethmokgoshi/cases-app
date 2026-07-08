@@ -194,7 +194,7 @@ export async function GET(request: Request) {
 
             // Find all branches/folders
             const branches = pathParts
-                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER') && p.name !== source)
+                .filter(p => (p.type === 'BRANCH' || p.type === 'FOLDER' || p.type === 'REFERRER') && p.name !== source)
                 .map(p => clean(p.name));
             const branch = branches.join(' ');
 

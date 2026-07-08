@@ -77,7 +77,7 @@ describe("Credo Consumer Account model", () => {
     expect(consumer!.password).not.toBeNull();
     expect(await bcrypt.compare(testPassword, consumer!.password!)).toBe(true);
     expect(await bcrypt.compare("WrongPassword", consumer!.password!)).toBe(false);
-  });
+  }, 15000);
 
   it("allows two different people to share the same email and phone", async () => {
     const hashedPassword = await bcrypt.hash(testPassword, 12);

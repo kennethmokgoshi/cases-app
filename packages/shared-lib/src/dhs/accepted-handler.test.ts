@@ -261,6 +261,29 @@ describe('handleDhsAccepted', () => {
         // Timeline comment reflects a RESEND, not a first send
         const comment = db.caseComment.create.mock.calls.find((c) => c[0].data.content.includes('RE-SENT'));
         expect(comment).toBeTruthy();
+        // A resend uses the consent REMINDER wording — NOT the acceptance email.
+        const sentBody = sendMsg.mock.calls[0][3];
+        const sentSubject = sendMsg.mock.calls[0][4];
+        expect(sentSubject).toContain('Reminder: Your Consent Is Needed');
+        expect(sentBody).toContain('cannot continue');
+        expect(sentBody).toContain('https://credo.zenowethu.co.za/consent/existing-tok');
+        expect(sentBody).not.toContain('has been accepted');
+    });
+
+    it('first send (no forceResend) still uses the "Good News" acceptance wording', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
+        db.debtReviewRemovalConsent.create.mockResolvedValue({
+            id: 'consent1', token: 'tok123', expiresAt: new Date(Date.now() + 1e9),
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        await handleDhsAccepted({ caseId: 'case1', triggeredByUserId: 'staff1' });
+
+        const sentBody = sendMsg.mock.calls[0][3];
+        const sentSubject = sendMsg.mock.calls[0][4];
+        expect(sentSubject).toContain('Good News');
+        expect(sentBody).toContain('has been accepted');
     });
 
     it('forceResend never re-emails a consumer who has already consented', async () => {

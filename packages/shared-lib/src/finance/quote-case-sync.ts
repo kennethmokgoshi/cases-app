@@ -262,6 +262,8 @@ export interface QuoteFulfilmentResult {
     quoteTotal?: number;
     captured?: number;
     fulfilled?: boolean;
+    /** Amount captured above the quote total — 0 unless the client overpaid. */
+    overpaidBy?: number;
     caseSync?: AdvanceCaseStatusResult;
 }
 
@@ -308,16 +310,19 @@ export async function checkQuoteFulfilment(
 
     const quoteTotal = Number(quote.total);
     const fulfilled = quoteTotal > 0 && captured >= quoteTotal;
-    if (!fulfilled) return { checked: true, quoteTotal, captured, fulfilled: false };
+    if (!fulfilled) return { checked: true, quoteTotal, captured, fulfilled: false, overpaidBy: 0 };
 
+    const overpaidBy = Math.round((captured - quoteTotal) * 100) / 100;
     const caseSync = await advanceCaseStatusIfForward({
         caseId,
         toStatus: 'SETTLED_SUCCESS',
         userId,
-        notes: `Captured payments R${captured.toFixed(2)} cover accepted quote ${quote.invoiceNumber} (R${quoteTotal.toFixed(2)})`,
+        notes: `Captured payments R${captured.toFixed(2)} cover accepted quote ${quote.invoiceNumber} (R${quoteTotal.toFixed(2)})${
+            overpaidBy > 0 ? ` — client overpaid by R${overpaidBy.toFixed(2)}` : ''
+        }`,
     });
 
-    return { checked: true, quoteTotal, captured, fulfilled: true, caseSync };
+    return { checked: true, quoteTotal, captured, fulfilled: true, overpaidBy, caseSync };
 }
 
 /**

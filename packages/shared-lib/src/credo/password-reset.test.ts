@@ -1,10 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const prismaMock = vi.hoisted(() => ({
-  consumerAccount: { findUnique: vi.fn(), update: vi.fn() },
-  passwordResetToken: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  $transaction: vi.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
-}));
+const prismaMock = vi.hoisted(() => {
+  const mock: any = {
+    consumerAccount: { findUnique: vi.fn(), update: vi.fn() },
+    consumerPasswordHistory: { findMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+    passwordResetToken: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(),
+  };
+  // Support both the array form (token invalidation) and the interactive
+  // callback form (setConsumerPassword).
+  mock.$transaction.mockImplementation((arg: unknown) =>
+    typeof arg === 'function' ? (arg as (tx: unknown) => Promise<unknown>)(mock) : Promise.all(arg as Promise<unknown>[]),
+  );
+  return mock;
+});
 
 const sendTransactionalEmail = vi.hoisted(() => vi.fn().mockResolvedValue({ emailSuccess: true, errors: [] }));
 
@@ -28,6 +37,8 @@ const VALID_ID = '8001015009087';
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.passwordResetToken.create.mockResolvedValue({ id: 'tok1' });
+  prismaMock.consumerPasswordHistory.findMany.mockResolvedValue([]);
+  prismaMock.consumerAccount.update.mockResolvedValue({});
 });
 
 describe('formatConsumerGreetingName', () => {
@@ -113,15 +124,27 @@ describe('validateResetToken', () => {
 });
 
 describe('resetPasswordWithToken', () => {
-  it('rejects passwords shorter than 8 characters', async () => {
+  const validToken = () => {
+    prismaMock.passwordResetToken.findUnique.mockResolvedValue({
+      id: 't', consumerId: 'c1', expiresAt: new Date(Date.now() + 10000), usedAt: null,
+    });
+    prismaMock.consumerAccount.findUnique.mockResolvedValue({
+      id: 'c1', password: null, activatedAt: null,
+    });
+  };
+
+  it('rejects passwords that fail the strength policy', async () => {
+    validToken();
     const r = await resetPasswordWithToken('tok', 'short');
     expect(r.ok).toBe(false);
-    expect(prismaMock.passwordResetToken.findUnique).not.toHaveBeenCalled();
+    // Weak complexity (no uppercase/digit) is also rejected now.
+    const r2 = await resetPasswordWithToken('tok', 'longenough');
+    expect(r2.ok).toBe(false);
   });
 
   it('rejects an invalid token', async () => {
     prismaMock.passwordResetToken.findUnique.mockResolvedValue(null);
-    const r = await resetPasswordWithToken('tok', 'longenough');
+    const r = await resetPasswordWithToken('tok', 'LongEnough1');
     expect(r.ok).toBe(false);
   });
 
@@ -129,7 +152,7 @@ describe('resetPasswordWithToken', () => {
     prismaMock.passwordResetToken.findUnique.mockResolvedValue({
       id: 't', consumerId: 'c1', expiresAt: new Date(Date.now() + 10000), usedAt: new Date(),
     });
-    const r = await resetPasswordWithToken('tok', 'longenough');
+    const r = await resetPasswordWithToken('tok', 'LongEnough1');
     expect(r.ok).toBe(false);
   });
 
@@ -137,26 +160,40 @@ describe('resetPasswordWithToken', () => {
     prismaMock.passwordResetToken.findUnique.mockResolvedValue({
       id: 't', consumerId: 'c1', expiresAt: new Date(Date.now() - 1000), usedAt: null,
     });
-    const r = await resetPasswordWithToken('tok', 'longenough');
+    const r = await resetPasswordWithToken('tok', 'LongEnough1');
     expect(r.ok).toBe(false);
   });
 
   it('sets the password, activates the account, and consumes the token', async () => {
+    validToken();
+    const r = await resetPasswordWithToken('tok', 'LongEnough1');
+    expect(r.ok).toBe(true);
+    // Hash stored, not the raw password
+    const updateCall = prismaMock.consumerAccount.update.mock.calls[0][0];
+    expect(updateCall.data.password).not.toBe('LongEnough1');
+    expect(updateCall.data.activatedAt instanceof Date).toBe(true);
+    expect(updateCall.data.mustChangePassword).toBe(false);
+    // Token consumed + siblings invalidated
+    expect(prismaMock.passwordResetToken.update).toHaveBeenCalledOnce();
+    expect(prismaMock.passwordResetToken.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it('rejects reuse of a recent password', async () => {
     prismaMock.passwordResetToken.findUnique.mockResolvedValue({
       id: 't', consumerId: 'c1', expiresAt: new Date(Date.now() + 10000), usedAt: null,
     });
-    const r = await resetPasswordWithToken('tok', 'longenough');
-    expect(r.ok).toBe(true);
-    expect(prismaMock.$transaction).toHaveBeenCalledOnce();
-    // Hash stored, not the raw password
-    const updateCall = prismaMock.consumerAccount.update.mock.calls[0][0];
-    expect(updateCall.data.password).not.toBe('longenough');
-    expect(updateCall.data.activatedAt instanceof Date).toBe(true);
+    const bcrypt = (await import('bcryptjs')).default;
+    prismaMock.consumerAccount.findUnique.mockResolvedValue({
+      id: 'c1', password: await bcrypt.hash('LongEnough1', 4), activatedAt: new Date(),
+    });
+    const r = await resetPasswordWithToken('tok', 'LongEnough1');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/last 5 passwords/i);
   });
 
   it('looks the token up by its hash, never the raw value', async () => {
     prismaMock.passwordResetToken.findUnique.mockResolvedValue(null);
-    await resetPasswordWithToken('rawtoken', 'longenough');
+    await resetPasswordWithToken('rawtoken', 'LongEnough1');
     const where = prismaMock.passwordResetToken.findUnique.mock.calls[0][0].where;
     expect(where.tokenHash).toBe(hashResetToken('rawtoken'));
   });

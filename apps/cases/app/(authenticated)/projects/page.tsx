@@ -1,11 +1,11 @@
 'use client';
 
 import { useSession } from '@zenowethu/ui';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ProjectMembersModal } from '@zenowethu/ui';
+import { findProjectById, getProjectAncestorIds } from '@/lib/project-directory';
 
 // Client-side logger
 const logger = {
@@ -38,13 +38,13 @@ export default function ProjectsDirectory() {
 
 function ProjectsDirectoryComponent() {
     const { data: session, status } = useSession();
-    const router = useRouter();
     const searchParams = useSearchParams();
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
 
     // View/Edit Members Modal State
     const [viewingMembersProject, setViewingMembersProject] = useState<Project | null>(null);
+    const openedProjectIdRef = useRef<string | null>(null);
 
     const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
 
@@ -65,6 +65,19 @@ function ProjectsDirectoryComponent() {
             fetchProjects();
         }
     }, [session, status, fetchProjects]);
+
+    useEffect(() => {
+        const projectId = searchParams.get('id');
+        if (!projectId || openedProjectIdRef.current === projectId) return;
+
+        const project = findProjectById(projects, projectId);
+        if (!project) return;
+
+        const ancestorIds = getProjectAncestorIds(projects, projectId);
+        setExpandedProjects((prev) => new Set([...prev, ...ancestorIds, project.id]));
+        setViewingMembersProject(project);
+        openedProjectIdRef.current = projectId;
+    }, [projects, searchParams]);
 
     const buildTree = (items: Project[], parentId: string | null = null): Project[] => {
         return items

@@ -5,7 +5,8 @@ import { getStatusByCode } from '@zenowethu/shared-lib';
 import {
     sendStatusChangeNotification,
     sendInternalNotification,
-    findManagersForCase
+    findManagersForCase,
+    buildProjectUrl
 } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib';
 import { z } from 'zod';
@@ -176,7 +177,8 @@ export async function PATCH(
                     role: 'ADMIN',
                     statusCode: 'NO_MANAGER_ADMIN',
                     variables: {
-                        projectName: primaryProject.name
+                        projectName: primaryProject.name,
+                        projectUrl: buildProjectUrl(primaryProject.id)
                     }
                 });
             }
