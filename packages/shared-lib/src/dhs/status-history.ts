@@ -51,6 +51,8 @@ export type AcceptedViaDhsCode = (typeof ACCEPTED_VIA_DHS_CODES)[number];
 
 const ELIGIBLE_SET = new Set<string>(CLEARANCE_ELIGIBLE_CODES);
 const ACCEPTED_SET = new Set<string>(ACCEPTED_VIA_DHS_CODES);
+export const DHS_UNSUSPEND_CONSUMER_SERVICES_REASON = 'The consumer wants to resume with the program';
+const DHS_UNSUSPEND_CONFIRMATION_WAIT_MS = 30000;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -683,7 +685,23 @@ export async function unsuspendConsumerServices(idNumber: string): Promise<Unsus
             };
         }
 
-        await delay(5000);
+        const completed = await completeUnsuspendDialog(page, DHS_UNSUSPEND_CONSUMER_SERVICES_REASON);
+        if (!completed) {
+            screenshotPath = `storage/uploads/dhs-unsuspend-dialog-incomplete-${Date.now()}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            return {
+                success: false,
+                idNumber,
+                unsuspended: false,
+                before,
+                after: null,
+                message: 'DHS opened the unsuspend dialog, but the required reason, final Unsuspend button, or Continue step could not be completed.',
+                screenshot: screenshotPath,
+            };
+        }
+
+        await delay(DHS_UNSUSPEND_CONFIRMATION_WAIT_MS);
+        await refreshSearchManageConsumerResult(page, idNumber);
         const afterRead = await readConsumerRow(page, idNumber);
         const after = afterRead ? classifySuspension(afterRead.signals) : null;
         screenshotPath = `storage/uploads/dhs-unsuspend-${Date.now()}.png`;
@@ -859,7 +877,7 @@ async function readConsumerRow(
                 | null;
             if (found) return found;
         } catch {
-            // Frame detached / cross-origin — skip.
+            // Frame detached / cross-origin - skip.
         }
     }
     return null;
@@ -901,10 +919,144 @@ async function clickSuspensionToggle(page: Page, idNumber: string): Promise<bool
             const clicked = (await frame.evaluate(clickScript)) as boolean;
             if (clicked) return true;
         } catch {
+            // Frame detached / cross-origin - skip.
+        }
+    }
+    return false;
+}
+
+async function completeUnsuspendDialog(page: Page, reason: string): Promise<boolean> {
+    await delay(1000);
+
+    let reasonEntered = false;
+    for (let attempt = 0; attempt < 10; attempt++) {
+        reasonEntered = await fillUnsuspendReason(page, reason);
+        if (reasonEntered) break;
+        await delay(1000);
+    }
+    if (!reasonEntered) return false;
+
+    let submitted = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+        submitted = await clickUnsuspendDialogSubmit(page);
+        if (submitted) break;
+        await delay(1000);
+    }
+    if (!submitted) return false;
+
+    return clickUnsuspendContinue(page);
+}
+
+async function fillUnsuspendReason(page: Page, reason: string): Promise<boolean> {
+    const fillScript = `(function () {
+        var reason = ${JSON.stringify(reason)};
+        var clean = function (s) { return (s || '').replace(/\\s+/g, ' ').trim(); };
+        var isVisible = function (el) {
+            if (!el) return false;
+            var rect = el.getBoundingClientRect();
+            var style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+        var textareas = document.querySelectorAll('textarea');
+        for (var i = 0; i < textareas.length; i++) {
+            var textarea = textareas[i];
+            var context = clean(document.body.innerText).toLowerCase();
+            if (!isVisible(textarea)) continue;
+            if (context.indexOf('unsuspend consumer debt counsellor services reason') === -1 && context.indexOf('unsuspend consumer') === -1) continue;
+            textarea.focus();
+            textarea.value = reason;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        }
+        return false;
+    })()`;
+
+    for (const frame of page.frames()) {
+        try {
+            const filled = (await frame.evaluate(fillScript)) as boolean;
+            if (filled) return true;
+        } catch {
+            // Frame detached / cross-origin - skip.
+        }
+    }
+    return false;
+}
+
+async function clickUnsuspendDialogSubmit(page: Page): Promise<boolean> {
+    const submitScript = `(function () {
+        var clean = function (s) { return (s || '').replace(/\\s+/g, ' ').trim(); };
+        var isVisible = function (el) {
+            if (!el) return false;
+            var rect = el.getBoundingClientRect();
+            var style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+        var candidates = document.querySelectorAll('button, input[type="button"], input[type="submit"], a, div[class*="btn"], span[onclick]');
+        for (var i = 0; i < candidates.length; i++) {
+            var el = candidates[i];
+            if (!isVisible(el)) continue;
+            var text = clean(el.innerText || el.value || el.getAttribute('title') || el.getAttribute('aria-label')).toLowerCase();
+            if (text.indexOf('unsuspend consumer debt counsellor services') === -1) continue;
+            var context = clean(document.body.innerText).toLowerCase();
+            if (context.indexOf('unsuspend consumer debt counsellor services reason') === -1) continue;
+            el.click();
+            return true;
+        }
+        return false;
+    })()`;
+
+    for (const frame of page.frames()) {
+        try {
+            const clicked = (await frame.evaluate(submitScript)) as boolean;
+            if (clicked) return true;
+        } catch {
             // Frame detached / cross-origin — skip.
         }
     }
     return false;
+}
+
+async function clickUnsuspendContinue(page: Page): Promise<boolean> {
+    const continueScript = `(function () {
+        var clean = function (s) { return (s || '').replace(/\\s+/g, ' ').trim(); };
+        var isVisible = function (el) {
+            if (!el) return false;
+            var rect = el.getBoundingClientRect();
+            var style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+        var candidates = document.querySelectorAll('button, input[type="button"], input[type="submit"], a, div[class*="btn"], span[onclick]');
+        for (var i = 0; i < candidates.length; i++) {
+            var el = candidates[i];
+            if (!isVisible(el)) continue;
+            var text = clean(el.innerText || el.value || el.getAttribute('title') || el.getAttribute('aria-label')).toLowerCase();
+            if (text.indexOf('continue') === -1) continue;
+            el.click();
+            return true;
+        }
+        return false;
+    })()`;
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+        for (const frame of page.frames()) {
+            try {
+                const clicked = (await frame.evaluate(continueScript)) as boolean;
+                if (clicked) return true;
+            } catch {
+                // Frame detached / cross-origin - skip.
+            }
+        }
+        await delay(1000);
+    }
+    return false;
+}
+
+async function refreshSearchManageConsumerResult(page: Page, idNumber: string): Promise<void> {
+    await page.reload({ waitUntil: 'load', timeout: DHS_CONFIG.timeout });
+    await delay(2000);
+    await fillIdAndApplyFilter(page, idNumber);
+    await delay(5000);
 }
 
 /** Fill the RSA ID field and click Apply Filter on the Search & Manage Consumer page. */

@@ -272,6 +272,21 @@ type NotificationEntry = {
     sentAt: string;
 };
 
+type DrrReadinessApiResponse = {
+    success?: boolean;
+    error?: string;
+    result?: {
+        ready: boolean;
+        missingAfter: string[];
+        requiredMissingAfter?: string[];
+        optionalMissingAfter?: string[];
+        recoveredBySplit?: string[];
+        creditReportRequestedFrom?: string | null;
+        actionsPerformed?: string[];
+        errors?: string[];
+    };
+};
+
 type EditFormData = {
     firstName: string;
     lastName: string;
@@ -360,6 +375,7 @@ export default function CaseDetailPage() {
     const [dhsLoading, setDhsLoading] = useState(false);
     const [checkRequestLoading, setCheckRequestLoading] = useState(false);
     const [manageConsumersLoading, setManageConsumersLoading] = useState(false);
+    const [drrReadinessLoading, setDrrReadinessLoading] = useState(false);
     const [unsuspendServicesLoading, setUnsuspendServicesLoading] = useState(false);
     const [showUnsuspendServicesAction, setShowUnsuspendServicesAction] = useState(false);
     const [resendConsentLoading, setResendConsentLoading] = useState(false);
@@ -1804,6 +1820,80 @@ export default function CaseDetailPage() {
             setDhsMessage({ type: 'error', text: 'Failed to connect to DHS' });
         } finally {
             setManageConsumersLoading(false);
+        }
+    };
+
+    const handleDrrDocumentReadiness = async () => {
+        if (!caseData?.id) {
+            setDhsMessage({ type: 'error', text: 'Case ID is required' });
+            return;
+        }
+        const consented = caseData.drrConsents?.[0]?.status === 'CONSENTED';
+        if (!consented) {
+            setDhsMessage({ type: 'warning', text: 'The consumer must consent before DRR document readiness can run.' });
+            return;
+        }
+
+        setDrrReadinessLoading(true);
+        setDhsMessage(null);
+        try {
+            const res = await fetch('/api/internal/drr-readiness', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    caseId: caseData.id,
+                    runClearanceWhenReady: false,
+                }),
+            });
+            const payload = await res.json() as DrrReadinessApiResponse;
+
+            const caseRes = await fetch(`/api/cases/${params.id}`);
+            if (caseRes.ok) {
+                const updatedCase = await caseRes.json();
+                setCaseData(updatedCase);
+            }
+            setActivityUpdate(prev => prev + 1);
+
+            if (!res.ok || payload.error) {
+                setDhsMessage({ type: 'error', text: payload.error || 'DRR document readiness failed.' });
+                return;
+            }
+
+            const result = payload.result;
+            if (!result) {
+                setDhsMessage({ type: 'error', text: 'DRR document readiness returned no result.' });
+                return;
+            }
+
+            const requiredMissing = result.requiredMissingAfter ?? result.missingAfter.filter((kind) => kind === 'CREDIT_REPORT');
+            const optionalMissing = result.optionalMissingAfter ?? result.missingAfter.filter((kind) => kind !== 'CREDIT_REPORT');
+            const recovered = result.recoveredBySplit?.length
+                ? ` Recovered from combined file: ${result.recoveredBySplit.map((kind) => kind.replace(/_/g, ' ').toLowerCase()).join(', ')}.`
+                : '';
+
+            if (requiredMissing.includes('CREDIT_REPORT')) {
+                const requested = result.creditReportRequestedFrom
+                    ? ` Credit report request sent to ${result.creditReportRequestedFrom}.`
+                    : ' Please obtain or upload a credit report before continuing.';
+                setDhsMessage({
+                    type: 'warning',
+                    text: `Credit report was not found on the portal or in the combined document.${requested}${recovered}`,
+                });
+                return;
+            }
+
+            const optionalNote = optionalMissing.length
+                ? ` Optional documents not found: ${optionalMissing.map((kind) => kind.replace(/_/g, ' ').toLowerCase()).join(', ')}.`
+                : '';
+            setDhsMessage({
+                type: payload.success === false ? 'warning' : 'success',
+                text: `Credit report confirmed. DRR can continue.${optionalNote}${recovered}`,
+            });
+        } catch (error) {
+            log.error({ err: error }, 'DRR document readiness error:', error);
+            setDhsMessage({ type: 'error', text: 'Failed to run DRR document readiness' });
+        } finally {
+            setDrrReadinessLoading(false);
         }
     };
 
@@ -3794,6 +3884,7 @@ export default function CaseDetailPage() {
                                                             manuallyAcceptedViaDhs: caseData.manuallyAcceptedViaDhs,
                                                         });
                                                         if (!eligible) return null;
+                                                        const hasDrrConsent = caseData.drrConsents?.[0]?.status === 'CONSENTED';
                                                         return (
                                                             <>
                                                                 <button
@@ -3804,6 +3895,16 @@ export default function CaseDetailPage() {
                                                                 >
                                                                     {manageConsumersLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Manage Consumers'}
                                                                 </button>
+                                                                {hasDrrConsent && (
+                                                                    <button
+                                                                        onClick={handleDrrDocumentReadiness}
+                                                                        disabled={drrReadinessLoading}
+                                                                        title="Search the portal documents for credit reports, payslip and bank statement. If anything is missing, search the combined document and extract what is found. Credit report is required; payslip and bank statement are optional."
+                                                                        className="px-3 py-1.5 bg-sky-600 text-white rounded hover:bg-sky-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
+                                                                    >
+                                                                        {drrReadinessLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Find DRR Documents'}
+                                                                    </button>
+                                                                )}
                                                                 <button
                                                                     onClick={handleResendConsentLink}
                                                                     disabled={resendConsentLoading}

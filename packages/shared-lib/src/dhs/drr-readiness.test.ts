@@ -101,6 +101,8 @@ describe('docTypeToKind', () => {
     it('maps credit report variants, payslip and bank statement', () => {
         expect(docTypeToKind('CREDIT_REPORT')).toBe('CREDIT_REPORT');
         expect(docTypeToKind('CREDIT_REPORT_OTHER')).toBe('CREDIT_REPORT');
+        expect(docTypeToKind('CREDIT_REPORT_XDS')).toBe('CREDIT_REPORT');
+        expect(docTypeToKind('CREDIT_REPORT_EXPERIAN')).toBe('CREDIT_REPORT');
         expect(docTypeToKind('PAYSLIP')).toBe('PAYSLIP');
         expect(docTypeToKind('BANK_STATEMENT')).toBe('BANK_STATEMENT');
         expect(docTypeToKind('ID')).toBeNull();
@@ -137,7 +139,7 @@ describe('runDrrDocumentReadiness', () => {
             (c) => c[0].data.activityType === 'DRR_READY_FOR_MANAGE_CONSUMERS',
         );
         expect(readyComment).toBeTruthy();
-        expect(readyComment?.[0].data.content).toContain('Manage Consumers');
+        expect(readyComment?.[0].data.content).toContain('Required credit report is on file');
         // The clearance automation ran and its status propagated to the result
         expect(clearance).toHaveBeenCalledWith({ caseId: 'case1', triggeredByUserId: undefined });
         expect(r.clearance?.statusUpdatedTo).toBe('READY_CLEARANCE');
@@ -284,20 +286,18 @@ describe('runDrrDocumentReadiness', () => {
         expect(r.creditReportRequestedFrom).toBeNull();
     });
 
-    it('opens Credo DocumentRequests for missing payslip/bank statement without duplicating open ones', async () => {
+    it('continues when only optional payslip/bank statement documents are missing', async () => {
         db.case.findUnique.mockResolvedValue(
             baseCase([doc('CREDIT_REPORT')]),
         );
-        // Payslip request already open; bank statement not yet
-        db.documentRequest.findFirst
-            .mockResolvedValueOnce({ id: 'open-payslip' })
-            .mockResolvedValueOnce(null);
 
         const r = await runDrrDocumentReadiness({ caseId: 'case1' });
 
-        expect(r.ready).toBe(false);
-        expect(db.documentRequest.create).toHaveBeenCalledTimes(1);
-        expect(r.documentRequestsCreated).toEqual(["Latest 3 months' bank statements"]);
+        expect(r.ready).toBe(true);
+        expect(r.requiredMissingAfter).toEqual([]);
+        expect(r.optionalMissingAfter).toEqual(['PAYSLIP', 'BANK_STATEMENT']);
+        expect(db.documentRequest.create).not.toHaveBeenCalled();
+        expect(clearance).toHaveBeenCalled();
     });
 
     it('never throws — a missing case is reported as an error', async () => {

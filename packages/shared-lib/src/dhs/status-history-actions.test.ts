@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { page } = vi.hoisted(() => ({
     page: {
         goto: vi.fn(),
+        reload: vi.fn(),
         $: vi.fn(),
         click: vi.fn(),
         keyboard: { press: vi.fn() },
@@ -29,7 +30,12 @@ vi.mock('../integrations', () => ({
     getDHSCredentials: vi.fn().mockResolvedValue({ username: 'user', password: 'pass' }),
 }));
 
-import { getConsumerSuspensionIndicator, unsuspendConsumerServices } from './status-history';
+import { delay } from './browser';
+import {
+    DHS_UNSUSPEND_CONSUMER_SERVICES_REASON,
+    getConsumerSuspensionIndicator,
+    unsuspendConsumerServices,
+} from './status-history';
 
 const suspendedRow = {
     cells: ['actions', '8001015009087', 'Y'],
@@ -52,6 +58,7 @@ const activeRow = {
 beforeEach(() => {
     vi.clearAllMocks();
     page.goto.mockResolvedValue(undefined);
+    page.reload.mockResolvedValue(undefined);
     page.$.mockImplementation(async (selector: string) =>
         selector === '#ContentPlaceHolder1_txtRSAIDNo' || selector === '#cp_pagedata_lb_ApplyDataFilter'
             ? {}
@@ -80,11 +87,22 @@ describe('DHS suspension actions', () => {
     });
 
     it('clicks Unsuspend only when DHS shows services are suspended', async () => {
+        let readCount = 0;
         const frame = {
-            evaluate: vi.fn()
-                .mockResolvedValueOnce(suspendedRow)
-                .mockResolvedValueOnce(true)
-                .mockResolvedValueOnce(activeRow),
+            evaluate: vi.fn(async (script: string) => {
+                if (script.includes('signals:')) {
+                    readCount += 1;
+                    return readCount === 1 ? suspendedRow : activeRow;
+                }
+                if (script.includes('btn.click();')) return true;
+                if (script.includes('textarea.value = reason')) {
+                    expect(script).toContain(DHS_UNSUSPEND_CONSUMER_SERVICES_REASON);
+                    return true;
+                }
+                if (script.includes("text.indexOf('unsuspend consumer debt counsellor services')")) return true;
+                if (script.includes("text.indexOf('continue')")) return true;
+                return null;
+            }),
         };
         page.frames.mockReturnValue([frame]);
 
@@ -94,5 +112,28 @@ describe('DHS suspension actions', () => {
         expect(result.unsuspended).toBe(true);
         expect(result.before?.status).toBe('SUSPENDED');
         expect(result.after?.status).toBe('NOT_SUSPENDED');
+        expect(delay).toHaveBeenCalledWith(30000);
+        expect(page.reload).toHaveBeenCalledWith({ waitUntil: 'load', timeout: 60000 });
+        expect(page.type).toHaveBeenCalledWith('#ContentPlaceHolder1_txtRSAIDNo', '8001015009087', { delay: 80 });
+    });
+
+    it('does not report success when the DHS reason dialog cannot be completed', async () => {
+        const frame = {
+            evaluate: vi.fn(async (script: string) => {
+                if (script.includes('signals:')) return suspendedRow;
+                if (script.includes('btn.click();')) return true;
+                if (script.includes('textarea.value = reason')) return false;
+                return null;
+            }),
+        };
+        page.frames.mockReturnValue([frame]);
+
+        const result = await unsuspendConsumerServices('8001015009087');
+
+        expect(result.success).toBe(false);
+        expect(result.unsuspended).toBe(false);
+        expect(result.message).toContain('required reason');
+        expect(delay).not.toHaveBeenCalledWith(30000);
+        expect(page.reload).not.toHaveBeenCalled();
     });
 });

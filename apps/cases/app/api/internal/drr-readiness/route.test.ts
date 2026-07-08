@@ -13,11 +13,21 @@ vi.mock('@zenowethu/shared-lib/src/dhs/drr-readiness', () => ({
     runDrrDocumentReadiness: vi.fn(),
 }));
 
+vi.mock('@zenowethu/database', () => ({
+    prisma: {
+        debtReviewRemovalConsent: { findFirst: vi.fn() },
+    },
+}));
+
 import { POST } from './route';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { runDrrDocumentReadiness } from '@zenowethu/shared-lib/src/dhs/drr-readiness';
+import { prisma } from '@zenowethu/database';
 
 const run = runDrrDocumentReadiness as unknown as ReturnType<typeof vi.fn>;
+const db = prisma as unknown as {
+    debtReviewRemovalConsent: { findFirst: ReturnType<typeof vi.fn> };
+};
 
 const request = (body: unknown, headers: Record<string, string> = {}) =>
     new NextRequest('https://app.zenowethu.co.za/api/internal/drr-readiness', {
@@ -28,6 +38,7 @@ const request = (body: unknown, headers: Record<string, string> = {}) =>
 
 const okResult = {
     caseId: 'case1', ready: true, presentBefore: [], recoveredBySplit: [], missingAfter: [],
+    requiredMissingAfter: [], optionalMissingAfter: [],
     splitAttempted: false, creditReportRequestedFrom: null, documentRequestsCreated: [],
     actionsPerformed: [], errors: [],
 };
@@ -36,6 +47,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     process.env.INTERNAL_API_SECRET = 'shhh';
     run.mockResolvedValue(okResult);
+    db.debtReviewRemovalConsent.findFirst.mockResolvedValue({ id: 'consent1' });
 });
 
 describe('POST /api/internal/drr-readiness', () => {
@@ -45,7 +57,11 @@ describe('POST /api/internal/drr-readiness', () => {
 
         expect(res.status).toBe(200);
         expect(json.success).toBe(true);
-        expect(run).toHaveBeenCalledWith({ caseId: 'case1', triggeredByUserId: undefined });
+        expect(run).toHaveBeenCalledWith({
+            caseId: 'case1',
+            triggeredByUserId: undefined,
+            runClearanceWhenReady: undefined,
+        });
     });
 
     it('accepts a signed-in staff member and attributes the run to them', async () => {
@@ -54,7 +70,34 @@ describe('POST /api/internal/drr-readiness', () => {
         const res = await POST(request({ caseId: 'case1' }));
 
         expect(res.status).toBe(200);
-        expect(run).toHaveBeenCalledWith({ caseId: 'case1', triggeredByUserId: 'staff1' });
+        expect(run).toHaveBeenCalledWith({
+            caseId: 'case1',
+            triggeredByUserId: 'staff1',
+            runClearanceWhenReady: undefined,
+        });
+    });
+
+    it('lets staff run a documents-only check without triggering clearance', async () => {
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'staff1', userType: 'STAFF' } } as never);
+
+        const res = await POST(request({ caseId: 'case1', runClearanceWhenReady: false }));
+
+        expect(res.status).toBe(200);
+        expect(run).toHaveBeenCalledWith({
+            caseId: 'case1',
+            triggeredByUserId: 'staff1',
+            runClearanceWhenReady: false,
+        });
+    });
+
+    it('rejects staff runs before the consumer has consented', async () => {
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'staff1', userType: 'STAFF' } } as never);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
+
+        const res = await POST(request({ caseId: 'case1' }));
+
+        expect(res.status).toBe(403);
+        expect(run).not.toHaveBeenCalled();
     });
 
     it('rejects a wrong secret with no session', async () => {

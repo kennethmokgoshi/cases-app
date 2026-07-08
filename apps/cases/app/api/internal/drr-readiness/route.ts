@@ -3,11 +3,13 @@ import { z } from 'zod';
 import { createLogger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { runDrrDocumentReadiness } from '@zenowethu/shared-lib/src/dhs/drr-readiness';
+import { prisma } from '@zenowethu/database';
 
 const logger = createLogger('api/internal/drr-readiness');
 
 const bodySchema = z.object({
     caseId: z.string().min(1),
+    runClearanceWhenReady: z.boolean().optional(),
 });
 
 /**
@@ -44,8 +46,25 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'caseId is required' }, { status: 400 });
         }
 
+        if (!internalCall) {
+            const consented = await prisma.debtReviewRemovalConsent.findFirst({
+                where: { caseId: parsed.data.caseId, status: 'CONSENTED' },
+                select: { id: true },
+            });
+            if (!consented) {
+                return NextResponse.json(
+                    { error: 'Consumer consent is required before DRR document readiness can run.' },
+                    { status: 403 },
+                );
+            }
+        }
+
         logger.info(`[DRR Readiness] Triggered for case ${parsed.data.caseId} (${internalCall ? 'internal' : 'staff'})`);
-        const result = await runDrrDocumentReadiness({ caseId: parsed.data.caseId, triggeredByUserId });
+        const result = await runDrrDocumentReadiness({
+            caseId: parsed.data.caseId,
+            triggeredByUserId,
+            runClearanceWhenReady: parsed.data.runClearanceWhenReady,
+        });
 
         return NextResponse.json({ success: result.errors.length === 0, result });
     } catch (error) {

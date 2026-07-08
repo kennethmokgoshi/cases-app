@@ -58,10 +58,12 @@ const READINESS_PARK_FROM_STATUSES = new Set([
     'ZDM_CLIENT',
 ]);
 
-/** The three document kinds a file needs before Manage Consumers can proceed. */
+/** The document kinds this pipeline looks for. */
 export type RequiredDocKind = 'CREDIT_REPORT' | 'PAYSLIP' | 'BANK_STATEMENT';
 
 export const REQUIRED_DOC_KINDS: RequiredDocKind[] = ['CREDIT_REPORT', 'PAYSLIP', 'BANK_STATEMENT'];
+const REQUIRED_TO_PROCEED_KINDS: RequiredDocKind[] = ['CREDIT_REPORT'];
+const OPTIONAL_DOC_KINDS: RequiredDocKind[] = ['PAYSLIP', 'BANK_STATEMENT'];
 
 const KIND_LABELS: Record<RequiredDocKind, string> = {
     CREDIT_REPORT: 'Credit report',
@@ -71,7 +73,14 @@ const KIND_LABELS: Record<RequiredDocKind, string> = {
 
 /** Document.type values that satisfy each required kind. */
 const KIND_MATCHERS: Record<RequiredDocKind, string[]> = {
-    CREDIT_REPORT: ['CREDIT_REPORT', 'CREDIT_REPORT_OTHER'],
+    CREDIT_REPORT: [
+        'CREDIT_REPORT',
+        'CREDIT_REPORT_OTHER',
+        'CREDIT_REPORT_TRANSUNION',
+        'CREDIT_REPORT_EXPERIAN',
+        'CREDIT_REPORT_XDS',
+        'CREDIT_REPORT_LIGHTSTONE',
+    ],
     PAYSLIP: ['PAYSLIP'],
     BANK_STATEMENT: ['BANK_STATEMENT'],
 };
@@ -84,7 +93,7 @@ const CREDIT_REPORT_REQUEST_COOLDOWN_DAYS = 7;
 
 export interface DrrReadinessResult {
     caseId: string;
-    /** True when all three required documents are on file at the end of the run. */
+    /** True when the required credit report is on file at the end of the run. */
     ready: boolean;
     /** Kinds already on file before any splitting. */
     presentBefore: RequiredDocKind[];
@@ -92,6 +101,10 @@ export interface DrrReadinessResult {
     recoveredBySplit: RequiredDocKind[];
     /** Kinds still missing at the end of the run. */
     missingAfter: RequiredDocKind[];
+    /** Required document kinds still missing at the end of the run. */
+    requiredMissingAfter: RequiredDocKind[];
+    /** Optional document kinds still missing at the end of the run. */
+    optionalMissingAfter: RequiredDocKind[];
     /** True when a combined document was found and the AI split was attempted. */
     splitAttempted: boolean;
     /** Email address the credit report was requested from (referrer/B2B partner). */
@@ -109,6 +122,7 @@ export interface DrrReadinessResult {
 /** Map a Document.type value to the required kind it satisfies, if any. */
 export function docTypeToKind(type: string): RequiredDocKind | null {
     const t = (type || '').toUpperCase();
+    if (t.startsWith('CREDIT_REPORT')) return 'CREDIT_REPORT';
     for (const kind of REQUIRED_DOC_KINDS) {
         if (KIND_MATCHERS[kind].includes(t)) return kind;
     }
@@ -151,6 +165,8 @@ export async function runDrrDocumentReadiness(params: {
         presentBefore: [],
         recoveredBySplit: [],
         missingAfter: [],
+        requiredMissingAfter: [],
+        optionalMissingAfter: [],
         splitAttempted: false,
         creditReportRequestedFrom: null,
         documentRequestsCreated: [],
@@ -201,6 +217,8 @@ export async function runDrrDocumentReadiness(params: {
             }
         }
         result.missingAfter = missing;
+        result.requiredMissingAfter = missing.filter((k) => REQUIRED_TO_PROCEED_KINDS.includes(k));
+        result.optionalMissingAfter = missing.filter((k) => OPTIONAL_DOC_KINDS.includes(k));
 
         // ── Step 3: credit report still missing → ask the referrer/partner ───
         if (missing.includes('CREDIT_REPORT')) {
@@ -208,13 +226,14 @@ export async function runDrrDocumentReadiness(params: {
         }
 
         // ── Step 4: consumer-suppliable documents → Credo DocumentRequests ───
-        const consumerKinds = missing.filter((k): k is 'PAYSLIP' | 'BANK_STATEMENT' => k !== 'CREDIT_REPORT');
-        if (consumerKinds.length > 0) {
-            await openConsumerDocumentRequests(caseId, caseData.clientId, consumerKinds, userId, result);
+        if (result.optionalMissingAfter.length > 0) {
+            result.actionsPerformed.push(
+                `Optional documents not found: ${result.optionalMissingAfter.map((k) => KIND_LABELS[k]).join(', ')}. Continuing because they are not required for DRR.`,
+            );
         }
 
         // ── Step 5: verdict on the case timeline + workflow status ───────────
-        result.ready = missing.length === 0;
+        result.ready = result.requiredMissingAfter.length === 0;
         await postReadinessComment(caseId, userId, result);
 
         if (!result.ready) {
@@ -325,8 +344,8 @@ async function trySplitCombinedDocument(
             if (!existsSync(uploadsDir)) await mkdir(uploadsDir, { recursive: true });
 
             const timestamp = Date.now();
-            for (const doc of splitDocs) {
-                const docFileName = `${timestamp}-${doc.type.toLowerCase()}.pdf`;
+            for (const [index, doc] of splitDocs.entries()) {
+                const docFileName = `${timestamp}-${index + 1}-${doc.type.toLowerCase()}.pdf`;
                 const docFilePath = join(uploadsDir, docFileName);
                 const docFileUrl = `/uploads/${caseId}/${docFileName}`;
                 const docBuffer = Buffer.from(doc.base64Pdf, 'base64');
@@ -525,9 +544,12 @@ async function postReadinessComment(
         checklist,
     ];
     if (result.ready) {
-        lines.push('', 'All required documents are on file. ➜ Running the Manage Consumers DHS clearance check automatically — its outcome will be posted here.');
+        const optionalMissing = result.optionalMissingAfter.length > 0
+            ? ` Optional documents not found: ${result.optionalMissingAfter.map((k) => KIND_LABELS[k]).join(', ')}.`
+            : '';
+        lines.push('', `Required credit report is on file.${optionalMissing} Continuing with DRR readiness.`);
     } else {
-        lines.push('', `Still missing: ${result.missingAfter.map((k) => KIND_LABELS[k]).join(', ')}. The case cannot proceed to Manage Consumers yet — parked at Awaiting DRR Documents.`);
+        lines.push('', `Still missing required document: ${result.requiredMissingAfter.map((k) => KIND_LABELS[k]).join(', ')}. The case cannot proceed to Manage Consumers yet - parked at Awaiting DRR Documents.`);
     }
     if (result.actionsPerformed.length) lines.push('', `Actions: ${result.actionsPerformed.join(' ')}`);
     if (result.errors.length) lines.push('', `Errors: ${result.errors.join(' | ')}`);
