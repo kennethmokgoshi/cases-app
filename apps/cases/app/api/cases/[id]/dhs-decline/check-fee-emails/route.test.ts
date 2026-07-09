@@ -137,4 +137,17 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
         expect(response.status).toBe(404);
         expect(db.caseComment.create).not.toHaveBeenCalled();
     });
+
+    it('returns 400 for malformed JSON', async () => {
+        const response = await POST(
+            new Request('https://cases.zenowethu.co.za/api/cases/case-1/dhs-decline/check-fee-emails', {
+                method: 'POST',
+                body: '{not-json',
+            }),
+            params
+        );
+
+        expect(response.status).toBe(400);
+        expect(db.case.findUnique).not.toHaveBeenCalled();
+    });
 });

@@ -42,7 +42,14 @@ export async function POST(
         }
 
         const { id: caseId } = await params;
-        const parsed = BodySchema.safeParse(await request.json());
+        let body: unknown;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+        }
+
+        const parsed = BodySchema.safeParse(body);
         if (!parsed.success) {
             return NextResponse.json(
                 { error: 'Validation failed', details: parsed.error.flatten() },
