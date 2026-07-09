@@ -32,6 +32,22 @@ describe('buildAcceptedViaDhsEmail', () => {
         expect(email).toMatch(/your consent/i);
     });
 
+    it('explains the Credo consent link uses ID verification, not login', () => {
+        const e = buildAcceptedViaDhsEmail({
+            clientFirstName: 'Sipho',
+            fileNumber: 'ZDM-2026-1009',
+            consentLink: 'https://credo.zenowethu.co.za/consent/tok123',
+            credo: { idNumber: '8001015009087', setPasswordLink: 'https://credo.zenowethu.co.za/reset-password?token=abc' },
+        });
+
+        expect(e).toContain('HOW TO VERIFY YOUR CONSENT LINK');
+        expect(e).toContain('You do not need to log in to give this consent');
+        expect(e).toContain('ID number to type:  8001015009087');
+        expect(e).not.toContain('HOW TO LOG IN TO YOUR CREDO PORTAL');
+        expect(e).not.toContain('Your password');
+        expect(e).not.toContain('reset-password?token=abc');
+    });
+
     it('acknowledges the signed POA and frames consent via POPIA', () => {
         expect(email).toMatch(/Power of Attorney/i);
         expect(email).toContain('POPIA');

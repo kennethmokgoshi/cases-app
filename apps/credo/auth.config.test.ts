@@ -28,11 +28,11 @@ describe("Credo auth config", () => {
     expect(authorizePath("/dashboard", false)).toBe(false);
     expect(authorizePath("/my-account", false)).toBe(false);
     expect(authorizePath("/credit-report/history", false)).toBe(false);
-    expect(authorizePath("/consent/token-123", false)).toBe(false);
   });
 
   it("allows public pages and signed-in access", () => {
     expect(authorizePath("/login", false)).toBe(true);
+    expect(authorizePath("/consent/token-123", false)).toBe(true);
     expect(authorizePath("/quote/public-token", false)).toBe(true);
     expect(authorizePath("/credit-report", true)).toBe(true);
   });

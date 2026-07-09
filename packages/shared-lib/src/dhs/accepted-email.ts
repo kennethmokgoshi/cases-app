@@ -64,20 +64,12 @@ export function buildCredoLoginSection(credo?: CredoLoginDetails | null): string
     if (!credo) return '';
     return `
 ─────────────────────────────────────────
-HOW TO LOG IN TO YOUR CREDO PORTAL
+HOW TO VERIFY YOUR CONSENT LINK
 ─────────────────────────────────────────
-Your consent is given inside Credo, your secure Zenowethu consumer portal. Logging in is simple:
+You do not need to log in to give this consent. Click the secure consent link above, then type your 13-digit South African ID number to verify that the link belongs to you.
 
-  Your username:  your 13-digit SA ID number (${credo.idNumber})
-${credo.setPasswordLink
-            ? `  Your password:  you have not set one yet — please set it first using this link:
-
-  ${credo.setPasswordLink}
-
-Once your password is set, click the consent link above (or again at any time) and sign in with your ID number and your new password.`
-            : `  Your password:  the password you chose for Credo. If you have forgotten it, click "Forgot password?" on the login page.`}
-
-After signing in you will see your consent page — read it and press "I Approve" so our team can start working on your file.
+  ID number to type:  ${credo.idNumber}
+After verification you will see your consent page. Please read it and press "I Approve" so our team can start working on your file.
 `;
 }
 

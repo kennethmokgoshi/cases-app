@@ -29,15 +29,15 @@ function createStorage(): Pick<Storage, "getItem" | "setItem" | "removeItem"> {
 }
 
 describe("Credo session security", () => {
-  it("identifies confidential Credo routes without blocking public token quote pages", () => {
+  it("identifies confidential Credo routes without blocking public token pages", () => {
     expect(isCredoProtectedPathname("/dashboard")).toBe(true);
     expect(isCredoProtectedPathname("/credit-report/history")).toBe(true);
     expect(isCredoProtectedPathname("/documents/sign/doc-123")).toBe(true);
-    expect(isCredoProtectedPathname("/consent/token-123")).toBe(true);
     expect(isCredoProtectedPathname("/quote")).toBe(true);
 
     expect(isCredoProtectedPathname("/")).toBe(false);
     expect(isCredoProtectedPathname("/login")).toBe(false);
+    expect(isCredoProtectedPathname("/consent/token-123")).toBe(false);
     expect(isCredoProtectedPathname("/quote/public-token")).toBe(false);
   });
 

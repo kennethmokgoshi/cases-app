@@ -37,19 +37,22 @@ describe('buildConsentReminderEmail', () => {
         expect(body).toContain('NCRDC3693');
     });
 
-    it('includes Credo login instructions when a profile exists', () => {
+    it('includes ID verification instructions when a profile exists', () => {
         const body = buildConsentReminderEmail({
             ...base,
             credo: { idNumber: '9005135832087', setPasswordLink: 'https://credo.zenowethu.co.za/reset-password?token=abc' },
         });
-        expect(body).toContain('HOW TO LOG IN TO YOUR CREDO PORTAL');
-        expect(body).toContain('13-digit SA ID number (9005135832087)');
-        expect(body).toContain('https://credo.zenowethu.co.za/reset-password?token=abc');
+        expect(body).toContain('HOW TO VERIFY YOUR CONSENT LINK');
+        expect(body).toContain('You do not need to log in to give this consent');
+        expect(body).toContain('ID number to type:  9005135832087');
+        expect(body).not.toContain('HOW TO LOG IN TO YOUR CREDO PORTAL');
+        expect(body).not.toContain('https://credo.zenowethu.co.za/reset-password?token=abc');
+        expect(body).not.toContain('Your password');
     });
 
     it('omits the Credo section for the public-link fallback', () => {
         const body = buildConsentReminderEmail({ ...base, credo: null });
-        expect(body).not.toContain('HOW TO LOG IN TO YOUR CREDO PORTAL');
+        expect(body).not.toContain('HOW TO VERIFY YOUR CONSENT LINK');
     });
 
     it('falls back to Sir/Madam when the first name is blank', () => {

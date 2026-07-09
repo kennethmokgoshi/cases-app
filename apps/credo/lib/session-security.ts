@@ -21,7 +21,6 @@ const PREFIX_PROTECTED_PATHS = [
   "/settings",
   "/admin",
   "/upgrade",
-  "/consent",
   "/change-password",
 ] as const;
 
