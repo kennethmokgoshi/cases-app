@@ -36,11 +36,15 @@ vi.mock('@zenowethu/shared-lib', () => ({
         warn: vi.fn(),
     })),
     getSMTPCredentials: vi.fn(),
+}));
+
+vi.mock('@zenowethu/shared-lib/src/integrations/imap', () => ({
     scanMailboxForClient: vi.fn(),
 }));
 
 import { prisma } from '@zenowethu/database';
-import { auth, getSMTPCredentials, scanMailboxForClient } from '@zenowethu/shared-lib';
+import { auth, getSMTPCredentials } from '@zenowethu/shared-lib';
+import { scanMailboxForClient } from '@zenowethu/shared-lib/src/integrations/imap';
 import { POST } from './route';
 
 type PrismaMock = {

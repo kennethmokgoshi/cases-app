@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { auth, createLogger, getSMTPCredentials, verifyImapConnection } from '@zenowethu/shared-lib';
+import { auth, createLogger, getSMTPCredentials } from '@zenowethu/shared-lib';
+import { verifyImapConnection } from '@zenowethu/shared-lib/src/integrations/imap';
 import { decryptSecret } from '@zenowethu/shared-lib/src/security/encryption';
 import { prisma } from '@zenowethu/database';
 import { usesSmtpPassword } from '@/lib/mailboxes';

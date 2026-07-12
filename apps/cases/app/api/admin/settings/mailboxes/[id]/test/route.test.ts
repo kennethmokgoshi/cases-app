@@ -16,11 +16,15 @@ vi.mock('@zenowethu/shared-lib', () => ({
         warn: vi.fn(),
     })),
     getSMTPCredentials: vi.fn(),
+}));
+
+vi.mock('@zenowethu/shared-lib/src/integrations/imap', () => ({
     verifyImapConnection: vi.fn(),
 }));
 
 import { prisma } from '@zenowethu/database';
-import { auth, getSMTPCredentials, verifyImapConnection } from '@zenowethu/shared-lib';
+import { auth, getSMTPCredentials } from '@zenowethu/shared-lib';
+import { verifyImapConnection } from '@zenowethu/shared-lib/src/integrations/imap';
 import { POST } from './route';
 
 const db = prisma as unknown as { mailboxAccount: { findUnique: ReturnType<typeof vi.fn> } };
