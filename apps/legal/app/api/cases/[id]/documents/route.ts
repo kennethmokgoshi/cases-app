@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger } from '@zenowethu/shared-lib';
+import { auth, logger, touchCaseAction } from '@zenowethu/shared-lib';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -150,6 +150,8 @@ export async function POST(
             }
         });
 
+        await touchCaseAction(caseId, 'DOCUMENT_UPLOAD', { userId: session.user.id });
+
         logger.info(`[UPLOAD_TRACE] ✅ SUCCESS in ${Date.now() - startTime}ms`);
         return NextResponse.json({ document });
 
@@ -215,6 +217,8 @@ export async function DELETE(
             where: { id: documentId }
         });
 
+        await touchCaseAction(document.caseId, 'DOCUMENT_DELETE', { userId: session.user.id });
+
         return NextResponse.json({ success: true });
 
     } catch (error) {
@@ -253,6 +257,8 @@ export async function PATCH(
             where: { id: documentId },
             data: { type }
         });
+
+        await touchCaseAction(document.caseId, 'DOCUMENT_UPDATE', { userId: session.user.id });
 
         return NextResponse.json({ document });
 

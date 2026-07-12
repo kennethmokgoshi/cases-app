@@ -55,6 +55,13 @@ describe('calculateSlaDeadline', () => {
         calculateSlaDeadline(original);
         expect(original.getTime()).toBe(originalTime);
     });
+
+    it('adds custom business days correctly', () => {
+        const mon = new Date('2026-03-23'); // Monday
+        const deadline = calculateSlaDeadline(mon, 2);
+        // Mon Mar 23 + 2 business days = Wed Mar 25
+        expect(deadline.toISOString().slice(0, 10)).toBe('2026-03-25');
+    });
 });
 
 describe('isCaseOverdue', () => {

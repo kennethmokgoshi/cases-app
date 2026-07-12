@@ -57,7 +57,7 @@ export async function PATCH(
             nextUpdateDate = new Date(body.nextUpdate);
         } else if (statusInfo?.slaEnabled && statusInfo.slaDays) {
             // Fallback to SLA if enabled and no manual update provided
-            nextUpdateDate = calculateSlaDeadline(new Date());
+            nextUpdateDate = calculateSlaDeadline(new Date(), statusInfo.slaDays);
         }
 
         // Update the case

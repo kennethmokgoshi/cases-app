@@ -2,8 +2,8 @@ import { addBusinessDays } from 'date-fns';
 
 export const SLA_BUSINESS_DAYS = 5;
 
-export function calculateSlaDeadline(startDate: Date): Date {
-    return addBusinessDays(startDate, SLA_BUSINESS_DAYS);
+export function calculateSlaDeadline(startDate: Date, days: number = SLA_BUSINESS_DAYS): Date {
+    return addBusinessDays(startDate, days);
 }
 
 export function isCaseOverdue(deadline: Date | null): boolean {

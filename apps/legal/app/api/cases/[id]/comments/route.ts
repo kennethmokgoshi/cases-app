@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, logger, sendManualMessage, CaseCommentCreateSchema, parseBody } from '@zenowethu/shared-lib';
+import { auth, logger, sendManualMessage, CaseCommentCreateSchema, parseBody, touchCaseAction } from '@zenowethu/shared-lib';
 import { z } from 'zod';
 
 // Parse @mentions from comment text - returns array of usernames
@@ -203,6 +203,9 @@ export async function POST(
                 }
             }
         });
+
+        // Touch the case and calculate nextUpdate
+        await touchCaseAction(id, 'COMMENT', { userId: session.user.id });
 
         // Create in-app notifications for mentioned users
         const currentUser = await prisma.user.findUnique({

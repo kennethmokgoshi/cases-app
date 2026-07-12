@@ -4,6 +4,7 @@ import {
     matchesDocType,
     PATH_A_TO_B,
     PATH_C_TO_G,
+    PATH_D3_TO_G,
     PATH_D4_TO_F2,
     PATH_D4_TO_G,
     PATH_D4_TO_F1,
@@ -56,6 +57,12 @@ describe('getRemovalPaths', () => {
         const paths = getRemovalPaths('C');
         expect(paths).toHaveLength(1);
         expect(paths[0]).toBe(PATH_C_TO_G);
+    });
+
+    it('status D3 returns D3→G path', () => {
+        const paths = getRemovalPaths('D3');
+        expect(paths).toHaveLength(1);
+        expect(paths[0]).toBe(PATH_D3_TO_G);
     });
 
     it('status D4 returns 3 candidate paths', () => {
@@ -124,11 +131,32 @@ describe('PATH_D4_TO_F2 required documents', () => {
 });
 
 describe('PATH_D4_TO_F1 required documents', () => {
-    it('requires Form 19, paid-up letters, Form 17.2(c) and court order', () => {
+    it('requires Form 19, paid-up letters, Form 17.2(c), restructuring/court order, mortgage evidence and s71/72 statement', () => {
         expect(PATH_D4_TO_F1.requiredDocTypes).toContain(DOC_TYPES.CERTIFIED_FORM_19);
         expect(PATH_D4_TO_F1.requiredDocTypes).toContain(DOC_TYPES.PAID_UP_LETTERS);
         expect(PATH_D4_TO_F1.requiredDocTypes).toContain(DOC_TYPES.FORM_17_2C);
-        expect(PATH_D4_TO_F1.requiredDocTypes).toContain(DOC_TYPES.COURT_ORDER_GRANTED);
+        expect(PATH_D4_TO_F1.requiredDocTypes).toContain(DOC_TYPES.RESTRUCTURING_OR_COURT_ORDER);
+        expect(PATH_D4_TO_F1.requiredDocTypes).toContain(DOC_TYPES.MORTGAGE_NOT_IN_ARREARS);
+        expect(PATH_D4_TO_F1.requiredDocTypes).toContain(DOC_TYPES.SECTION_71_72_STATEMENT);
+        expect(PATH_D4_TO_F1.requiredDocTypes).toHaveLength(6);
+    });
+
+    it('restructuring-or-court-order is satisfied by either document via aliases', () => {
+        expect(matchesDocType('DEBT_RESTRUCTURING_PROPOSAL', DOC_TYPES.RESTRUCTURING_OR_COURT_ORDER)).toBe(true);
+        expect(matchesDocType('COURT_ORDER_GRANTED',         DOC_TYPES.RESTRUCTURING_OR_COURT_ORDER)).toBe(true);
+        expect(matchesDocType('PAYSLIP',                     DOC_TYPES.RESTRUCTURING_OR_COURT_ORDER)).toBe(false);
+    });
+
+    it('mortgage-not-in-arrears is satisfied by a statement of account or credit report', () => {
+        expect(matchesDocType('MORTGAGE_STATEMENT', DOC_TYPES.MORTGAGE_NOT_IN_ARREARS)).toBe(true);
+        expect(matchesDocType('CREDIT_REPORT',      DOC_TYPES.MORTGAGE_NOT_IN_ARREARS)).toBe(true);
+    });
+});
+
+describe('PATH_D3_TO_G required documents', () => {
+    it('requires the same court documents as the C→G rescission path', () => {
+        expect(PATH_D3_TO_G.requiredDocTypes).toEqual(PATH_C_TO_G.requiredDocTypes);
+        expect(PATH_D3_TO_G.toStatus).toBe('G');
     });
 });
 

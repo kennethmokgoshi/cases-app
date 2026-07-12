@@ -9,6 +9,7 @@
  *   A  — Under debt review (accepted, no court order)
  *   B  — Assessment resulted in rejection
  *   C  — Under debt review (no court order)
+ *   D3 — Under debt review with NCT / consent order
  *   D4 — Under debt review with magistrate court order
  *   F1 — All restructured debts settled EXCEPT mortgage
  *   F2 — All restructured debts have been settled
@@ -65,6 +66,12 @@ export const DOC_TYPES = {
     POA:                     'POA',
     ZENOWETHU_POA:           'ZENOWETHU_POA',
     ID:                      'ID',
+    /** Restructuring proposal AND-OR court order granted (either satisfies). */
+    RESTRUCTURING_OR_COURT_ORDER: 'RESTRUCTURING_OR_COURT_ORDER',
+    /** Evidence the mortgage is not in arrears — statement of account or credit report. */
+    MORTGAGE_NOT_IN_ARREARS: 'MORTGAGE_NOT_IN_ARREARS',
+    /** Statement in terms of NCA sections 71(1)(b) and 72. */
+    SECTION_71_72_STATEMENT: 'SECTION_71_72_STATEMENT',
 } as const;
 
 /** Aliases used when matching documents — handles naming variations */
@@ -81,6 +88,18 @@ export const DOC_TYPE_ALIASES: Record<string, string[]> = {
     FORM_17W:           ['FORM_17W', 'FORM 17W', 'FORM17W', 'FORM_17_W'],
     FORM_16:            ['FORM_16', 'FORM 16', 'FORM16'],
     POA:                ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY'],
+    RESTRUCTURING_OR_COURT_ORDER: [
+        'DEBT_RESTRUCTURING_PROPOSAL', 'RESTRUCTURING_PROPOSAL', 'RESTRUCTURING',
+        'COURT_ORDER_GRANTED', 'COURT_ORDER', 'COURT ORDER', 'CONSENT_ORDER',
+    ],
+    MORTGAGE_NOT_IN_ARREARS: [
+        'MORTGAGE_NOT_IN_ARREARS', 'MORTGAGE_STATEMENT', 'STATEMENT_OF_ACCOUNT',
+        'BOND_STATEMENT', 'HOME_LOAN_STATEMENT', 'CREDIT_REPORT',
+    ],
+    SECTION_71_72_STATEMENT: [
+        'SECTION_71_72_STATEMENT', 'SECTION_71_72', 'S71_72_STATEMENT',
+        'SECTION 71', 'STATEMENT_71', '71(1)(B)',
+    ],
 };
 
 /** Check if an uploaded document type matches a required type (alias-aware) */
@@ -112,6 +131,15 @@ export const PATH_C_TO_G: RemovalPath = {
     alreadyExitable: false,
 };
 
+/** D3 → G: Under review with NCT/consent order → court order rescission */
+export const PATH_D3_TO_G: RemovalPath = {
+    fromStatus: 'D3',
+    toStatus: 'G',
+    description: 'Magistrate rescinded the debt review consent/NCT order',
+    requiredDocTypes: [DOC_TYPES.NOTICE_OF_MOTION, DOC_TYPES.FOUNDING_AFFIDAVIT, DOC_TYPES.COURT_ORDER_GRANTED],
+    alreadyExitable: false,
+};
+
 /** D4 → F2: All debts settled (most common exit) */
 export const PATH_D4_TO_F2: RemovalPath = {
     fromStatus: 'D4',
@@ -130,7 +158,9 @@ export const PATH_D4_TO_F1: RemovalPath = {
         DOC_TYPES.CERTIFIED_FORM_19,
         DOC_TYPES.PAID_UP_LETTERS,
         DOC_TYPES.FORM_17_2C,
-        DOC_TYPES.COURT_ORDER_GRANTED,
+        DOC_TYPES.RESTRUCTURING_OR_COURT_ORDER,
+        DOC_TYPES.MORTGAGE_NOT_IN_ARREARS,
+        DOC_TYPES.SECTION_71_72_STATEMENT,
     ],
     alreadyExitable: false,
 };
@@ -167,6 +197,7 @@ export function getRemovalPaths(dhsStatus: string | null | undefined): RemovalPa
     if (['F1', 'F2', 'G'].includes(s)) return [PATH_ALREADY_EXITABLE];
     if (s === 'A') return [PATH_A_TO_B];
     if (s === 'C') return [PATH_C_TO_G];
+    if (s === 'D3') return [PATH_D3_TO_G];
     if (s === 'D4') return D4_CANDIDATE_PATHS;
     return [];
 }

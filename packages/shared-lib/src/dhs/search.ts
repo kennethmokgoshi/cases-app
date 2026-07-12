@@ -191,7 +191,16 @@ export async function searchConsumer(idNumber: string): Promise<{
 
         logger.info('[DHS search] Consumer extracted:', JSON.stringify(consumer));
 
-        const result: any = { found: true, consumer, debtCounsellor: undefined };
+        // Try to get Debt Counsellor info from popup
+        let dcInfo = undefined;
+        try {
+            logger.info('[DHS search] Fetching DC info from popup...');
+            dcInfo = await getDebtCounsellorInfo(page);
+        } catch (dcError) {
+            logger.error('[DHS search] Failed to fetch DC info from popup:', dcError);
+        }
+
+        const result: any = { found: true, consumer, debtCounsellor: dcInfo };
         
         // If status is Declined, try to get reason
         if (consumer.status && (consumer.status.toLowerCase().includes('declined') || consumer.status.toLowerCase().includes('rejected'))) {

@@ -7,6 +7,8 @@ export { getNCTCredentials, invalidateNCTCredentialsCache } from './nct-config'
 export { getXDSCredentials, invalidateXDSCredentialsCache } from './xds-config'
 export { getSMTPCredentials, invalidateSMTPCredentialsCache } from './smtp-config'
 export type { SMTPCredentials } from './smtp-config'
+export { verifyImapConnection, scanMailboxForClient } from './imap'
+export type { ImapConnectionConfig, ImapVerifyResult, ScanResult } from './imap'
 
 // DCCP — DC Credit Protect integration
 export { getDCCPCredentials, invalidateDCCPCredentialsCache, DCCP_CLI_COMMISSION_RATE, DCCP_AIP_TIERS, DCCP_INDIVIDUAL_FUNERAL_TIERS, DCCP_FAMILY_FUNERAL_TIERS, DCCP_FUNERAL_DEPENDANT_COVER, DCCP_RULES, DCCP_CLI_EXCLUDED_ACCOUNT_TYPES, DCCP_CONTACTS } from './dccp-config'

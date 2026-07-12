@@ -49,7 +49,7 @@ export async function PATCH(
         // Calculate deadline if SLA is enabled
         let deadline: Date | null = null;
         if (statusInfo?.slaEnabled && statusInfo.slaDays) {
-            deadline = calculateSlaDeadline(new Date());
+            deadline = calculateSlaDeadline(new Date(), statusInfo.slaDays);
         }
 
         // Update the case

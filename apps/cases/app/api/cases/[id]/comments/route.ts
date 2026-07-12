@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, sendManualMessage, createLogger } from '@zenowethu/shared-lib';
+import { auth, sendManualMessage, createLogger, touchCaseAction } from '@zenowethu/shared-lib';
 import { CaseCommentCreateSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
@@ -204,13 +204,8 @@ export async function POST(
             }
         });
 
-        // Reset nextUpdate to 7 days from now after every comment update
-        const nextUpdateDate = new Date();
-        nextUpdateDate.setDate(nextUpdateDate.getDate() + 7);
-        await prisma.case.update({
-            where: { id },
-            data: { nextUpdate: nextUpdateDate }
-        });
+        // Touch the case and calculate nextUpdate
+        await touchCaseAction(id, 'COMMENT', { userId: session.user.id });
 
         // Create in-app notifications for mentioned users
         const currentUser = await prisma.user.findUnique({

@@ -10,6 +10,7 @@ import { logger } from '../logger';
 import { addWorkingDays } from '../statuses/workingDays';
 import { sendManualMessage } from '../notifications/service';
 import { GhlService } from '../integrations/ghl-service';
+import { getStatusByCode } from '../statuses/statuses';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -213,6 +214,52 @@ export async function setNextUpdate(caseId: string, workingDays = 3, adminUserId
         data: {
             nextUpdate: addWorkingDays(new Date(), workingDays),
             ...(adminUserId ? { updatedById: adminUserId } : {}),
+        },
+    });
+}
+
+/**
+ * Update case updatedAt to now and calculate/push the nextUpdate date based on the action done.
+ */
+export async function touchCaseAction(
+    caseId: string,
+    action: 'COMMENT' | 'DOCUMENT_UPLOAD' | 'DOCUMENT_DELETE' | 'DOCUMENT_UPDATE' | 'STATUS_CHANGE' | 'TASK_UPDATE' | 'OTHER',
+    options?: {
+        status?: string;
+        customDays?: number;
+        userId?: string;
+    }
+): Promise<void> {
+    const now = new Date();
+    let days = 3; // Default default
+
+    if (action === 'COMMENT') {
+        days = 7; // Comments push by 7 working days
+    } else if (action === 'STATUS_CHANGE' && options?.status) {
+        const statusInfo = getStatusByCode(options.status);
+        if (statusInfo?.slaEnabled && statusInfo.slaDays) {
+            days = statusInfo.slaDays;
+        } else {
+            days = 7; // Fallback default for status change
+        }
+    } else if (action === 'DOCUMENT_UPLOAD' || action === 'DOCUMENT_UPDATE' || action === 'DOCUMENT_DELETE') {
+        days = 3; // Document actions push by 3 working days
+    } else if (action === 'TASK_UPDATE') {
+        days = 3; // Task updates push by 3 working days
+    }
+
+    if (options?.customDays !== undefined) {
+        days = options.customDays;
+    }
+
+    const nextUpdateDate = addWorkingDays(now, days);
+
+    await prisma.case.update({
+        where: { id: caseId },
+        data: {
+            updatedAt: now,
+            nextUpdate: nextUpdateDate,
+            ...(options?.userId ? { updatedById: options.userId } : {}),
         },
     });
 }

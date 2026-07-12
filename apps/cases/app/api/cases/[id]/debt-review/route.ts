@@ -9,8 +9,22 @@ type RouteContext = { params: Promise<{ id: string }> };
 export const DOCUMENT_TYPES = [
     'FORM_16',
     'FORM_17_1',
+    'FORM_17_2A',
     'SECTION_86_NOTICE',
     'DEBT_RESTRUCTURING_PROPOSAL',
+    'AFFORDABILITY_ASSESSMENT',
+    'CONSUMER_INFO_RECORD',
+    // Status C/D3/D4 → G rescission pack (court documents)
+    'NOTICE_OF_MOTION',
+    'FOUNDING_AFFIDAVIT',
+    'NOTICE_OF_SET_DOWN',
+    'NOTICE_OF_MOTION_RESCISSION',
+    'COURT_ORDER_GRANTED',
+    'PROOF_OF_SERVICE',
+    // Status D4 → F1/F2 packs
+    'CERTIFIED_FORM_19',
+    'FORM_17_2C',
+    'SECTION_71_72_STATEMENT',
 ] as const;
 
 // GET /api/cases/[id]/debt-review

@@ -12,6 +12,7 @@
         "@zenowethu/database": "workspace:*",
         "bcryptjs": "^3.0.0",
         "date-fns": "^4.1.0",
+        "imapflow": "^1.4.7",
         "nodemailer": "^7.0.11",
         "openai": "^6.9.1",
         "pdf-lib": "^1.17.1",

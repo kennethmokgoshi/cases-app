@@ -16,18 +16,23 @@ vi.mock('@zenowethu/database', () => ({
             updateMany: vi.fn(),
             findMany:   vi.fn(),
         },
+        document: {
+            findFirst: vi.fn(),
+            create:    vi.fn(),
+            update:    vi.fn(),
+        },
         case: { findUnique: vi.fn() },
     },
 }));
 
-vi.mock('fs/promises', () => ({ readFile: vi.fn() }));
+vi.mock('fs/promises', () => ({ readFile: vi.fn(), stat: vi.fn() }));
 vi.mock('fs',          () => ({ existsSync: vi.fn() }));
 vi.mock('@/lib/email-with-attachments', () => ({ sendEmailWithAttachments: vi.fn() }));
 
 import { auth }                      from '@zenowethu/shared-lib';
 import { prisma }                    from '@zenowethu/database';
 import { existsSync }                from 'fs';
-import { readFile }                  from 'fs/promises';
+import { readFile, stat }            from 'fs/promises';
 import { sendEmailWithAttachments }  from '@/lib/email-with-attachments';
 
 import { PATCH }  from './[docId]/approve/route';
@@ -133,6 +138,55 @@ describe('PATCH /debt-review/[docId]/approve', () => {
 
         const res = await PATCH(makeReq(), ctx('case-1', 'doc-1') as any);
         expect(res.status).toBe(200);
+    });
+
+    it('syncs the approved document into the case vault (new Document row)', async () => {
+        vi.mocked(auth).mockResolvedValue(adminSession as any);
+        vi.mocked(prisma.debtReviewDocument.findFirst).mockResolvedValue(sampleDoc as any);
+        vi.mocked(prisma.debtReviewDocument.update).mockResolvedValue({ ...sampleDoc, status: 'APPROVED' } as any);
+        vi.mocked(prisma.document.findFirst).mockResolvedValue(null);
+        vi.mocked(stat).mockResolvedValue({ size: 12345 } as any);
+
+        const res = await PATCH(makeReq(), ctx('case-1', 'doc-1') as any);
+        expect(res.status).toBe(200);
+        expect(prisma.document.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({
+                caseId:   'case-1',
+                type:     'FORM_16',
+                fileName: 'Form16.pdf',
+                fileUrl:  sampleDoc.fileUrl,
+                fileSize: 12345,
+                mimeType: 'application/pdf',
+            }),
+        });
+    });
+
+    it('updates the existing vault Document row on re-approval of the same type', async () => {
+        vi.mocked(auth).mockResolvedValue(adminSession as any);
+        vi.mocked(prisma.debtReviewDocument.findFirst).mockResolvedValue(sampleDoc as any);
+        vi.mocked(prisma.debtReviewDocument.update).mockResolvedValue({ ...sampleDoc, status: 'APPROVED' } as any);
+        vi.mocked(prisma.document.findFirst).mockResolvedValue({ id: 'vault-1' } as any);
+        vi.mocked(stat).mockResolvedValue({ size: 999 } as any);
+
+        const res = await PATCH(makeReq(), ctx('case-1', 'doc-1') as any);
+        expect(res.status).toBe(200);
+        expect(prisma.document.update).toHaveBeenCalledWith({
+            where: { id: 'vault-1' },
+            data:  expect.objectContaining({ fileUrl: sampleDoc.fileUrl }),
+        });
+        expect(prisma.document.create).not.toHaveBeenCalled();
+    });
+
+    it('still approves when vault sync fails', async () => {
+        vi.mocked(auth).mockResolvedValue(adminSession as any);
+        vi.mocked(prisma.debtReviewDocument.findFirst).mockResolvedValue(sampleDoc as any);
+        vi.mocked(prisma.debtReviewDocument.update).mockResolvedValue({ ...sampleDoc, status: 'APPROVED' } as any);
+        vi.mocked(prisma.document.findFirst).mockRejectedValue(new Error('db down'));
+
+        const res  = await PATCH(makeReq(), ctx('case-1', 'doc-1') as any);
+        const json = await res.json();
+        expect(res.status).toBe(200);
+        expect(json.success).toBe(true);
     });
 });
 

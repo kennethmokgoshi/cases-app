@@ -70,7 +70,11 @@ export async function previewDHSDecline(params: {
 
     const caseData = await prisma.case.findUnique({
         where: { id: caseId },
-        include: { client: true, documents: true },
+        include: {
+            client: true,
+            documents: true,
+            debtCounsellor: true,
+        },
     });
 
     const category = classifyDeclineReason(declineReason);
@@ -104,8 +108,12 @@ export async function previewDHSDecline(params: {
     const dcEmail =
         extractedEmail ||
         caseData.preferredDcEmail ||
+        caseData.debtCounsellor?.preferredEmail ||
         caseData.lastKnownEmail ||
-        caseData.dcEmail;
+        caseData.debtCounsellor?.lastKnownEmail ||
+        caseData.dcEmail ||
+        caseData.debtCounsellor?.email ||
+        null;
     const dcName =
         caseData.debtCounsellorName ||
         caseData.dcTradingName ||

@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger, getSMTPCredentials, scanMailboxForClient } from '@zenowethu/shared-lib';
+import { decryptSecret } from '@zenowethu/shared-lib/src/security/encryption';
 import { z } from 'zod';
+import { usesSmtpPassword } from '@/lib/mailboxes';
+import { getSmtpUsernameIfConfigured } from '@/lib/mailbox-smtp';
+import { join } from 'path';
+import { mkdir, writeFile } from 'fs/promises';
 
 const logger = createLogger('api/cases/[id]/dhs-decline/check-fee-emails');
 
@@ -9,12 +14,79 @@ const BodySchema = z.object({
     lookbackDays: z.coerce.number().int().min(1).max(365).default(90),
     receivedAfter: z.coerce.date().optional(),
     reason: z.string().trim().max(1000).optional(),
+    // 'ALL' (default) searches every mailbox the caller may use; otherwise a MailboxAccount id
+    mailboxId: z.string().trim().min(1).default('ALL'),
 });
 
 const ACTIVITY_TYPE = 'DHS_FEE_EMAIL_SCAN_REQUESTED';
 const DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-function isMailboxIngestionConfigured(): boolean {
+interface SearchableMailbox {
+    id: string;
+    label: string;
+    emailAddress: string;
+    isDcCommunication: boolean;
+    hasPassword: boolean;
+    imapHost: string;
+    imapPort: number;
+    imapSecure: boolean;
+    password: string | null;
+}
+
+interface InvoiceEmailScanSummary {
+    status: 'QUEUED' | 'DUPLICATE' | 'NOT_CONFIGURED' | 'COMPLETED';
+    searchFrom: string;
+    idNumberMatchRequired: boolean;
+    idNumberMatchValue: string;
+    selectedMailboxCount: number;
+    readableMailboxCount: number;
+    skippedMailboxCount: number;
+    emailsScanned: number | null;
+    newEmailsFound: number | null;
+    invoiceCandidatesFound: number | null;
+    uploadedDocuments: number | null;
+    note: string;
+}
+
+interface InvoiceEmailMatchPolicy {
+    requiredIdentifierType: 'CLIENT_ID_NUMBER';
+    requiredIdentifierValue: string;
+    serverSideSearchRequired: true;
+    openOrFetchOnlyAfterIdentifierMatch: true;
+    nonMatchingEmailAction: 'SKIP_WITHOUT_OPENING';
+}
+
+// Mailboxes this user may search: active shared inboxes + their own personal one.
+// A mailbox matching the Email (SMTP) Account login reuses its saved password.
+async function getSearchableMailboxes(userId: string): Promise<SearchableMailbox[]> {
+    const [rows, smtpUsername] = await Promise.all([
+        prisma.mailboxAccount.findMany({
+            where: {
+                isActive: true,
+                OR: [{ ownerUserId: null }, { ownerUserId: userId }],
+            },
+            select: {
+                id: true,
+                label: true,
+                emailAddress: true,
+                isDcCommunication: true,
+                password: true,
+                imapHost: true,
+                imapPort: true,
+                imapSecure: true,
+            },
+            orderBy: { createdAt: 'asc' },
+        }),
+        getSmtpUsernameIfConfigured(),
+    ]);
+    return rows.map(rest => ({
+        ...rest,
+        hasPassword: Boolean(rest.password) || usesSmtpPassword(rest.emailAddress, rest.password, smtpUsername),
+    }));
+}
+
+// Legacy env-based single-inbox configuration still counts as configured
+function isEnvMailboxConfigured(): boolean {
     return Boolean(
         process.env.DC_FEE_INBOX_PROVIDER ||
         process.env.DC_FEE_INBOX_IMAP_HOST ||
@@ -25,6 +97,62 @@ function isMailboxIngestionConfigured(): boolean {
 
 function formatDateOnly(date: Date): string {
     return date.toISOString().slice(0, 10);
+}
+
+function buildPendingScanSummary({
+    status,
+    searchFrom,
+    idNumber,
+    selectedMailboxes,
+    configuredMailboxes,
+    emailsScanned = null,
+    newEmailsFound = null,
+    invoiceCandidatesFound = null,
+    uploadedDocuments = null,
+}: {
+    status: InvoiceEmailScanSummary['status'];
+    searchFrom: Date;
+    idNumber: string;
+    selectedMailboxes: SearchableMailbox[];
+    configuredMailboxes: SearchableMailbox[];
+    emailsScanned?: number | null;
+    newEmailsFound?: number | null;
+    invoiceCandidatesFound?: number | null;
+    uploadedDocuments?: number | null;
+}): InvoiceEmailScanSummary {
+    const skippedMailboxCount = selectedMailboxes.length - configuredMailboxes.length;
+    const note = status === 'DUPLICATE'
+        ? 'A matching scan request already exists for this case and mailbox selection in the last 24 hours.'
+        : status === 'NOT_CONFIGURED'
+            ? 'No selected mailbox has saved credentials yet, so no emails can be read.'
+            : status === 'COMPLETED'
+                ? 'Scan completed. Found documents have been attached to the case.'
+                : 'Mailbox credentials are saved. Email scanned/found/uploaded counts will appear after the inbox worker processes this request.';
+
+    return {
+        status,
+        searchFrom: searchFrom.toISOString(),
+        idNumberMatchRequired: true,
+        idNumberMatchValue: idNumber,
+        selectedMailboxCount: selectedMailboxes.length,
+        readableMailboxCount: configuredMailboxes.length,
+        skippedMailboxCount,
+        emailsScanned,
+        newEmailsFound,
+        invoiceCandidatesFound,
+        uploadedDocuments,
+        note,
+    };
+}
+
+function buildMatchPolicy(idNumber: string): InvoiceEmailMatchPolicy {
+    return {
+        requiredIdentifierType: 'CLIENT_ID_NUMBER',
+        requiredIdentifierValue: idNumber,
+        serverSideSearchRequired: true,
+        openOrFetchOnlyAfterIdentifierMatch: true,
+        nonMatchingEmailAction: 'SKIP_WITHOUT_OPENING',
+    };
 }
 
 export async function POST(
@@ -79,96 +207,371 @@ export async function POST(
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
+        const { lookbackDays, receivedAfter, reason, mailboxId } = parsed.data;
+        const idNumber = caseData.client.idNumber?.trim();
+        if (!idNumber) {
+            return NextResponse.json(
+                { error: 'Cannot check invoice emails until the client ID number is saved on the case.' },
+                { status: 422 }
+            );
+        }
+
+        const searchable = await getSearchableMailboxes(session.user.id);
+        let selectedMailboxes: SearchableMailbox[];
+        if (mailboxId === 'ALL') {
+            selectedMailboxes = searchable;
+        } else {
+            const match = searchable.find(m => m.id === mailboxId);
+            if (!match) {
+                return NextResponse.json(
+                    { error: 'Mailbox not found, inactive, or not available to you' },
+                    { status: 404 }
+                );
+            }
+            selectedMailboxes = [match];
+        }
+
+        const searchFrom = receivedAfter ?? new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+        const configuredMailboxes = selectedMailboxes.filter(m => m.hasPassword);
+        const inboxConfigured = configuredMailboxes.length > 0 || isEnvMailboxConfigured();
+        const matchPolicy = buildMatchPolicy(idNumber);
+
+        // Duplicate guard is per mailbox scope, so checking a second mailbox on
+        // the same day is allowed. Old requests without the strict ID-number
+        // match policy are deliberately superseded by a new safe request.
+        const scopeKey = mailboxId;
         const duplicateSince = new Date(Date.now() - DUPLICATE_WINDOW_MS);
-        const existingRequest = await prisma.caseComment.findFirst({
+        const recentRequests = await prisma.caseComment.findMany({
             where: {
                 caseId,
                 activityType: ACTIVITY_TYPE,
                 createdAt: { gte: duplicateSince },
             },
             orderBy: { createdAt: 'desc' },
-            select: { id: true, createdAt: true },
+            select: { id: true, createdAt: true, activityData: true },
+        });
+        const existingRequest = recentRequests.find(r => {
+            try {
+                const data = JSON.parse(r.activityData ?? '{}');
+                const hasStrictMatchPolicy =
+                    data.matchPolicy?.requiredIdentifierType === matchPolicy.requiredIdentifierType &&
+                    data.matchPolicy?.requiredIdentifierValue === matchPolicy.requiredIdentifierValue &&
+                    data.matchPolicy?.serverSideSearchRequired === true &&
+                    data.matchPolicy?.openOrFetchOnlyAfterIdentifierMatch === true &&
+                    data.matchPolicy?.nonMatchingEmailAction === matchPolicy.nonMatchingEmailAction;
+                return (data.mailboxScope ?? 'ALL') === scopeKey && hasStrictMatchPolicy;
+            } catch {
+                return false;
+            }
         });
 
+        const encoder = new TextEncoder();
+
         if (existingRequest) {
-            return NextResponse.json({
-                success: true,
-                duplicate: true,
-                scanQueued: false,
-                inboxConfigured: isMailboxIngestionConfigured(),
-                activityId: existingRequest.id,
-                message: 'A fee-invoice email check was already requested for this case in the last 24 hours.',
+            let scanSummaryVal = buildPendingScanSummary({
+                status: 'DUPLICATE',
+                searchFrom,
+                idNumber,
+                selectedMailboxes,
+                configuredMailboxes,
+            });
+            try {
+                const existingData = JSON.parse(existingRequest.activityData ?? '{}');
+                if (existingData.scanSummary) {
+                    scanSummaryVal = {
+                        ...scanSummaryVal,
+                        ...existingData.scanSummary,
+                        status: 'DUPLICATE',
+                    };
+                }
+            } catch {
+                // Ignore
+            }
+            const stream = new ReadableStream({
+                start(controller) {
+                    controller.enqueue(encoder.encode(JSON.stringify({
+                        type: 'complete',
+                        data: {
+                            success: true,
+                            duplicate: true,
+                            scanQueued: false,
+                            inboxConfigured,
+                            activityId: existingRequest.id,
+                            mailboxes: selectedMailboxes.map(m => ({
+                                id: m.id,
+                                emailAddress: m.emailAddress,
+                                isDcCommunication: m.isDcCommunication,
+                                configured: m.hasPassword,
+                            })),
+                            scanSummary: scanSummaryVal,
+                            message: 'A fee-invoice email check was already requested for this case and mailbox selection in the last 24 hours.',
+                        }
+                    }) + '\n'));
+                    controller.close();
+                }
+            });
+            return new Response(stream, {
+                headers: {
+                    'Content-Type': 'application/x-ndjson',
+                    'Cache-Control': 'no-cache, no-transform',
+                }
             });
         }
 
-        const { lookbackDays, receivedAfter, reason } = parsed.data;
-        const searchFrom = receivedAfter ?? new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
         const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`.trim();
-        const inboxConfigured = isMailboxIngestionConfigured();
-        const activityData = {
-            action: 'CHECK_DC_FEE_INVOICE_EMAILS',
-            caseId,
-            fileNumber: caseData.fileNumber,
-            clientName,
-            idNumber: caseData.client.idNumber,
-            lookbackDays,
-            receivedAfter: searchFrom.toISOString(),
-            mailboxConfigured: inboxConfigured,
-        };
 
-        const content = [
-            `Fee-invoice email check requested for ${clientName} (${caseData.client.idNumber}).`,
-            `Search from: ${formatDateOnly(searchFrom)}.`,
-            inboxConfigured
-                ? 'Mailbox ingestion is configured; the inbox worker can match DC invoice replies and proof-of-payment replies to this case.'
-                : 'Mailbox ingestion is not configured yet; connect IMAP, Gmail, or Microsoft Graph before this can read the inbox automatically.',
-            reason ? `Decline reason: ${reason}` : null,
-        ].filter((line): line is string => Boolean(line)).join('\n');
+        const stream = new ReadableStream({
+            async start(controller) {
+                const send = (data: any) => {
+                    controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
+                };
 
-        const [comment] = await Promise.all([
-            prisma.caseComment.create({
-                data: {
-                    caseId,
-                    userId: session.user.id,
-                    content,
-                    type: 'NOTE',
-                    isInternal: true,
-                    activityType: ACTIVITY_TYPE,
-                    activityData: JSON.stringify(activityData),
-                },
-                select: { id: true },
-            }),
-            prisma.workflowLog.create({
-                data: {
-                    caseId,
-                    fromStatus: caseData.status,
-                    toStatus: caseData.status,
-                    action: ACTIVITY_TYPE,
-                    userId: session.user.id,
-                    notes: content,
-                },
-            }),
-        ]);
+                try {
+                    let emailsScanned = 0;
+                    let newEmailsFound = 0;
+                    let invoiceCandidatesFound = 0;
+                    const savedDocuments: string[] = [];
+                    const mailboxErrors: string[] = [];
 
-        logger.info('[DHS fee email check] Requested', {
-            caseId,
-            fileNumber: caseData.fileNumber,
-            userId: session.user.id,
-            inboxConfigured,
+                    if (inboxConfigured && configuredMailboxes.length > 0) {
+                        const systemUser = await prisma.user.findFirst({
+                            where: {
+                                OR: [
+                                    { id: session.user.id },
+                                    { role: 'ADMIN' },
+                                ],
+                            },
+                        });
+                        const uploadDir = join(process.cwd(), 'storage', 'uploads', caseId);
+                        const totalMbx = configuredMailboxes.length;
+
+                        for (let i = 0; i < totalMbx; i++) {
+                            const mailbox = configuredMailboxes[i];
+                            const baseProgress = Math.round((i / totalMbx) * 100);
+                            send({
+                                type: 'progress',
+                                progress: baseProgress,
+                                emailsScanned,
+                                newEmailsFound,
+                            });
+
+                            let password: string | null = null;
+                            if (mailbox.password) {
+                                password = decryptSecret(mailbox.password);
+                            } else {
+                                try {
+                                    const smtp = await getSMTPCredentials();
+                                    if (usesSmtpPassword(mailbox.emailAddress, mailbox.password, smtp.password ? smtp.username : null)) {
+                                        password = smtp.password;
+                                    }
+                                } catch {
+                                    // ignore
+                                }
+                            }
+
+                            if (!password) {
+                                mailboxErrors.push(`${mailbox.emailAddress}: No password saved`);
+                                continue;
+                            }
+
+                            try {
+                                const scanResult = await scanMailboxForClient({
+                                    config: {
+                                        host: mailbox.imapHost,
+                                        port: mailbox.imapPort,
+                                        secure: mailbox.imapSecure,
+                                        username: mailbox.emailAddress,
+                                        password,
+                                    },
+                                    idNumber,
+                                    since: searchFrom,
+                                    onProgress: (p) => {
+                                        const mbxProgress = p.total ? (p.processed / p.total) : 0.5;
+                                        const totalProgress = Math.round(((i + mbxProgress) / totalMbx) * 100);
+                                        send({
+                                            type: 'progress',
+                                            progress: Math.min(totalProgress, 99),
+                                            emailsScanned: emailsScanned + p.processed,
+                                            newEmailsFound: newEmailsFound + p.newEmailsFound,
+                                        });
+                                    }
+                                });
+
+                                emailsScanned += scanResult.emailsScanned;
+                                newEmailsFound += scanResult.newEmailsFound;
+                                invoiceCandidatesFound += scanResult.invoiceCandidatesFound;
+
+                                if (scanResult.attachments.length > 0) {
+                                    await mkdir(uploadDir, { recursive: true });
+                                    for (const att of scanResult.attachments) {
+                                        const safeName = att.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+                                        const uniqueFileName = `${Date.now()}-${safeName}`;
+                                        await writeFile(join(uploadDir, uniqueFileName), att.buffer);
+
+                                        const fileUrl = `/uploads/${caseId}/${uniqueFileName}`;
+                                        const docType = att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT';
+
+                                        await prisma.document.create({
+                                            data: {
+                                                caseId,
+                                                type: docType,
+                                                fileName: att.fileName,
+                                                fileUrl,
+                                                fileSize: att.buffer.length,
+                                                mimeType: att.mimeType,
+                                                uploadedById: systemUser?.id || session.user.id,
+                                            },
+                                        });
+                                        savedDocuments.push(fileUrl);
+                                    }
+                                }
+                            } catch (err: any) {
+                                logger.error(`Error scanning mailbox ${mailbox.emailAddress}:`, err);
+                                mailboxErrors.push(`${mailbox.emailAddress}: ${err.message || String(err)}`);
+                            }
+                        }
+                    }
+
+                    const scanStatus = inboxConfigured
+                        ? (mailboxErrors.length === configuredMailboxes.length && configuredMailboxes.length > 0 ? 'NOT_CONFIGURED' : 'COMPLETED')
+                        : 'NOT_CONFIGURED';
+
+                    const scanSummary = buildPendingScanSummary({
+                        status: scanStatus,
+                        searchFrom,
+                        idNumber,
+                        selectedMailboxes,
+                        configuredMailboxes,
+                        emailsScanned: inboxConfigured ? emailsScanned : null,
+                        newEmailsFound: inboxConfigured ? newEmailsFound : null,
+                        invoiceCandidatesFound: inboxConfigured ? invoiceCandidatesFound : null,
+                        uploadedDocuments: inboxConfigured ? savedDocuments.length : null,
+                    });
+
+                    if (mailboxErrors.length > 0) {
+                        scanSummary.note += ` Mailbox errors: ${mailboxErrors.join('; ')}`;
+                    }
+
+                    const activityData = {
+                        action: 'CHECK_DC_FEE_INVOICE_EMAILS',
+                        caseId,
+                        fileNumber: caseData.fileNumber,
+                        clientName,
+                        idNumber,
+                        matchPolicy,
+                        lookbackDays,
+                        receivedAfter: searchFrom.toISOString(),
+                        mailboxScope: scopeKey,
+                        mailboxes: selectedMailboxes.map(m => ({
+                            id: m.id,
+                            emailAddress: m.emailAddress,
+                            isDcCommunication: m.isDcCommunication,
+                            configured: m.hasPassword,
+                        })),
+                        mailboxConfigured: inboxConfigured,
+                        scanSummary,
+                    };
+
+                    const mailboxSummary = selectedMailboxes.length > 0
+                        ? selectedMailboxes
+                            .map(m => `${m.emailAddress}${m.isDcCommunication ? ' (DC comms)' : ''}${m.hasPassword ? '' : ' — no password saved'}`)
+                            .join(', ')
+                        : 'none registered';
+
+                    const emailCountsLine = scanStatus === 'COMPLETED'
+                        ? `Email counts: ${emailsScanned} scanned, ${newEmailsFound} new, ${invoiceCandidatesFound} invoice/PoP candidates, ${savedDocuments.length} documents uploaded.`
+                        : 'Email counts: pending inbox worker (emails scanned/found/uploaded not available yet).';
+
+                    const configLine = scanStatus === 'COMPLETED'
+                        ? `Scan completed successfully. Saved documents: ${savedDocuments.length} file(s) attached.`
+                        : inboxConfigured
+                            ? 'Mailbox credentials are saved; the inbox worker can match DC invoice replies and proof-of-payment replies to this case.'
+                            : 'No mailbox has a saved password yet; ask Admin to set mailbox passwords in Admin → Settings before the app can read the inbox automatically.';
+
+                    const content = [
+                        `Fee-invoice email check requested for ${clientName} (${caseData.client.idNumber}).`,
+                        `Search from: ${formatDateOnly(searchFrom)}.`,
+                        `Strict match rule: only emails containing client ID number ${idNumber} may be opened/read; non-matching emails must be skipped unopened.`,
+                        `Mailboxes: ${mailboxId === 'ALL' ? `all (${mailboxSummary})` : mailboxSummary}.`,
+                        `Mailbox summary: ${selectedMailboxes.length} selected, ${configuredMailboxes.length} readable, ${selectedMailboxes.length - configuredMailboxes.length} skipped.`,
+                        emailCountsLine,
+                        configLine,
+                        mailboxErrors.length > 0 ? `Errors: ${mailboxErrors.join('; ')}` : null,
+                        reason ? `Decline reason: ${reason}` : null,
+                    ].filter((line): line is string => Boolean(line)).join('\n');
+
+                    const [comment] = await Promise.all([
+                        prisma.caseComment.create({
+                            data: {
+                                caseId,
+                                userId: session.user.id,
+                                content,
+                                type: 'NOTE',
+                                isInternal: true,
+                                activityType: ACTIVITY_TYPE,
+                                activityData: JSON.stringify(activityData),
+                            },
+                            select: { id: true },
+                        }),
+                        prisma.workflowLog.create({
+                            data: {
+                                caseId,
+                                fromStatus: caseData.status,
+                                toStatus: caseData.status,
+                                action: ACTIVITY_TYPE,
+                                userId: session.user.id,
+                                notes: content,
+                            },
+                        }),
+                    ]);
+
+                    logger.info('[DHS fee email check] Completed synchronously', {
+                        caseId,
+                        fileNumber: caseData.fileNumber,
+                        userId: session.user.id,
+                        mailboxScope: scopeKey,
+                        mailboxCount: selectedMailboxes.length,
+                        inboxConfigured,
+                        scanStatus,
+                        emailsScanned,
+                        savedDocuments: savedDocuments.length,
+                    });
+
+                    send({
+                        type: 'complete',
+                        data: {
+                            success: true,
+                            duplicate: false,
+                            scanQueued: false,
+                            inboxConfigured,
+                            activityId: comment.id,
+                            mailboxes: activityData.mailboxes,
+                            matchPolicy,
+                            scanSummary,
+                            message: scanStatus === 'COMPLETED'
+                                ? `Fee-invoice email check completed. Scanned ${emailsScanned} email(s), found ${invoiceCandidatesFound} invoice/PoP candidate(s), uploaded ${savedDocuments.length} document(s).`
+                                : 'Fee-invoice email check logged. Save mailbox passwords in Admin → Settings before the app can read emails automatically.',
+                        }
+                    });
+                    controller.close();
+                } catch (err: any) {
+                    logger.error('Error during fee-invoice email check stream:', err);
+                    send({ type: 'error', error: err.message || String(err) });
+                    controller.close();
+                }
+            }
         });
 
-        return NextResponse.json({
-            success: true,
-            duplicate: false,
-            scanQueued: inboxConfigured,
-            inboxConfigured,
-            activityId: comment.id,
-            message: inboxConfigured
-                ? 'Fee-invoice email check requested. Matching emails will be uploaded to this case by the inbox worker.'
-                : 'Fee-invoice email check logged. Configure a mailbox connector before the app can read emails automatically.',
-        }, { status: 202 });
+        return new Response(stream, {
+            headers: {
+                'Content-Type': 'application/x-ndjson',
+                'Cache-Control': 'no-cache, no-transform',
+                'Connection': 'keep-alive',
+            }
+        });
     } catch (error) {
         logger.error('Error requesting fee-invoice email check:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+

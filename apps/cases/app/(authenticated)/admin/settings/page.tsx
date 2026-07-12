@@ -6,6 +6,7 @@ import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import MailboxSettings from '@/components/MailboxSettings';
 
 // Client-side logger
 const logger = {
@@ -1827,6 +1828,31 @@ export default function SettingsPage() {
                                 Reset
                             </button>
                         </div>
+                    </section>
+                )}
+
+                {/* Invoice Search Mailboxes — Admin & Executive only */}
+                {(session?.user?.isAdmin || (session?.user as any)?.isExecutive) && (
+                    <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-white text-2xl">
+                                📥
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-bold text-white">Invoice Search Mailboxes</h2>
+                                    <span className="px-2 py-0.5 text-xs font-semibold bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 rounded-full">
+                                        Admin &amp; Executive only
+                                    </span>
+                                </div>
+                                <p className="text-gray-400 text-sm mt-0.5">
+                                    Inboxes the app can search for DC fee invoices and proof-of-payment replies (the
+                                    &ldquo;Check invoice emails&rdquo; action on declined transfers). Admin sets the passwords for
+                                    shared mailboxes here; each staff member manages their own mailbox from Account Settings.
+                                </p>
+                            </div>
+                        </div>
+                        <MailboxSettings mode="admin" />
                     </section>
                 )}
 

@@ -53,3 +53,8 @@ FromGIt/
 
 # Codex local scratch
 .codex/
+
+# Local settings and temp logs
+.claude/
+tmp/
+

@@ -514,6 +514,7 @@ model User {
   dccpCredential             DCCPCredential?
   staffBankingDetail         StaffBankingDetail?
   approvedDebtReviewDocs     DebtReviewDocument[]           @relation("DebtReviewDocumentApprover")
+  uploadedServiceConsents    CreditProviderServiceConsentDocument[] @relation("CreditProviderServiceConsentUploader")
   uploadedDocuments          Document[]
   grantedDocumentAccess      DocumentAccessGrant[]          @relation("DocumentAccessGranter")
   documentAccessGrants       DocumentAccessGrant[]          @relation("DocumentAccessGrantee")
@@ -544,6 +545,7 @@ model User {
   caseAppNextUpdates         CaseAppNextUpdate[]            @relation("CaseAppNextUpdateUpdater")
   paymentArrangementsCreated PaymentArrangement[]           @relation("ArrangementCreator")
   instalmentsHonoured        PaymentArrangementInstalment[] @relation("InstalmentHonouredBy")
+  personalMailbox            MailboxAccount?                @relation("MailboxOwner")
 }
 
 // Debit order mandate lifecycle — capture, send, sign-back, NuPay registration
@@ -1226,22 +1228,49 @@ model ServiceRequest {
 }
 
 model CreditProvider {
-  id             String          @id @default(cuid())
-  name           String          @unique
-  type           String
-  email          String?
-  phone          String?
-  address        String?
-  attorney       String?
-  attorneyEmail  String?
-  attorneyPhone  String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  creditAccounts CreditAccount[]
+  id                      String                                 @id @default(cuid())
+  name                    String                                 @unique
+  type                    String
+  email                   String?
+  phone                   String?
+  address                 String?
+  attorney                String?
+  attorneyEmail           String?
+  attorneyPhone           String?
+  isActive                Boolean                                @default(true)
+  createdAt               DateTime                               @default(now())
+  updatedAt               DateTime                               @updatedAt
+  creditAccounts          CreditAccount[]
+  serviceConsentDocuments CreditProviderServiceConsentDocument[]
 
   @@index([name])
   @@index([isActive])
+}
+
+model CreditProviderServiceConsentDocument {
+  id               String         @id @default(cuid())
+  creditProviderId String
+  title            String
+  fileName         String
+  fileUrl          String
+  fileSize         Int
+  mimeType         String
+  consentScope     String         @default("EMAIL_SERVICE")
+  receivedFrom     String?
+  effectiveDate    DateTime?
+  expiresAt        DateTime?
+  notes            String?
+  isActive         Boolean        @default(true)
+  uploadedById     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  creditProvider   CreditProvider @relation(fields: [creditProviderId], references: [id], onDelete: Cascade)
+  uploadedBy       User?          @relation("CreditProviderServiceConsentUploader", fields: [uploadedById], references: [id])
+
+  @@index([creditProviderId])
+  @@index([isActive])
+  @@index([expiresAt])
+  @@index([uploadedById])
 }
 
 model DebtReviewDocument {
@@ -1742,6 +1771,33 @@ model DCCPFuneralDependant {
   policy       DCCPPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
   @@index([policyId])
+}
+
+// Email inboxes the app can search for DC fee invoices and proof-of-payment
+// replies. Shared org mailboxes (ownerUserId = null) are password-managed by
+// Admin only; a personal mailbox belongs to one staff user who manages their
+// own password (Admin cannot set it). Passwords are AES-256-GCM encrypted via
+// @zenowethu/shared-lib encryptSecret before storage.
+model MailboxAccount {
+  id                String    @id @default(cuid())
+  label             String
+  emailAddress      String    @unique
+  imapHost          String
+  imapPort          Int       @default(993)
+  imapSecure        Boolean   @default(true)
+  // Encrypted IMAP password; null until set — mailbox is not searchable without it
+  password          String?
+  // Marks the mailbox used to communicate with other debt counsellors
+  isDcCommunication Boolean   @default(false)
+  isActive          Boolean   @default(true)
+  ownerUserId       String?   @unique
+  owner             User?     @relation("MailboxOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  notes             String?
+  lastCheckedAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([isActive])
 }
 
 model DCCPCredential {

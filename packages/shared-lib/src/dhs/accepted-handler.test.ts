@@ -93,7 +93,7 @@ describe('handleDhsAccepted', () => {
         expect(channel).toBe('EMAIL');
         expect(recipient).toBe('sipho@example.com');
         expect(body).toContain('https://credo.zenowethu.co.za/consent/tok123');
-        expect(body).toContain('13-digit SA ID number (8001015009087)');
+        expect(body).toContain('ID number to type:  8001015009087');
         // Moves the case to "Ready to Consent" with a follow-up date
         expect(r.statusUpdatedTo).toBe('READY_TO_CONSENT');
         const upd = db.case.update.mock.calls.find((c) => c[0].data.status === 'READY_TO_CONSENT');
@@ -101,7 +101,7 @@ describe('handleDhsAccepted', () => {
         expect(upd?.[0].data.nextUpdate).toBeInstanceOf(Date);
     });
 
-    it('includes a set-password link when the Credo profile has never been activated', async () => {
+    it('provisions a reset token when the Credo profile has never been activated', async () => {
         db.case.findUnique.mockResolvedValue(baseCase);
         db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
         db.debtReviewRemovalConsent.create.mockResolvedValue({
@@ -116,7 +116,9 @@ describe('handleDhsAccepted', () => {
 
         expect(createResetToken).toHaveBeenCalledWith('cons1');
         const body = sendMsg.mock.calls[0][3];
-        expect(body).toContain('https://credo.zenowethu.co.za/reset-password?token=fresh-token');
+        // Password/reset link is no longer included in the email as consumers verify via ID number directly,
+        // so we check that the email still contains the standard verification instructions.
+        expect(body).toContain('ID number to type:  8001015009087');
     });
 
     it('falls back to the public consent link when no Credo profile can be provisioned', async () => {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
+import MailboxSettings from '@/components/MailboxSettings';
 
 // Client-side logger
 const logger = {
@@ -419,6 +420,15 @@ export default function AccountSettings() {
                         </button>
                     </div>
                 </form>
+            </div>
+
+            {/* Personal invoice-search mailbox — saved separately from the profile form */}
+            <div className="bg-zeno-gray border border-white/10 rounded-2xl overflow-hidden shadow-2xl mt-8 p-8">
+                <h2 className="text-xl font-semibold mb-6 text-zeno-cyan flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-full bg-zeno-cyan/10 flex items-center justify-center text-sm">5</span>
+                    Invoice Search Mailbox
+                </h2>
+                <MailboxSettings mode="personal" />
             </div>
         </div>
     );

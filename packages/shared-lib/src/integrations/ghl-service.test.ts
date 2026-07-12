@@ -76,6 +76,7 @@ vi.mock('../notifications/providers', () => ({
 
 vi.mock('../logger', () => ({
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    createLogger: vi.fn().mockReturnValue({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }));
 
 import { GhlService } from './ghl-service';

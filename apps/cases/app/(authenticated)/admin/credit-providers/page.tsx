@@ -21,6 +21,22 @@ type CreditProvider = {
   updatedAt: string
 }
 
+type ServiceConsentDocument = {
+  id: string
+  title: string
+  fileName: string
+  fileUrl: string
+  fileSize: number
+  mimeType: string
+  receivedFrom: string | null
+  effectiveDate: string | null
+  expiresAt: string | null
+  notes: string | null
+  isActive: boolean
+  createdAt: string
+  uploadedBy: { firstName: string; lastName: string; email: string } | null
+}
+
 type Meta = { total: number; active: number; inactive: number }
 
 const PROVIDER_TYPES = ['BANK', 'MICRO_LENDER', 'TELECOM', 'RETAILER', 'OTHER'] as const
@@ -41,6 +57,12 @@ const TYPE_COLORS: Record<ProviderType, string> = {
   RETAILER: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   OTHER: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
 }
+
+const fmtDate = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleDateString('en-ZA') : '—'
+
+const fmtBytes = (bytes: number) =>
+  `${Math.max(1, Math.round(bytes / 1024)).toLocaleString('en-ZA')} KB`
 
 function ProviderModal({
   initial,
@@ -247,6 +269,267 @@ function ProviderModal({
   )
 }
 
+function ServiceConsentModal({
+  provider,
+  canMutate,
+  onClose,
+}: {
+  provider: CreditProvider
+  canMutate: boolean
+  onClose: () => void
+}) {
+  const [documents, setDocuments] = useState<ServiceConsentDocument[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({
+    title: '',
+    receivedFrom: '',
+    effectiveDate: '',
+    expiresAt: '',
+    notes: '',
+  })
+  const [file, setFile] = useState<File | null>(null)
+
+  const fetchDocuments = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/admin/credit-providers/${provider.id}/service-consents`)
+      if (!res.ok) throw new Error('Failed to load service consent documents')
+      const data = await res.json()
+      setDocuments(data.documents ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load service consent documents')
+    } finally {
+      setLoading(false)
+    }
+  }, [provider.id])
+
+  useEffect(() => { fetchDocuments() }, [fetchDocuments])
+
+  async function uploadDocument(e: React.FormEvent) {
+    e.preventDefault()
+    if (!file) {
+      setError('Choose the consent-service document first')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const body = new FormData()
+      body.set('file', file)
+      if (form.title) body.set('title', form.title)
+      if (form.receivedFrom) body.set('receivedFrom', form.receivedFrom)
+      if (form.effectiveDate) body.set('effectiveDate', form.effectiveDate)
+      if (form.expiresAt) body.set('expiresAt', form.expiresAt)
+      if (form.notes) body.set('notes', form.notes)
+
+      const res = await fetch(`/api/admin/credit-providers/${provider.id}/service-consents`, {
+        method: 'POST',
+        body,
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error ?? 'Upload failed')
+      }
+      setForm({ title: '', receivedFrom: '', effectiveDate: '', expiresAt: '', notes: '' })
+      setFile(null)
+      await fetchDocuments()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function setDocumentActive(doc: ServiceConsentDocument, isActive: boolean) {
+    setError('')
+    const res = await fetch(`/api/admin/credit-providers/${provider.id}/service-consents/${doc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive }),
+    })
+    if (res.ok) {
+      await fetchDocuments()
+    } else {
+      const data = await res.json()
+      setError(data.error ?? 'Update failed')
+    }
+  }
+
+  async function deleteDocument(doc: ServiceConsentDocument) {
+    if (!await confirm(`Delete "${doc.title}" from ${provider.name}?`)) return
+    setError('')
+    const res = await fetch(`/api/admin/credit-providers/${provider.id}/service-consents/${doc.id}`, {
+      method: 'DELETE',
+    })
+    if (res.ok) {
+      await fetchDocuments()
+    } else {
+      const data = await res.json()
+      setError(data.error ?? 'Delete failed')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-[var(--color-bg-secondary)] border border-white/10 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-[var(--color-bg-secondary)] z-10">
+          <div>
+            <h2 className="text-white font-semibold text-lg">Service consent documents</h2>
+            <p className="text-xs text-gray-500 mt-1">{provider.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {canMutate && (
+            <form onSubmit={uploadDocument} className="rounded-xl border border-white/10 bg-black/15 p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Document title</label>
+                  <input
+                    value={form.title}
+                    onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Consent to be served by email"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Received from</label>
+                  <input
+                    value={form.receivedFrom}
+                    onChange={(e) => setForm(prev => ({ ...prev, receivedFrom: e.target.value }))}
+                    placeholder="Provider legal department"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Effective date</label>
+                  <input
+                    type="date"
+                    value={form.effectiveDate}
+                    onChange={(e) => setForm(prev => ({ ...prev, effectiveDate: e.target.value }))}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Expiry date</label>
+                  <input
+                    type="date"
+                    value={form.expiresAt}
+                    onChange={(e) => setForm(prev => ({ ...prev, expiresAt: e.target.value }))}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs text-gray-500 mb-1 block">File</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-sm text-gray-300 file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-cyan-400"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs text-gray-500 mb-1 block">Notes</label>
+                  <textarea
+                    value={form.notes}
+                    onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
+                    rows={2}
+                    placeholder="Reusable for all consumers linked to this provider"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none resize-none"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                {saving ? 'Uploading...' : 'Upload consent document'}
+              </button>
+            </form>
+          )}
+
+          {error && <p className="text-red-400 text-sm">{error}</p>}
+
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500" />
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="text-center py-10 border border-dashed border-white/10 rounded-xl">
+              <p className="text-gray-400 text-sm">No service consent documents saved for this provider.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-white/10">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="bg-black/20 text-gray-500 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Document</th>
+                    <th className="px-4 py-3 text-left">Received</th>
+                    <th className="px-4 py-3 text-left">Dates</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    {canMutate && <th className="px-4 py-3 text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {documents.map(doc => (
+                    <tr key={doc.id}>
+                      <td className="px-4 py-3">
+                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 font-medium">
+                          {doc.title}
+                        </a>
+                        <p className="text-xs text-gray-500 mt-0.5">{doc.fileName} · {fmtBytes(doc.fileSize)}</p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-300">
+                        {doc.receivedFrom ?? '—'}
+                        {doc.uploadedBy && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Uploaded by {doc.uploadedBy.firstName} {doc.uploadedBy.lastName}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-400">
+                        <p>Effective: {fmtDate(doc.effectiveDate)}</p>
+                        <p>Expires: {fmtDate(doc.expiresAt)}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${doc.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                          {doc.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      {canMutate && (
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => setDocumentActive(doc, !doc.isActive)}
+                              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-xs transition-colors"
+                            >
+                              {doc.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => deleteDocument(doc)}
+                              className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CreditProvidersContent() {
   const { data: session } = useSession()
   const [providers, setProviders] = useState<CreditProvider[]>([])
@@ -259,6 +542,7 @@ function CreditProvidersContent() {
   const [typeFilter, setTypeFilter] = useState('')
   const [activeFilter, setActiveFilter] = useState('')
   const [modal, setModal]         = useState<Partial<CreditProvider> | null | false>(false)
+  const [serviceConsentProvider, setServiceConsentProvider] = useState<CreditProvider | null>(null)
   const [deleting, setDeleting]   = useState<string | null>(null)
 
   const canMutate = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager
@@ -475,6 +759,12 @@ function CreditProvidersContent() {
                           >
                             Edit
                           </button>
+                          <button
+                            onClick={() => setServiceConsentProvider(p)}
+                            className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 rounded-lg text-xs transition-colors"
+                          >
+                            Service docs
+                          </button>
                           {canDelete && (
                             <button
                               onClick={() => deleteProvider(p)}
@@ -527,6 +817,13 @@ function CreditProvidersContent() {
           initial={modal}
           onClose={() => setModal(false)}
           onSave={() => fetchProviders(page)}
+        />
+      )}
+      {serviceConsentProvider && (
+        <ServiceConsentModal
+          provider={serviceConsentProvider}
+          canMutate={Boolean(canMutate)}
+          onClose={() => setServiceConsentProvider(null)}
         />
       )}
     </div>

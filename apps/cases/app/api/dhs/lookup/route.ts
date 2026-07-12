@@ -528,7 +528,7 @@ export async function POST(request: Request) {
                 await prisma.case.update({
                     where: { id: caseId },
                     data: {
-                        ncrdcNo: dc?.ncrRegistrationNo || null,
+                        ncrdcNo: dc?.ncrRegistrationNo || consumer.debtCounsellor || null,
                         debtCounsellorName: dc?.fullName || consumer.debtCounsellor,
                         dcTradingName: dc?.tradingName || null,
                         dcMobile: dc?.mobile || null,

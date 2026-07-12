@@ -32,6 +32,8 @@ import SendMandateModal from './SendMandateModal';
 import DcFeeInvoiceModal from './DcFeeInvoiceModal';
 import { ConsumerPortalPanel } from '@/app/components/ConsumerPortalPanel';
 import { getCaseHeaderClientAction } from '@/lib/case-header-client-action';
+import CheckInvoiceEmailsButton from '@/components/CheckInvoiceEmailsButton';
+import { isInvoiceRequestedFromDcStatus } from '@/lib/mailboxes';
 import { canShowDhsManageConsumers } from '@/lib/dhs-manage-consumers-eligibility';
 
 
@@ -500,15 +502,6 @@ export default function CaseDetailPage() {
         actionsPerformed?: string[];
         errors?: string[];
         statusUpdatedTo?: string | null;
-    } | null>(null);
-    const [isCheckingDeclineFeeEmails, setIsCheckingDeclineFeeEmails] = useState(false);
-    const [declineFeeEmailResult, setDeclineFeeEmailResult] = useState<{
-        success: boolean;
-        duplicate?: boolean;
-        scanQueued?: boolean;
-        inboxConfigured?: boolean;
-        message?: string;
-        error?: string;
     } | null>(null);
     const [isAssistClientConsentOpen, setIsAssistClientConsentOpen] = useState(false);
 
@@ -3214,6 +3207,19 @@ export default function CaseDetailPage() {
                                     <p className="text-white font-semibold text-lg">{currentStatus?.name || caseData.status}</p>
                                     <p className="text-xs text-gray-400 mt-1">{currentStatus?.description}</p>
                                     {/* Deadline removed as requested */}
+                                    {isInvoiceRequestedFromDcStatus(caseData.status) && (
+                                        <div className="mt-3 pt-3 border-t border-white/10">
+                                            <p className="text-xs text-gray-400 mb-2">
+                                                Waiting on the DC&apos;s invoice — search the mailboxes for their reply so it can be uploaded to this case.
+                                            </p>
+                                            <CheckInvoiceEmailsButton
+                                                caseId={caseData.id}
+                                                reason={caseData.declineReason || null}
+                                                onRequested={() => setActivityUpdate(prev => prev + 1)}
+                                                menuAlign="left"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -4341,35 +4347,6 @@ export default function CaseDetailPage() {
                                         }
                                     };
 
-                                    const handleCheckFeeEmails = async () => {
-                                        const reason = caseData.declineReason || declineReason;
-                                        setIsCheckingDeclineFeeEmails(true);
-                                        setDeclineFeeEmailResult(null);
-                                        try {
-                                            const res = await fetch(`/api/cases/${caseData.id}/dhs-decline/check-fee-emails`, {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({
-                                                    lookbackDays: 90,
-                                                    receivedAfter: caseData.declineFirstDetectedAt || caseData.declineLastDetectedAt || undefined,
-                                                    reason: reason || undefined,
-                                                }),
-                                            });
-                                            const data = await res.json();
-                                            setDeclineFeeEmailResult(data);
-                                            if (res.ok && data.success) {
-                                                toast.success(data.message || 'Fee-invoice email check requested.');
-                                                setActivityUpdate(prev => prev + 1);
-                                            } else {
-                                                toast.error(data.error || 'Fee-invoice email check failed');
-                                            }
-                                        } catch {
-                                            toast.error('Network error - please try again');
-                                        } finally {
-                                            setIsCheckingDeclineFeeEmails(false);
-                                        }
-                                    };
-
                                     const formatDeclineDate = (dateStr: string | null) => {
                                         if (!dateStr) return null;
                                         try {
@@ -4428,18 +4405,13 @@ export default function CaseDetailPage() {
                                                                 ) : '⚡ Handle Decline'}
                                                             </button>
                                                             {needsFeeEmailFollowUp && (
-                                                                <button
-                                                                    onClick={handleCheckFeeEmails}
-                                                                    disabled={isCheckingDeclineFeeEmails}
-                                                                    className="text-xs text-white bg-cyan-700/80 border border-cyan-500/50 px-2.5 py-1 rounded hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                                                                >
-                                                                    {isCheckingDeclineFeeEmails ? (
-                                                                        <>
-                                                                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                                                            Checking...
-                                                                        </>
-                                                                    ) : 'Check invoice emails'}
-                                                                </button>
+                                                                <CheckInvoiceEmailsButton
+                                                                    caseId={caseData.id}
+                                                                    receivedAfter={caseData.declineFirstDetectedAt || caseData.declineLastDetectedAt || null}
+                                                                    reason={currentReason || null}
+                                                                    onRequested={() => setActivityUpdate(prev => prev + 1)}
+                                                                    menuAlign="right"
+                                                                />
                                                             )}
                                                             {needsClientAction && (
                                                                 <button
@@ -4550,30 +4522,6 @@ export default function CaseDetailPage() {
                                                     )}
                                                     {declineHandleResult.statusUpdatedTo && (
                                                         <div className="mt-1 opacity-70">Status updated to: {declineHandleResult.statusUpdatedTo.replace(/_/g, ' ')}</div>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {declineFeeEmailResult && (
-                                                <div className={`mt-3 p-3 rounded-lg border text-xs ${
-                                                    declineFeeEmailResult.success
-                                                        ? declineFeeEmailResult.inboxConfigured
-                                                            ? 'bg-cyan-900/10 border-cyan-500/20 text-cyan-200'
-                                                            : 'bg-amber-900/10 border-amber-500/20 text-amber-200'
-                                                        : 'bg-red-900/10 border-red-500/20 text-red-300'
-                                                }`}>
-                                                    <div className="font-semibold mb-1">
-                                                        {declineFeeEmailResult.success ? 'Invoice email check' : 'Invoice email check failed'}
-                                                        {declineFeeEmailResult.duplicate && (
-                                                            <span className="ml-2 font-normal opacity-70">(already requested)</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="opacity-90">
-                                                        {declineFeeEmailResult.message || declineFeeEmailResult.error || 'No result message returned.'}
-                                                    </div>
-                                                    {declineFeeEmailResult.success && !declineFeeEmailResult.inboxConfigured && (
-                                                        <div className="mt-1 opacity-70">
-                                                            Configure the mailbox connector to let the app read invoice and proof-of-payment replies automatically.
-                                                        </div>
                                                     )}
                                                 </div>
                                             )}
