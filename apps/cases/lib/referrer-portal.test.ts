@@ -5,6 +5,7 @@ import {
     maskConsumerName,
     portalCommissionStatus,
     portalStageLabel,
+    toPortalComment,
 } from './referrer-portal';
 
 describe('referrer portal privacy helpers', () => {
@@ -50,5 +51,31 @@ describe('referrer portal commission helpers', () => {
         expect(portalCommissionStatus({ isEligible: false, isPaid: false })).toBe('In progress');
         expect(portalCommissionStatus({ isEligible: true, isPaid: false })).toBe('Ready for payout');
         expect(portalCommissionStatus({ isEligible: true, isPaid: false, paymentRef: 'EFT-1' })).toBe('Paid');
+    });
+});
+
+describe('referrer portal discussion comments', () => {
+    it('marks the referrer own messages and shows their first name only', () => {
+        const comment = toPortalComment({
+            id: 'c-1',
+            content: 'Any update?',
+            createdAt: '2026-07-13T09:00:00Z',
+            user: { firstName: 'William', lastName: 'Maesela', userType: 'REFERRER' },
+        });
+
+        expect(comment.fromReferrer).toBe(true);
+        expect(comment.authorName).toBe('William');
+    });
+
+    it('labels staff replies with a first name and last initial', () => {
+        const comment = toPortalComment({
+            id: 'c-2',
+            content: 'DHS transfer requested.',
+            createdAt: '2026-07-13T10:00:00Z',
+            user: { firstName: 'Aaron', lastName: 'Nzotho', userType: 'STAFF' },
+        });
+
+        expect(comment.fromReferrer).toBe(false);
+        expect(comment.authorName).toBe('Aaron N. — Zenowethu');
     });
 });

@@ -3,44 +3,51 @@
   "configurations": [
     {
       "name": "cases",
-      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "cases", "dev"],
       "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "cases-alt",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
+      "runtimeArgs": ["--filter", "cases", "exec", "next", "dev", "--port", "3010"],
+      "port": 3010,
       "autoPort": false
     },
     {
       "name": "insurance",
-      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "insurance", "dev"],
       "port": 3001
     },
     {
       "name": "legal",
-      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "legal", "dev"],
       "port": 3002
     },
     {
       "name": "forensic-audit",
-      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "forensic-audit", "dev"],
       "port": 3003
     },
     {
       "name": "finance",
-      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "finance", "dev"],
       "port": 3004
     },
     {
       "name": "credo",
-      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "credo", "dev"],
       "port": 3005
     },
     {
       "name": "website",
-      "runtimeExecutable": "C:/Users/Kenneth/bin/pnpm.cmd",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "website", "dev"],
       "port": 3006
     }

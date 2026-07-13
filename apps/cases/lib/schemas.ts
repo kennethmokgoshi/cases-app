@@ -290,7 +290,7 @@ export const DocumentSummarySchema = z.object({
 
 export const CaseCommentCreateSchema = z.object({
     content: z.string().min(1, 'Comment content is required').max(10000),
-    type: z.enum(['NOTE', 'COMMENT', 'SYSTEM', 'JOURNAL']).optional().default('COMMENT'),
+    type: z.enum(['NOTE', 'COMMENT', 'SYSTEM', 'JOURNAL', 'REFERRER']).optional().default('COMMENT'),
     isInternal: z.boolean().optional().default(true),
     activityType: optionalString,
     activityData: z.record(z.string(), z.unknown()).optional().nullable(),

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { createLogger } from '@zenowethu/shared-lib';
+import { createLogger, referrerEarnsCommission } from '@zenowethu/shared-lib';
 import { z } from 'zod';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
 import { maskConsumerName, toPortalNumber } from '@/lib/referrer-portal';
@@ -70,6 +70,18 @@ export async function POST(request: Request) {
         const parsed = PaymentQuerySchema.safeParse(await request.json());
         if (!parsed.success) {
             return NextResponse.json({ error: 'Invalid payment query', details: parsed.error.flatten() }, { status: 422 });
+        }
+
+        // Discount referrers earn no commission, so there is nothing to follow up on.
+        const referrerRecord = await prisma.referrer.findUnique({
+            where: { id: access.referrer.id },
+            select: { referrerType: true },
+        });
+        if (!referrerEarnsCommission(referrerRecord?.referrerType)) {
+            return NextResponse.json(
+                { error: 'Payment follow-ups are not available — discount referrers do not earn commission.' },
+                { status: 403 },
+            );
         }
 
         const referralCase = await prisma.case.findFirst({

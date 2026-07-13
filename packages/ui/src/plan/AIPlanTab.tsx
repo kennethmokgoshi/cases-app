@@ -56,7 +56,8 @@ interface PlanData {
 
 interface AIPlanTabProps {
   caseId: string;
-  acquisitionType: string;
+  /** Retained for caller compatibility — readiness confirmation now applies to all acquisition types. */
+  acquisitionType?: string;
 }
 
 const PLAN_STATUS_STYLES: Record<string, string> = {
@@ -69,6 +70,27 @@ const PLAN_STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-red-500/20 text-red-300 border border-red-500/30',
 };
 
+/**
+ * Plan-generation gating — mirrors the server rule in /api/ai/plan/generate:
+ * ALL cases require both sufficient documents and the staff readiness flag.
+ */
+export function getPlanGenerationGate(input: {
+  confidenceCanProceed: boolean;
+  planReadyToStart: boolean;
+  planStatus?: string | null;
+}): { canGenerate: boolean; blockedReason: string } {
+  if (!input.confidenceCanProceed) {
+    return { canGenerate: false, blockedReason: 'Upload required documents first' };
+  }
+  if (!input.planReadyToStart) {
+    return { canGenerate: false, blockedReason: 'Tick the readiness checkbox above first' };
+  }
+  if (input.planStatus === 'IN_PROGRESS') {
+    return { canGenerate: true, blockedReason: 'Cannot regenerate while plan is running' };
+  }
+  return { canGenerate: true, blockedReason: '' };
+}
+
 const CASE_TYPE_STYLES: Record<string, string> = {
   DEBT_REVIEW_APPLICATION: 'bg-green-500/20 text-green-300',
   DEBT_REVIEW_FLAG_REMOVAL: 'bg-indigo-500/20 text-indigo-300',
@@ -80,7 +102,7 @@ const CASE_TYPE_STYLES: Record<string, string> = {
   GENERAL: 'bg-gray-500/20 text-gray-300',
 };
 
-export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
+export function AIPlanTab({ caseId }: AIPlanTabProps) {
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -229,8 +251,6 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
     }
   };
 
-  const isB2B = acquisitionType === 'B2B';
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -250,9 +270,12 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
 
   const { plan, confidence } = planData;
 
-  const canGenerate =
-    confidence.canProceed &&
-    (!isB2B || planData.planReadyToStart);
+  const gate = getPlanGenerationGate({
+    confidenceCanProceed: confidence.canProceed,
+    planReadyToStart: planData.planReadyToStart,
+    planStatus: plan?.status,
+  });
+  const canGenerate = gate.canGenerate;
   // A cancelled plan is treated as "no plan" — show the first-generate button
   const isCancelled = plan?.status === 'CANCELLED';
   const hasActivePlan = !!plan && !isCancelled;
@@ -273,28 +296,26 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
       {/* SECTION 1: Confidence Report */}
       <ConfidenceReport confidence={confidence} caseId={caseId} />
 
-      {/* SECTION 2: B2B Readiness Checkbox */}
-      {isB2B && (
-        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={planData.planReadyToStart}
-              onChange={(e) => void handleToggleReady(e.target.checked)}
-              disabled={togglingReady}
-              className="mt-0.5 w-4 h-4 accent-cyan-400 cursor-pointer"
-            />
-            <div>
-              <p className="text-sm font-semibold text-white">
-                Information sufficient to proceed
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                B2B cases require staff confirmation before AI plan generation can begin.
-              </p>
-            </div>
-          </label>
-        </div>
-      )}
+      {/* SECTION 2: Readiness Checkbox */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={planData.planReadyToStart}
+            onChange={(e) => void handleToggleReady(e.target.checked)}
+            disabled={togglingReady}
+            className="mt-0.5 w-4 h-4 accent-cyan-400 cursor-pointer"
+          />
+          <div>
+            <p className="text-sm font-semibold text-white">
+              Information sufficient to proceed
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Staff must confirm case information is sufficient before AI plan generation can begin.
+            </p>
+          </div>
+        </label>
+      </div>
 
       {/* SECTION 3: Generate / Regenerate */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -347,16 +368,8 @@ export function AIPlanTab({ caseId, acquisitionType }: AIPlanTabProps) {
           </button>
         )}
 
-        {!canGenerate && !generating && (
-          <p className="text-xs text-gray-500">
-            {!confidence.canProceed
-              ? 'Upload required documents first'
-              : isB2B && !planData.planReadyToStart
-                ? 'Tick the readiness checkbox above first'
-                : plan?.status === 'IN_PROGRESS'
-                  ? 'Cannot regenerate while plan is running'
-                  : ''}
-          </p>
+        {!canGenerate && !generating && gate.blockedReason && (
+          <p className="text-xs text-gray-500">{gate.blockedReason}</p>
         )}
       </div>
 

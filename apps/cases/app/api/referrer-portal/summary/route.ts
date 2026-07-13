@@ -30,6 +30,8 @@ export async function GET() {
                 accountType: true,
                 branchCode: true,
                 accountHolderName: true,
+                referrerType: true,
+                clientDiscountPercent: true,
                 commissionType: true,
                 fixedCommissionAmount: true,
                 cases: {
@@ -99,6 +101,8 @@ export async function GET() {
                 accountType: referrer.accountType,
                 branchCode: referrer.branchCode,
                 accountHolderName: referrer.accountHolderName,
+                referrerType: referrer.referrerType,
+                clientDiscountPercent: referrer.clientDiscountPercent != null ? toPortalNumber(referrer.clientDiscountPercent) : null,
                 commissionType: referrer.commissionType,
                 fixedCommissionAmount: toPortalNumber(referrer.fixedCommissionAmount),
             },

@@ -9,6 +9,7 @@ import {
     getCommissionStageForCaseStatus,
     isCommissionEligible,
     calculateCommissionAmount,
+    referrerEarnsCommission,
     buildProjectUrl,
 } from '@zenowethu/shared-lib';
 import { auth, createLogger } from '@zenowethu/shared-lib';
@@ -99,17 +100,21 @@ export async function PATCH(
         if (currentCase.referrerId) {
             const commissionStage = getCommissionStageForCaseStatus(newStatus);
             if (commissionStage) {
-                const eligible = isCommissionEligible(commissionStage);
+                // Discount-type referrers earn no commission — we still track the
+                // stage (their client-pipeline dashboards rely on it) but the
+                // referral never becomes payout-eligible.
+                const referrer = await prisma.referrer.findUnique({
+                    where: { id: currentCase.referrerId },
+                    select: { referrerType: true, commissionType: true, fixedCommissionAmount: true },
+                });
+                const earnsCommission = referrerEarnsCommission(referrer?.referrerType);
+                const eligible = earnsCommission && isCommissionEligible(commissionStage);
 
                 // Auto-calculate commission amount when the referral becomes eligible
                 // and it has not already been paid out.
                 let autoAmount: number | undefined;
                 if (eligible) {
-                    const [referrer, existingCommission, totalReferralCount] = await Promise.all([
-                        prisma.referrer.findUnique({
-                            where: { id: currentCase.referrerId },
-                            select: { commissionType: true, fixedCommissionAmount: true },
-                        }),
+                    const [existingCommission, totalReferralCount] = await Promise.all([
                         prisma.referrerCommission.findUnique({ where: { caseId: id }, select: { isPaid: true, commissionAmount: true } }),
                         prisma.case.count({ where: { referrerId: currentCase.referrerId } }),
                     ]);

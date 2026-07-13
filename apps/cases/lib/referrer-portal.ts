@@ -65,6 +65,39 @@ export function portalStageLabel(stage?: string | null): string {
         .join(' ');
 }
 
+// Case discussion between a referrer and staff is stored as CaseComment rows
+// with this type — visible in the staff activity feed and the referrer portal.
+export const REFERRER_COMMENT_TYPE = 'REFERRER';
+
+export type PortalCommentSource = {
+    id: string;
+    content: string;
+    createdAt: Date | string;
+    user: { firstName: string; lastName: string; userType: string | null };
+};
+
+export type PortalComment = {
+    id: string;
+    content: string;
+    createdAt: Date | string;
+    authorName: string;
+    fromReferrer: boolean;
+};
+
+export function toPortalComment(comment: PortalCommentSource): PortalComment {
+    const fromReferrer = comment.user.userType === 'REFERRER';
+    const lastInitial = comment.user.lastName?.trim().charAt(0).toUpperCase();
+    return {
+        id: comment.id,
+        content: comment.content,
+        createdAt: comment.createdAt,
+        authorName: fromReferrer
+            ? comment.user.firstName
+            : `${comment.user.firstName}${lastInitial ? ` ${lastInitial}.` : ''} — Zenowethu`,
+        fromReferrer,
+    };
+}
+
 export function calculatePortalCommissionTotals(commissions: PortalCommissionInput[]) {
     return commissions.reduce(
         (totals, commission) => {

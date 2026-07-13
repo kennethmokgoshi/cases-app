@@ -75,7 +75,12 @@ model Referrer {
   createdById           String?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
-  // Commission tier configuration
+  // Referrer type — COMMISSION referrers earn a payout per referral (clients pay
+  // full price); DISCOUNT referrers earn nothing but their clients get discounted
+  // pricing (clientDiscountPercent).
+  referrerType          String               @default("COMMISSION") // COMMISSION | DISCOUNT
+  clientDiscountPercent Decimal? // % discount for this referrer's clients (DISCOUNT type)
+  // Commission tier configuration (COMMISSION type only)
   commissionType        String               @default("FIXED") // FIXED | VOLUME_BASED
   fixedCommissionAmount Decimal? // Used when commissionType = FIXED
   // Referrer hierarchy — who referred this referrer

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { createLogger } from '@zenowethu/shared-lib';
+import { createLogger, referrerEarnsCommission } from '@zenowethu/shared-lib';
 import { generateCommissionStatementPdf, type CommissionStatementData } from '@/lib/commission-statement-pdf';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
 import { maskConsumerName, toPortalNumber } from '@/lib/referrer-portal';
@@ -37,6 +37,11 @@ export async function GET(request: Request) {
         });
 
         if (!referrer) return new NextResponse('Referrer not found', { status: 404 });
+
+        // Discount referrers earn no commission, so a commission statement does not apply.
+        if (!referrerEarnsCommission(referrer.referrerType)) {
+            return new NextResponse('Commission statements are not available for discount referrers', { status: 403 });
+        }
 
         let totalPaid = 0;
         let totalUnpaid = 0;

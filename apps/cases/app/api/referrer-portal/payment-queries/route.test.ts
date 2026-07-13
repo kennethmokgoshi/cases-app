@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@zenowethu/shared-lib', () => ({
     createLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+    referrerEarnsCommission: (referrerType: string | null | undefined) => referrerType !== 'DISCOUNT',
 }));
 
 vi.mock('@/lib/referrer-portal-access', () => ({
@@ -12,6 +13,9 @@ vi.mock('@zenowethu/database', () => ({
     prisma: {
         case: {
             findFirst: vi.fn(),
+        },
+        referrer: {
+            findUnique: vi.fn(),
         },
         referrerPaymentQuery: {
             findMany: vi.fn(),
@@ -48,12 +52,28 @@ describe('POST /api/referrer-portal/payment-queries', () => {
         expect(prisma.case.findFirst).not.toHaveBeenCalled();
     });
 
+    it('rejects a discount referrer — no commission to follow up on', async () => {
+        vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
+            ok: true,
+            sessionUserId: 'user-1',
+            referrer: { id: 'ref-1', firstName: 'Nomsa', lastName: 'Dube' },
+        });
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({ referrerType: 'DISCOUNT' } as never);
+
+        const res = await POST(req({ caseId: 'case-1', notes: 'Please check this client payment.' }));
+
+        expect(res.status).toBe(403);
+        expect(prisma.case.findFirst).not.toHaveBeenCalled();
+        expect(prisma.referrerPaymentQuery.create).not.toHaveBeenCalled();
+    });
+
     it('rejects a case that is not linked to the current referrer', async () => {
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: true,
             sessionUserId: 'user-1',
             referrer: { id: 'ref-1', firstName: 'Nomsa', lastName: 'Dube' },
         });
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({ referrerType: 'COMMISSION' } as never);
         vi.mocked(prisma.case.findFirst).mockResolvedValueOnce(null);
 
         const res = await POST(req({ caseId: 'case-2', notes: 'Please check this client payment.' }));
@@ -70,6 +90,7 @@ describe('POST /api/referrer-portal/payment-queries', () => {
             sessionUserId: 'user-1',
             referrer: { id: 'ref-1', firstName: 'Nomsa', lastName: 'Dube' },
         });
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({ referrerType: 'COMMISSION' } as never);
         vi.mocked(prisma.case.findFirst).mockResolvedValueOnce({
             id: 'case-1',
             fileNumber: 'ZDM-1',

@@ -6,6 +6,8 @@ import {
     VOLUME_TIER_THRESHOLD,
     getCommissionStageForCaseStatus,
     isCommissionEligible,
+    referrerEarnsCommission,
+    REFERRER_TYPES,
 } from './referrer-commission';
 
 // ---------------------------------------------------------------------------
@@ -103,5 +105,30 @@ describe('isCommissionEligible', () => {
         expect(isCommissionEligible('QUOTE_SUBMITTED')).toBe(false);
         expect(isCommissionEligible('ARREARS_1M')).toBe(false);
         expect(isCommissionEligible('HANDED_OVER')).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// referrerEarnsCommission
+// ---------------------------------------------------------------------------
+
+describe('referrerEarnsCommission', () => {
+    it('returns true for COMMISSION referrers', () => {
+        expect(referrerEarnsCommission('COMMISSION')).toBe(true);
+    });
+
+    it('returns false for DISCOUNT referrers', () => {
+        expect(referrerEarnsCommission('DISCOUNT')).toBe(false);
+    });
+
+    it('treats unknown or missing types as COMMISSION (historical default)', () => {
+        expect(referrerEarnsCommission(null)).toBe(true);
+        expect(referrerEarnsCommission(undefined)).toBe(true);
+        expect(referrerEarnsCommission('')).toBe(true);
+        expect(referrerEarnsCommission('SOMETHING_ELSE')).toBe(true);
+    });
+
+    it('exposes both referrer types', () => {
+        expect(REFERRER_TYPES).toEqual(['COMMISSION', 'DISCOUNT']);
     });
 });

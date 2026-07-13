@@ -1,6 +1,29 @@
 import type { ReferrerCommissionStage } from '@zenowethu/database';
 
 // ---------------------------------------------------------------------------
+// Referrer Types
+// ---------------------------------------------------------------------------
+
+/** COMMISSION: the referrer's clients pay full price and the referrer earns a
+ *  payout per referral (per the commission tier below).
+ *  DISCOUNT: the referrer's clients get discounted pricing
+ *  (Referrer.clientDiscountPercent) and the referrer earns no commission.
+ */
+export type ReferrerType = 'COMMISSION' | 'DISCOUNT';
+
+export const REFERRER_TYPES: ReferrerType[] = ['COMMISSION', 'DISCOUNT'];
+
+export const REFERRER_TYPE_LABELS: Record<ReferrerType, string> = {
+    COMMISSION: 'Commission — clients pay full price, referrer earns per referral',
+    DISCOUNT:   'Discount — clients get discounted pricing, no commission',
+};
+
+/** Unknown/legacy values are treated as COMMISSION (the historical default). */
+export function referrerEarnsCommission(referrerType: string | null | undefined): boolean {
+    return referrerType !== 'DISCOUNT';
+}
+
+// ---------------------------------------------------------------------------
 // Commission Tier Types
 // ---------------------------------------------------------------------------
 

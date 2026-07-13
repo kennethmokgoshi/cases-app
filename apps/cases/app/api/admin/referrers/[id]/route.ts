@@ -7,6 +7,7 @@ import { canAccessReferrer } from '@/lib/referrer-access';
 const logger = createLogger('api/admin/referrers/[id]');
 
 const COMMISSION_TYPES = ['FIXED', 'VOLUME_BASED'] as const;
+const REFERRER_TYPES = ['COMMISSION', 'DISCOUNT'] as const;
 
 const PatchSchema = z.object({
     firstName: z.string().min(1).max(100).optional(),
@@ -27,7 +28,11 @@ const PatchSchema = z.object({
     accountHolderName: z.string().max(200).nullable().optional(),
     notes: z.string().max(1000).nullable().optional(),
     isActive: z.boolean().optional(),
-    // Commission tier
+    // Referrer type — COMMISSION earns per referral; DISCOUNT gives clients
+    // discounted pricing and earns nothing.
+    referrerType: z.enum(REFERRER_TYPES).optional(),
+    clientDiscountPercent: z.number().min(0).max(100).nullable().optional(),
+    // Commission tier (COMMISSION type only)
     commissionType: z.enum(COMMISSION_TYPES).optional(),
     fixedCommissionAmount: z.number().min(1).max(99999).nullable().optional(),
     // Hierarchy
@@ -174,6 +179,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
 
         const { parentReferrerId: newParentReferrerId, ...restData } = data;
+        // Keep type-specific config consistent with the referrer's (possibly
+        // updated) type: discount referrers carry no commission amount,
+        // commission referrers carry no client discount.
+        const effectiveType = restData.referrerType ?? existing.referrerType;
+        if (effectiveType === 'DISCOUNT') {
+            restData.fixedCommissionAmount = null;
+        } else {
+            restData.clientDiscountPercent = null;
+        }
         const updated = await prisma.referrer.update({
             where: { id },
             data: {

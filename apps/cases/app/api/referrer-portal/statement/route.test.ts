@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@zenowethu/shared-lib', () => ({
     createLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+    referrerEarnsCommission: (referrerType: string | null | undefined) => referrerType !== 'DISCOUNT',
 }));
 
 vi.mock('@/lib/referrer-portal-access', () => ({
@@ -38,6 +39,7 @@ describe('GET /api/referrer-portal/statement', () => {
             id: 'ref-1',
             firstName: 'Nomsa',
             lastName: 'Dube',
+            referrerType: 'COMMISSION',
             email: 'nomsa@example.com',
             bankName: null,
             accountNumber: null,
@@ -62,5 +64,25 @@ describe('GET /api/referrer-portal/statement', () => {
             totalUnpaid: 200,
         }));
         expect(JSON.stringify(vi.mocked(generateCommissionStatementPdf).mock.calls[0][0])).not.toContain('Thabo Mokoena');
+    });
+
+    it('rejects discount referrers — no commission statement applies', async () => {
+        vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
+            ok: true,
+            sessionUserId: 'user-1',
+            referrer: { id: 'ref-1', firstName: 'Nomsa', lastName: 'Dube' },
+        });
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({
+            id: 'ref-1',
+            firstName: 'Nomsa',
+            lastName: 'Dube',
+            referrerType: 'DISCOUNT',
+            commissions: [],
+        } as never);
+
+        const res = await GET(new Request('http://localhost/api/referrer-portal/statement'));
+
+        expect(res.status).toBe(403);
+        expect(generateCommissionStatementPdf).not.toHaveBeenCalled();
     });
 });

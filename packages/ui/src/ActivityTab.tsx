@@ -66,7 +66,9 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
     const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
     const [cursorPosition, setCursorPosition] = useState(0);
     const [showInternal, setShowInternal] = useState(true);
-    const [isJournalMode, setIsJournalMode] = useState(false);
+    const [composerMode, setComposerMode] = useState<'NOTE' | 'JOURNAL' | 'REFERRER'>('NOTE');
+    const isJournalMode = composerMode === 'JOURNAL';
+    const isReferrerMode = composerMode === 'REFERRER';
     const [mounted, setMounted] = useState(false);
     const [pendingAttachments, setPendingAttachments] = useState<Array<{ name: string; url: string; type: string; size: number }>>([]);
     const [isUploading, setIsUploading] = useState(false);
@@ -233,7 +235,7 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     content: newComment,
-                    type: isJournalMode ? 'JOURNAL' : 'NOTE',
+                    type: composerMode === 'NOTE' ? 'NOTE' : composerMode,
                     isInternal: isJournalMode,
                     attachments: pendingAttachments
                 }) });
@@ -263,6 +265,7 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
         if (comment.type === 'JOURNAL') return '📓';
         if (comment.type === 'SYSTEM') return '⚙️';
         if (comment.type === 'GHL') return '💬';
+        if (comment.type === 'REFERRER') return '🤝';
 
         // Check for specific cross-app event types
         if (comment.activityType === 'INSURANCE_EVENT') return '🛡️';
@@ -283,6 +286,7 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
         if (comment.activityType === 'LEGAL_EVENT') return 'bg-purple-500/10 border-purple-500/20';
         if (comment.activityType === 'FORENSIC_EVENT') return 'bg-red-500/10 border-red-500/20';
         if (comment.type === 'JOURNAL') return 'bg-amber-500/5 border-amber-500/10';
+        if (comment.type === 'REFERRER') return 'bg-cyan-500/5 border-cyan-400/20';
         return 'bg-zeno-navy/40 border-white/5';
     };
 
@@ -305,13 +309,15 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                         {showInternal ? '👁️ Showing Internal' : 'Hide Internal'}
                     </button>
                     <button
-                        onClick={() => setIsJournalMode(!isJournalMode)}
+                        onClick={() => setComposerMode(composerMode === 'NOTE' ? 'JOURNAL' : composerMode === 'JOURNAL' ? 'REFERRER' : 'NOTE')}
                         className={`text-xs px-4 py-1.5 rounded-lg border font-medium transition-all ${isJournalMode
-                            ? 'bg-zeno-cyan text-zeno-navy border-zeno-cyan'
-                            : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+                            ? 'bg-amber-500 text-zeno-navy border-amber-500'
+                            : isReferrerMode
+                                ? 'bg-zeno-cyan text-zeno-navy border-zeno-cyan'
+                                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
                             }`}
                     >
-                        {isJournalMode ? 'Mode: Journal 📓' : 'Mode: Public Note 💬'}
+                        {isJournalMode ? 'Mode: Journal 📓' : isReferrerMode ? 'Mode: Referrer Reply 🤝' : 'Mode: Public Note 💬'}
                     </button>
                 </div>
             </header>
@@ -324,8 +330,8 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                         value={newComment}
                         onChange={handleTextChange}
                         onPaste={handlePaste}
-                        placeholder={isJournalMode ? "Type internal team note..." : "Add a public comment..."}
-                        className={`w-full px-4 py-3 bg-zeno-navy border rounded-xl text-white placeholder-gray-500 transition-all focus:outline-none resize-none ${isJournalMode ? 'border-amber-500/30 ring-1 ring-amber-500/10' : 'border-white/10 focus:border-zeno-cyan'
+                        placeholder={isJournalMode ? "Type internal team note..." : isReferrerMode ? "Reply to the referrer (visible in their portal)..." : "Add a public comment..."}
+                        className={`w-full px-4 py-3 bg-zeno-navy border rounded-xl text-white placeholder-gray-500 transition-all focus:outline-none resize-none ${isJournalMode ? 'border-amber-500/30 ring-1 ring-amber-500/10' : isReferrerMode ? 'border-zeno-cyan/40 ring-1 ring-zeno-cyan/10' : 'border-white/10 focus:border-zeno-cyan'
                             }`}
                         rows={3}
                     />
@@ -392,7 +398,9 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                         <span className="text-[10px] text-gray-500 italic">
                             {isJournalMode
                                 ? "📓 Internal notes are only visible to staff and managers."
-                                : "💬 Public notes may be shared in reports."}
+                                : isReferrerMode
+                                    ? "🤝 Referrer replies appear in the referrer's portal for this case."
+                                    : "💬 Public notes may be shared in reports."}
                         </span>
                     </div>
                     <button
@@ -401,7 +409,7 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                         className={`px-5 py-2 font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all ${isJournalMode ? 'bg-amber-500 text-zeno-navy' : 'bg-zeno-cyan text-zeno-navy'
                             }`}
                     >
-                        {submitting ? 'Saving...' : isUploading ? 'Uploading...' : (isJournalMode ? 'Save to Journal' : 'Post Comment')}
+                        {submitting ? 'Saving...' : isUploading ? 'Uploading...' : (isJournalMode ? 'Save to Journal' : isReferrerMode ? 'Send to Referrer' : 'Post Comment')}
                     </button>
                 </div>
             </form>
@@ -435,6 +443,11 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                                         {comment.isInternal && (
                                             <span className="text-[10px] bg-white/5 text-gray-400 px-1.5 py-0.5 rounded border border-white/10 font-bold uppercase tracking-widest">
                                                 Internal
+                                            </span>
+                                        )}
+                                        {comment.type === 'REFERRER' && (
+                                            <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded uppercase font-bold">
+                                                Referrer thread
                                             </span>
                                         )}
                                         {/* Badge to identify source app */}
