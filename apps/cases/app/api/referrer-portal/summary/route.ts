@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { createLogger } from '@zenowethu/shared-lib';
+import { createLogger, referrerEarnsCommission } from '@zenowethu/shared-lib';
+import { summariseCaseFinancials, isAcceptedQuote } from '@zenowethu/shared-lib/src/finance/case-financials';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
 import {
+    calculateDiscountPartnerTotals,
     calculatePortalCommissionTotals,
     maskConsumerName,
     portalCommissionStatus,
@@ -40,7 +42,10 @@ export async function GET() {
                         fileNumber: true,
                         status: true,
                         createdAt: true,
+                        serviceFee: true,
                         client: { select: { firstName: true, lastName: true } },
+                        payments: { select: { amount: true, status: true, date: true } },
+                        invoices: { select: { total: true, status: true, type: true, acceptedAt: true, createdAt: true } },
                         referrerCommission: {
                             select: {
                                 id: true,
@@ -89,6 +94,43 @@ export async function GET() {
 
         const totals = calculatePortalCommissionTotals(commissionInputs);
 
+        // Per-case client finances (quote basis + completed payments) — shown to
+        // discount partners, whose value is the client money flow, not commission.
+        const caseFinancials = new Map(referrer.cases.map((referral) => {
+            const fin = summariseCaseFinancials({
+                serviceFee: referral.serviceFee === null ? null : toPortalNumber(referral.serviceFee),
+                payments: referral.payments.map((p) => ({ amount: toPortalNumber(p.amount), status: p.status })),
+                invoices: referral.invoices.map((i) => ({ total: toPortalNumber(i.total), status: i.status, type: i.type ?? undefined, acceptedAt: i.acceptedAt })),
+            });
+            // Date the quote basis was established: quote acceptance/creation date,
+            // or case creation when the basis is the case service fee.
+            const acceptedQuote = referral.invoices
+                .filter((i) => isAcceptedQuote({ total: toPortalNumber(i.total), status: i.status, type: i.type ?? undefined, acceptedAt: i.acceptedAt }))
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
+            const quoteDate = fin.feeBasisSource === 'ACCEPTED_QUOTE'
+                ? (acceptedQuote?.acceptedAt ?? acceptedQuote?.createdAt ?? null)
+                : fin.feeBasisSource === 'CASE_SERVICE_FEE' ? referral.createdAt : null;
+            const completedPayments = referral.payments
+                .filter((p) => p.status === 'COMPLETED')
+                .map((p) => ({ amount: toPortalNumber(p.amount), date: p.date }));
+            return [referral.id, { quoteTotal: fin.feeBasisTotal, totalPaid: fin.totalPaid, quoteDate, completedPayments }] as const;
+        }));
+
+        const isDiscountReferrer = !referrerEarnsCommission(referrer.referrerType);
+        const discountSummary = isDiscountReferrer
+            ? calculateDiscountPartnerTotals(referrer.cases.map((referral) => {
+                const fin = caseFinancials.get(referral.id)!;
+                return {
+                    createdAt: referral.createdAt,
+                    stage: referral.referrerCommission?.stage ?? null,
+                    stageUpdatedAt: referral.referrerCommission?.updatedAt ?? null,
+                    quoteTotal: fin.quoteTotal,
+                    quoteDate: fin.quoteDate,
+                    payments: fin.completedPayments,
+                };
+            }))
+            : null;
+
         return NextResponse.json({
             referrer: {
                 id: referrer.id,
@@ -107,8 +149,10 @@ export async function GET() {
                 fixedCommissionAmount: toPortalNumber(referrer.fixedCommissionAmount),
             },
             summary: totals,
+            discountSummary,
             referrals: referrer.cases.map((referral) => {
                 const commission = referral.referrerCommission;
+                const fin = caseFinancials.get(referral.id);
                 return {
                     caseId: referral.id,
                     fileNumber: referral.fileNumber,
@@ -116,6 +160,8 @@ export async function GET() {
                     referralStatus: portalStageLabel(commission?.stage ?? referral.status),
                     caseStatus: referral.status,
                     createdAt: referral.createdAt,
+                    quoteTotal: fin?.quoteTotal ?? null,
+                    totalPaid: fin?.totalPaid ?? 0,
                     commissionId: commission?.id ?? null,
                     commissionAmount: toPortalNumber(commission?.commissionAmount),
                     commissionStatus: portalCommissionStatus({

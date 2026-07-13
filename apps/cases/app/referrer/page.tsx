@@ -28,6 +28,8 @@ type ReferralRow = {
     referralStatus: string;
     caseStatus: string;
     createdAt: string;
+    quoteTotal: number | null;
+    totalPaid: number;
     commissionId: string | null;
     commissionAmount: number;
     commissionStatus: string;
@@ -70,6 +72,12 @@ type ReferralDetail = {
     referrerType: string;
     clientDiscountPercent: number | null;
     services: string[];
+    financials: {
+        quoteTotal: number | null;
+        totalPaid: number;
+        outstanding: number | null;
+        payments: { id: string; amount: number; date: string }[];
+    } | null;
     documents: { id: string; label: string; uploadedAt: string }[];
     workflow: {
         label: string;
@@ -86,6 +94,17 @@ type ReferralDetail = {
     comments: PortalComment[];
 };
 
+type DiscountPartnerSummary = {
+    totalReferrals: number;
+    referralsLast30Days: number;
+    totalSettled: number;
+    settledLast30Days: number;
+    totalQuoted: number;
+    quotedLast30Days: number;
+    totalPaid: number;
+    paidLast30Days: number;
+};
+
 type PortalSummary = {
     referrer: ReferrerProfile;
     summary: {
@@ -94,6 +113,7 @@ type PortalSummary = {
         commissionPending: number;
         commissionPaid: number;
     };
+    discountSummary: DiscountPartnerSummary | null;
     referrals: ReferralRow[];
     paymentQueries: PaymentQuery[];
 };
@@ -358,12 +378,12 @@ export default function ReferrerPortalPage() {
         );
     }
 
-    const { referrer, summary, referrals, paymentQueries } = portalData;
+    const { referrer, summary, discountSummary, referrals, paymentQueries } = portalData;
 
     // Discount referrers earn no commission — their clients get discounted
-    // pricing instead, so the portal shows referral progress without payouts.
+    // pricing instead, so the portal shows referral flow and client money
+    // (quotes/payments) rather than payouts.
     const isDiscountReferrer = referrer.referrerType === 'DISCOUNT';
-    const settledCount = referrals.filter((referral) => referral.referralStatus === 'Settled').length;
 
     return (
         <main className="min-h-screen bg-slate-950 text-slate-100">
@@ -408,12 +428,16 @@ export default function ReferrerPortalPage() {
 
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                 <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {(isDiscountReferrer
+                    {(isDiscountReferrer && discountSummary
                         ? [
-                            ['Total referrals', String(summary.totalReferrals)],
-                            ['In progress', String(summary.totalReferrals - settledCount)],
-                            ['Settled', String(settledCount)],
-                            ['Client discount', referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Applied on quotes'],
+                            ['Total referrals', String(discountSummary.totalReferrals)],
+                            ['Referrals — last 30 days', String(discountSummary.referralsLast30Days)],
+                            ['Total settled', String(discountSummary.totalSettled)],
+                            ['Settled — last 30 days', String(discountSummary.settledLast30Days)],
+                            ['Total quoted', formatMoney(discountSummary.totalQuoted)],
+                            ['Quoted — last 30 days', formatMoney(discountSummary.quotedLast30Days)],
+                            ['Total paid', formatMoney(discountSummary.totalPaid)],
+                            ['Paid — last 30 days', formatMoney(discountSummary.paidLast30Days)],
                         ]
                         : [
                             ['Total referrals', String(summary.totalReferrals)],
@@ -447,6 +471,8 @@ export default function ReferrerPortalPage() {
                                         <th className="px-4 py-3">Status</th>
                                         {isDiscountReferrer ? (
                                             <>
+                                                <th className="px-4 py-3">Quote</th>
+                                                <th className="px-4 py-3">Paid</th>
                                                 <th className="px-4 py-3">Referred</th>
                                                 <th className="px-4 py-3">Last activity</th>
                                             </>
@@ -475,6 +501,14 @@ export default function ReferrerPortalPage() {
                                             </td>
                                             {isDiscountReferrer ? (
                                                 <>
+                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-100">
+                                                        {referral.quoteTotal != null ? formatMoney(referral.quoteTotal) : <span className="text-slate-500">No quote</span>}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-4 py-3">
+                                                        {referral.totalPaid > 0
+                                                            ? <span className="text-emerald-300">{formatMoney(referral.totalPaid)}</span>
+                                                            : <span className="text-slate-500">—</span>}
+                                                    </td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.createdAt)}</td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.lastUpdatedAt)}</td>
                                                 </>
@@ -489,7 +523,7 @@ export default function ReferrerPortalPage() {
                                     ))}
                                     {referrals.length === 0 && (
                                         <tr>
-                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 5 : 6}>No referrals are linked yet.</td>
+                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 7 : 6}>No referrals are linked yet.</td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -644,11 +678,41 @@ export default function ReferrerPortalPage() {
 
                                     {isDiscountReferrer ? (
                                         <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
-                                            <h3 className="text-sm font-semibold text-white">Client benefit</h3>
-                                            <p className="mt-2 text-sm text-slate-300">
+                                            <h3 className="text-sm font-semibold text-white">Client finances</h3>
+                                            <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                                                <div>
+                                                    <dt className="text-xs text-slate-400">Quote</dt>
+                                                    <dd className="text-white">
+                                                        {detail.financials?.quoteTotal != null ? formatMoney(detail.financials.quoteTotal) : 'No quote yet'}
+                                                    </dd>
+                                                </div>
+                                                <div>
+                                                    <dt className="text-xs text-slate-400">Total paid</dt>
+                                                    <dd className="text-emerald-300">{formatMoney(detail.financials?.totalPaid ?? 0)}</dd>
+                                                </div>
+                                                <div>
+                                                    <dt className="text-xs text-slate-400">Balance</dt>
+                                                    <dd className="text-white">
+                                                        {detail.financials?.outstanding != null ? formatMoney(detail.financials.outstanding) : '—'}
+                                                    </dd>
+                                                </div>
+                                            </dl>
+                                            <h4 className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Payments received</h4>
+                                            {(detail.financials?.payments.length ?? 0) === 0 ? (
+                                                <p className="mt-1.5 text-sm text-slate-400">No payments recorded yet.</p>
+                                            ) : (
+                                                <ul className="mt-1.5 space-y-1.5">
+                                                    {detail.financials!.payments.map((payment) => (
+                                                        <li key={payment.id} className="flex items-center justify-between gap-3 text-sm">
+                                                            <span className="text-emerald-300">{formatMoney(payment.amount)}</span>
+                                                            <span className="whitespace-nowrap text-xs text-slate-400">{formatDate(payment.date)}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            <p className="mt-3 border-t border-white/10 pt-2 text-xs text-slate-400">
                                                 This client receives your discounted pricing
-                                                {referrer.clientDiscountPercent != null ? ` (${referrer.clientDiscountPercent}% off)` : ''}.
-                                                No commission is tracked on this referral.
+                                                {referrer.clientDiscountPercent != null ? ` (${referrer.clientDiscountPercent}% off)` : ''}. No commission is tracked.
                                             </p>
                                         </div>
                                     ) : (

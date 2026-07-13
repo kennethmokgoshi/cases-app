@@ -65,6 +65,82 @@ export function portalStageLabel(stage?: string | null): string {
         .join(' ');
 }
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+export type DiscountPartnerReferralInput = {
+    createdAt: Date | string;
+    stage?: string | null;
+    /** When the referral last changed stage — used to date "settled" events. */
+    stageUpdatedAt?: Date | string | null;
+    quoteTotal: number | null;
+    /** Best-known date the quote basis was established (acceptance date, quote date, or case creation for service fees). */
+    quoteDate?: Date | string | null;
+    /** Completed client payments only. */
+    payments: { amount: number; date: Date | string }[];
+};
+
+export type DiscountPartnerTotals = {
+    totalReferrals: number;
+    referralsLast30Days: number;
+    totalSettled: number;
+    settledLast30Days: number;
+    totalQuoted: number;
+    quotedLast30Days: number;
+    totalPaid: number;
+    paidLast30Days: number;
+};
+
+function isWithinLast30Days(value: Date | string | null | undefined, now: Date): boolean {
+    if (!value) return false;
+    const time = new Date(value).getTime();
+    if (Number.isNaN(time)) return false;
+    return time >= now.getTime() - THIRTY_DAYS_MS && time <= now.getTime();
+}
+
+function roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
+}
+
+/** Dashboard totals for a discount partner: referral flow, settlements, and the
+ *  quote/payment money their referred clients generated — overall and in the
+ *  last 30 days. */
+export function calculateDiscountPartnerTotals(
+    referrals: DiscountPartnerReferralInput[],
+    now: Date = new Date(),
+): DiscountPartnerTotals {
+    return referrals.reduce<DiscountPartnerTotals>(
+        (totals, referral) => {
+            const settled = referral.stage === 'SETTLED';
+            const quoted = referral.quoteTotal != null && referral.quoteTotal > 0;
+            const paid = referral.payments.reduce((sum, payment) => sum + payment.amount, 0);
+            const paid30 = referral.payments
+                .filter((payment) => isWithinLast30Days(payment.date, now))
+                .reduce((sum, payment) => sum + payment.amount, 0);
+
+            return {
+                totalReferrals: totals.totalReferrals + 1,
+                referralsLast30Days: totals.referralsLast30Days + (isWithinLast30Days(referral.createdAt, now) ? 1 : 0),
+                totalSettled: totals.totalSettled + (settled ? 1 : 0),
+                settledLast30Days: totals.settledLast30Days + (settled && isWithinLast30Days(referral.stageUpdatedAt, now) ? 1 : 0),
+                totalQuoted: roundMoney(totals.totalQuoted + (quoted ? referral.quoteTotal! : 0)),
+                quotedLast30Days: roundMoney(totals.quotedLast30Days + (quoted && isWithinLast30Days(referral.quoteDate, now) ? referral.quoteTotal! : 0)),
+                totalPaid: roundMoney(totals.totalPaid + paid),
+                paidLast30Days: roundMoney(totals.paidLast30Days + paid30),
+            };
+        },
+        {
+            totalReferrals: 0,
+            referralsLast30Days: 0,
+            totalSettled: 0,
+            settledLast30Days: 0,
+            totalQuoted: 0,
+            quotedLast30Days: 0,
+            totalPaid: 0,
+            paidLast30Days: 0,
+        },
+    );
+}
+
 /** Case.services is stored as a JSON string array — parse defensively. */
 export function parseCaseServices(services?: string | null): string[] {
     if (!services) return [];

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    calculateDiscountPartnerTotals,
     calculatePortalCommissionTotals,
     formatDocumentTypeLabel,
     maskAccountNumber,
@@ -116,5 +117,86 @@ describe('formatDocumentTypeLabel', () => {
         expect(formatDocumentTypeLabel(null)).toBe('Document');
         expect(formatDocumentTypeLabel('')).toBe('Document');
         expect(formatDocumentTypeLabel('_')).toBe('Document');
+    });
+});
+
+describe('calculateDiscountPartnerTotals', () => {
+    const now = new Date('2026-07-14T12:00:00Z');
+    const recent = new Date('2026-07-01T12:00:00Z');   // within 30 days
+    const old = new Date('2026-05-01T12:00:00Z');      // outside 30 days
+
+    it('returns zeros for no referrals', () => {
+        expect(calculateDiscountPartnerTotals([], now)).toEqual({
+            totalReferrals: 0,
+            referralsLast30Days: 0,
+            totalSettled: 0,
+            settledLast30Days: 0,
+            totalQuoted: 0,
+            quotedLast30Days: 0,
+            totalPaid: 0,
+            paidLast30Days: 0,
+        });
+    });
+
+    it('splits totals into overall and last-30-days buckets', () => {
+        const totals = calculateDiscountPartnerTotals([
+            {
+                createdAt: recent,
+                stage: 'SETTLED',
+                stageUpdatedAt: recent,
+                quoteTotal: 5000,
+                quoteDate: recent,
+                payments: [
+                    { amount: 2000, date: recent },
+                    { amount: 1000, date: old },
+                ],
+            },
+            {
+                createdAt: old,
+                stage: 'SETTLED',
+                stageUpdatedAt: old,
+                quoteTotal: 3000,
+                quoteDate: old,
+                payments: [{ amount: 3000, date: old }],
+            },
+            {
+                createdAt: old,
+                stage: 'PAYING_INSTALMENTS',
+                stageUpdatedAt: recent,
+                quoteTotal: null,
+                quoteDate: null,
+                payments: [],
+            },
+        ], now);
+
+        expect(totals).toEqual({
+            totalReferrals: 3,
+            referralsLast30Days: 1,
+            totalSettled: 2,
+            settledLast30Days: 1,
+            totalQuoted: 8000,
+            quotedLast30Days: 5000,
+            totalPaid: 6000,
+            paidLast30Days: 2000,
+        });
+    });
+
+    it('never counts unsettled stages as settled, even when recently updated', () => {
+        const totals = calculateDiscountPartnerTotals([
+            { createdAt: recent, stage: 'UP_TO_DATE', stageUpdatedAt: recent, quoteTotal: null, quoteDate: null, payments: [] },
+        ], now);
+        expect(totals.totalSettled).toBe(0);
+        expect(totals.settledLast30Days).toBe(0);
+    });
+
+    it('ignores future-dated and invalid dates for 30-day buckets', () => {
+        const future = new Date('2026-08-01T12:00:00Z');
+        const totals = calculateDiscountPartnerTotals([
+            { createdAt: future, stage: null, stageUpdatedAt: null, quoteTotal: 100, quoteDate: 'not-a-date', payments: [{ amount: 50, date: future }] },
+        ], now);
+        expect(totals.referralsLast30Days).toBe(0);
+        expect(totals.quotedLast30Days).toBe(0);
+        expect(totals.paidLast30Days).toBe(0);
+        expect(totals.totalPaid).toBe(50);
     });
 });

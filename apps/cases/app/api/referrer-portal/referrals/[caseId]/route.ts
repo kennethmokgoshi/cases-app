@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { createLogger } from '@zenowethu/shared-lib';
+import { createLogger, referrerEarnsCommission } from '@zenowethu/shared-lib';
+import { summariseCaseFinancials } from '@zenowethu/shared-lib/src/finance/case-financials';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
 import {
     formatDocumentTypeLabel,
@@ -33,10 +34,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
                 fileNumber: true,
                 status: true,
                 services: true,
+                serviceFee: true,
                 createdAt: true,
                 updatedAt: true,
                 client: { select: { firstName: true, lastName: true } },
                 referrer: { select: { referrerType: true, clientDiscountPercent: true } },
+                payments: {
+                    select: { id: true, amount: true, status: true, date: true },
+                    orderBy: { date: 'desc' },
+                },
+                invoices: { select: { total: true, status: true, type: true, acceptedAt: true } },
                 referrerCommission: {
                     select: {
                         stage: true,
@@ -80,6 +87,28 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
 
         const commission = referralCase.referrerCommission;
 
+        // Client finances are shown to discount partners only — their clients'
+        // money flow is the partner's benefit. Commission referrers see their
+        // own commission block instead.
+        const isDiscountReferrer = !referrerEarnsCommission(referralCase.referrer?.referrerType);
+        const financials = isDiscountReferrer
+            ? (() => {
+                const fin = summariseCaseFinancials({
+                    serviceFee: referralCase.serviceFee === null ? null : toPortalNumber(referralCase.serviceFee),
+                    payments: referralCase.payments.map((p) => ({ amount: toPortalNumber(p.amount), status: p.status })),
+                    invoices: referralCase.invoices.map((i) => ({ total: toPortalNumber(i.total), status: i.status, type: i.type ?? undefined, acceptedAt: i.acceptedAt })),
+                });
+                return {
+                    quoteTotal: fin.feeBasisTotal,
+                    totalPaid: fin.totalPaid,
+                    outstanding: fin.outstanding,
+                    payments: referralCase.payments
+                        .filter((p) => p.status === 'COMPLETED')
+                        .map((p) => ({ id: p.id, amount: toPortalNumber(p.amount), date: p.date })),
+                };
+            })()
+            : null;
+
         return NextResponse.json({
             caseId: referralCase.id,
             fileNumber: referralCase.fileNumber,
@@ -92,6 +121,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
                 ? toPortalNumber(referralCase.referrer.clientDiscountPercent)
                 : null,
             services: parseCaseServices(referralCase.services),
+            financials,
             documents: referralCase.documents.map((document) => ({
                 id: document.id,
                 label: formatDocumentTypeLabel(document.type),

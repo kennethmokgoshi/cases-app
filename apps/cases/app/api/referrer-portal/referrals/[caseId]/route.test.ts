@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@zenowethu/shared-lib', () => ({
     createLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+    referrerEarnsCommission: (referrerType: string | null | undefined) => referrerType !== 'DISCOUNT',
 }));
 
 vi.mock('@/lib/referrer-portal-access', () => ({
@@ -84,10 +85,13 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
             fileNumber: 'ZDM-2026-1020-43Z',
             status: 'DHS_REQUESTED',
             services: '["debt review flag removal","credit repair"]',
+            serviceFee: null,
             createdAt: new Date('2026-06-01T09:00:00Z'),
             updatedAt: new Date('2026-07-01T09:00:00Z'),
             client: { firstName: 'Nomsa', lastName: 'Moeng' },
             referrer: { referrerType: 'COMMISSION', clientDiscountPercent: null },
+            payments: [],
+            invoices: [],
             referrerCommission: {
                 stage: 'QUOTE_ACCEPTED',
                 isEligible: false,
@@ -132,6 +136,7 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
         expect(json.commission).toEqual(expect.objectContaining({ amount: 500, status: 'In progress' }));
         expect(json.referrerType).toBe('COMMISSION');
         expect(json.clientDiscountPercent).toBeNull();
+        expect(json.financials).toBeNull();
         expect(json.services).toEqual(['debt review flag removal', 'credit repair']);
         expect(json.documents).toEqual([
             expect.objectContaining({ id: 'd-1', label: 'ID Document' }),
@@ -156,10 +161,16 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
             fileNumber: 'ZDM-2026-1021-99A',
             status: 'NEW_LEAD',
             services: null,
+            serviceFee: { toNumber: () => 5000 },
             createdAt: new Date('2026-06-01T09:00:00Z'),
             updatedAt: new Date('2026-07-01T09:00:00Z'),
             client: { firstName: 'Sipho', lastName: 'Nkosi' },
             referrer: { referrerType: 'DISCOUNT', clientDiscountPercent: { toNumber: () => 15 } },
+            payments: [
+                { id: 'p-1', amount: { toNumber: () => 2000 }, status: 'COMPLETED', date: new Date('2026-06-20T09:00:00Z') },
+                { id: 'p-2', amount: { toNumber: () => 999 }, status: 'PENDING', date: new Date('2026-06-25T09:00:00Z') },
+            ],
+            invoices: [],
             referrerCommission: null,
             documents: [],
         } as never);
@@ -174,5 +185,14 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
         expect(json.clientDiscountPercent).toBe(15);
         expect(json.services).toEqual([]);
         expect(json.documents).toEqual([]);
+        expect(json.financials).toMatchObject({
+            quoteTotal: 5000,
+            totalPaid: 2000,
+            outstanding: 3000,
+        });
+        // Only COMPLETED payments appear, with their amounts and dates
+        expect(json.financials.payments).toEqual([
+            expect.objectContaining({ id: 'p-1', amount: 2000 }),
+        ]);
     });
 });
