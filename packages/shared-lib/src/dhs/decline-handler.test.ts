@@ -8,12 +8,14 @@ vi.mock('../notifications/service', () => ({
     sendManualMessage: vi.fn(),
 }));
 import {
+    buildOutstandingFeesEmail,
     buildSendDocsClientEmail,
     calculateNextUpdate,
     classifyDeclineReason,
     extractEmailFromReason,
     formatDhsDeclineDate,
     getBasePeriodForCategory,
+    resolveDcIdentity,
 } from './decline-handler';
 
 describe('classifyDeclineReason', () => {
@@ -226,6 +228,7 @@ describe('consumer decline email copy', () => {
         const body = buildSendDocsClientEmail({
             clientFirstName: 'Maria',
             dcName: 'YMA Consulting',
+            dcFirmName: null,
             fileNumber: 'ZDM-2026-1001',
             declineReason: 'Kindly forward POA & ID copy to transfers@yma-consulting.co.za',
             transferRequestedDate: '01 Jul 2026',
@@ -238,5 +241,70 @@ describe('consumer decline email copy', () => {
         expect(body).toContain('Kindly forward POA & ID copy');
         expect(body).toContain('What we have done to handle the decline');
         expect(body).toContain('Power of Attorney and ID copy');
+    });
+
+    it('names the DC and their firm, with the DHS response on its own line, for fees declines', () => {
+        const body = buildOutstandingFeesEmail({
+            clientFirstName: 'Nombulelo',
+            dcName: 'Gasant Essack',
+            dcFirmName: 'Creditore Debt Counselling',
+            fileNumber: 'ZDM-2026-1005-BZP',
+            declineReason: 'fees outstanding',
+            transferRequestedDate: '27 Jun 2026',
+            declineRecordedDate: '13 Jul 2026',
+        });
+
+        expect(body).toContain(
+            'Your current Debt Counsellor (Gasant Essack) from (Creditore Debt Counselling) has declined this request.\n\nTheir DHS response reads: "fees outstanding"'
+        );
+    });
+
+    it('omits the firm phrase when no trading name is available', () => {
+        const body = buildOutstandingFeesEmail({
+            clientFirstName: 'Nombulelo',
+            dcName: 'Gasant Essack',
+            dcFirmName: null,
+            fileNumber: 'ZDM-2026-1005-BZP',
+            declineReason: 'fees outstanding',
+            transferRequestedDate: '27 Jun 2026',
+            declineRecordedDate: '13 Jul 2026',
+        });
+
+        expect(body).toContain('Your current Debt Counsellor (Gasant Essack) has declined this request.');
+        expect(body).not.toContain('from (');
+    });
+});
+
+describe('resolveDcIdentity', () => {
+    it('uses the linked DebtCounsellor record when case-level fields are empty', () => {
+        expect(resolveDcIdentity({
+            debtCounsellorName: null,
+            dcTradingName: null,
+            debtCounsellor: { fullName: 'Gasant Essack', tradingName: 'Creditore Debt Counselling' },
+        })).toEqual({ dcName: 'Gasant Essack', dcFirmName: 'Creditore Debt Counselling' });
+    });
+
+    it('prefers case-level overrides over the linked record', () => {
+        expect(resolveDcIdentity({
+            debtCounsellorName: 'Case Level Name',
+            dcTradingName: 'Case Level Firm',
+            debtCounsellor: { fullName: 'Gasant Essack', tradingName: 'Creditore Debt Counselling' },
+        })).toEqual({ dcName: 'Case Level Name', dcFirmName: 'Case Level Firm' });
+    });
+
+    it('does not repeat the firm when the trading name is the only name known', () => {
+        expect(resolveDcIdentity({
+            debtCounsellorName: null,
+            dcTradingName: 'Creditore Debt Counselling',
+            debtCounsellor: null,
+        })).toEqual({ dcName: 'Creditore Debt Counselling', dcFirmName: null });
+    });
+
+    it('falls back to the generic placeholder when nothing is known', () => {
+        expect(resolveDcIdentity({
+            debtCounsellorName: null,
+            dcTradingName: null,
+            debtCounsellor: null,
+        })).toEqual({ dcName: 'Debt Counsellor', dcFirmName: null });
     });
 });

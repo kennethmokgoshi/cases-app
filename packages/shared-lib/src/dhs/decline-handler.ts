@@ -290,10 +290,7 @@ export async function handleDHSDecline(params: {
             caseData.dcEmail ||
             caseData.debtCounsellor?.email ||
             null;
-        const dcName =
-            caseData.debtCounsellorName ||
-            caseData.dcTradingName ||
-            'Debt Counsellor';
+        const { dcName, dcFirmName } = resolveDcIdentity(caseData);
 
         // Attachment URLs for POA + ID documents
         const docAttachments = caseData.documents
@@ -430,6 +427,7 @@ export async function handleDHSDecline(params: {
                             buildSendDocsClientEmail({
                                 clientFirstName,
                                 dcName,
+                                dcFirmName,
                                 fileNumber,
                                 declineReason,
                                 transferRequestedDate,
@@ -476,6 +474,7 @@ export async function handleDHSDecline(params: {
             const emailBody = buildConsumerConsentEmail({
                 clientFirstName,
                 dcName,
+                dcFirmName,
                 dcContactLine,
                 declineReason,
                 transferRequestedDate,
@@ -541,6 +540,7 @@ export async function handleDHSDecline(params: {
             const feesEmailBody = buildOutstandingFeesEmail({
                 clientFirstName,
                 dcName,
+                dcFirmName,
                 fileNumber,
                 declineReason,
                 transferRequestedDate,
@@ -581,6 +581,7 @@ export async function handleDHSDecline(params: {
                         buildAttorneyClientEmail({
                             clientFirstName,
                             dcName,
+                            dcFirmName,
                             fileNumber,
                             declineReason,
                             attorneyEmail: null,
@@ -626,6 +627,7 @@ export async function handleDHSDecline(params: {
                             buildAttorneyClientEmail({
                                 clientFirstName,
                                 dcName,
+                                dcFirmName,
                                 fileNumber,
                                 declineReason,
                                 attorneyEmail,
@@ -671,6 +673,7 @@ export async function handleDHSDecline(params: {
                     buildResubmitClientEmail({
                         clientFirstName,
                         dcName,
+                        dcFirmName,
                         fileNumber,
                         declineReason,
                         transferRequestedDate,
@@ -767,6 +770,34 @@ async function addComment(
     });
 }
 
+/**
+ * Resolve the DC's personal name and firm (trading) name for outbound copy.
+ * Falls back through case-level overrides to the linked DebtCounsellor record
+ * so consumer emails never render the literal placeholder "Debt Counsellor"
+ * when the DC is actually known.
+ */
+export function resolveDcIdentity(caseData: {
+    debtCounsellorName: string | null;
+    dcTradingName: string | null;
+    debtCounsellor?: { fullName: string | null; tradingName: string | null } | null;
+}): { dcName: string; dcFirmName: string | null } {
+    const tradingName =
+        caseData.dcTradingName || caseData.debtCounsellor?.tradingName || null;
+    const dcName =
+        caseData.debtCounsellorName ||
+        caseData.debtCounsellor?.fullName ||
+        tradingName ||
+        'Debt Counsellor';
+    // Only show the firm separately when it adds information beyond the name
+    const dcFirmName = tradingName && tradingName !== dcName ? tradingName : null;
+    return { dcName, dcFirmName };
+}
+
+/** Renders "(Gasant Essack) from (Creditore Debt Counselling)" or just "(Gasant Essack)". */
+function dcDisplayPhrase(dcName: string, dcFirmName: string | null): string {
+    return dcFirmName ? `(${dcName}) from (${dcFirmName})` : `(${dcName})`;
+}
+
 // ─── Email Templates ──────────────────────────────────────────────────────────
 
 const SIGNATURE = `Aaron Nzotho | NCRDC3693
@@ -829,6 +860,7 @@ ${p.solutionSummary}`;
 function buildSendDocsClientEmail(p: {
     clientFirstName: string;
     dcName: string;
+    dcFirmName: string | null;
     fileNumber: string;
     declineReason: string;
     transferRequestedDate: string;
@@ -839,7 +871,7 @@ function buildSendDocsClientEmail(p: {
 
 We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
 
-Your current Debt Counsellor (${p.dcName}) declined the DHS transfer request.
+Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} declined the DHS transfer request.
 
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
@@ -866,6 +898,7 @@ function buildSendDocsSms(p: {
 function buildConsumerConsentEmail(p: {
     clientFirstName: string;
     dcName: string;
+    dcFirmName: string | null;
     dcContactLine: string;
     declineReason: string;
     transferRequestedDate: string;
@@ -877,9 +910,9 @@ We trust this message finds you well.
 
 We are reaching out regarding the transfer of your debt review file to Zenowethu Debt Management.
 
-We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request and their DHS response reads:
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request.
 
-"${p.declineReason}"
+Their DHS response reads: "${p.declineReason}"
 
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
@@ -915,6 +948,7 @@ function buildConsentSms(p: {
 function buildOutstandingFeesEmail(p: {
     clientFirstName: string;
     dcName: string;
+    dcFirmName: string | null;
     fileNumber: string;
     declineReason: string;
     transferRequestedDate: string;
@@ -926,9 +960,9 @@ We trust this message finds you well.
 
 We are writing regarding your debt review file (File No: ${p.fileNumber}) and the transfer of your case to Zenowethu Debt Management.
 
-We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request. Their DHS response reads:
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request.
 
-"${p.declineReason}"
+Their DHS response reads: "${p.declineReason}"
 
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
@@ -993,6 +1027,7 @@ ${SIGNATURE}`;
 function buildAttorneyClientEmail(p: {
     clientFirstName: string;
     dcName: string;
+    dcFirmName: string | null;
     fileNumber: string;
     declineReason: string;
     attorneyEmail: string | null;
@@ -1006,9 +1041,9 @@ function buildAttorneyClientEmail(p: {
 
 We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
 
-We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has declined this request and indicated that a legal matter is involved. Their DHS response reads:
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request and indicated that a legal matter is involved.
 
-"${p.declineReason}"
+Their DHS response reads: "${p.declineReason}"
 
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
@@ -1038,6 +1073,7 @@ function buildAttorneySms(p: { clientFirstName: string }): string {
 function buildResubmitClientEmail(p: {
     clientFirstName: string;
     dcName: string;
+    dcFirmName: string | null;
     fileNumber: string;
     declineReason: string;
     transferRequestedDate: string;
@@ -1047,9 +1083,9 @@ function buildResubmitClientEmail(p: {
 
 We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
 
-We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor (${p.dcName}) has indicated that the request cannot be processed immediately. Their DHS response reads:
+We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has indicated that the request cannot be processed immediately.
 
-"${p.declineReason}"
+Their DHS response reads: "${p.declineReason}"
 
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,

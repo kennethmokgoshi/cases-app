@@ -32,6 +32,7 @@ import {
     buildResubmitClientEmail,
     buildResubmitSms,
     formatDhsDeclineDate,
+    resolveDcIdentity,
 } from './decline-handler';
 
 export interface PreviewMessage {
@@ -114,10 +115,7 @@ export async function previewDHSDecline(params: {
         caseData.dcEmail ||
         caseData.debtCounsellor?.email ||
         null;
-    const dcName =
-        caseData.debtCounsellorName ||
-        caseData.dcTradingName ||
-        'Debt Counsellor';
+    const { dcName, dcFirmName } = resolveDcIdentity(caseData);
 
     const docAttachments = caseData.documents
         .filter(d => ['ID', 'POA', 'ZENOWETHU_POA'].includes(d.type))
@@ -169,6 +167,7 @@ export async function previewDHSDecline(params: {
                     body: buildSendDocsClientEmail({
                         clientFirstName,
                         dcName,
+                        dcFirmName,
                         fileNumber,
                         declineReason,
                         transferRequestedDate,
@@ -196,6 +195,7 @@ export async function previewDHSDecline(params: {
                 body: buildConsumerConsentEmail({
                     clientFirstName,
                     dcName,
+                    dcFirmName,
                     dcContactLine,
                     declineReason,
                     transferRequestedDate,
@@ -218,6 +218,7 @@ export async function previewDHSDecline(params: {
                 body: buildOutstandingFeesEmail({
                     clientFirstName,
                     dcName,
+                    dcFirmName,
                     fileNumber,
                     declineReason,
                     transferRequestedDate,
@@ -249,6 +250,7 @@ export async function previewDHSDecline(params: {
                     body: buildAttorneyClientEmail({
                         clientFirstName,
                         dcName,
+                        dcFirmName,
                         fileNumber,
                         declineReason,
                         attorneyEmail: extractedEmail,
@@ -267,6 +269,7 @@ export async function previewDHSDecline(params: {
                     body: buildAttorneyClientEmail({
                         clientFirstName,
                         dcName,
+                        dcFirmName,
                         fileNumber,
                         declineReason,
                         attorneyEmail: null,
@@ -291,6 +294,7 @@ export async function previewDHSDecline(params: {
                 body: buildResubmitClientEmail({
                     clientFirstName,
                     dcName,
+                    dcFirmName,
                     fileNumber,
                     declineReason,
                     transferRequestedDate,
