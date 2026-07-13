@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
     calculatePortalCommissionTotals,
+    formatDocumentTypeLabel,
     maskAccountNumber,
     maskConsumerName,
+    parseCaseServices,
     portalCommissionStatus,
     portalStageLabel,
     toPortalComment,
@@ -77,5 +79,42 @@ describe('referrer portal discussion comments', () => {
 
         expect(comment.fromReferrer).toBe(false);
         expect(comment.authorName).toBe('Aaron N. — Zenowethu');
+    });
+});
+
+describe('parseCaseServices', () => {
+    it('parses a JSON string array', () => {
+        expect(parseCaseServices('["debt review flag removal","credit repair"]'))
+            .toEqual(['debt review flag removal', 'credit repair']);
+    });
+
+    it('returns an empty list for null, invalid JSON, or non-array JSON', () => {
+        expect(parseCaseServices(null)).toEqual([]);
+        expect(parseCaseServices(undefined)).toEqual([]);
+        expect(parseCaseServices('not-json')).toEqual([]);
+        expect(parseCaseServices('{"a":1}')).toEqual([]);
+    });
+
+    it('drops non-string and empty entries', () => {
+        expect(parseCaseServices('["credit repair", 42, "", "  ", null]')).toEqual(['credit repair']);
+    });
+});
+
+describe('formatDocumentTypeLabel', () => {
+    it('humanizes underscore-coded document types', () => {
+        expect(formatDocumentTypeLabel('PROOF_OF_RESIDENCE')).toBe('Proof Of Residence');
+        expect(formatDocumentTypeLabel('BANK_STATEMENT')).toBe('Bank Statement');
+    });
+
+    it('keeps known acronyms uppercase', () => {
+        expect(formatDocumentTypeLabel('ID_DOCUMENT')).toBe('ID Document');
+        expect(formatDocumentTypeLabel('POA')).toBe('POA');
+        expect(formatDocumentTypeLabel('DHS_FORM')).toBe('DHS Form');
+    });
+
+    it('falls back to "Document" for empty input', () => {
+        expect(formatDocumentTypeLabel(null)).toBe('Document');
+        expect(formatDocumentTypeLabel('')).toBe('Document');
+        expect(formatDocumentTypeLabel('_')).toBe('Document');
     });
 });

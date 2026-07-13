@@ -3,7 +3,9 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
 import {
+    formatDocumentTypeLabel,
     maskConsumerName,
+    parseCaseServices,
     portalCommissionStatus,
     portalStageLabel,
     toPortalComment,
@@ -30,9 +32,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
                 id: true,
                 fileNumber: true,
                 status: true,
+                services: true,
                 createdAt: true,
                 updatedAt: true,
                 client: { select: { firstName: true, lastName: true } },
+                referrer: { select: { referrerType: true, clientDiscountPercent: true } },
                 referrerCommission: {
                     select: {
                         stage: true,
@@ -42,6 +46,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
                         paidAt: true,
                         paymentRef: true,
                     },
+                },
+                // Document types + dates only — never filenames or file access,
+                // and admin-only documents stay invisible to referrers.
+                documents: {
+                    where: { isAdminOnly: false },
+                    select: { id: true, type: true, uploadedAt: true },
+                    orderBy: { uploadedAt: 'desc' },
                 },
             },
         });
@@ -76,6 +87,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
             createdAt: referralCase.createdAt,
             lastUpdatedAt: referralCase.updatedAt,
             referralStatus: portalStageLabel(commission?.stage ?? referralCase.status),
+            referrerType: referralCase.referrer?.referrerType ?? 'COMMISSION',
+            clientDiscountPercent: referralCase.referrer?.clientDiscountPercent != null
+                ? toPortalNumber(referralCase.referrer.clientDiscountPercent)
+                : null,
+            services: parseCaseServices(referralCase.services),
+            documents: referralCase.documents.map((document) => ({
+                id: document.id,
+                label: formatDocumentTypeLabel(document.type),
+                uploadedAt: document.uploadedAt,
+            })),
             workflow: getWorkflowInfo(referralCase.status),
             statusHistory: statusLogs.map((log) => ({
                 id: log.id,

@@ -67,6 +67,10 @@ type ReferralDetail = {
     createdAt: string;
     lastUpdatedAt: string;
     referralStatus: string;
+    referrerType: string;
+    clientDiscountPercent: number | null;
+    services: string[];
+    documents: { id: string; label: string; uploadedAt: string }[];
     workflow: {
         label: string;
         description: string | null;
@@ -622,6 +626,22 @@ export default function ReferrerPortalPage() {
                                         )}
                                     </div>
 
+                                    {detail.services.length > 0 && (
+                                        <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
+                                            <h3 className="text-sm font-semibold text-white">Requested services</h3>
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                {detail.services.map((service) => (
+                                                    <span
+                                                        key={service}
+                                                        className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100"
+                                                    >
+                                                        {service}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {isDiscountReferrer ? (
                                         <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
                                             <h3 className="text-sm font-semibold text-white">Client benefit</h3>
@@ -654,6 +674,30 @@ export default function ReferrerPortalPage() {
                                         </dl>
                                     </div>
                                     )}
+
+                                    <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-sm font-semibold text-white">Documents on file</h3>
+                                            <span className="text-xs text-slate-400">{detail.documents.length} received</span>
+                                        </div>
+                                        {detail.documents.length === 0 ? (
+                                            <p className="mt-2 text-sm text-slate-400">
+                                                No documents received yet — reminding your client to submit their documents helps the case move faster.
+                                            </p>
+                                        ) : (
+                                            <ul className="mt-2 space-y-1.5">
+                                                {detail.documents.map((doc) => (
+                                                    <li key={doc.id} className="flex items-center justify-between gap-3 text-sm">
+                                                        <span className="flex items-center gap-2 text-slate-200">
+                                                            <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400/80" />
+                                                            {doc.label}
+                                                        </span>
+                                                        <span className="whitespace-nowrap text-xs text-slate-400">{formatDate(doc.uploadedAt)}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
 
                                     <div>
                                         <h3 className="text-sm font-semibold text-white">Progress history</h3>

@@ -83,9 +83,11 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
             id: 'case-1',
             fileNumber: 'ZDM-2026-1020-43Z',
             status: 'DHS_REQUESTED',
+            services: '["debt review flag removal","credit repair"]',
             createdAt: new Date('2026-06-01T09:00:00Z'),
             updatedAt: new Date('2026-07-01T09:00:00Z'),
             client: { firstName: 'Nomsa', lastName: 'Moeng' },
+            referrer: { referrerType: 'COMMISSION', clientDiscountPercent: null },
             referrerCommission: {
                 stage: 'QUOTE_ACCEPTED',
                 isEligible: false,
@@ -94,6 +96,10 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
                 paidAt: null,
                 paymentRef: null,
             },
+            documents: [
+                { id: 'd-1', type: 'ID_DOCUMENT', uploadedAt: new Date('2026-06-05T09:00:00Z') },
+                { id: 'd-2', type: 'PROOF_OF_RESIDENCE', uploadedAt: new Date('2026-06-04T09:00:00Z') },
+            ],
         } as never);
         vi.mocked(prisma.workflowLog.findMany).mockResolvedValueOnce([
             { id: 'log-1', fromStatus: 'NEW', toStatus: 'DHS_REQUESTED', timestamp: new Date('2026-06-10T09:00:00Z') },
@@ -124,11 +130,49 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
             expect.objectContaining({ from: 'new', to: 'dhs_requested' }),
         ]);
         expect(json.commission).toEqual(expect.objectContaining({ amount: 500, status: 'In progress' }));
+        expect(json.referrerType).toBe('COMMISSION');
+        expect(json.clientDiscountPercent).toBeNull();
+        expect(json.services).toEqual(['debt review flag removal', 'credit repair']);
+        expect(json.documents).toEqual([
+            expect.objectContaining({ id: 'd-1', label: 'ID Document' }),
+            expect.objectContaining({ id: 'd-2', label: 'Proof Of Residence' }),
+        ]);
         expect(json.comments).toHaveLength(2);
         expect(json.comments[0]).toEqual(expect.objectContaining({ fromReferrer: true, authorName: 'William' }));
         expect(json.comments[1]).toEqual(expect.objectContaining({ fromReferrer: false, authorName: 'Aaron N. — Zenowethu' }));
         expect(prisma.caseComment.findMany).toHaveBeenCalledWith(expect.objectContaining({
             where: { caseId: 'case-1', type: 'REFERRER' },
         }));
+    });
+
+    it('returns discount details for a discount referrer referral', async () => {
+        vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
+            ok: true,
+            sessionUserId: 'user-1',
+            referrer: { id: 'ref-1', firstName: 'William', lastName: 'Maesela' },
+        });
+        vi.mocked(prisma.case.findFirst).mockResolvedValueOnce({
+            id: 'case-2',
+            fileNumber: 'ZDM-2026-1021-99A',
+            status: 'NEW_LEAD',
+            services: null,
+            createdAt: new Date('2026-06-01T09:00:00Z'),
+            updatedAt: new Date('2026-07-01T09:00:00Z'),
+            client: { firstName: 'Sipho', lastName: 'Nkosi' },
+            referrer: { referrerType: 'DISCOUNT', clientDiscountPercent: { toNumber: () => 15 } },
+            referrerCommission: null,
+            documents: [],
+        } as never);
+        vi.mocked(prisma.workflowLog.findMany).mockResolvedValueOnce([] as never);
+        vi.mocked(prisma.caseComment.findMany).mockResolvedValueOnce([] as never);
+
+        const res = await call('case-2');
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.referrerType).toBe('DISCOUNT');
+        expect(json.clientDiscountPercent).toBe(15);
+        expect(json.services).toEqual([]);
+        expect(json.documents).toEqual([]);
     });
 });

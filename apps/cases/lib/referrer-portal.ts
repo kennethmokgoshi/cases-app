@@ -65,6 +65,33 @@ export function portalStageLabel(stage?: string | null): string {
         .join(' ');
 }
 
+/** Case.services is stored as a JSON string array — parse defensively. */
+export function parseCaseServices(services?: string | null): string[] {
+    if (!services) return [];
+    try {
+        const parsed: unknown = JSON.parse(services);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    } catch {
+        return [];
+    }
+}
+
+const DOCUMENT_LABEL_ACRONYMS = new Set(['ID', 'POA', 'DHS', 'NCR', 'NCT', 'XDS']);
+
+/** Human label for a Document.type code, e.g. ID_DOCUMENT → "ID Document". */
+export function formatDocumentTypeLabel(type?: string | null): string {
+    const parts = (type ?? '').split('_').filter(Boolean);
+    if (parts.length === 0) return 'Document';
+    return parts
+        .map((part) => {
+            const upper = part.toUpperCase();
+            if (DOCUMENT_LABEL_ACRONYMS.has(upper)) return upper;
+            return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+        })
+        .join(' ');
+}
+
 // Case discussion between a referrer and staff is stored as CaseComment rows
 // with this type — visible in the staff activity feed and the referrer portal.
 export const REFERRER_COMMENT_TYPE = 'REFERRER';
