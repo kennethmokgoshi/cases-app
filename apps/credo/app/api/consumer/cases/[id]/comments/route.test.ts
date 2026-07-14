@@ -29,7 +29,7 @@ const db = prisma as unknown as {
   caseComment: { create: ReturnType<typeof vi.fn> };
 };
 
-const request = (body: unknown) => new NextRequest('https://credo.zenowethu.co.za/api/consumer/cases/case1/comments', {
+const request = (body: unknown) => new NextRequest('https://crediva.zenowethu.co.za/api/consumer/cases/case1/comments', {
   method: 'POST',
   body: JSON.stringify(body),
   headers: { 'Content-Type': 'application/json' },

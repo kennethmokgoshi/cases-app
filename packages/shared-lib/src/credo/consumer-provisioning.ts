@@ -7,7 +7,7 @@ import { getDefaultPasswordHash } from './password-policy';
 
 const logger = createLogger('credo/provisioning');
 
-const CREDO_URL = process.env.CREDO_URL || 'https://credo.zenowethu.co.za';
+const CREDO_URL = process.env.CREDO_URL || 'https://crediva.zenowethu.co.za';
 // Password-reset / activation links are valid for 7 days. Activation invites for
 // auto-provisioned accounts use the same token mechanism, so a generous window
 // avoids locking out consumers who open the email a few days later.
@@ -119,9 +119,9 @@ export async function sendActivationInvite(params: {
   const link = `${CREDO_URL}/reset-password?token=${params.rawToken}`;
   const html = renderBrandedEmail(
     `
-      <h2 style="margin:0 0 15px;color:#0B1D35;font-size:22px;">Your Credo profile is ready, ${params.firstName}</h2>
+      <h2 style="margin:0 0 15px;color:#0B1D35;font-size:22px;">Your Crediva profile is ready, ${params.firstName}</h2>
       <p style="margin:0 0 20px;color:#475569;font-size:16px;line-height:1.6">
-        Zenowethu has created a secure Credo profile for you. Credo lets you track your case,
+        Zenowethu has created a secure Crediva profile for you. Crediva lets you track your case,
         upload required documents, view quotes and chat with our AI Credit Coach — all in one place.
       </p>
       <p style="margin:0 0 20px;color:#475569;font-size:16px;line-height:1.6">
@@ -131,16 +131,16 @@ export async function sendActivationInvite(params: {
       <p style="margin:0 0 8px;color:#94A3B8;font-size:13px;">This link expires in 7 days. If you did not expect this, you can ignore this email.</p>
     `,
     {
-      title: 'Activate your Credo profile',
-      previewText: 'Set your password to access your Credo profile.',
+      title: 'Activate your Crediva profile',
+      previewText: 'Set your password to access your Crediva profile.',
       button: { text: 'Set my password →', url: link },
-      companyName: 'Zenowethu Consulting (Credo)',
+      companyName: 'Zenowethu Consulting (Crediva)',
     },
   );
 
   const result = await sendTransactionalEmail({
     to: params.email,
-    subject: 'Activate your Credo profile — set your password',
+    subject: 'Activate your Crediva profile — set your password',
     html,
   });
   return { sent: result.emailSuccess, reason: result.errors.join('; ') || undefined };

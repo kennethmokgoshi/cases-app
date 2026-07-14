@@ -138,23 +138,20 @@ export async function GET() {
             }] as const;
         }));
 
-        const isDiscountReferrer = !referrerEarnsCommission(referrer.referrerType);
-        const discountSummary = isDiscountReferrer
-            ? calculateDiscountPartnerTotals(referrer.cases.map((referral) => {
-                const fin = caseFinancials.get(referral.id)!;
-                const milestones = caseMilestones.get(referral.id)!;
-                return {
-                    createdAt: referral.createdAt,
-                    stage: referral.referrerCommission?.stage ?? null,
-                    caseStatus: referral.status,
-                    settledAt: milestones.settledAt,
-                    completedAt: milestones.completedAt,
-                    quoteTotal: fin.quoteTotal,
-                    quoteDate: fin.quoteDate,
-                    payments: fin.completedPayments,
-                };
-            }))
-            : null;
+                const discountSummary = calculateDiscountPartnerTotals(referrer.cases.map((referral) => {
+            const fin = caseFinancials.get(referral.id)!;
+            const milestones = caseMilestones.get(referral.id)!;
+            return {
+                createdAt: referral.createdAt,
+                stage: referral.referrerCommission?.stage ?? null,
+                caseStatus: referral.status,
+                settledAt: milestones.settledAt,
+                completedAt: milestones.completedAt,
+                quoteTotal: fin.quoteTotal,
+                quoteDate: fin.quoteDate,
+                payments: fin.completedPayments,
+            };
+        }));
 
         return NextResponse.json({
             referrer: {
@@ -199,8 +196,12 @@ export async function GET() {
                     paidThisMonth: (fin?.completedPayments ?? [])
                         .filter((payment) => isInCalendarMonth(payment.date, now))
                         .reduce((sum, payment) => sum + payment.amount, 0),
-                    commissionId: commission?.id ?? null,
+                    paidLastMonth: (fin?.completedPayments ?? [])
+                        .filter((payment) => isInCalendarMonth(payment.date, now, 1))
+                        .reduce((sum, payment) => sum + payment.amount, 0),
+                                        commissionId: commission?.id ?? null,
                     commissionAmount: toPortalNumber(commission?.commissionAmount),
+                    commissionStage: commission?.stage ?? 'NEW_LEAD',
                     commissionStatus: portalCommissionStatus({
                         isEligible: commission?.isEligible ?? false,
                         isPaid: commission?.isPaid ?? false,

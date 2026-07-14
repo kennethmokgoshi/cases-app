@@ -33,9 +33,21 @@ describe('describeAiProvider', () => {
     expect(info.keyLooksWrong).toBe(false);
   });
 
-  it('reports no key configured when both env vars are empty', () => {
+  it('falls back to OpenAI when neither OpenRouter nor Anthropic is set', () => {
     vi.stubEnv('OPENROUTER_API_KEY', '');
     vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('OPENAI_API_KEY', 'sk-abc123');
+    const info = describeAiProvider();
+    expect(info.provider).toBe('OpenAI');
+    expect(info.envVar).toBe('OPENAI_API_KEY');
+    expect(info.keyConfigured).toBe(true);
+    expect(info.keyLooksWrong).toBe(false);
+  });
+
+  it('reports no key configured when all env vars are empty', () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('OPENAI_API_KEY', '');
     const info = describeAiProvider();
     expect(info.keyConfigured).toBe(false);
   });
@@ -46,6 +58,7 @@ describe('classifyPlanGenerationError', () => {
     // Default: OpenRouter configured with a wrong-provider key (the real-world failure seen in prod)
     vi.stubEnv('OPENROUTER_API_KEY', 'sk-proj-wrongkey');
     vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('OPENAI_API_KEY', '');
   });
 
   afterEach(() => {

@@ -19,7 +19,7 @@ function Logo() {
           <path d="M10 22 Q16 8 22 22" stroke="#C4953A" strokeWidth="2.5" strokeLinecap="round" fill="none" />
           <path d="M13 18 L19 18" stroke="#C4953A" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        <span style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0B1D35", letterSpacing: "-0.02em", fontFamily: "var(--font-playfair), Georgia, serif" }}>Credo</span>
+        <span style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0B1D35", letterSpacing: "-0.02em", fontFamily: "var(--font-playfair), Georgia, serif" }}>Crediva</span>
       </div>
     </div>
   );

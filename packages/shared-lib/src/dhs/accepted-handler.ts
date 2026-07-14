@@ -223,7 +223,7 @@ export async function handleDhsAccepted(params: {
                     }
                 }
                 if (activationToken) {
-                    const credoUrl = (process.env.CREDO_URL || 'https://credo.zenowethu.co.za').replace(/\/+$/, '');
+                    const credoUrl = (process.env.CREDO_URL || 'https://crediva.zenowethu.co.za').replace(/\/+$/, '');
                     credoSetPasswordLink = `${credoUrl}/reset-password?token=${activationToken}`;
                 }
             }

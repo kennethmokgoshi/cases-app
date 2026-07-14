@@ -1,28 +1,13 @@
 import { prisma } from '@zenowethu/database';
-import { logger } from '@zenowethu/shared-lib';
-import OpenAI from 'openai';
+import { logger, getAiClientForTask } from '@zenowethu/shared-lib';
 import type { PlanEvaluationResult, ChangeType } from './types';
-
-const useOpenRouter = !!process.env.OPENROUTER_API_KEY;
-const client = new OpenAI({
-  apiKey: useOpenRouter
-    ? process.env.OPENROUTER_API_KEY
-    : process.env.ANTHROPIC_API_KEY,
-  baseURL: useOpenRouter
-    ? 'https://openrouter.ai/api/v1'
-    : 'https://api.anthropic.com/v1',
-  defaultHeaders: useOpenRouter
-    ? { 'HTTP-Referer': 'https://zenowethu.co.za', 'X-Title': 'Zenowethu Cases' }
-    : undefined,
-});
-const MODEL = useOpenRouter
-  ? 'anthropic/claude-sonnet-4-5'
-  : 'claude-sonnet-4-6';
 
 export async function evaluateNewInfo(
   planId: string,
   newInfoDescription: string,
 ): Promise<PlanEvaluationResult> {
+  const { client, model: modelId } = await getAiClientForTask('plan_generation');
+
   const plan = await prisma.casePlan.findUnique({
     where: { id: planId },
     include: {
@@ -83,7 +68,7 @@ export async function evaluateNewInfo(
     .join(', ') || 'None';
 
   const response = await client.chat.completions.create({
-    model: MODEL,
+    model: modelId,
     max_tokens: 2048,
     response_format: { type: 'json_object' },
     messages: [

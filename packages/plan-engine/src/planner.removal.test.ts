@@ -20,7 +20,18 @@ vi.mock('@zenowethu/shared-lib', () => ({
         error: vi.fn(),
         warn: vi.fn(),
         debug: vi.fn()
-    }
+    },
+    getAiClientForTask: vi.fn().mockResolvedValue({
+        client: {
+            chat: {
+                completions: {
+                    create: mockCreate
+                }
+            }
+        },
+        model: 'anthropic/claude-sonnet-4-5',
+        providerName: 'Mock Provider'
+    })
 }));
 
 // Mock OpenAI

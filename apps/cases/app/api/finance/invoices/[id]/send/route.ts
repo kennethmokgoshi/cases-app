@@ -27,7 +27,7 @@ function buildEmailHtml(
 
   const isQuote  = invoice.type === 'QUOTE'
   const docLabel = isQuote ? 'Quotation' : 'Invoice'
-  const credoUrl = process.env.CREDO_APP_URL || 'https://credo.zenowethu.co.za'
+  const credoUrl = process.env.CREDO_APP_URL || 'https://crediva.zenowethu.co.za'
   const viewLink = invoice.publicToken ? `${credoUrl}/quote/${invoice.publicToken}` : null
 
   const content = `

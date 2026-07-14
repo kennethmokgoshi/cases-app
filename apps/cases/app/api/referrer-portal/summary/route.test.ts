@@ -95,7 +95,10 @@ describe('GET /api/referrer-portal/summary', () => {
             commissionPending: 200,
             commissionPaid: 0,
         });
-        expect(json.discountSummary).toBeNull();
+        expect(json.discountSummary).toMatchObject({
+            totalReferrals: 1,
+        });
+        expect(json.referrals[0].commissionStage).toBe('DEPOSIT_PAID');
         expect(prisma.referrer.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'ref-1' } }));
     });
 
@@ -207,13 +210,15 @@ describe('GET /api/referrer-portal/summary', () => {
                 settledLastMonth: 0,
                 totalQuoted: 8000,         // 5000 service fee + 3000 accepted quote
                 quotedThisMonth: 5000,     // only case-a's fee basis dates to July
+                quotedLastMonth: 0,
                 totalPaid: 3000,           // completed payments only — PENDING excluded
                 paidThisMonth: 2000,
+                paidLastMonth: 0,
             });
             // Labels and tones come from the workflow status, never the commission stage.
-            expect(json.referrals[0]).toMatchObject({ quoteTotal: 5000, totalPaid: 3000, paidThisMonth: 2000, statusTone: 'settled', referralStatus: 'Settled Successfully' });
-            expect(json.referrals[1]).toMatchObject({ statusTone: 'completed', referralStatus: 'Completed' });
-            expect(json.referrals[2]).toMatchObject({ quoteTotal: 3000, totalPaid: 0, statusTone: 'neutral', referralStatus: 'New referral' });
+            expect(json.referrals[0]).toMatchObject({ quoteTotal: 5000, totalPaid: 3000, paidThisMonth: 2000, paidLastMonth: 0, statusTone: 'settled', referralStatus: 'Settled Successfully', commissionStage: 'SETTLED' });
+            expect(json.referrals[1]).toMatchObject({ statusTone: 'completed', referralStatus: 'Completed', commissionStage: 'NEW_LEAD' });
+            expect(json.referrals[2]).toMatchObject({ quoteTotal: 3000, totalPaid: 0, statusTone: 'neutral', referralStatus: 'New referral', commissionStage: 'NEW_LEAD' });
         } finally {
             vi.useRealTimers();
         }

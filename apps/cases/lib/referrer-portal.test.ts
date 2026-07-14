@@ -197,8 +197,10 @@ describe('calculateDiscountPartnerTotals', () => {
             settledLastMonth: 0,
             totalQuoted: 0,
             quotedThisMonth: 0,
+            quotedLastMonth: 0,
             totalPaid: 0,
             paidThisMonth: 0,
+            paidLastMonth: 0,
         });
     });
 
@@ -241,15 +243,15 @@ describe('calculateDiscountPartnerTotals', () => {
                 payments: [],
             },
             {
-                // Still being worked.
+                // Still being worked, but quoted and paid last month.
                 createdAt: lastMonth,
                 stage: 'PAYING_INSTALMENTS',
                 caseStatus: 'REQUESTED_VIA_DHS',
                 settledAt: null,
                 completedAt: null,
-                quoteTotal: null,
-                quoteDate: null,
-                payments: [],
+                quoteTotal: 1500,
+                quoteDate: lastMonth,
+                payments: [{ amount: 500, date: lastMonth }],
             },
         ], now);
 
@@ -263,10 +265,12 @@ describe('calculateDiscountPartnerTotals', () => {
             totalSettled: 2,
             settledThisMonth: 1,
             settledLastMonth: 1,
-            totalQuoted: 8000,
+            totalQuoted: 9500,
             quotedThisMonth: 5000,
-            totalPaid: 6000,
+            quotedLastMonth: 1500,
+            totalPaid: 6500,
             paidThisMonth: 2000,
+            paidLastMonth: 500,
         });
     });
 

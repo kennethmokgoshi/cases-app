@@ -87,7 +87,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
               </svg>
             </div>
             <span style={{ fontWeight: 700, fontSize: "1rem", color: "#0B1D35", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>
-              Credo
+              Crediva
             </span>
           </Link>
         )}
@@ -243,7 +243,7 @@ function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
     "/settings":      "Settings",
   };
 
-  const title = pageTitle[pathname] ?? "Credo";
+  const title = pageTitle[pathname] ?? "Crediva";
 
   return (
     <header style={{

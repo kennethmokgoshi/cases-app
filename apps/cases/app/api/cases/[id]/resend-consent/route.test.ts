@@ -36,7 +36,7 @@ const request = () =>
 const okResult = {
     emailSent: true,
     skipped: false,
-    consentLink: 'https://credo.zenowethu.co.za/consent/tok123',
+    consentLink: 'https://crediva.zenowethu.co.za/consent/tok123',
     statusUpdatedTo: 'READY_TO_CONSENT',
     actionsPerformed: [],
     errors: [],

@@ -73,7 +73,7 @@ function LoginForm() {
               <path d="M7.5 11l2.5 2.5 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <span style={{ fontWeight: 700, fontSize: "1.25rem", color: "#FFFFFF", letterSpacing: "-0.01em" }}>Credo</span>
+          <span style={{ fontWeight: 700, fontSize: "1.25rem", color: "#FFFFFF", letterSpacing: "-0.01em" }}>Crediva</span>
         </Link>
 
         <div style={{ position: "relative" }}>
@@ -118,7 +118,7 @@ function LoginForm() {
             }}>
               Welcome back
             </h1>
-            <p style={{ fontSize: "0.9375rem", color: "#64748B" }}>Sign in to your Credo account</p>
+            <p style={{ fontSize: "0.9375rem", color: "#64748B" }}>Sign in to your Crediva account</p>
           </div>
 
           {error && (

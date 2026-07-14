@@ -7,7 +7,7 @@ import { setConsumerPassword } from './password-policy';
 
 const logger = createLogger('credo/password-reset');
 
-const CREDO_URL = process.env.CREDO_URL || 'https://credo.zenowethu.co.za';
+const CREDO_URL = process.env.CREDO_URL || 'https://crediva.zenowethu.co.za';
 
 export interface RequestResetResult {
   /** Always true unless an actual send error occurred — callers must NOT leak account existence. */
@@ -67,27 +67,27 @@ export async function requestPasswordReset(idNumber: string): Promise<RequestRes
 
   const html = renderBrandedEmail(
     `
-      <h2 style="margin:0 0 15px;color:#0B1D35;font-size:22px;">Reset your Credo password</h2>
+      <h2 style="margin:0 0 15px;color:#0B1D35;font-size:22px;">Reset your Crediva password</h2>
       <p style="margin:0 0 20px;color:#475569;font-size:16px;line-height:1.6">
         Hi ${formatConsumerGreetingName(consumer)}, we received a request to set or reset the password for your
-        Credo profile. Click the button below to choose a new password.
+        Crediva profile. Click the button below to choose a new password.
       </p>
       <p style="margin:0 0 8px;color:#94A3B8;font-size:13px;">
         This link expires in 7 days and can be used once. If you did not request this, you can safely ignore this email — your password will not change.
       </p>
-      <p style="margin:16px 0 0;color:#64748B;font-size:14px;">Remember: your Credo username is your 13-digit SA ID number.</p>
+      <p style="margin:16px 0 0;color:#64748B;font-size:14px;">Remember: your Crediva username is your 13-digit SA ID number.</p>
     `,
     {
-      title: 'Reset your Credo password',
-      previewText: 'Choose a new password for your Credo profile.',
+      title: 'Reset your Crediva password',
+      previewText: 'Choose a new password for your Crediva profile.',
       button: { text: 'Reset my password →', url: link },
-      companyName: 'Zenowethu Consulting (Credo)',
+      companyName: 'Zenowethu Consulting (Crediva)',
     },
   );
 
   const result = await sendTransactionalEmail({
     to: consumer.email,
-    subject: 'Reset your Credo password',
+    subject: 'Reset your Crediva password',
     html,
   });
 

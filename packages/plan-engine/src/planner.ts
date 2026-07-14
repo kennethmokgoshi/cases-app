@@ -1,27 +1,10 @@
 import { prisma } from '@zenowethu/database';
-import { logger } from '@zenowethu/shared-lib';
-import OpenAI from 'openai';
+import { logger, getAiClientForTask } from '@zenowethu/shared-lib';
 import type { GeneratedPlan, PlanStepDefinition } from './types';
 
-// Uses OpenRouter (OpenAI-compatible) when OPENROUTER_API_KEY is set,
-// falling back to direct Anthropic via ANTHROPIC_API_KEY.
-const useOpenRouter = !!process.env.OPENROUTER_API_KEY;
-const client = new OpenAI({
-  apiKey: useOpenRouter
-    ? process.env.OPENROUTER_API_KEY
-    : process.env.ANTHROPIC_API_KEY,
-  baseURL: useOpenRouter
-    ? 'https://openrouter.ai/api/v1'
-    : 'https://api.anthropic.com/v1',
-  defaultHeaders: useOpenRouter
-    ? { 'HTTP-Referer': 'https://zenowethu.co.za', 'X-Title': 'Zenowethu Cases' }
-    : undefined,
-});
-const MODEL = useOpenRouter
-  ? 'anthropic/claude-sonnet-4-5'
-  : 'claude-sonnet-4-6';
-
 export async function generatePlan(caseId: string, userGuidance?: string): Promise<GeneratedPlan> {
+  const { client, model: modelId } = await getAiClientForTask('plan_generation');
+
   const caseRecord = await prisma.case.findUnique({
     where: { id: caseId },
     include: {
@@ -286,7 +269,7 @@ Respond ONLY with JSON:
 Valid actionTypes: DHS_SEARCH, DHS_TRANSFER_REQUEST, REQUEST_FILE_FROM_DC, STATUS_UPDATE, DOCUMENT_REQUEST_CLIENT, PRESCRIPTION_CHECK, DRAFT_PRESCRIPTION_LETTER, SEND_PRESCRIPTION_LETTER, DRAFT_LEGAL_LETTER, SEND_LEGAL_LETTER, BUREAU_DISPUTE, INSURANCE_ASSESSMENT, DRAFT_CANCELLATION_LETTER, SEND_CANCELLATION_LETTER, OPEN_FORENSIC_AUDIT, RECKLESS_LENDING_ASSESSMENT, GENERATE_INVOICE, GHL_SEND_SMS, GHL_SEND_EMAIL, GHL_SEND_WHATSAPP, GHL_WAIT_DOCUMENT, GHL_WAIT_REPLY, NCT_STATUS_CHECK`;
 
   const response = await client.chat.completions.create({
-    model: MODEL,
+    model: modelId,
     max_tokens: 4096,
     messages: [
       { role: 'system', content: systemPrompt },

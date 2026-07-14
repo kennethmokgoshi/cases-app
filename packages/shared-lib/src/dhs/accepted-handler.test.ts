@@ -56,7 +56,7 @@ const baseCase = {
 beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = 'https://cases.zenowethu.co.za';
-    process.env.CREDO_URL = 'https://credo.zenowethu.co.za';
+    process.env.CREDO_URL = 'https://crediva.zenowethu.co.za';
     db.caseComment.create.mockResolvedValue({});
     db.case.update.mockResolvedValue({});
     db.debtReviewRemovalConsent.update.mockResolvedValue({});
@@ -82,7 +82,7 @@ describe('handleDhsAccepted', () => {
         expect(r.emailSent).toBe(true);
         expect(r.skipped).toBe(false);
         // The consent link is the login-gated Credo page, not the public token page
-        expect(r.consentLink).toBe('https://credo.zenowethu.co.za/consent/tok123');
+        expect(r.consentLink).toBe('https://crediva.zenowethu.co.za/consent/tok123');
         // Consent is tied to the Credo profile
         expect(provision).toHaveBeenCalledWith('cl1');
         const createData = db.debtReviewRemovalConsent.create.mock.calls[0][0].data;
@@ -92,7 +92,7 @@ describe('handleDhsAccepted', () => {
         const [, channel, recipient, body] = sendMsg.mock.calls[0];
         expect(channel).toBe('EMAIL');
         expect(recipient).toBe('sipho@example.com');
-        expect(body).toContain('https://credo.zenowethu.co.za/consent/tok123');
+        expect(body).toContain('https://crediva.zenowethu.co.za/consent/tok123');
         expect(body).toContain('ID number to type:  8001015009087');
         // Moves the case to "Ready to Consent" with a follow-up date
         expect(r.statusUpdatedTo).toBe('READY_TO_CONSENT');
@@ -252,7 +252,7 @@ describe('handleDhsAccepted', () => {
         expect(r.skipped).toBe(false);
         // Existing token reused — no new consent row
         expect(db.debtReviewRemovalConsent.create).not.toHaveBeenCalled();
-        expect(r.consentLink).toBe('https://credo.zenowethu.co.za/consent/existing-tok');
+        expect(r.consentLink).toBe('https://crediva.zenowethu.co.za/consent/existing-tok');
         const body = sendMsg.mock.calls[0][3];
         expect(body).toContain('/consent/existing-tok');
         // Consent row upgraded to the Credo channel now that a profile exists
@@ -268,7 +268,7 @@ describe('handleDhsAccepted', () => {
         const sentSubject = sendMsg.mock.calls[0][4];
         expect(sentSubject).toContain('Reminder: Your Consent Is Needed');
         expect(sentBody).toContain('cannot continue');
-        expect(sentBody).toContain('https://credo.zenowethu.co.za/consent/existing-tok');
+        expect(sentBody).toContain('https://crediva.zenowethu.co.za/consent/existing-tok');
         expect(sentBody).not.toContain('has been accepted');
     });
 

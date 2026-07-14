@@ -32,12 +32,12 @@ describe('buildAcceptedViaDhsEmail', () => {
         expect(email).toMatch(/your consent/i);
     });
 
-    it('explains the Credo consent link uses ID verification, not login', () => {
+    it('explains the Crediva consent link uses ID verification, not login', () => {
         const e = buildAcceptedViaDhsEmail({
             clientFirstName: 'Sipho',
             fileNumber: 'ZDM-2026-1009',
-            consentLink: 'https://credo.zenowethu.co.za/consent/tok123',
-            credo: { idNumber: '8001015009087', setPasswordLink: 'https://credo.zenowethu.co.za/reset-password?token=abc' },
+            consentLink: 'https://crediva.zenowethu.co.za/consent/tok123',
+            credo: { idNumber: '8001015009087', setPasswordLink: 'https://crediva.zenowethu.co.za/reset-password?token=abc' },
         });
 
         expect(e).toContain('HOW TO VERIFY YOUR CONSENT LINK');

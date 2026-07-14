@@ -28,8 +28,8 @@ export interface ClassifiedPlanError {
 }
 
 export interface AiProviderInfo {
-  provider: 'OpenRouter' | 'Anthropic';
-  envVar: 'OPENROUTER_API_KEY' | 'ANTHROPIC_API_KEY';
+  provider: 'OpenRouter' | 'Anthropic' | 'OpenAI';
+  envVar: 'OPENROUTER_API_KEY' | 'ANTHROPIC_API_KEY' | 'OPENAI_API_KEY';
   keyConfigured: boolean;
   /** True when the configured key does not match the provider's expected prefix. */
   keyLooksWrong: boolean;
@@ -38,16 +38,40 @@ export interface AiProviderInfo {
 
 /** Describes which AI provider the planner will use, based on current env vars. */
 export function describeAiProvider(): AiProviderInfo {
-  const useOpenRouter = !!process.env.OPENROUTER_API_KEY;
-  const key = useOpenRouter ? process.env.OPENROUTER_API_KEY : process.env.ANTHROPIC_API_KEY;
-  const expectedPrefix = useOpenRouter ? 'sk-or-' : 'sk-ant-';
-  return {
-    provider: useOpenRouter ? 'OpenRouter' : 'Anthropic',
-    envVar: useOpenRouter ? 'OPENROUTER_API_KEY' : 'ANTHROPIC_API_KEY',
-    keyConfigured: !!key,
-    keyLooksWrong: !!key && !key.startsWith(expectedPrefix),
-    expectedPrefix,
-  };
+  const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
+  const hasAnthropic = !hasOpenRouter && !!process.env.ANTHROPIC_API_KEY;
+
+  if (hasOpenRouter) {
+    const key = process.env.OPENROUTER_API_KEY;
+    const expectedPrefix = 'sk-or-';
+    return {
+      provider: 'OpenRouter',
+      envVar: 'OPENROUTER_API_KEY',
+      keyConfigured: true,
+      keyLooksWrong: !!key && !key.startsWith(expectedPrefix),
+      expectedPrefix,
+    };
+  } else if (hasAnthropic) {
+    const key = process.env.ANTHROPIC_API_KEY;
+    const expectedPrefix = 'sk-ant-';
+    return {
+      provider: 'Anthropic',
+      envVar: 'ANTHROPIC_API_KEY',
+      keyConfigured: true,
+      keyLooksWrong: !!key && !key.startsWith(expectedPrefix),
+      expectedPrefix,
+    };
+  } else {
+    const key = process.env.OPENAI_API_KEY;
+    const expectedPrefix = 'sk-'; // OpenAI keys typically start with sk-
+    return {
+      provider: 'OpenAI',
+      envVar: 'OPENAI_API_KEY',
+      keyConfigured: !!key,
+      keyLooksWrong: !!key && !key.startsWith(expectedPrefix),
+      expectedPrefix,
+    };
+  }
 }
 
 interface ErrorLike {

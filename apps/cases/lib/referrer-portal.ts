@@ -158,8 +158,10 @@ export type DiscountPartnerTotals = {
     settledLastMonth: number;
     totalQuoted: number;
     quotedThisMonth: number;
+    quotedLastMonth: number;
     totalPaid: number;
     paidThisMonth: number;
+    paidLastMonth: number;
 };
 
 /** True when the value falls in the calendar month `monthOffset` months before `now` (0 = this month, 1 = last month). */
@@ -199,6 +201,9 @@ export function calculateDiscountPartnerTotals(
             const paidThisMonth = referral.payments
                 .filter((payment) => isInCalendarMonth(payment.date, now))
                 .reduce((sum, payment) => sum + payment.amount, 0);
+            const paidLastMonth = referral.payments
+                .filter((payment) => isInCalendarMonth(payment.date, now, 1))
+                .reduce((sum, payment) => sum + payment.amount, 0);
 
             return {
                 totalReferrals: totals.totalReferrals + 1,
@@ -212,8 +217,10 @@ export function calculateDiscountPartnerTotals(
                 settledLastMonth: totals.settledLastMonth + (settled && isInCalendarMonth(referral.settledAt, now, 1) ? 1 : 0),
                 totalQuoted: roundMoney(totals.totalQuoted + (quoted ? referral.quoteTotal! : 0)),
                 quotedThisMonth: roundMoney(totals.quotedThisMonth + (quoted && isInCalendarMonth(referral.quoteDate, now) ? referral.quoteTotal! : 0)),
+                quotedLastMonth: roundMoney(totals.quotedLastMonth + (quoted && isInCalendarMonth(referral.quoteDate, now, 1) ? referral.quoteTotal! : 0)),
                 totalPaid: roundMoney(totals.totalPaid + paid),
                 paidThisMonth: roundMoney(totals.paidThisMonth + paidThisMonth),
+                paidLastMonth: roundMoney(totals.paidLastMonth + paidLastMonth),
             };
         },
         {
@@ -228,8 +235,10 @@ export function calculateDiscountPartnerTotals(
             settledLastMonth: 0,
             totalQuoted: 0,
             quotedThisMonth: 0,
+            quotedLastMonth: 0,
             totalPaid: 0,
             paidThisMonth: 0,
+            paidLastMonth: 0,
         },
     );
 }

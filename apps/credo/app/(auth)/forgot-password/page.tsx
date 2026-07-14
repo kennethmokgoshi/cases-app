@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
               <path d="M10 22 Q16 8 22 22" stroke="#C4953A" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
               <path d="M13 18 L19 18" stroke="#C4953A" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            <span style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0B1D35", letterSpacing: "-0.02em", fontFamily: "var(--font-playfair), Georgia, serif" }}>Credo</span>
+            <span style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0B1D35", letterSpacing: "-0.02em", fontFamily: "var(--font-playfair), Georgia, serif" }}>Crediva</span>
           </div>
         </div>
 
@@ -62,7 +62,7 @@ export default function ForgotPasswordPage() {
               </div>
               <h2 style={{ fontSize: "1.375rem", fontWeight: 700, color: "#0F172A", margin: "0 0 10px", fontFamily: "var(--font-playfair), Georgia, serif" }}>Check your email</h2>
               <p style={{ fontSize: "0.9375rem", color: "#64748B", margin: "0 0 28px", lineHeight: 1.6 }}>
-                If a Credo profile exists for ID <strong>{idNumber}</strong> and has an email on file, a password reset link has been sent. The link expires in 7 days.
+                If a Crediva profile exists for ID <strong>{idNumber}</strong> and has an email on file, a password reset link has been sent. The link expires in 7 days.
               </p>
               <Link href="/login" style={{ display: "block", textAlign: "center", padding: "12px 24px", background: "#0B1D35", color: "#FFFFFF", borderRadius: 9, fontSize: "0.9375rem", fontWeight: 600, textDecoration: "none" }}>
                 Back to login

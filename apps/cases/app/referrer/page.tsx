@@ -37,8 +37,10 @@ type ReferralRow = {
     quoteDate: string | null;
     totalPaid: number;
     paidThisMonth: number;
+    paidLastMonth: number;
     commissionId: string | null;
     commissionAmount: number;
+    commissionStage: string;
     commissionStatus: string;
     isEligible: boolean;
     isPaid: boolean;
@@ -76,6 +78,7 @@ type ReferralDetail = {
     createdAt: string;
     lastUpdatedAt: string;
     referralStatus: string;
+    commissionStage: string;
     referrerType: string;
     clientDiscountPercent: number | null;
     services: string[];
@@ -113,8 +116,10 @@ type DiscountPartnerSummary = {
     settledLastMonth: number;
     totalQuoted: number;
     quotedThisMonth: number;
+    quotedLastMonth: number;
     totalPaid: number;
     paidThisMonth: number;
+    paidLastMonth: number;
 };
 
 type PortalSummary = {
@@ -157,6 +162,48 @@ function statusToneClass(tone?: PortalStatusTone): string {
     return STATUS_TONE_CLASSES[tone ?? 'neutral'] ?? STATUS_TONE_CLASSES.neutral;
 }
 
+const STAGE_LABELS: Record<string, string> = {
+    NEW_LEAD: 'New Lead',
+    ADMIN_FEE_PAID: 'Admin Fee Paid',
+    QUOTE_SUBMITTED: 'Quote Submitted',
+    QUOTE_ACCEPTED: 'Quote Accepted',
+    DEPOSIT_PAID: 'Deposit Paid',
+    PAYING_INSTALMENTS: 'Paying instalments',
+    UP_TO_DATE: 'Up to Date',
+    ARREARS_1M: '1 Month in Arrears',
+    ARREARS_2M: '2 Months in Arrears',
+    ARREARS_3M: '3 Months in Arrears',
+    ARREARS_4M_PLUS: '4+ Months in Arrears',
+    HANDED_OVER: 'Handed Over',
+    SETTLED: 'Settled',
+};
+
+function getStageToneClass(stage: string): string {
+    switch (stage) {
+        case 'NEW_LEAD':
+            return 'border-slate-500/40 bg-slate-500/10 text-slate-300';
+        case 'ADMIN_FEE_PAID':
+        case 'QUOTE_SUBMITTED':
+        case 'QUOTE_ACCEPTED':
+            return 'border-blue-400/40 bg-blue-400/10 text-blue-200';
+        case 'DEPOSIT_PAID':
+        case 'PAYING_INSTALMENTS':
+        case 'UP_TO_DATE':
+            return 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200';
+        case 'ARREARS_1M':
+        case 'ARREARS_2M':
+        case 'ARREARS_3M':
+            return 'border-orange-400/50 bg-orange-400/15 text-orange-300';
+        case 'ARREARS_4M_PLUS':
+        case 'HANDED_OVER':
+            return 'border-red-400/50 bg-red-400/15 text-red-300';
+        case 'SETTLED':
+            return 'border-emerald-400/50 bg-emerald-400/15 text-emerald-300';
+        default:
+            return 'border-white/10 bg-white/[0.04] text-slate-200';
+    }
+}
+
 /** True when the date falls in the calendar month `monthOffset` months ago (0 = this month, 1 = last month). */
 function isInCalendarMonth(value: string | null, monthOffset: 0 | 1): boolean {
     if (!value) return false;
@@ -185,8 +232,10 @@ type ReferralFilterId =
     | 'settled-last-month'
     | 'quoted'
     | 'quoted-this-month'
+    | 'quoted-last-month'
     | 'paid'
-    | 'paid-this-month';
+    | 'paid-this-month'
+    | 'paid-last-month';
 
 const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row: ReferralRow) => boolean }> = {
     'all': { label: 'All referrals', matches: () => true },
@@ -200,8 +249,10 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'settled-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
     'quoted': { label: 'Quoted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 },
     'quoted-this-month': { label: 'Quoted this month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 0) },
+    'quoted-last-month': { label: 'Quoted last month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 1) },
     'paid': { label: 'Files with payments', matches: (row) => row.totalPaid > 0 },
     'paid-this-month': { label: 'Paid this month', matches: (row) => row.paidThisMonth > 0 },
+    'paid-last-month': { label: 'Paid last month', matches: (row) => row.paidLastMonth > 0 },
 };
 
 function formatMoney(value: number): string {
@@ -472,7 +523,7 @@ export default function ReferrerPortalPage() {
     // (quotes/payments) rather than payouts.
     const isDiscountReferrer = referrer.referrerType === 'DISCOUNT';
 
-    // Monthly scoreboard for discount partners: every stat is clickable and
+    // Monthly scoreboard for referrers: every stat is clickable and
     // filters the tracking table to the files behind the number.
     const discountGroups: {
         title: string;
@@ -480,7 +531,7 @@ export default function ReferrerPortalPage() {
         accentText: string;
         accentBar: string;
         stats: { id: ReferralFilterId; label: string; value: number; delta?: number }[];
-    }[] | null = isDiscountReferrer && discountSummary
+    }[] | null = discountSummary
         ? [
             {
                 title: 'Referrals',
@@ -533,15 +584,7 @@ export default function ReferrerPortalPage() {
         ]
         : null;
 
-    const discountMoneyCards: { id: ReferralFilterId; label: string; value: string; valueClass: string }[] | null =
-        isDiscountReferrer && discountSummary
-            ? [
-                { id: 'quoted', label: 'Total quoted', value: formatMoney(discountSummary.totalQuoted), valueClass: 'text-white' },
-                { id: 'quoted-this-month', label: `Quoted — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.quotedThisMonth), valueClass: 'text-white' },
-                { id: 'paid', label: 'Total paid', value: formatMoney(discountSummary.totalPaid), valueClass: 'text-emerald-300' },
-                { id: 'paid-this-month', label: `Paid — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.paidThisMonth), valueClass: 'text-emerald-300' },
-            ]
-            : null;
+    const discountMoneyCards = null;
 
     return (
         <main className="min-h-screen bg-slate-950 text-slate-100">
@@ -562,14 +605,6 @@ export default function ReferrerPortalPage() {
                         )}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        {!isDiscountReferrer && (
-                            <a
-                                href="/api/referrer-portal/statement"
-                                className="rounded-md border border-cyan-300/40 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-300/10"
-                            >
-                                Download statement
-                            </a>
-                        )}
                         <button
                             type="button"
                             onClick={async () => {
@@ -585,74 +620,44 @@ export default function ReferrerPortalPage() {
             </header>
 
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                {discountGroups && discountMoneyCards ? (
-                    <>
-                        <section className="grid gap-3 lg:grid-cols-3">
-                            {discountGroups.map((group) => (
-                                <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
-                                    <div className={`h-1 ${group.accentBar}`} />
-                                    <div className="px-4 pb-2 pt-3">
-                                        <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${group.accentText}`}>{group.title}</p>
-                                        <p className="mt-0.5 text-[11px] text-slate-400">{group.caption}</p>
-                                    </div>
-                                    <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
-                                        {group.stats.map((stat) => (
-                                            <button
-                                                key={stat.id}
-                                                type="button"
-                                                onClick={() => toggleReferralFilter(stat.id)}
-                                                title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
-                                                className={`px-3 py-3 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === stat.id ? 'bg-white/[0.08]' : ''}`}
-                                            >
-                                                <p className="text-[11px] uppercase tracking-wide text-slate-400">{stat.label}</p>
-                                                <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
-                                                {stat.delta != null && (
-                                                    <p className={`mt-1 text-[11px] font-medium ${stat.delta > 0 ? 'text-emerald-300' : stat.delta < 0 ? 'text-orange-300' : 'text-slate-400'}`}>
-                                                        {stat.delta > 0
-                                                            ? `▲ ${stat.delta} up on last month`
-                                                            : stat.delta < 0
-                                                                ? `▼ ${Math.abs(stat.delta)} down on last month`
-                                                                : 'Level with last month'}
-                                                    </p>
-                                                )}
-                                            </button>
-                                        ))}
-                                    </div>
+                {discountGroups && (
+                    <section className="grid gap-3 lg:grid-cols-3">
+                        {discountGroups.map((group) => (
+                            <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
+                                <div className={`h-1 ${group.accentBar}`} />
+                                <div className="px-4 pb-2 pt-3">
+                                    <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${group.accentText}`}>{group.title}</p>
+                                    <p className="mt-0.5 text-[11px] text-slate-400">{group.caption}</p>
                                 </div>
-                            ))}
-                        </section>
-                        <section className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                            {discountMoneyCards.map((card) => (
-                                <button
-                                    key={card.id}
-                                    type="button"
-                                    onClick={() => toggleReferralFilter(card.id)}
-                                    title={`Show files: ${REFERRAL_FILTERS[card.id].label}`}
-                                    className={`rounded-lg border border-white/10 bg-white/[0.04] p-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === card.id ? 'ring-1 ring-cyan-300/50' : ''}`}
-                                >
-                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{card.label}</p>
-                                    <p className={`mt-2 text-2xl font-semibold ${card.valueClass}`}>{card.value}</p>
-                                </button>
-                            ))}
-                        </section>
-                    </>
-                ) : (
-                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {[
-                            ['Total referrals', String(summary.totalReferrals)],
-                            ['Commission earned', formatMoney(summary.commissionEarned)],
-                            ['Commission pending', formatMoney(summary.commissionPending)],
-                            ['Commission paid', formatMoney(summary.commissionPaid)],
-                        ].map(([label, value]) => (
-                            <div key={label} className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
-                                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-                                <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+                                <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
+                                    {group.stats.map((stat) => (
+                                        <button
+                                            key={stat.id}
+                                            type="button"
+                                            onClick={() => toggleReferralFilter(stat.id)}
+                                            title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
+                                            className={`px-3 py-3 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === stat.id ? 'bg-white/[0.08]' : ''}`}
+                                        >
+                                            <p className="text-[11px] uppercase tracking-wide text-slate-400">{stat.label}</p>
+                                            <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
+                                            {stat.delta != null && (
+                                                <p className={`mt-1 text-[11px] font-medium ${stat.delta > 0 ? 'text-emerald-300' : stat.delta < 0 ? 'text-orange-300' : 'text-slate-400'}`}>
+                                                    {stat.delta > 0
+                                                        ? `▲ ${stat.delta} up on last month`
+                                                        : stat.delta < 0
+                                                            ? `▼ ${Math.abs(stat.delta)} down on last month`
+                                                            : 'Level with last month'}
+                                                </p>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         ))}
                     </section>
                 )}
 
-                <section className={`mt-6 grid gap-6 ${isDiscountReferrer ? '' : 'xl:grid-cols-[minmax(0,1fr)_360px]'}`}>
+                <section className="mt-6">
                     <div id="referral-tracking" className="rounded-lg border border-white/10 bg-white/[0.03]">
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
                             <div>
@@ -683,62 +688,90 @@ export default function ReferrerPortalPage() {
                                     <tr>
                                         <th className="px-4 py-3">File</th>
                                         <th className="px-4 py-3">Consumer</th>
+                                        <th className="px-4 py-3">Stage</th>
+                                        <th className="px-4 py-3">Quoted</th>
+                                        <th className="px-4 py-3 text-center">Deposit Paid</th>
+                                        <th className="px-4 py-3">Payment Status</th>
                                         <th className="px-4 py-3">Status</th>
-                                        {isDiscountReferrer ? (
-                                            <>
-                                                <th className="px-4 py-3">Quote</th>
-                                                <th className="px-4 py-3">Paid</th>
-                                                <th className="px-4 py-3">Referred</th>
-                                                <th className="px-4 py-3">Last activity</th>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <th className="px-4 py-3">Commission</th>
-                                                <th className="px-4 py-3">Payout</th>
-                                                <th className="px-4 py-3">Reference</th>
-                                            </>
-                                        )}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/10">
-                                    {visibleReferrals.map((referral) => (
-                                        <tr
-                                            key={referral.caseId}
-                                            onClick={() => setSelectedCaseId(referral.caseId)}
-                                            className={`cursor-pointer transition-colors ${referral.caseId === selectedCaseId ? 'bg-cyan-300/[0.07]' : 'hover:bg-white/[0.03]'}`}
-                                        >
-                                            <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-cyan-100">{referral.fileNumber}</td>
-                                            <td className="whitespace-nowrap px-4 py-3 text-white">{referral.consumerLabel}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${statusToneClass(referral.statusTone)}`}>
-                                                    {referral.referralStatus}
-                                                </span>
-                                            </td>
-                                            {isDiscountReferrer ? (
-                                                <>
-                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-100">
-                                                        {referral.quoteTotal != null ? formatMoney(referral.quoteTotal) : <span className="text-slate-500">No quote</span>}
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-4 py-3">
-                                                        {referral.totalPaid > 0
-                                                            ? <span className="text-emerald-300">{formatMoney(referral.totalPaid)}</span>
-                                                            : <span className="text-slate-500">—</span>}
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.createdAt)}</td>
-                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.lastUpdatedAt)}</td>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-100">{formatMoney(referral.commissionAmount)}</td>
-                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-300">{referral.commissionStatus}</td>
-                                                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-400">{referral.paymentRef ?? 'Pending'}</td>
-                                                </>
-                                            )}
-                                        </tr>
-                                    ))}
+                                    {visibleReferrals.map((referral) => {
+                                        const stage = referral.commissionStage ?? 'NEW_LEAD';
+                                        
+                                        // 1. Quoted: yes or no
+                                        const isQuoted = (referral.quoteTotal != null && referral.quoteTotal > 0) || !['NEW_LEAD', 'ADMIN_FEE_PAID'].includes(stage);
+                                        
+                                        // 2. Deposit paid: yes or no
+                                        const isDepositPaid = !['NEW_LEAD', 'ADMIN_FEE_PAID', 'QUOTE_SUBMITTED', 'QUOTE_ACCEPTED'].includes(stage);
+                                        
+                                        // 3. Settled or still paying
+                                        const agreementStatus = stage === 'SETTLED' ? 'Settled' : isDepositPaid ? 'Still paying' : 'Not started';
+                                        const agreementToneClass = stage === 'SETTLED'
+                                            ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                                            : isDepositPaid
+                                                ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'
+                                                : 'border-slate-700 bg-slate-800/40 text-slate-400';
+                                                
+                                        // 4. Up to date or overdue arrears
+                                        let paymentStatus = 'Not started';
+                                        let paymentToneClass = 'border-slate-700 bg-slate-800/40 text-slate-400';
+                                        if (stage === 'ARREARS_1M') {
+                                            paymentStatus = 'Overdue 1 month';
+                                            paymentToneClass = 'border-amber-500/40 bg-amber-500/10 text-amber-300';
+                                        } else if (stage === 'ARREARS_2M') {
+                                            paymentStatus = 'Overdue 2 months';
+                                            paymentToneClass = 'border-amber-500/40 bg-amber-500/10 text-amber-300';
+                                        } else if (stage === 'ARREARS_3M') {
+                                            paymentStatus = 'Overdue 3 months';
+                                            paymentToneClass = 'border-amber-500/40 bg-amber-500/10 text-amber-300';
+                                        } else if (stage === 'ARREARS_4M_PLUS' || stage === 'HANDED_OVER') {
+                                            paymentStatus = '4+ months in arrears';
+                                            paymentToneClass = 'border-rose-500/40 bg-rose-500/10 text-rose-300';
+                                        } else if (['DEPOSIT_PAID', 'PAYING_INSTALMENTS', 'UP_TO_DATE', 'SETTLED'].includes(stage)) {
+                                            paymentStatus = 'Up to date';
+                                            paymentToneClass = 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300';
+                                        }
+
+                                        return (
+                                            <tr
+                                                key={referral.caseId}
+                                                onClick={() => setSelectedCaseId(referral.caseId)}
+                                                className={`cursor-pointer transition-colors ${referral.caseId === selectedCaseId ? 'bg-cyan-300/[0.07]' : 'hover:bg-white/[0.03]'}`}
+                                            >
+                                                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-cyan-100">{referral.fileNumber}</td>
+                                                <td className="whitespace-nowrap px-4 py-3 text-white">{referral.consumerLabel}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${getStageToneClass(stage)}`}>
+                                                        {STAGE_LABELS[stage] ?? stage}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${isQuoted ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 bg-slate-800/40 text-slate-400'}`}>
+                                                        {isQuoted ? 'Yes' : 'No'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${isDepositPaid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 bg-slate-800/40 text-slate-400'}`}>
+                                                        {isDepositPaid ? 'Yes' : 'No'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${paymentToneClass}`}>
+                                                        {paymentStatus}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${agreementToneClass}`}>
+                                                        {agreementStatus}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                     {visibleReferrals.length === 0 && (
                                         <tr>
-                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 7 : 6}>
+                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={7}>
                                                 {referrals.length === 0
                                                     ? 'No referrals are linked yet.'
                                                     : <>No files match “{REFERRAL_FILTERS[referralFilter].label}” yet. <button type="button" onClick={() => setReferralFilter('all')} className="text-cyan-300 underline underline-offset-2">Show all files</button></>}
@@ -749,73 +782,6 @@ export default function ReferrerPortalPage() {
                             </table>
                         </div>
                     </div>
-
-                    {!isDiscountReferrer && (
-                    <form onSubmit={handleQuerySubmit} className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                        <h2 className="text-base font-semibold text-white">Missing payment follow-up</h2>
-                        <div className="mt-4 space-y-4">
-                            <label className="block text-sm">
-                                <span className="text-slate-300">Referral</span>
-                                <select
-                                    value={selectedCaseId}
-                                    onChange={(event) => setSelectedCaseId(event.target.value)}
-                                    className="mt-1 w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-white outline-none focus:border-cyan-300"
-                                    required
-                                >
-                                    {referrals.map((referral) => (
-                                        <option key={referral.caseId} value={referral.caseId}>
-                                            {referral.fileNumber} - {referral.consumerLabel}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                            {selectedReferral && (
-                                <div className="rounded-md border border-cyan-300/20 bg-cyan-300/5 px-3 py-2 text-xs text-cyan-100">
-                                    Current payout status: {selectedReferral.commissionStatus}
-                                </div>
-                            )}
-                            <label className="block text-sm">
-                                <span className="text-slate-300">Date paid by client</span>
-                                <input
-                                    type="date"
-                                    value={claimedPaidAt}
-                                    onChange={(event) => setClaimedPaidAt(event.target.value)}
-                                    className="mt-1 w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-white outline-none focus:border-cyan-300"
-                                />
-                            </label>
-                            <label className="block text-sm">
-                                <span className="text-slate-300">Claimed amount</span>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={claimedAmount}
-                                    onChange={(event) => setClaimedAmount(event.target.value)}
-                                    className="mt-1 w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-white outline-none focus:border-cyan-300"
-                                    placeholder="0.00"
-                                />
-                            </label>
-                            <label className="block text-sm">
-                                <span className="text-slate-300">Follow-up note</span>
-                                <textarea
-                                    value={queryNotes}
-                                    onChange={(event) => setQueryNotes(event.target.value)}
-                                    className="mt-1 min-h-28 w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-white outline-none focus:border-cyan-300"
-                                    placeholder="Tell us what should be checked."
-                                    required
-                                />
-                            </label>
-                            <button
-                                type="submit"
-                                disabled={querySubmitting || referrals.length === 0}
-                                className="w-full rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {querySubmitting ? 'Submitting...' : 'Submit follow-up'}
-                            </button>
-                            {queryMessage && <p className="text-sm text-cyan-100">{queryMessage}</p>}
-                        </div>
-                    </form>
-                    )}
                 </section>
 
                 {selectedCaseId && (
@@ -895,68 +861,6 @@ export default function ReferrerPortalPage() {
                                         </div>
                                     )}
 
-                                    {isDiscountReferrer ? (
-                                        <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
-                                            <h3 className="text-sm font-semibold text-white">Client finances</h3>
-                                            <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
-                                                <div>
-                                                    <dt className="text-xs text-slate-400">Quote</dt>
-                                                    <dd className="text-white">
-                                                        {detail.financials?.quoteTotal != null ? formatMoney(detail.financials.quoteTotal) : 'No quote yet'}
-                                                    </dd>
-                                                </div>
-                                                <div>
-                                                    <dt className="text-xs text-slate-400">Total paid</dt>
-                                                    <dd className="text-emerald-300">{formatMoney(detail.financials?.totalPaid ?? 0)}</dd>
-                                                </div>
-                                                <div>
-                                                    <dt className="text-xs text-slate-400">Balance</dt>
-                                                    <dd className="text-white">
-                                                        {detail.financials?.outstanding != null ? formatMoney(detail.financials.outstanding) : '—'}
-                                                    </dd>
-                                                </div>
-                                            </dl>
-                                            <h4 className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Payments received</h4>
-                                            {(detail.financials?.payments.length ?? 0) === 0 ? (
-                                                <p className="mt-1.5 text-sm text-slate-400">No payments recorded yet.</p>
-                                            ) : (
-                                                <ul className="mt-1.5 space-y-1.5">
-                                                    {detail.financials!.payments.map((payment) => (
-                                                        <li key={payment.id} className="flex items-center justify-between gap-3 text-sm">
-                                                            <span className="text-emerald-300">{formatMoney(payment.amount)}</span>
-                                                            <span className="whitespace-nowrap text-xs text-slate-400">{formatDate(payment.date)}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                            <p className="mt-3 border-t border-white/10 pt-2 text-xs text-slate-400">
-                                                This client receives your discounted pricing
-                                                {referrer.clientDiscountPercent != null ? ` (${referrer.clientDiscountPercent}% off)` : ''}. No commission is tracked.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                    <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
-                                        <h3 className="text-sm font-semibold text-white">Commission</h3>
-                                        <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                                            <div>
-                                                <dt className="text-xs text-slate-400">Amount</dt>
-                                                <dd className="text-white">{formatMoney(detail.commission.amount)}</dd>
-                                            </div>
-                                            <div>
-                                                <dt className="text-xs text-slate-400">Status</dt>
-                                                <dd className="text-white">{detail.commission.status}</dd>
-                                            </div>
-                                            <div>
-                                                <dt className="text-xs text-slate-400">Paid on</dt>
-                                                <dd className="text-slate-200">{formatDate(detail.commission.paidAt)}</dd>
-                                            </div>
-                                            <div>
-                                                <dt className="text-xs text-slate-400">Reference</dt>
-                                                <dd className="font-mono text-xs text-slate-200">{detail.commission.paymentRef ?? 'Pending'}</dd>
-                                            </div>
-                                        </dl>
-                                    </div>
-                                    )}
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
                                         <div className="flex items-center justify-between">
@@ -1057,7 +961,7 @@ export default function ReferrerPortalPage() {
                     </section>
                 )}
 
-                <section className={`mt-6 grid gap-6 ${isDiscountReferrer ? '' : 'lg:grid-cols-2'}`}>
+                <section className="mt-6">
                     <form onSubmit={handleProfileSave} className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
                         <h2 className="text-base font-semibold text-white">{isDiscountReferrer ? 'Profile' : 'Profile and banking'}</h2>
                         {isDiscountReferrer && (
@@ -1115,38 +1019,6 @@ export default function ReferrerPortalPage() {
                             {profileMessage && <p className="text-sm text-cyan-100">{profileMessage}</p>}
                         </div>
                     </form>
-
-                    {!isDiscountReferrer && (
-                    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-base font-semibold text-white">Follow-up history</h2>
-                            <span className="text-xs text-slate-400">{paymentQueries.length} submitted</span>
-                        </div>
-                        <div className="mt-4 space-y-3">
-                            {paymentQueries.map((query) => (
-                                <div key={query.id} className="rounded-md border border-white/10 bg-slate-900/80 p-3">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                            <p className="font-mono text-xs text-cyan-100">{query.fileNumber}</p>
-                                            <p className="mt-1 text-sm text-white">{query.consumerLabel}</p>
-                                        </div>
-                                        <span className="rounded-full bg-white/10 px-2 py-1 text-xs text-slate-200">{query.status}</span>
-                                    </div>
-                                    <p className="mt-2 text-xs text-slate-400">
-                                        Submitted {formatDate(query.createdAt)}
-                                        {query.claimedAmount > 0 ? ` for ${formatMoney(query.claimedAmount)}` : ''}
-                                    </p>
-                                    {query.notes && <p className="mt-2 text-sm text-slate-300">{query.notes}</p>}
-                                </div>
-                            ))}
-                            {paymentQueries.length === 0 && (
-                                <p className="rounded-md border border-white/10 bg-slate-900/80 p-4 text-sm text-slate-400">
-                                    No payment follow-ups submitted yet.
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                    )}
                 </section>
             </div>
         </main>

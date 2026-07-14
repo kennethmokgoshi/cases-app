@@ -518,12 +518,12 @@ async function openConsumerDocumentRequests(
                 caseId,
                 category: spec.category,
                 label: spec.label,
-                notes: 'Needed to complete your debt review removal. Please upload it in your Credo portal.',
+                notes: 'Needed to complete your debt review removal. Please upload it in your Crediva portal.',
                 requestedById: userId ?? null,
             },
         });
         result.documentRequestsCreated.push(spec.label);
-        result.actionsPerformed.push(`Credo upload request opened for the consumer: ${spec.label}.`);
+        result.actionsPerformed.push(`Crediva upload request opened for the consumer: ${spec.label}.`);
     }
 }
 

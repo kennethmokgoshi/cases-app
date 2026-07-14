@@ -385,17 +385,17 @@ function Step3({ onNext, onBack, submitting, error, onGoToStep }: {
           {
             key: "popia" as const,
             title: "POPIA Data Protection Consent",
-            body: "I consent to Credo processing my personal information in accordance with the Protection of Personal Information Act (POPIA) No. 4 of 2013. My data will be used solely to provide credit repair services and will not be sold or shared without my express consent.",
+            body: "I consent to Crediva processing my personal information in accordance with the Protection of Personal Information Act (POPIA) No. 4 of 2013. My data will be used solely to provide credit repair services and will not be sold or shared without my express consent.",
           },
           {
             key: "bureau" as const,
             title: "Credit Bureau Access Authorisation",
-            body: "I authorise Credo to retrieve my credit reports from TransUnion SA, Experian SA, XDS, and Lightstone on my behalf, as permitted under the National Credit Act (NCA) No. 34 of 2005 Section 72. I understand I am entitled to one free report per bureau per year.",
+            body: "I authorise Crediva to retrieve my credit reports from TransUnion SA, Experian SA, XDS, and Lightstone on my behalf, as permitted under the National Credit Act (NCA) No. 34 of 2005 Section 72. I understand I am entitled to one free report per bureau per year.",
           },
           {
             key: "terms" as const,
             title: "Terms of Service & Privacy Policy",
-            body: `I have read and agree to Credo's Terms of Service and Privacy Policy. I understand that Credo is not a law firm and that dispute outcomes are not guaranteed.`,
+            body: `I have read and agree to Crediva's Terms of Service and Privacy Policy. I understand that Crediva is not a law firm and that dispute outcomes are not guaranteed.`,
           },
         ].map(item => (
           <label key={item.key} style={{
@@ -481,7 +481,7 @@ function Step4() {
       </div>
 
       <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0F172A", letterSpacing: "-0.02em", margin: "0 0 10px", fontFamily: "var(--font-playfair), Georgia, serif" }}>
-        Welcome to Credo
+        Welcome to Crediva
       </h2>
       <p style={{ fontSize: "0.9375rem", color: "#64748B", margin: "0 0 32px", lineHeight: 1.7 }}>
         Your account is ready. We&apos;re pulling your credit reports from all 4 SA bureaus.
@@ -603,7 +603,7 @@ export default function RegisterPage() {
               <path d="M7.5 11l2.5 2.5 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span style={{ fontWeight: 700, fontSize: "1.25rem", color: "#FFFFFF", letterSpacing: "-0.01em" }}>Credo</span>
+          <span style={{ fontWeight: 700, fontSize: "1.25rem", color: "#FFFFFF", letterSpacing: "-0.01em" }}>Crediva</span>
         </Link>
 
         <div style={{ position: "relative" }}>
@@ -613,7 +613,7 @@ export default function RegisterPage() {
           </p>
           <p style={{ fontSize: "0.9375rem", color: "#64748B", lineHeight: 1.7 }}>
             You have the right to dispute inaccurate information under the National Credit Act.
-            Credo makes that simple, guided, and free to start.
+            Crediva makes that simple, guided, and free to start.
           </p>
         </div>
 

@@ -111,7 +111,7 @@ export default function AICoachPage() {
     {
       id: 1,
       role: "assistant",
-      content: `Hello! I am your Credo AI Credit Coach.
+      content: `Hello! I am your Crediva AI Credit Coach.
 
 I understand South African credit law — the **National Credit Act**, POPIA, debt review, prescription rules, emolument attachment orders, and your rights with all four credit bureaus.
 
@@ -199,7 +199,7 @@ I can see your credit profile and help you understand exactly what is affecting 
             <div style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: "#059669", border: "2px solid white" }}/>
           </div>
           <div>
-            <p style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#0F172A", margin: 0 }}>Credo AI Credit Coach</p>
+            <p style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#0F172A", margin: 0 }}>Crediva AI Credit Coach</p>
             <p style={{ fontSize: "0.8125rem", color: "#059669", margin: 0, fontWeight: 500 }}>Online &bull; Knows your credit profile</p>
           </div>
         </div>
@@ -351,7 +351,7 @@ I can see your credit profile and help you understand exactly what is affecting 
       </div>
 
       <p style={{ fontSize: "0.75rem", color: "#94A3B8", textAlign: "center", margin: "8px 0 0", lineHeight: 1.5 }}>
-        Credo AI provides general guidance under SA law. For legal advice, consult a qualified attorney or the Credit Ombud (free).
+        Crediva AI provides general guidance under SA law. For legal advice, consult a qualified attorney or the Credit Ombud (free).
       </p>
 
       <style>{`

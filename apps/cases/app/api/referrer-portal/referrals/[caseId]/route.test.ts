@@ -131,6 +131,7 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
         // Workflow status drives the label — the lagging commission stage
         // (QUOTE_ACCEPTED here) must not leak into the display.
         expect(json.referralStatus).toBe('Requested via DHS');
+        expect(json.commissionStage).toBe('QUOTE_ACCEPTED');
         expect(json.workflow.percent).toBe(30);
         expect(json.statusHistory).toEqual([
             expect.objectContaining({ from: 'new', to: 'dhs_requested' }),
@@ -187,6 +188,7 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
         expect(json.clientDiscountPercent).toBe(15);
         expect(json.services).toEqual([]);
         expect(json.documents).toEqual([]);
+        expect(json.commissionStage).toBe('NEW_LEAD');
         expect(json.financials).toMatchObject({
             quoteTotal: 5000,
             totalPaid: 2000,

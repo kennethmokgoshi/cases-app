@@ -9,7 +9,7 @@ const MessageSchema = z.object({
     consumerId: z.string().optional(),
 });
 
-const SYSTEM_PROMPT = `You are Credo AI, a South African credit coaching assistant built by Zenowethu.
+const SYSTEM_PROMPT = `You are Crediva AI, a South African credit coaching assistant built by Zenowethu.
 
 Your role is to help South African consumers understand their credit rights and improve their financial situation. You have deep knowledge of:
 - The National Credit Act (NCA) — Sections 71, 72, 86, 126

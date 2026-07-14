@@ -50,7 +50,7 @@ const verifyIdentity = verifyDrrConsentIdentity as unknown as ReturnType<typeof 
 
 const params = Promise.resolve({ token: 'tok123' });
 const request = (headers: Record<string, string> = {}, body?: unknown) =>
-    new NextRequest('https://credo.zenowethu.co.za/api/consumer/consent/tok123', {
+    new NextRequest('https://crediva.zenowethu.co.za/api/consumer/consent/tok123', {
         headers,
         ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
     });

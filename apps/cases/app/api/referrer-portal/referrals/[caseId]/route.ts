@@ -117,7 +117,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
             lastUpdatedAt: referralCase.updatedAt,
             // Workflow status, not commission stage — the stage lags and only
             // tracks the payout pipeline.
-            referralStatus: portalStageLabel(referralCase.status),
+                        referralStatus: portalStageLabel(referralCase.status),
+            commissionStage: commission?.stage ?? 'NEW_LEAD',
             referrerType: referralCase.referrer?.referrerType ?? 'COMMISSION',
             clientDiscountPercent: referralCase.referrer?.clientDiscountPercent != null
                 ? toPortalNumber(referralCase.referrer.clientDiscountPercent)

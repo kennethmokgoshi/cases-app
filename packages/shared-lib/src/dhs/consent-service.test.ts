@@ -46,7 +46,7 @@ const caseModel = (prisma as unknown as { case: { update: ReturnType<typeof vi.f
 beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = 'https://cases.zenowethu.co.za';
-    process.env.CREDO_URL = 'https://credo.zenowethu.co.za';
+    process.env.CREDO_URL = 'https://crediva.zenowethu.co.za';
     caseComment.create.mockResolvedValue({});
     caseModel.update.mockResolvedValue({});
 });
@@ -59,7 +59,7 @@ describe('buildConsentLink', () => {
 
 describe('buildCredoConsentLink', () => {
     it('builds the login-gated Credo consent URL', () => {
-        expect(buildCredoConsentLink('tok123')).toBe('https://credo.zenowethu.co.za/consent/tok123');
+        expect(buildCredoConsentLink('tok123')).toBe('https://crediva.zenowethu.co.za/consent/tok123');
     });
 });
 

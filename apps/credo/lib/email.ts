@@ -170,12 +170,12 @@ export function welcomeEmailHtml(firstName: string): string {
     `;
 
     return renderBrandedEmail(content, {
-        title: "Welcome to Credo",
+        title: "Welcome to Crediva",
         previewText: "Your account is ready. Let's get started on your credit repair journey.",
         button: {
             text: "Go to my dashboard →",
-            url: `${process.env.NEXTAUTH_URL || "https://credo.zenowethu.co.za"}/dashboard`
+            url: `${process.env.NEXTAUTH_URL || "https://crediva.zenowethu.co.za"}/dashboard`
         },
-        companyName: "Zenowethu Consulting (Credo)"
+        companyName: "Zenowethu Consulting (Crediva)"
     });
 }

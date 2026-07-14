@@ -57,7 +57,7 @@ describe('GET /api/consumer/cases/[id]/statement', () => {
   it('returns 401 when not signed in', async () => {
     vi.mocked(auth).mockResolvedValue(null as never);
 
-    const res = await GET(new Request('https://credo.zenowethu.co.za/api/consumer/cases/case1/statement'), {
+    const res = await GET(new Request('https://crediva.zenowethu.co.za/api/consumer/cases/case1/statement'), {
       params: Promise.resolve({ id: 'case1' }),
     });
 
@@ -65,7 +65,7 @@ describe('GET /api/consumer/cases/[id]/statement', () => {
   });
 
   it('returns a downloadable payment statement for the linked case', async () => {
-    const res = await GET(new Request('https://credo.zenowethu.co.za/api/consumer/cases/case1/statement'), {
+    const res = await GET(new Request('https://crediva.zenowethu.co.za/api/consumer/cases/case1/statement'), {
       params: Promise.resolve({ id: 'case1' }),
     });
     const csv = await res.text();

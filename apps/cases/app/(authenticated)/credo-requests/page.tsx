@@ -68,7 +68,7 @@ export default function CredoRequestsPage() {
       {/* Header section with responsive layout */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Credo Portal Requests</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Crediva Portal Requests</h1>
           <p className="text-gray-400 mt-1">Review and convert inbound service requests from the consumer portal.</p>
         </div>
         <div className="flex items-center gap-3">

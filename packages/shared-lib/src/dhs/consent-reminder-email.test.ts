@@ -16,7 +16,7 @@ describe('buildConsentReminderEmail', () => {
     const base = {
         clientFirstName: 'Letlhogonolo',
         fileNumber: 'ZDM-2026-1022-2T7',
-        consentLink: 'https://credo.zenowethu.co.za/consent/tok123',
+        consentLink: 'https://crediva.zenowethu.co.za/consent/tok123',
     };
 
     it('reminds the consumer that flag removal cannot continue without consent', () => {
@@ -40,13 +40,13 @@ describe('buildConsentReminderEmail', () => {
     it('includes ID verification instructions when a profile exists', () => {
         const body = buildConsentReminderEmail({
             ...base,
-            credo: { idNumber: '9005135832087', setPasswordLink: 'https://credo.zenowethu.co.za/reset-password?token=abc' },
+            credo: { idNumber: '9005135832087', setPasswordLink: 'https://crediva.zenowethu.co.za/reset-password?token=abc' },
         });
         expect(body).toContain('HOW TO VERIFY YOUR CONSENT LINK');
         expect(body).toContain('You do not need to log in to give this consent');
         expect(body).toContain('ID number to type:  9005135832087');
         expect(body).not.toContain('HOW TO LOG IN TO YOUR CREDO PORTAL');
-        expect(body).not.toContain('https://credo.zenowethu.co.za/reset-password?token=abc');
+        expect(body).not.toContain('https://crediva.zenowethu.co.za/reset-password?token=abc');
         expect(body).not.toContain('Your password');
     });
 

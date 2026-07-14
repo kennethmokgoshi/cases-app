@@ -122,14 +122,14 @@ export async function POST(
                   <p style="margin:0 0 16px;color:#0F172A;font-size:16px;font-weight:600">${parsed.data.label}</p>
                   ${parsed.data.notes ? `<p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6">${parsed.data.notes}</p>` : ''}
                   <p style="margin:0;color:#475569;font-size:15px;line-height:1.6">
-                    Log in to Credo with your 13-digit ID number and upload it under your Documents.
+                    Log in to Crediva with your 13-digit ID number and upload it under your Documents.
                   </p>
                 `,
                 {
                     title: 'Document required',
                     previewText: `Please upload: ${parsed.data.label}`,
-                    button: { text: 'Upload my document →', url: `${process.env.CREDO_URL || 'https://credo.zenowethu.co.za'}/documents` },
-                    companyName: 'Zenowethu Consulting (Credo)',
+                    button: { text: 'Upload my document →', url: `${process.env.CREDO_URL || 'https://crediva.zenowethu.co.za'}/documents` },
+                    companyName: 'Zenowethu Consulting (Crediva)',
                 },
             );
             sendTransactionalEmail({ to: consumer.email, subject: 'Action needed: a document is required for your case', html })

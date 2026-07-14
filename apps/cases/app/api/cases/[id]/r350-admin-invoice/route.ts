@@ -20,7 +20,7 @@ function formatZAR(n: number): string {
 
 function buildEmailHtml(invoiceNumber: string, total: number, publicToken: string | null): string {
   const totalFormatted = formatZAR(total);
-  const credoUrl = process.env.CREDO_APP_URL || 'https://credo.zenowethu.co.za';
+  const credoUrl = process.env.CREDO_APP_URL || 'https://crediva.zenowethu.co.za';
   const viewLink = publicToken ? `${credoUrl}/quote/${publicToken}` : null;
 
   const content = `

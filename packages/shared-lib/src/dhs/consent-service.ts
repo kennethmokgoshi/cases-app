@@ -62,7 +62,7 @@ export function buildConsentLink(token: string): string {
 
 /** Base URL of the Credo consumer portal. */
 export function getCredoBaseUrl(): string {
-    return (process.env.CREDO_URL || 'https://credo.zenowethu.co.za').replace(/\/+$/, '');
+    return (process.env.CREDO_URL || 'https://crediva.zenowethu.co.za').replace(/\/+$/, '');
 }
 
 /**
@@ -335,7 +335,7 @@ export async function onDebtReviewRemovalConsent(consentId: string): Promise<voi
     const automationUserId = await getAutomationUserId().catch(() => null);
     if (automationUserId) {
         const who = consent.consumer
-            ? `via their Credo profile (ID ${consent.consumer.idNumber ? consent.consumer.idNumber.slice(0, 6) + '***' : 'on file'})`
+            ? `via their Crediva profile (ID ${consent.consumer.idNumber ? consent.consumer.idNumber.slice(0, 6) + '***' : 'on file'})`
             : 'via the secure emailed link';
         await prisma.caseComment
             .create({
