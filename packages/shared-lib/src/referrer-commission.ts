@@ -64,6 +64,8 @@ const STATUS_TO_COMMISSION_STAGE: Record<string, ReferrerCommissionStage> = {
     ARREARS_4M_PLUS: 'ARREARS_4M_PLUS',
     CL_HANDED_OVER:  'HANDED_OVER',
     COMPLETED:       'SETTLED',
+    SETTLED:         'SETTLED',
+    SETTLED_SUCCESS: 'SETTLED',
 };
 
 // Commission is payable once any of these stages is reached

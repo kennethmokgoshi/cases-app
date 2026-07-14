@@ -1,3 +1,5 @@
+import { getStatusByCode } from '@zenowethu/shared-lib/src/statuses/statuses';
+
 export type MoneyLike = number | { toNumber: () => number } | null | undefined;
 
 export type PortalCommissionInput = {
@@ -58,20 +60,85 @@ export function portalStageLabel(stage?: string | null): string {
     };
 
     if (!stage) return 'In progress';
-    return labels[stage] ?? stage
-        .toLowerCase()
-        .split('_')
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ');
+    return labels[stage]
+        ?? getStatusByCode(stage)?.name
+        ?? stage
+            .toLowerCase()
+            .split('_')
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ');
 }
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * Referrer-facing colour tone for a referral's stage or case status.
+ * - settled: fees fully paid — the happy end state
+ * - completed: the work is done but payment is still outstanding
+ * - progress: we have started working the file (anything from "Requested via DHS" onwards)
+ * - detour: we hit a stumbling block, but we are working through it
+ * - attention: overdue — needs immediate action
+ * - lost: withdrawn or cancelled
+ * - neutral: beginning stages / unknown
+ */
+export type PortalStatusTone =
+    | 'settled'
+    | 'completed'
+    | 'progress'
+    | 'detour'
+    | 'attention'
+    | 'lost'
+    | 'neutral';
+
+// Commission stage codes (RefStage) that do not exist as workflow statuses,
+// plus stumbling-block codes that must read as detours regardless of the
+// workflow category they sit in.
+const STAGE_TONES: Record<string, PortalStatusTone> = {
+    SETTLED: 'settled',
+    SETTLED_SUCCESS: 'settled',
+    ADMIN_FEE_PAID: 'progress',
+    QUOTE_SUBMITTED: 'progress',
+    QUOTE_ACCEPTED: 'progress',
+    DEPOSIT_PAID: 'progress',
+    PAYING_INSTALMENTS: 'progress',
+    UP_TO_DATE: 'progress',
+    ARREARS_1M: 'detour',
+    ARREARS_2M: 'detour',
+    ARREARS_3M: 'detour',
+    ARREARS_4M_PLUS: 'detour',
+    HANDED_OVER: 'detour',
+    COLLECTION_HANDED_OVER: 'detour',
+};
+
+const CATEGORY_TONES: Record<string, PortalStatusTone> = {
+    SETTLED: 'settled',
+    COMPLETED: 'completed',
+    IN_PROGRESS: 'progress',
+    ADVANCED: 'progress',
+    ADVANCED_PROGRESS: 'progress',
+    PAYING: 'progress',
+    DETOUR: 'detour',
+    ADVANCED_DETOUR: 'detour',
+    OVERDUE: 'attention',
+    LOST: 'lost',
+    BEGINNING: 'neutral',
+};
+
+export function portalStatusTone(stageOrStatus?: string | null): PortalStatusTone {
+    if (!stageOrStatus) return 'neutral';
+    const stageTone = STAGE_TONES[stageOrStatus];
+    if (stageTone) return stageTone;
+    const category = getStatusByCode(stageOrStatus)?.category;
+    return (category && CATEGORY_TONES[category]) || 'neutral';
+}
 
 export type DiscountPartnerReferralInput = {
     createdAt: Date | string;
     stage?: string | null;
-    /** When the referral last changed stage — used to date "settled" events. */
-    stageUpdatedAt?: Date | string | null;
+    /** Raw case workflow status — used when no commission stage exists. */
+    caseStatus?: string | null;
+    /** When the referral reached a settled state — used to bucket settlements by month. */
+    settledAt?: Date | string | null;
+    /** When the work was completed — used to bucket completions by month. */
+    completedAt?: Date | string | null;
     quoteTotal: number | null;
     /** Best-known date the quote basis was established (acceptance date, quote date, or case creation for service fees). */
     quoteDate?: Date | string | null;
@@ -81,62 +148,88 @@ export type DiscountPartnerReferralInput = {
 
 export type DiscountPartnerTotals = {
     totalReferrals: number;
-    referralsLast30Days: number;
+    referralsThisMonth: number;
+    referralsLastMonth: number;
+    totalCompleted: number;
+    completedThisMonth: number;
+    completedLastMonth: number;
     totalSettled: number;
-    settledLast30Days: number;
+    settledThisMonth: number;
+    settledLastMonth: number;
     totalQuoted: number;
-    quotedLast30Days: number;
+    quotedThisMonth: number;
     totalPaid: number;
-    paidLast30Days: number;
+    paidThisMonth: number;
 };
 
-function isWithinLast30Days(value: Date | string | null | undefined, now: Date): boolean {
+/** True when the value falls in the calendar month `monthOffset` months before `now` (0 = this month, 1 = last month). */
+export function isInCalendarMonth(
+    value: Date | string | null | undefined,
+    now: Date,
+    monthOffset: 0 | 1 = 0,
+): boolean {
     if (!value) return false;
-    const time = new Date(value).getTime();
-    if (Number.isNaN(time)) return false;
-    return time >= now.getTime() - THIRTY_DAYS_MS && time <= now.getTime();
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return false;
+    const target = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    return date.getFullYear() === target.getFullYear() && date.getMonth() === target.getMonth();
 }
 
 function roundMoney(value: number): number {
     return Math.round(value * 100) / 100;
 }
 
-/** Dashboard totals for a discount partner: referral flow, settlements, and the
- *  quote/payment money their referred clients generated — overall and in the
- *  last 30 days. */
+/** Dashboard totals for a discount partner: referral flow, completions,
+ *  settlements, and the quote/payment money their referred clients generated —
+ *  all-time plus this and last calendar month. */
 export function calculateDiscountPartnerTotals(
     referrals: DiscountPartnerReferralInput[],
     now: Date = new Date(),
 ): DiscountPartnerTotals {
     return referrals.reduce<DiscountPartnerTotals>(
         (totals, referral) => {
-            const settled = referral.stage === 'SETTLED';
+            // The case's workflow status is the truth about where the file is;
+            // the commission stage only tracks the payout pipeline and can lag
+            // (most workflow statuses never update it), so status wins.
+            const tone = portalStatusTone(referral.caseStatus ?? referral.stage);
+            const settled = tone === 'settled';
+            const completed = tone === 'completed';
             const quoted = referral.quoteTotal != null && referral.quoteTotal > 0;
             const paid = referral.payments.reduce((sum, payment) => sum + payment.amount, 0);
-            const paid30 = referral.payments
-                .filter((payment) => isWithinLast30Days(payment.date, now))
+            const paidThisMonth = referral.payments
+                .filter((payment) => isInCalendarMonth(payment.date, now))
                 .reduce((sum, payment) => sum + payment.amount, 0);
 
             return {
                 totalReferrals: totals.totalReferrals + 1,
-                referralsLast30Days: totals.referralsLast30Days + (isWithinLast30Days(referral.createdAt, now) ? 1 : 0),
+                referralsThisMonth: totals.referralsThisMonth + (isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
+                referralsLastMonth: totals.referralsLastMonth + (isInCalendarMonth(referral.createdAt, now, 1) ? 1 : 0),
+                totalCompleted: totals.totalCompleted + (completed ? 1 : 0),
+                completedThisMonth: totals.completedThisMonth + (completed && isInCalendarMonth(referral.completedAt, now) ? 1 : 0),
+                completedLastMonth: totals.completedLastMonth + (completed && isInCalendarMonth(referral.completedAt, now, 1) ? 1 : 0),
                 totalSettled: totals.totalSettled + (settled ? 1 : 0),
-                settledLast30Days: totals.settledLast30Days + (settled && isWithinLast30Days(referral.stageUpdatedAt, now) ? 1 : 0),
+                settledThisMonth: totals.settledThisMonth + (settled && isInCalendarMonth(referral.settledAt, now) ? 1 : 0),
+                settledLastMonth: totals.settledLastMonth + (settled && isInCalendarMonth(referral.settledAt, now, 1) ? 1 : 0),
                 totalQuoted: roundMoney(totals.totalQuoted + (quoted ? referral.quoteTotal! : 0)),
-                quotedLast30Days: roundMoney(totals.quotedLast30Days + (quoted && isWithinLast30Days(referral.quoteDate, now) ? referral.quoteTotal! : 0)),
+                quotedThisMonth: roundMoney(totals.quotedThisMonth + (quoted && isInCalendarMonth(referral.quoteDate, now) ? referral.quoteTotal! : 0)),
                 totalPaid: roundMoney(totals.totalPaid + paid),
-                paidLast30Days: roundMoney(totals.paidLast30Days + paid30),
+                paidThisMonth: roundMoney(totals.paidThisMonth + paidThisMonth),
             };
         },
         {
             totalReferrals: 0,
-            referralsLast30Days: 0,
+            referralsThisMonth: 0,
+            referralsLastMonth: 0,
+            totalCompleted: 0,
+            completedThisMonth: 0,
+            completedLastMonth: 0,
             totalSettled: 0,
-            settledLast30Days: 0,
+            settledThisMonth: 0,
+            settledLastMonth: 0,
             totalQuoted: 0,
-            quotedLast30Days: 0,
+            quotedThisMonth: 0,
             totalPaid: 0,
-            paidLast30Days: 0,
+            paidThisMonth: 0,
         },
     );
 }

@@ -3,11 +3,13 @@ import {
     calculateDiscountPartnerTotals,
     calculatePortalCommissionTotals,
     formatDocumentTypeLabel,
+    isInCalendarMonth,
     maskAccountNumber,
     maskConsumerName,
     parseCaseServices,
     portalCommissionStatus,
     portalStageLabel,
+    portalStatusTone,
     toPortalComment,
 } from './referrer-portal';
 
@@ -48,6 +50,13 @@ describe('referrer portal commission helpers', () => {
         expect(portalStageLabel('DEPOSIT_PAID')).toBe('Deposit paid');
         expect(portalStageLabel('ARREARS_3M')).toBe('Payment follow-up');
         expect(portalStageLabel(null)).toBe('In progress');
+    });
+
+    it('labels workflow statuses with their proper names, title-casing unknown codes', () => {
+        expect(portalStageLabel('OUTSTANDING_DOCS')).toBe('Outstanding Documents');
+        expect(portalStageLabel('SETTLED_SUCCESS')).toBe('Settled Successfully');
+        expect(portalStageLabel('REQUESTED_VIA_DHS')).toBe('Requested via DHS');
+        expect(portalStageLabel('SOME_UNKNOWN_CODE')).toBe('Some Unknown Code');
     });
 
     it('shows the payout status without exposing internal workflow notes', () => {
@@ -120,49 +129,124 @@ describe('formatDocumentTypeLabel', () => {
     });
 });
 
+describe('portalStatusTone', () => {
+    it('maps settled stages and statuses to the settled tone', () => {
+        expect(portalStatusTone('SETTLED')).toBe('settled');
+        expect(portalStatusTone('SETTLED_SUCCESS')).toBe('settled');
+    });
+
+    it('maps completed workflow statuses to the completed (payment outstanding) tone', () => {
+        expect(portalStatusTone('COMPLETED')).toBe('completed');
+        expect(portalStatusTone('CL_INVOICED_PENDING')).toBe('completed');
+    });
+
+    it('maps working stages — anything from Requested via DHS onwards — to the progress tone', () => {
+        expect(portalStatusTone('REQUESTED_VIA_DHS')).toBe('progress');
+        expect(portalStatusTone('DOCUMENTS_EMAILED')).toBe('progress');
+        expect(portalStatusTone('QUOTE_ACCEPTED')).toBe('progress');
+        expect(portalStatusTone('PAYING_INSTALMENTS')).toBe('progress');
+    });
+
+    it('maps detour categories and arrears to the detour tone', () => {
+        expect(portalStatusTone('IRFDC_1M')).toBe('detour');
+        expect(portalStatusTone('ARREARS_2M')).toBe('detour');
+        expect(portalStatusTone('COURT_POSTPONED')).toBe('detour');
+    });
+
+    it('maps overdue, lost, beginning, and unknown codes safely', () => {
+        expect(portalStatusTone('OVERDUE')).toBe('attention');
+        expect(portalStatusTone('CANCELLED')).toBe('lost');
+        expect(portalStatusTone('NOT_LINKED')).toBe('neutral');
+        expect(portalStatusTone('SOMETHING_UNKNOWN')).toBe('neutral');
+        expect(portalStatusTone(null)).toBe('neutral');
+    });
+});
+
+describe('isInCalendarMonth', () => {
+    const now = new Date('2026-07-14T12:00:00Z');
+
+    it('buckets dates into this and last calendar month', () => {
+        expect(isInCalendarMonth('2026-07-02T00:00:00Z', now, 0)).toBe(true);
+        expect(isInCalendarMonth('2026-06-30T00:00:00Z', now, 0)).toBe(false);
+        expect(isInCalendarMonth('2026-06-05T00:00:00Z', now, 1)).toBe(true);
+        expect(isInCalendarMonth('2026-05-31T12:00:00Z', now, 1)).toBe(false);
+    });
+
+    it('rejects null and invalid dates', () => {
+        expect(isInCalendarMonth(null, now, 0)).toBe(false);
+        expect(isInCalendarMonth('not-a-date', now, 0)).toBe(false);
+    });
+});
+
 describe('calculateDiscountPartnerTotals', () => {
     const now = new Date('2026-07-14T12:00:00Z');
-    const recent = new Date('2026-07-01T12:00:00Z');   // within 30 days
-    const old = new Date('2026-05-01T12:00:00Z');      // outside 30 days
+    const thisMonth = new Date('2026-07-01T12:00:00Z');
+    const lastMonth = new Date('2026-06-10T12:00:00Z');
+    const older = new Date('2026-04-01T12:00:00Z');
 
     it('returns zeros for no referrals', () => {
         expect(calculateDiscountPartnerTotals([], now)).toEqual({
             totalReferrals: 0,
-            referralsLast30Days: 0,
+            referralsThisMonth: 0,
+            referralsLastMonth: 0,
+            totalCompleted: 0,
+            completedThisMonth: 0,
+            completedLastMonth: 0,
             totalSettled: 0,
-            settledLast30Days: 0,
+            settledThisMonth: 0,
+            settledLastMonth: 0,
             totalQuoted: 0,
-            quotedLast30Days: 0,
+            quotedThisMonth: 0,
             totalPaid: 0,
-            paidLast30Days: 0,
+            paidThisMonth: 0,
         });
     });
 
-    it('splits totals into overall and last-30-days buckets', () => {
+    it('splits totals into all-time, this-month, and last-month buckets', () => {
         const totals = calculateDiscountPartnerTotals([
             {
-                createdAt: recent,
+                // Settled this month, referred this month.
+                createdAt: thisMonth,
                 stage: 'SETTLED',
-                stageUpdatedAt: recent,
+                caseStatus: 'SETTLED_SUCCESS',
+                settledAt: thisMonth,
+                completedAt: lastMonth,
                 quoteTotal: 5000,
-                quoteDate: recent,
+                quoteDate: thisMonth,
                 payments: [
-                    { amount: 2000, date: recent },
-                    { amount: 1000, date: old },
+                    { amount: 2000, date: thisMonth },
+                    { amount: 1000, date: older },
                 ],
             },
             {
-                createdAt: old,
-                stage: 'SETTLED',
-                stageUpdatedAt: old,
+                // Settled last month via case status (no commission stage).
+                createdAt: older,
+                stage: null,
+                caseStatus: 'SETTLED',
+                settledAt: lastMonth,
+                completedAt: null,
                 quoteTotal: 3000,
-                quoteDate: old,
-                payments: [{ amount: 3000, date: old }],
+                quoteDate: older,
+                payments: [{ amount: 3000, date: older }],
             },
             {
-                createdAt: old,
+                // Work completed last month, payment outstanding.
+                createdAt: lastMonth,
+                stage: null,
+                caseStatus: 'COMPLETED',
+                settledAt: null,
+                completedAt: lastMonth,
+                quoteTotal: null,
+                quoteDate: null,
+                payments: [],
+            },
+            {
+                // Still being worked.
+                createdAt: lastMonth,
                 stage: 'PAYING_INSTALMENTS',
-                stageUpdatedAt: recent,
+                caseStatus: 'REQUESTED_VIA_DHS',
+                settledAt: null,
+                completedAt: null,
                 quoteTotal: null,
                 quoteDate: null,
                 payments: [],
@@ -170,33 +254,42 @@ describe('calculateDiscountPartnerTotals', () => {
         ], now);
 
         expect(totals).toEqual({
-            totalReferrals: 3,
-            referralsLast30Days: 1,
+            totalReferrals: 4,
+            referralsThisMonth: 1,
+            referralsLastMonth: 2,
+            totalCompleted: 1,
+            completedThisMonth: 0,
+            completedLastMonth: 1,
             totalSettled: 2,
-            settledLast30Days: 1,
+            settledThisMonth: 1,
+            settledLastMonth: 1,
             totalQuoted: 8000,
-            quotedLast30Days: 5000,
+            quotedThisMonth: 5000,
             totalPaid: 6000,
-            paidLast30Days: 2000,
+            paidThisMonth: 2000,
         });
     });
 
-    it('never counts unsettled stages as settled, even when recently updated', () => {
+    it('counts by workflow status — the lagging commission stage never overrides it', () => {
         const totals = calculateDiscountPartnerTotals([
-            { createdAt: recent, stage: 'UP_TO_DATE', stageUpdatedAt: recent, quoteTotal: null, quoteDate: null, payments: [] },
+            // Stage still says QUOTE_ACCEPTED but the case status is the truth: completed.
+            { createdAt: thisMonth, stage: 'QUOTE_ACCEPTED', caseStatus: 'COMPLETED', settledAt: null, completedAt: thisMonth, quoteTotal: null, quoteDate: null, payments: [] },
+            // Stage says SETTLED (COMPLETED maps there for payouts) but the file is still being worked.
+            { createdAt: thisMonth, stage: 'SETTLED', caseStatus: 'REQUESTED_VIA_DHS', settledAt: null, completedAt: null, quoteTotal: null, quoteDate: null, payments: [] },
         ], now);
+        expect(totals.totalCompleted).toBe(1);
+        expect(totals.completedThisMonth).toBe(1);
         expect(totals.totalSettled).toBe(0);
-        expect(totals.settledLast30Days).toBe(0);
     });
 
-    it('ignores future-dated and invalid dates for 30-day buckets', () => {
+    it('ignores future-dated and invalid dates for month buckets', () => {
         const future = new Date('2026-08-01T12:00:00Z');
         const totals = calculateDiscountPartnerTotals([
-            { createdAt: future, stage: null, stageUpdatedAt: null, quoteTotal: 100, quoteDate: 'not-a-date', payments: [{ amount: 50, date: future }] },
+            { createdAt: future, stage: null, caseStatus: null, settledAt: null, completedAt: null, quoteTotal: 100, quoteDate: 'not-a-date', payments: [{ amount: 50, date: future }] },
         ], now);
-        expect(totals.referralsLast30Days).toBe(0);
-        expect(totals.quotedLast30Days).toBe(0);
-        expect(totals.paidLast30Days).toBe(0);
+        expect(totals.referralsThisMonth).toBe(0);
+        expect(totals.quotedThisMonth).toBe(0);
+        expect(totals.paidThisMonth).toBe(0);
         expect(totals.totalPaid).toBe(50);
     });
 });

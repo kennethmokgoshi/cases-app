@@ -81,6 +81,11 @@ describe('getCommissionStageForCaseStatus', () => {
         expect(getCommissionStageForCaseStatus('COMPLETED')).toBe('SETTLED');
     });
 
+    it('maps the settled workflow statuses to SETTLED so the stage stops lagging behind real settlements', () => {
+        expect(getCommissionStageForCaseStatus('SETTLED')).toBe('SETTLED');
+        expect(getCommissionStageForCaseStatus('SETTLED_SUCCESS')).toBe('SETTLED');
+    });
+
     it('returns null for unknown statuses', () => {
         expect(getCommissionStageForCaseStatus('UNKNOWN_STATUS')).toBeNull();
         expect(getCommissionStageForCaseStatus('')).toBeNull();

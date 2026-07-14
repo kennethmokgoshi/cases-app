@@ -6,9 +6,11 @@ import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
 import {
     calculateDiscountPartnerTotals,
     calculatePortalCommissionTotals,
+    isInCalendarMonth,
     maskConsumerName,
     portalCommissionStatus,
     portalStageLabel,
+    portalStatusTone,
     toPortalNumber,
 } from '@/lib/referrer-portal';
 
@@ -46,6 +48,12 @@ export async function GET() {
                         client: { select: { firstName: true, lastName: true } },
                         payments: { select: { amount: true, status: true, date: true } },
                         invoices: { select: { total: true, status: true, type: true, acceptedAt: true, createdAt: true } },
+                        workflowLogs: {
+                            where: { action: 'STATUS_CHANGE' },
+                            select: { toStatus: true, timestamp: true },
+                            orderBy: { timestamp: 'desc' },
+                            take: 50,
+                        },
                         referrerCommission: {
                             select: {
                                 id: true,
@@ -116,14 +124,31 @@ export async function GET() {
             return [referral.id, { quoteTotal: fin.feeBasisTotal, totalPaid: fin.totalPaid, quoteDate, completedPayments }] as const;
         }));
 
+        // Milestone dates from the case's status-change history — used to bucket
+        // completions and settlements into calendar months on the dashboard.
+        const caseMilestones = new Map(referrer.cases.map((referral) => {
+            const logs = referral.workflowLogs ?? [];
+            const settledLog = logs.find((log) => portalStatusTone(log.toStatus) === 'settled');
+            const completedLog = logs.find((log) => portalStatusTone(log.toStatus) === 'completed');
+            const stage = referral.referrerCommission?.stage ?? null;
+            return [referral.id, {
+                settledAt: settledLog?.timestamp
+                    ?? (stage === 'SETTLED' ? referral.referrerCommission?.updatedAt ?? null : null),
+                completedAt: completedLog?.timestamp ?? null,
+            }] as const;
+        }));
+
         const isDiscountReferrer = !referrerEarnsCommission(referrer.referrerType);
         const discountSummary = isDiscountReferrer
             ? calculateDiscountPartnerTotals(referrer.cases.map((referral) => {
                 const fin = caseFinancials.get(referral.id)!;
+                const milestones = caseMilestones.get(referral.id)!;
                 return {
                     createdAt: referral.createdAt,
                     stage: referral.referrerCommission?.stage ?? null,
-                    stageUpdatedAt: referral.referrerCommission?.updatedAt ?? null,
+                    caseStatus: referral.status,
+                    settledAt: milestones.settledAt,
+                    completedAt: milestones.completedAt,
                     quoteTotal: fin.quoteTotal,
                     quoteDate: fin.quoteDate,
                     payments: fin.completedPayments,
@@ -153,15 +178,27 @@ export async function GET() {
             referrals: referrer.cases.map((referral) => {
                 const commission = referral.referrerCommission;
                 const fin = caseFinancials.get(referral.id);
+                const milestones = caseMilestones.get(referral.id);
+                const now = new Date();
                 return {
                     caseId: referral.id,
                     fileNumber: referral.fileNumber,
                     consumerLabel: maskConsumerName(referral.client.firstName, referral.client.lastName),
-                    referralStatus: portalStageLabel(commission?.stage ?? referral.status),
+                    // The workflow status is the truth about the file — the
+                    // commission stage lags (few statuses update it) and is only
+                    // used for payout tracking, never for display.
+                    referralStatus: portalStageLabel(referral.status),
+                    statusTone: portalStatusTone(referral.status),
                     caseStatus: referral.status,
                     createdAt: referral.createdAt,
+                    settledAt: milestones?.settledAt ?? null,
+                    completedAt: milestones?.completedAt ?? null,
                     quoteTotal: fin?.quoteTotal ?? null,
+                    quoteDate: fin?.quoteDate ?? null,
                     totalPaid: fin?.totalPaid ?? 0,
+                    paidThisMonth: (fin?.completedPayments ?? [])
+                        .filter((payment) => isInCalendarMonth(payment.date, now))
+                        .reduce((sum, payment) => sum + payment.amount, 0),
                     commissionId: commission?.id ?? null,
                     commissionAmount: toPortalNumber(commission?.commissionAmount),
                     commissionStatus: portalCommissionStatus({

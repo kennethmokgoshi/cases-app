@@ -99,91 +99,123 @@ describe('GET /api/referrer-portal/summary', () => {
         expect(prisma.referrer.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'ref-1' } }));
     });
 
-    it('returns discount partner totals with quote and payment money for discount referrers', async () => {
-        vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
-            ok: true,
-            sessionUserId: 'user-1',
-            referrer: { id: 'ref-2', firstName: 'William', lastName: 'Maesela' },
-        });
+    it('returns discount partner calendar-month totals with quote and payment money', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-07-14T12:00:00Z'));
+        try {
+            vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
+                ok: true,
+                sessionUserId: 'user-1',
+                referrer: { id: 'ref-2', firstName: 'William', lastName: 'Maesela' },
+            });
 
-        const now = Date.now();
-        const recent = new Date(now - 5 * 24 * 60 * 60 * 1000);   // 5 days ago
-        const old = new Date(now - 60 * 24 * 60 * 60 * 1000);     // 60 days ago
+            const thisMonth = new Date('2026-07-09T10:00:00Z');
+            const lastMonth = new Date('2026-06-10T10:00:00Z');
+            const older = new Date('2026-05-15T10:00:00Z');
 
-        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({
-            id: 'ref-2',
-            firstName: 'William',
-            lastName: 'Maesela',
-            email: 'william@example.com',
-            cellNumber: null,
-            bankName: null,
-            accountNumber: null,
-            accountType: null,
-            branchCode: null,
-            accountHolderName: null,
-            referrerType: 'DISCOUNT',
-            clientDiscountPercent: { toNumber: () => 15 },
-            commissionType: 'FIXED',
-            fixedCommissionAmount: null,
-            cases: [
-                {
-                    id: 'case-a',
-                    fileNumber: 'ZDM-A',
-                    status: 'COMPLETED',
-                    createdAt: recent,
-                    serviceFee: { toNumber: () => 5000 },
-                    payments: [
-                        { amount: { toNumber: () => 2000 }, status: 'COMPLETED', date: recent },
-                        { amount: { toNumber: () => 1000 }, status: 'COMPLETED', date: old },
-                        { amount: { toNumber: () => 999 }, status: 'PENDING', date: recent },
-                    ],
-                    invoices: [],
-                    client: { firstName: 'Sipho', lastName: 'Nkosi' },
-                    referrerCommission: {
-                        id: 'com-a',
-                        stage: 'SETTLED',
-                        isEligible: false,
-                        commissionAmount: null,
-                        isPaid: false,
-                        paidAt: null,
-                        paymentRef: null,
-                        updatedAt: recent,
+            vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({
+                id: 'ref-2',
+                firstName: 'William',
+                lastName: 'Maesela',
+                email: 'william@example.com',
+                cellNumber: null,
+                bankName: null,
+                accountNumber: null,
+                accountType: null,
+                branchCode: null,
+                accountHolderName: null,
+                referrerType: 'DISCOUNT',
+                clientDiscountPercent: { toNumber: () => 15 },
+                commissionType: 'FIXED',
+                fixedCommissionAmount: null,
+                cases: [
+                    {
+                        id: 'case-a',
+                        fileNumber: 'ZDM-A',
+                        status: 'SETTLED_SUCCESS',
+                        createdAt: thisMonth,
+                        serviceFee: { toNumber: () => 5000 },
+                        payments: [
+                            { amount: { toNumber: () => 2000 }, status: 'COMPLETED', date: thisMonth },
+                            { amount: { toNumber: () => 1000 }, status: 'COMPLETED', date: older },
+                            { amount: { toNumber: () => 999 }, status: 'PENDING', date: thisMonth },
+                        ],
+                        invoices: [],
+                        workflowLogs: [
+                            { toStatus: 'SETTLED_SUCCESS', timestamp: thisMonth },
+                            { toStatus: 'COMPLETED', timestamp: lastMonth },
+                        ],
+                        client: { firstName: 'Sipho', lastName: 'Nkosi' },
+                        referrerCommission: {
+                            id: 'com-a',
+                            stage: 'SETTLED',
+                            isEligible: false,
+                            commissionAmount: null,
+                            isPaid: false,
+                            paidAt: null,
+                            paymentRef: null,
+                            updatedAt: thisMonth,
+                        },
                     },
-                },
-                {
-                    id: 'case-b',
-                    fileNumber: 'ZDM-B',
-                    status: 'NEW_LEAD',
-                    createdAt: old,
-                    serviceFee: null,
-                    payments: [],
-                    invoices: [
-                        { total: { toNumber: () => 3000 }, status: 'SENT', type: 'QUOTE', acceptedAt: old, createdAt: old },
-                    ],
-                    client: { firstName: 'Lerato', lastName: 'Dlamini' },
-                    referrerCommission: null,
-                },
-            ],
-            paymentQueries: [],
-        } as never);
+                    {
+                        id: 'case-b',
+                        fileNumber: 'ZDM-B',
+                        status: 'COMPLETED',
+                        createdAt: lastMonth,
+                        serviceFee: null,
+                        payments: [],
+                        invoices: [],
+                        workflowLogs: [
+                            { toStatus: 'COMPLETED', timestamp: lastMonth },
+                        ],
+                        client: { firstName: 'Zanele', lastName: 'Khumalo' },
+                        referrerCommission: null,
+                    },
+                    {
+                        id: 'case-c',
+                        fileNumber: 'ZDM-C',
+                        status: 'NEW_LEAD',
+                        createdAt: older,
+                        serviceFee: null,
+                        payments: [],
+                        invoices: [
+                            { total: { toNumber: () => 3000 }, status: 'SENT', type: 'QUOTE', acceptedAt: older, createdAt: older },
+                        ],
+                        workflowLogs: [],
+                        client: { firstName: 'Lerato', lastName: 'Dlamini' },
+                        referrerCommission: null,
+                    },
+                ],
+                paymentQueries: [],
+            } as never);
 
-        const res = await GET();
-        const json = await res.json();
+            const res = await GET();
+            const json = await res.json();
 
-        expect(res.status).toBe(200);
-        expect(json.referrer.referrerType).toBe('DISCOUNT');
-        expect(json.referrer.clientDiscountPercent).toBe(15);
-        expect(json.discountSummary).toEqual({
-            totalReferrals: 2,
-            referralsLast30Days: 1,
-            totalSettled: 1,
-            settledLast30Days: 1,
-            totalQuoted: 8000,       // 5000 service fee + 3000 accepted quote
-            quotedLast30Days: 5000,  // only the recent case's fee basis
-            totalPaid: 3000,         // completed payments only — PENDING excluded
-            paidLast30Days: 2000,
-        });
-        expect(json.referrals[0]).toMatchObject({ quoteTotal: 5000, totalPaid: 3000 });
-        expect(json.referrals[1]).toMatchObject({ quoteTotal: 3000, totalPaid: 0 });
+            expect(res.status).toBe(200);
+            expect(json.referrer.referrerType).toBe('DISCOUNT');
+            expect(json.referrer.clientDiscountPercent).toBe(15);
+            expect(json.discountSummary).toEqual({
+                totalReferrals: 3,
+                referralsThisMonth: 1,     // case-a
+                referralsLastMonth: 1,     // case-b
+                totalCompleted: 1,         // case-b — work done, payment outstanding
+                completedThisMonth: 0,
+                completedLastMonth: 1,
+                totalSettled: 1,           // case-a — workflow status SETTLED_SUCCESS
+                settledThisMonth: 1,
+                settledLastMonth: 0,
+                totalQuoted: 8000,         // 5000 service fee + 3000 accepted quote
+                quotedThisMonth: 5000,     // only case-a's fee basis dates to July
+                totalPaid: 3000,           // completed payments only — PENDING excluded
+                paidThisMonth: 2000,
+            });
+            // Labels and tones come from the workflow status, never the commission stage.
+            expect(json.referrals[0]).toMatchObject({ quoteTotal: 5000, totalPaid: 3000, paidThisMonth: 2000, statusTone: 'settled', referralStatus: 'Settled Successfully' });
+            expect(json.referrals[1]).toMatchObject({ statusTone: 'completed', referralStatus: 'Completed' });
+            expect(json.referrals[2]).toMatchObject({ quoteTotal: 3000, totalPaid: 0, statusTone: 'neutral', referralStatus: 'New referral' });
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

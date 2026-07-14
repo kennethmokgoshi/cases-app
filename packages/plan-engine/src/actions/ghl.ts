@@ -6,9 +6,14 @@ import {
   GhlEmailProvider,
   GhlWhatsAppProvider,
 } from '@zenowethu/shared-lib';
-import { stepRegistry } from '../step-registry';
-import type { ActionContext } from '../step-registry';
-import type { StepExecutionResult } from '../types';
+import type { ActionContext, ActionHandler } from '../step-registry';
+import type { ActionType, StepExecutionResult } from '../types';
+
+/** Handlers exported as a plain map — step-registry merges these explicitly (no side-effect imports). */
+export const ghlActions = new Map<ActionType, ActionHandler>();
+function registerAction(actionType: ActionType, handler: ActionHandler): void {
+  ghlActions.set(actionType, handler);
+}
 
 type GhlChannel = 'SMS' | 'EMAIL' | 'WHATSAPP';
 
@@ -102,7 +107,7 @@ async function sendViaGhl(
   return { success: true, result: result as unknown as Record<string, unknown> };
 }
 
-stepRegistry.register('GHL_SEND_SMS', async (ctx: ActionContext): Promise<StepExecutionResult> => {
+registerAction('GHL_SEND_SMS', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const message = (ctx.actionParams.message as string) || 'Message from Zenowethu Debt Counsellors.';
     return await sendViaGhl(ctx, 'SMS', message);
@@ -112,7 +117,7 @@ stepRegistry.register('GHL_SEND_SMS', async (ctx: ActionContext): Promise<StepEx
   }
 });
 
-stepRegistry.register('GHL_SEND_EMAIL', async (ctx: ActionContext): Promise<StepExecutionResult> => {
+registerAction('GHL_SEND_EMAIL', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const message = (ctx.actionParams.message as string) || 'Email from Zenowethu Debt Counsellors.';
     const subject = (ctx.actionParams.subject as string) || 'Update from Zenowethu Debt Counsellors';
@@ -123,7 +128,7 @@ stepRegistry.register('GHL_SEND_EMAIL', async (ctx: ActionContext): Promise<Step
   }
 });
 
-stepRegistry.register('GHL_SEND_WHATSAPP', async (ctx: ActionContext): Promise<StepExecutionResult> => {
+registerAction('GHL_SEND_WHATSAPP', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const message = (ctx.actionParams.message as string) || 'WhatsApp from Zenowethu Debt Counsellors.';
     return await sendViaGhl(ctx, 'WHATSAPP', message);
@@ -133,7 +138,7 @@ stepRegistry.register('GHL_SEND_WHATSAPP', async (ctx: ActionContext): Promise<S
   }
 });
 
-stepRegistry.register('GHL_WAIT_DOCUMENT', async (ctx: ActionContext): Promise<StepExecutionResult> => {
+registerAction('GHL_WAIT_DOCUMENT', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const documentType = (ctx.actionParams.documentType as string) || 'document';
     logger.info(`[GHL_WAIT_DOCUMENT] Case ${ctx.caseId}: waiting for ${documentType}`);
@@ -149,7 +154,7 @@ stepRegistry.register('GHL_WAIT_DOCUMENT', async (ctx: ActionContext): Promise<S
   }
 });
 
-stepRegistry.register('GHL_WAIT_REPLY', async (ctx: ActionContext): Promise<StepExecutionResult> => {
+registerAction('GHL_WAIT_REPLY', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const replyContext = (ctx.actionParams.context as string) || 'client reply';
     logger.info(`[GHL_WAIT_REPLY] Case ${ctx.caseId}: waiting for ${replyContext}`);

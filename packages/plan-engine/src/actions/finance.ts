@@ -1,8 +1,13 @@
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
-import { stepRegistry } from '../step-registry';
-import type { ActionContext } from '../step-registry';
-import type { StepExecutionResult } from '../types';
+import type { ActionContext, ActionHandler } from '../step-registry';
+import type { ActionType, StepExecutionResult } from '../types';
+
+/** Handlers exported as a plain map — step-registry merges these explicitly (no side-effect imports). */
+export const financeActions = new Map<ActionType, ActionHandler>();
+function registerAction(actionType: ActionType, handler: ActionHandler): void {
+  financeActions.set(actionType, handler);
+}
 
 interface LineItem {
   description: string;
@@ -10,7 +15,7 @@ interface LineItem {
   unitPrice: number;
 }
 
-stepRegistry.register(
+registerAction(
   'GENERATE_INVOICE',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {

@@ -60,6 +60,34 @@ interface AIPlanTabProps {
   acquisitionType?: string;
 }
 
+/** Structured error surfaced in the banner — detail and hint come from the API when available. */
+export interface PlanError {
+  message: string;
+  detail?: string;
+  hint?: string;
+  code?: string;
+}
+
+/**
+ * Maps a failed /api/ai/plan/generate response body to the structured banner error.
+ * Falls back to listing missing documents as the detail when the API sends no detail.
+ */
+export function buildPlanGenerationError(data: {
+  error?: string;
+  code?: string;
+  detail?: string;
+  hint?: string;
+  missingRequired?: string[];
+}): PlanError {
+  return {
+    message: data.error || 'Failed to generate plan',
+    code: data.code,
+    detail: data.detail
+      || (data.missingRequired?.length ? `Missing required documents: ${data.missingRequired.join(', ')}` : undefined),
+    hint: data.hint,
+  };
+}
+
 const PLAN_STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-gray-500/20 text-gray-400 border border-gray-500/30',
   AWAITING_APPROVAL: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
@@ -109,7 +137,7 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
   const [approving, setApproving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [togglingReady, setTogglingReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PlanError | null>(null);
   const [showGuidanceModal, setShowGuidanceModal] = useState(false);
   const [guidanceText, setGuidanceText] = useState('');
   const [declining, setDeclining] = useState(false);
@@ -123,7 +151,7 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
       setPlanData(data);
       setError(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load plan data');
+      setError({ message: err instanceof Error ? err.message : 'Failed to load plan data' });
     } finally {
       setLoading(false);
     }
@@ -157,13 +185,24 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ caseId, force, userGuidance: userGuidance?.trim() || undefined }),
       });
-      const data = await resp.json() as { error?: string; missingRequired?: unknown[] };
+      const data = await resp.json() as {
+        error?: string;
+        code?: string;
+        detail?: string;
+        hint?: string;
+        missingRequired?: string[];
+      };
       if (!resp.ok) {
-        throw new Error(data.error || 'Failed to generate plan');
+        setError(buildPlanGenerationError(data));
+        return;
       }
       await fetchPlanData();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Generation failed');
+      setError({
+        message: 'Generation failed',
+        detail: err instanceof Error ? err.message : String(err),
+        hint: 'Check your network connection and that the server is running, then retry.',
+      });
     } finally {
       setGenerating(false);
     }
@@ -197,7 +236,7 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
       }
       await fetchPlanData();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Decline failed');
+      setError({ message: err instanceof Error ? err.message : 'Decline failed' });
     } finally {
       setDeclining(false);
     }
@@ -228,7 +267,7 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
       }
       await fetchPlanData();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Approval failed');
+      setError({ message: err instanceof Error ? err.message : 'Approval failed' });
     } finally {
       setApproving(false);
     }
@@ -245,7 +284,7 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
       }
       await fetchPlanData();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Start failed');
+      setError({ message: err instanceof Error ? err.message : 'Start failed' });
     } finally {
       setStarting(false);
     }
@@ -263,7 +302,7 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
   if (!planData) {
     return (
       <div className="flex items-center justify-center py-16 text-red-400 text-sm">
-        {error || 'Failed to load plan data'}
+        {error?.message || 'Failed to load plan data'}
       </div>
     );
   }
@@ -288,8 +327,22 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
     <div className="space-y-6">
       {/* Error Banner */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-300 text-sm">
-          {error}
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-red-300 font-semibold">{error.message}</p>
+            {error.code && (
+              <span className="shrink-0 px-2 py-0.5 rounded bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-mono">
+                {error.code}
+              </span>
+            )}
+          </div>
+          {error.detail && <p className="text-red-300/90">{error.detail}</p>}
+          {error.hint && (
+            <p className="text-amber-300/90">
+              <span className="font-semibold">What to do: </span>
+              {error.hint}
+            </p>
+          )}
         </div>
       )}
 

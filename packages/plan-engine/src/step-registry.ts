@@ -1,4 +1,10 @@
 import type { ActionType, StepExecutionResult } from './types';
+import { casesActions } from './actions/cases';
+import { legalActions } from './actions/legal';
+import { insuranceActions } from './actions/insurance';
+import { forensicActions } from './actions/forensic';
+import { financeActions } from './actions/finance';
+import { ghlActions } from './actions/ghl';
 
 export interface ActionContext {
   caseId: string;
@@ -22,7 +28,7 @@ export interface ActionContext {
   };
 }
 
-type ActionHandler = (ctx: ActionContext) => Promise<StepExecutionResult>;
+export type ActionHandler = (ctx: ActionContext) => Promise<StepExecutionResult>;
 
 class StepRegistry {
   private actions = new Map<ActionType, ActionHandler>();
@@ -40,14 +46,21 @@ class StepRegistry {
   isRegistered(actionType: ActionType): boolean {
     return this.actions.has(actionType);
   }
+
+  registeredActionTypes(): ActionType[] {
+    return [...this.actions.keys()];
+  }
 }
 
 export const stepRegistry = new StepRegistry();
 
-// Register all action handlers
-import './actions/cases';
-import './actions/legal';
-import './actions/insurance';
-import './actions/forensic';
-import './actions/finance';
-import './actions/ghl';
+// Explicit registration of every department's handlers. The action modules export
+// plain maps (instead of self-registering via side-effect imports) because this
+// package is marked "sideEffects": false — bundlers are free to drop side-effect-only
+// imports, which previously shipped an empty registry and failed every step with
+// "No handler for: <actionType>".
+for (const actionMap of [casesActions, legalActions, insuranceActions, forensicActions, financeActions, ghlActions]) {
+  for (const [actionType, handler] of actionMap) {
+    stepRegistry.register(actionType, handler);
+  }
+}

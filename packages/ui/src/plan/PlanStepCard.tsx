@@ -227,10 +227,21 @@ export function PlanStepCard({ step, planId, onRefresh }: PlanStepCardProps) {
       )}
 
       {/* Error Section */}
-      {step.status === 'FAILED' && step.error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-          <p className="text-xs font-bold text-red-400 mb-1">Error</p>
-          <p className="text-xs text-red-300">{step.error}</p>
+      {step.status === 'FAILED' && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 space-y-2">
+          {step.error && (
+            <div>
+              <p className="text-xs font-bold text-red-400 mb-1">Error</p>
+              <p className="text-xs text-red-300">{step.error}</p>
+            </div>
+          )}
+          <button
+            onClick={handleResume}
+            disabled={actioning}
+            className="px-4 py-1.5 bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold rounded-lg hover:bg-red-500/30 disabled:opacity-50 transition-colors"
+          >
+            {actioning ? 'Retrying...' : 'Retry Step'}
+          </button>
         </div>
       )}
     </div>

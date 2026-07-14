@@ -21,15 +21,22 @@ type ReferrerProfile = {
     fixedCommissionAmount: number;
 };
 
+type PortalStatusTone = 'settled' | 'completed' | 'progress' | 'detour' | 'attention' | 'lost' | 'neutral';
+
 type ReferralRow = {
     caseId: string;
     fileNumber: string;
     consumerLabel: string;
     referralStatus: string;
+    statusTone: PortalStatusTone;
     caseStatus: string;
     createdAt: string;
+    settledAt: string | null;
+    completedAt: string | null;
     quoteTotal: number | null;
+    quoteDate: string | null;
     totalPaid: number;
+    paidThisMonth: number;
     commissionId: string | null;
     commissionAmount: number;
     commissionStatus: string;
@@ -96,13 +103,18 @@ type ReferralDetail = {
 
 type DiscountPartnerSummary = {
     totalReferrals: number;
-    referralsLast30Days: number;
+    referralsThisMonth: number;
+    referralsLastMonth: number;
+    totalCompleted: number;
+    completedThisMonth: number;
+    completedLastMonth: number;
     totalSettled: number;
-    settledLast30Days: number;
+    settledThisMonth: number;
+    settledLastMonth: number;
     totalQuoted: number;
-    quotedLast30Days: number;
+    quotedThisMonth: number;
     totalPaid: number;
-    paidLast30Days: number;
+    paidThisMonth: number;
 };
 
 type PortalSummary = {
@@ -126,6 +138,70 @@ type ProfileForm = {
     accountType: string;
     branchCode: string;
     accountHolderName: string;
+};
+
+// Colour language for referral statuses: settled = happy green, completed =
+// bright gold (job done, payment outstanding), progress = we're on it,
+// detour = stumbling block we're working through, attention = overdue.
+const STATUS_TONE_CLASSES: Record<PortalStatusTone, string> = {
+    settled: 'border-emerald-400/50 bg-emerald-400/15 text-emerald-300',
+    completed: 'border-yellow-400/50 bg-yellow-400/15 text-yellow-300',
+    progress: 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
+    detour: 'border-orange-400/50 bg-orange-400/15 text-orange-300',
+    attention: 'border-red-400/50 bg-red-400/15 text-red-300',
+    lost: 'border-slate-500/40 bg-slate-500/10 text-slate-400',
+    neutral: 'border-white/10 bg-white/[0.04] text-slate-200',
+};
+
+function statusToneClass(tone?: PortalStatusTone): string {
+    return STATUS_TONE_CLASSES[tone ?? 'neutral'] ?? STATUS_TONE_CLASSES.neutral;
+}
+
+/** True when the date falls in the calendar month `monthOffset` months ago (0 = this month, 1 = last month). */
+function isInCalendarMonth(value: string | null, monthOffset: 0 | 1): boolean {
+    if (!value) return false;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return false;
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    return date.getFullYear() === target.getFullYear() && date.getMonth() === target.getMonth();
+}
+
+function calendarMonthName(monthOffset: 0 | 1): string {
+    const now = new Date();
+    return new Intl.DateTimeFormat('en-ZA', { month: 'long' })
+        .format(new Date(now.getFullYear(), now.getMonth() - monthOffset, 1));
+}
+
+type ReferralFilterId =
+    | 'all'
+    | 'referrals-this-month'
+    | 'referrals-last-month'
+    | 'completed'
+    | 'completed-this-month'
+    | 'completed-last-month'
+    | 'settled'
+    | 'settled-this-month'
+    | 'settled-last-month'
+    | 'quoted'
+    | 'quoted-this-month'
+    | 'paid'
+    | 'paid-this-month';
+
+const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row: ReferralRow) => boolean }> = {
+    'all': { label: 'All referrals', matches: () => true },
+    'referrals-this-month': { label: 'Referred this month', matches: (row) => isInCalendarMonth(row.createdAt, 0) },
+    'referrals-last-month': { label: 'Referred last month', matches: (row) => isInCalendarMonth(row.createdAt, 1) },
+    'completed': { label: 'Completed — payment outstanding', matches: (row) => row.statusTone === 'completed' },
+    'completed-this-month': { label: 'Completed this month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 0) },
+    'completed-last-month': { label: 'Completed last month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 1) },
+    'settled': { label: 'Settled', matches: (row) => row.statusTone === 'settled' },
+    'settled-this-month': { label: 'Settled this month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 0) },
+    'settled-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
+    'quoted': { label: 'Quoted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 },
+    'quoted-this-month': { label: 'Quoted this month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 0) },
+    'paid': { label: 'Files with payments', matches: (row) => row.totalPaid > 0 },
+    'paid-this-month': { label: 'Paid this month', matches: (row) => row.paidThisMonth > 0 },
 };
 
 function formatMoney(value: number): string {
@@ -183,6 +259,7 @@ export default function ReferrerPortalPage() {
     const [commentText, setCommentText] = useState('');
     const [commentSubmitting, setCommentSubmitting] = useState(false);
     const [commentError, setCommentError] = useState('');
+    const [referralFilter, setReferralFilter] = useState<ReferralFilterId>('all');
 
     async function loadPortal() {
         setLoading(true);
@@ -215,6 +292,16 @@ export default function ReferrerPortalPage() {
         () => portalData?.referrals.find((referral) => referral.caseId === selectedCaseId) ?? null,
         [portalData, selectedCaseId],
     );
+
+    const visibleReferrals = useMemo(
+        () => (portalData?.referrals ?? []).filter(REFERRAL_FILTERS[referralFilter].matches),
+        [portalData, referralFilter],
+    );
+
+    function toggleReferralFilter(id: ReferralFilterId) {
+        setReferralFilter((current) => (current === id ? 'all' : id));
+        document.getElementById('referral-tracking')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 
     useEffect(() => {
         if (!selectedCaseId) {
@@ -385,6 +472,77 @@ export default function ReferrerPortalPage() {
     // (quotes/payments) rather than payouts.
     const isDiscountReferrer = referrer.referrerType === 'DISCOUNT';
 
+    // Monthly scoreboard for discount partners: every stat is clickable and
+    // filters the tracking table to the files behind the number.
+    const discountGroups: {
+        title: string;
+        caption: string;
+        accentText: string;
+        accentBar: string;
+        stats: { id: ReferralFilterId; label: string; value: number; delta?: number }[];
+    }[] | null = isDiscountReferrer && discountSummary
+        ? [
+            {
+                title: 'Referrals',
+                caption: 'Files you have sent our way',
+                accentText: 'text-cyan-300',
+                accentBar: 'bg-cyan-400',
+                stats: [
+                    { id: 'all', label: 'All time', value: discountSummary.totalReferrals },
+                    {
+                        id: 'referrals-this-month',
+                        label: calendarMonthName(0),
+                        value: discountSummary.referralsThisMonth,
+                        delta: discountSummary.referralsThisMonth - discountSummary.referralsLastMonth,
+                    },
+                    { id: 'referrals-last-month', label: calendarMonthName(1), value: discountSummary.referralsLastMonth },
+                ],
+            },
+            {
+                title: 'Completed',
+                caption: 'Job done — payment still outstanding',
+                accentText: 'text-yellow-300',
+                accentBar: 'bg-yellow-400',
+                stats: [
+                    { id: 'completed', label: 'All time', value: discountSummary.totalCompleted },
+                    {
+                        id: 'completed-this-month',
+                        label: calendarMonthName(0),
+                        value: discountSummary.completedThisMonth,
+                        delta: discountSummary.completedThisMonth - discountSummary.completedLastMonth,
+                    },
+                    { id: 'completed-last-month', label: calendarMonthName(1), value: discountSummary.completedLastMonth },
+                ],
+            },
+            {
+                title: 'Settled',
+                caption: 'Done, dusted, and fully paid',
+                accentText: 'text-emerald-300',
+                accentBar: 'bg-emerald-400',
+                stats: [
+                    { id: 'settled', label: 'All time', value: discountSummary.totalSettled },
+                    {
+                        id: 'settled-this-month',
+                        label: calendarMonthName(0),
+                        value: discountSummary.settledThisMonth,
+                        delta: discountSummary.settledThisMonth - discountSummary.settledLastMonth,
+                    },
+                    { id: 'settled-last-month', label: calendarMonthName(1), value: discountSummary.settledLastMonth },
+                ],
+            },
+        ]
+        : null;
+
+    const discountMoneyCards: { id: ReferralFilterId; label: string; value: string; valueClass: string }[] | null =
+        isDiscountReferrer && discountSummary
+            ? [
+                { id: 'quoted', label: 'Total quoted', value: formatMoney(discountSummary.totalQuoted), valueClass: 'text-white' },
+                { id: 'quoted-this-month', label: `Quoted — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.quotedThisMonth), valueClass: 'text-white' },
+                { id: 'paid', label: 'Total paid', value: formatMoney(discountSummary.totalPaid), valueClass: 'text-emerald-300' },
+                { id: 'paid-this-month', label: `Paid — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.paidThisMonth), valueClass: 'text-emerald-300' },
+            ]
+            : null;
+
     return (
         <main className="min-h-screen bg-slate-950 text-slate-100">
             <header className="border-b border-white/10 bg-slate-950/95">
@@ -427,40 +585,97 @@ export default function ReferrerPortalPage() {
             </header>
 
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {(isDiscountReferrer && discountSummary
-                        ? [
-                            ['Total referrals', String(discountSummary.totalReferrals)],
-                            ['Referrals — last 30 days', String(discountSummary.referralsLast30Days)],
-                            ['Total settled', String(discountSummary.totalSettled)],
-                            ['Settled — last 30 days', String(discountSummary.settledLast30Days)],
-                            ['Total quoted', formatMoney(discountSummary.totalQuoted)],
-                            ['Quoted — last 30 days', formatMoney(discountSummary.quotedLast30Days)],
-                            ['Total paid', formatMoney(discountSummary.totalPaid)],
-                            ['Paid — last 30 days', formatMoney(discountSummary.paidLast30Days)],
-                        ]
-                        : [
+                {discountGroups && discountMoneyCards ? (
+                    <>
+                        <section className="grid gap-3 lg:grid-cols-3">
+                            {discountGroups.map((group) => (
+                                <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
+                                    <div className={`h-1 ${group.accentBar}`} />
+                                    <div className="px-4 pb-2 pt-3">
+                                        <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${group.accentText}`}>{group.title}</p>
+                                        <p className="mt-0.5 text-[11px] text-slate-400">{group.caption}</p>
+                                    </div>
+                                    <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
+                                        {group.stats.map((stat) => (
+                                            <button
+                                                key={stat.id}
+                                                type="button"
+                                                onClick={() => toggleReferralFilter(stat.id)}
+                                                title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
+                                                className={`px-3 py-3 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === stat.id ? 'bg-white/[0.08]' : ''}`}
+                                            >
+                                                <p className="text-[11px] uppercase tracking-wide text-slate-400">{stat.label}</p>
+                                                <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
+                                                {stat.delta != null && (
+                                                    <p className={`mt-1 text-[11px] font-medium ${stat.delta > 0 ? 'text-emerald-300' : stat.delta < 0 ? 'text-orange-300' : 'text-slate-400'}`}>
+                                                        {stat.delta > 0
+                                                            ? `▲ ${stat.delta} up on last month`
+                                                            : stat.delta < 0
+                                                                ? `▼ ${Math.abs(stat.delta)} down on last month`
+                                                                : 'Level with last month'}
+                                                    </p>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </section>
+                        <section className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            {discountMoneyCards.map((card) => (
+                                <button
+                                    key={card.id}
+                                    type="button"
+                                    onClick={() => toggleReferralFilter(card.id)}
+                                    title={`Show files: ${REFERRAL_FILTERS[card.id].label}`}
+                                    className={`rounded-lg border border-white/10 bg-white/[0.04] p-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === card.id ? 'ring-1 ring-cyan-300/50' : ''}`}
+                                >
+                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{card.label}</p>
+                                    <p className={`mt-2 text-2xl font-semibold ${card.valueClass}`}>{card.value}</p>
+                                </button>
+                            ))}
+                        </section>
+                    </>
+                ) : (
+                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {[
                             ['Total referrals', String(summary.totalReferrals)],
                             ['Commission earned', formatMoney(summary.commissionEarned)],
                             ['Commission pending', formatMoney(summary.commissionPending)],
                             ['Commission paid', formatMoney(summary.commissionPaid)],
-                        ]
-                    ).map(([label, value]) => (
-                        <div key={label} className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
-                            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-                            <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-                        </div>
-                    ))}
-                </section>
+                        ].map(([label, value]) => (
+                            <div key={label} className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+                                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+                                <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+                            </div>
+                        ))}
+                    </section>
+                )}
 
                 <section className={`mt-6 grid gap-6 ${isDiscountReferrer ? '' : 'xl:grid-cols-[minmax(0,1fr)_360px]'}`}>
-                    <div className="rounded-lg border border-white/10 bg-white/[0.03]">
-                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                    <div id="referral-tracking" className="rounded-lg border border-white/10 bg-white/[0.03]">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
                             <div>
                                 <h2 className="text-base font-semibold text-white">Referral tracking</h2>
                                 <p className="text-xs text-slate-400">Click a referral to see its progress and ask questions.</p>
                             </div>
-                            <span className="text-xs text-slate-400">{referrals.length} records</span>
+                            <div className="flex items-center gap-2">
+                                {referralFilter !== 'all' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setReferralFilter('all')}
+                                        className="flex items-center gap-1.5 rounded-full border border-cyan-300/40 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100 hover:bg-cyan-300/20"
+                                    >
+                                        {REFERRAL_FILTERS[referralFilter].label}
+                                        <span aria-hidden="true">×</span>
+                                    </button>
+                                )}
+                                <span className="text-xs text-slate-400">
+                                    {referralFilter === 'all'
+                                        ? `${referrals.length} records`
+                                        : `${visibleReferrals.length} of ${referrals.length} records`}
+                                </span>
+                            </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-white/10 text-sm">
@@ -486,7 +701,7 @@ export default function ReferrerPortalPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/10">
-                                    {referrals.map((referral) => (
+                                    {visibleReferrals.map((referral) => (
                                         <tr
                                             key={referral.caseId}
                                             onClick={() => setSelectedCaseId(referral.caseId)}
@@ -495,7 +710,7 @@ export default function ReferrerPortalPage() {
                                             <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-cyan-100">{referral.fileNumber}</td>
                                             <td className="whitespace-nowrap px-4 py-3 text-white">{referral.consumerLabel}</td>
                                             <td className="px-4 py-3">
-                                                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-slate-200">
+                                                <span className={`whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${statusToneClass(referral.statusTone)}`}>
                                                     {referral.referralStatus}
                                                 </span>
                                             </td>
@@ -521,9 +736,13 @@ export default function ReferrerPortalPage() {
                                             )}
                                         </tr>
                                     ))}
-                                    {referrals.length === 0 && (
+                                    {visibleReferrals.length === 0 && (
                                         <tr>
-                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 7 : 6}>No referrals are linked yet.</td>
+                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 7 : 6}>
+                                                {referrals.length === 0
+                                                    ? 'No referrals are linked yet.'
+                                                    : <>No files match “{REFERRAL_FILTERS[referralFilter].label}” yet. <button type="button" onClick={() => setReferralFilter('all')} className="text-cyan-300 underline underline-offset-2">Show all files</button></>}
+                                            </td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -613,7 +832,7 @@ export default function ReferrerPortalPage() {
                                 )}
                             </div>
                             {detail && (
-                                <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100">
+                                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${statusToneClass(selectedReferral?.statusTone)}`}>
                                     {detail.referralStatus}
                                 </span>
                             )}

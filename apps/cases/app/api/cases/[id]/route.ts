@@ -46,6 +46,19 @@ export async function GET(
                     }
                 }
             },
+            // Referrer shown on the case page under the Project card so staff can
+            // spot referrals assigned to the wrong referrer at a glance.
+            referrer: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    cellNumber: true,
+                    referrerType: true,
+                    isActive: true
+                }
+            },
             documents: true,
             workflowLogs: {
                 orderBy: {

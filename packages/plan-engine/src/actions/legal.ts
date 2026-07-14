@@ -1,12 +1,17 @@
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
-import { stepRegistry } from '../step-registry';
-import type { ActionContext } from '../step-registry';
-import type { StepExecutionResult } from '../types';
+import type { ActionContext, ActionHandler } from '../step-registry';
+import type { ActionType, StepExecutionResult } from '../types';
+
+/** Handlers exported as a plain map — step-registry merges these explicitly (no side-effect imports). */
+export const legalActions = new Map<ActionType, ActionHandler>();
+function registerAction(actionType: ActionType, handler: ActionHandler): void {
+  legalActions.set(actionType, handler);
+}
 
 const THREE_YEARS_MS = 3 * 365 * 24 * 60 * 60 * 1000;
 
-stepRegistry.register(
+registerAction(
   'PRESCRIPTION_CHECK',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -50,7 +55,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'DRAFT_PRESCRIPTION_LETTER',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -99,7 +104,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'SEND_PRESCRIPTION_LETTER',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -121,7 +126,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'DRAFT_LEGAL_LETTER',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -164,7 +169,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'SEND_LEGAL_LETTER',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -186,7 +191,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'BUREAU_DISPUTE',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {

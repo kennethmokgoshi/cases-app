@@ -28,6 +28,7 @@ import { SavingsAuditCard } from './SavingsAuditCard';
 import { AssistClientConsentModal } from './AssistClientConsentModal';
 import { SavingsAuditResult } from '@zenowethu/shared-lib';
 import SendQuoteModal from './SendQuoteModal';
+import AssignReferrerModal from './AssignReferrerModal';
 import SendMandateModal from './SendMandateModal';
 import DcFeeInvoiceModal from './DcFeeInvoiceModal';
 import { ConsumerPortalPanel } from '@/app/components/ConsumerPortalPanel';
@@ -214,6 +215,15 @@ type CaseDetail = {
         idNumber: string;
         email: string | null;
         phone: string | null;
+    } | null;
+    referrer?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string | null;
+        cellNumber: string | null;
+        referrerType: string;
+        isActive: boolean;
     } | null;
     projects: Array<{
         isPrimary: boolean;
@@ -454,6 +464,7 @@ export default function CaseDetailPage() {
     const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
 
     const [viewingProjectMembers, setViewingProjectMembers] = useState<{ id: string; name: string; members?: any[] } | null>(null);
+    const [isAssignReferrerOpen, setIsAssignReferrerOpen] = useState(false);
     // Modals
     const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -2626,6 +2637,74 @@ export default function CaseDetailPage() {
                                     </Link>
                                 ))}
                             </div>
+                        )}
+                    </div>
+
+                    {/* Referrer card — directly under Project so staff can spot
+                        a referral assigned to the wrong referrer at a glance */}
+                    <div className="bg-zeno-blue/20 rounded-xl border border-white/5 px-5 py-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                </svg>
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Referrer</span>
+                            </div>
+                            {(isAdmin || isExecutive || userRole === 'MANAGER') && (
+                                <button
+                                    onClick={() => setIsAssignReferrerOpen(true)}
+                                    className="text-[10px] text-zeno-cyan hover:underline uppercase font-bold tracking-wider"
+                                >
+                                    {caseData.referrer ? 'Change' : 'Assign'}
+                                </button>
+                            )}
+                        </div>
+                        {!caseData.referrer ? (
+                            <p className="text-sm text-gray-600 italic">No referrer assigned</p>
+                        ) : (
+                            (() => {
+                                const referrerBody = (
+                                    <>
+                                        <div className="w-8 h-8 rounded-full bg-zeno-cyan/10 border border-zeno-cyan/20 flex items-center justify-center shrink-0">
+                                            <span className="text-xs font-bold text-zeno-cyan">
+                                                {caseData.referrer.firstName.charAt(0)}{caseData.referrer.lastName.charAt(0)}
+                                            </span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium text-white truncate">
+                                                {caseData.referrer.firstName} {caseData.referrer.lastName}
+                                            </p>
+                                            {(caseData.referrer.cellNumber || caseData.referrer.email) && (
+                                                <p className="text-xs text-gray-500 truncate">
+                                                    {caseData.referrer.cellNumber || caseData.referrer.email}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1 shrink-0">
+                                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${caseData.referrer.referrerType === 'DISCOUNT' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                                {caseData.referrer.referrerType === 'DISCOUNT' ? 'Discount' : 'Commission'}
+                                            </span>
+                                            {!caseData.referrer.isActive && (
+                                                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-400">
+                                                    Inactive
+                                                </span>
+                                            )}
+                                        </div>
+                                    </>
+                                );
+                                return (isAdmin || isExecutive || userRole === 'MANAGER') ? (
+                                    <Link
+                                        href={`/admin/referrers/${caseData.referrer.id}`}
+                                        className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                                    >
+                                        {referrerBody}
+                                    </Link>
+                                ) : (
+                                    <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5">
+                                        {referrerBody}
+                                    </div>
+                                );
+                            })()
                         )}
                     </div>
 
@@ -4959,6 +5038,17 @@ export default function CaseDetailPage() {
                     </div>
                 )
             }
+
+            {/* Assign / Change Referrer Modal */}
+            {caseData && (
+                <AssignReferrerModal
+                    isOpen={isAssignReferrerOpen}
+                    onClose={() => setIsAssignReferrerOpen(false)}
+                    caseId={caseData.id}
+                    currentReferrer={caseData.referrer ?? null}
+                    onChanged={(referrer) => setCaseData(prev => prev ? { ...prev, referrer } : prev)}
+                />
+            )}
 
             {/* Convert to Referrer Modal */}
             {showConvertModal && caseData && (

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
 import { z } from 'zod';
-import { checkConfidence, generatePlan } from '@zenowethu/plan-engine';
+import { checkConfidence, generatePlan, classifyPlanGenerationError } from '@zenowethu/plan-engine';
+
+const logger = createLogger('ai-plan-generate');
 
 const schema = z.object({
   caseId: z.string().min(1),
@@ -135,7 +137,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ plan, confidence, summary: generated.summary });
   } catch (error) {
-    console.error('[AI Plan Generate]', error);
-    return NextResponse.json({ error: 'Failed to generate plan' }, { status: 500 });
+    const classified = classifyPlanGenerationError(error);
+    logger.error(
+      { err: error, code: classified.code, detail: classified.detail },
+      'AI plan generation failed',
+    );
+    return NextResponse.json(
+      {
+        error: classified.message,
+        code: classified.code,
+        detail: classified.detail,
+        hint: classified.hint,
+      },
+      { status: classified.httpStatus },
+    );
   }
 }

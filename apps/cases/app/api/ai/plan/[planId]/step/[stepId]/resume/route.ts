@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth } from '@zenowethu/shared-lib';
+import { auth, createLogger } from '@zenowethu/shared-lib';
 import { executeNextStep } from '@zenowethu/plan-engine';
+
+const logger = createLogger('ai-plan-step-resume');
 
 export async function POST(
   _request: NextRequest,
@@ -20,7 +22,9 @@ export async function POST(
       return NextResponse.json({ error: 'Step not found' }, { status: 404 });
     }
 
-    if (step.status !== 'WAITING_FOR_USER') {
+    // WAITING_FOR_USER = paused at a breakpoint; FAILED = staff retrying after an error
+    const isRetry = step.status === 'FAILED';
+    if (step.status !== 'WAITING_FOR_USER' && !isRetry) {
       return NextResponse.json(
         { error: `Step cannot be resumed. Current status: ${step.status}` },
         { status: 409 },
@@ -32,13 +36,16 @@ export async function POST(
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
     }
 
-    // Reset step to PENDING and clear breakpoint flags
+    // Reset step to PENDING and clear breakpoint flags and any previous failure
     await prisma.casePlanStep.update({
       where: { id: stepId },
       data: {
         status: 'PENDING',
         breakpointBefore: false,
         pausedAt: null,
+        error: null,
+        executedAt: null,
+        completedAt: null,
       },
     });
 
@@ -49,7 +56,9 @@ export async function POST(
       data: {
         caseId: plan.caseId,
         userId: session.user.id,
-        content: `Plan resumed at Step ${step.stepNumber}: "${step.title}"`,
+        content: isRetry
+          ? `Failed Step ${step.stepNumber} retried: "${step.title}" (previous error: ${step.error || 'unknown'})`
+          : `Plan resumed at Step ${step.stepNumber}: "${step.title}"`,
         type: 'AI_PLAN',
         isInternal: true,
         activityType: 'PLAN_RESUMED',
@@ -65,7 +74,7 @@ export async function POST(
 
     return NextResponse.json({ plan: updated });
   } catch (error) {
-    console.error('[AI Plan Step Resume]', error);
+    logger.error({ err: error }, 'Failed to resume plan step');
     return NextResponse.json({ error: 'Failed to resume step' }, { status: 500 });
   }
 }

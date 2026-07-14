@@ -1,10 +1,15 @@
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
-import { stepRegistry } from '../step-registry';
-import type { ActionContext } from '../step-registry';
-import type { StepExecutionResult } from '../types';
+import type { ActionContext, ActionHandler } from '../step-registry';
+import type { ActionType, StepExecutionResult } from '../types';
 
-stepRegistry.register(
+/** Handlers exported as a plain map — step-registry merges these explicitly (no side-effect imports). */
+export const forensicActions = new Map<ActionType, ActionHandler>();
+function registerAction(actionType: ActionType, handler: ActionHandler): void {
+  forensicActions.set(actionType, handler);
+}
+
+registerAction(
   'OPEN_FORENSIC_AUDIT',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -35,7 +40,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'RECKLESS_LENDING_ASSESSMENT',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {

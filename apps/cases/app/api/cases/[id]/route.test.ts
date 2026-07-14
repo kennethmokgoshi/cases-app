@@ -115,3 +115,45 @@ describe('GET /api/cases/[id] — quote visibility', () => {
         expect(db.case.findUnique).not.toHaveBeenCalled();
     });
 });
+
+describe('GET /api/cases/[id] — referrer visibility', () => {
+    it('requests the linked referrer so staff can spot wrongly assigned referrals', async () => {
+        db.case.findUnique.mockResolvedValue({ ...baseCase, invoices: [] });
+
+        await GET(request(), { params });
+
+        const include = db.case.findUnique.mock.calls[0][0].include;
+        expect(include.referrer.select).toEqual(
+            expect.objectContaining({
+                id: true,
+                firstName: true,
+                lastName: true,
+                referrerType: true,
+                isActive: true,
+            })
+        );
+    });
+
+    it('passes the referrer through in the response', async () => {
+        const referrer = {
+            id: 'ref1',
+            firstName: 'William',
+            lastName: 'Maesela',
+            email: 'william@example.com',
+            cellNumber: '0820000000',
+            referrerType: 'COMMISSION',
+            isActive: true,
+        };
+        db.case.findUnique.mockResolvedValue({ ...baseCase, invoices: [], referrer });
+
+        const json = await (await GET(request(), { params })).json();
+        expect(json.referrer).toEqual(referrer);
+    });
+
+    it('returns a null referrer for cases without one', async () => {
+        db.case.findUnique.mockResolvedValue({ ...baseCase, invoices: [], referrer: null });
+
+        const json = await (await GET(request(), { params })).json();
+        expect(json.referrer).toBeNull();
+    });
+});

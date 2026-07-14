@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
 import { stepRegistry } from '@zenowethu/plan-engine/src/step-registry';
-// We must import the actions so the registry is populated
-import '@zenowethu/plan-engine/src/actions/cases';
 
 export async function POST(request: Request) {
   try {

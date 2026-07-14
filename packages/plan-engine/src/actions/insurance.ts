@@ -1,10 +1,15 @@
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
-import { stepRegistry } from '../step-registry';
-import type { ActionContext } from '../step-registry';
-import type { StepExecutionResult } from '../types';
+import type { ActionContext, ActionHandler } from '../step-registry';
+import type { ActionType, StepExecutionResult } from '../types';
 
-stepRegistry.register(
+/** Handlers exported as a plain map — step-registry merges these explicitly (no side-effect imports). */
+export const insuranceActions = new Map<ActionType, ActionHandler>();
+function registerAction(actionType: ActionType, handler: ActionHandler): void {
+  insuranceActions.set(actionType, handler);
+}
+
+registerAction(
   'INSURANCE_ASSESSMENT',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -50,7 +55,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'DRAFT_CANCELLATION_LETTER',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -87,7 +92,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'SEND_CANCELLATION_LETTER',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {

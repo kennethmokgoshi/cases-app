@@ -3,17 +3,22 @@ import fs from 'fs';
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
 import { requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
-import { stepRegistry } from '../step-registry';
 import { sendManualMessage, getTemplateByStatus, renderTemplate } from '@zenowethu/shared-lib';
-import type { ActionContext } from '../step-registry';
-import type { StepExecutionResult } from '../types';
+import type { ActionContext, ActionHandler } from '../step-registry';
+import type { ActionType, StepExecutionResult } from '../types';
+
+/** Handlers exported as a plain map — step-registry merges these explicitly (no side-effect imports). */
+export const casesActions = new Map<ActionType, ActionHandler>();
+function registerAction(actionType: ActionType, handler: ActionHandler): void {
+  casesActions.set(actionType, handler);
+}
 
 const resolveUploadPath = (fileUrl: string): string => {
   const relative = fileUrl.replace(/^\/uploads\//, '');
   return path.join(process.cwd(), 'storage', 'uploads', relative);
 };
 
-stepRegistry.register('DHS_SEARCH', async (ctx: ActionContext): Promise<StepExecutionResult> => {
+registerAction('DHS_SEARCH', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const { caseId, caseRecord } = ctx;
     logger.info(`[DHS_SEARCH] Case ${caseId}: searching DHS for ${caseRecord.client.idNumber}`);
@@ -42,7 +47,7 @@ stepRegistry.register('DHS_SEARCH', async (ctx: ActionContext): Promise<StepExec
   }
 });
 
-stepRegistry.register(
+registerAction(
   'DHS_TRANSFER_REQUEST',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     const { caseId, planId, stepId, caseRecord } = ctx;
@@ -137,7 +142,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'REQUEST_FILE_FROM_DC',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -258,7 +263,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register('STATUS_UPDATE', async (ctx: ActionContext): Promise<StepExecutionResult> => {
+registerAction('STATUS_UPDATE', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
     const { caseId, caseRecord, actionParams } = ctx;
     const newStatus = actionParams.status as string;
@@ -286,7 +291,7 @@ stepRegistry.register('STATUS_UPDATE', async (ctx: ActionContext): Promise<StepE
   }
 });
 
-stepRegistry.register(
+registerAction(
   'DOCUMENT_REQUEST_CLIENT',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {
@@ -313,7 +318,7 @@ stepRegistry.register(
   },
 );
 
-stepRegistry.register(
+registerAction(
   'NCT_STATUS_CHECK',
   async (ctx: ActionContext): Promise<StepExecutionResult> => {
     try {

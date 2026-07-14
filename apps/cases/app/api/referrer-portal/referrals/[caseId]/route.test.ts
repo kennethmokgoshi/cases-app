@@ -83,7 +83,7 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
         vi.mocked(prisma.case.findFirst).mockResolvedValueOnce({
             id: 'case-1',
             fileNumber: 'ZDM-2026-1020-43Z',
-            status: 'DHS_REQUESTED',
+            status: 'REQUESTED_VIA_DHS',
             services: '["debt review flag removal","credit repair"]',
             serviceFee: null,
             createdAt: new Date('2026-06-01T09:00:00Z'),
@@ -128,7 +128,9 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
 
         expect(res.status).toBe(200);
         expect(json.consumerLabel).toBe('N. Moeng');
-        expect(json.referralStatus).toBe('Quote accepted');
+        // Workflow status drives the label — the lagging commission stage
+        // (QUOTE_ACCEPTED here) must not leak into the display.
+        expect(json.referralStatus).toBe('Requested via DHS');
         expect(json.workflow.percent).toBe(30);
         expect(json.statusHistory).toEqual([
             expect.objectContaining({ from: 'new', to: 'dhs_requested' }),
