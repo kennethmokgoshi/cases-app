@@ -104,7 +104,10 @@ export default auth((req) => {
         // Restrict /admin access
         if (isLoggedIn && pathname.startsWith('/admin')) {
             const isAdmin = req.auth?.user?.isAdmin === true
-            if (!isAdmin) {
+            // Exception: the Debt Counsellors directory is viewable by ALL staff
+            // (per operations spec) — its edit APIs enforce isAdmin server-side.
+            const isStaffViewable = pathname.startsWith('/admin/debt-counsellors')
+            if (!isAdmin && !isStaffViewable) {
                 return NextResponse.redirect(new URL('/', req.url))
             }
         }

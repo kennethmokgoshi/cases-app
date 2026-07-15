@@ -72,17 +72,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid payment query', details: parsed.error.flatten() }, { status: 422 });
         }
 
-        // Discount referrers earn no commission, so there is nothing to follow up on.
-        const referrerRecord = await prisma.referrer.findUnique({
-            where: { id: access.referrer.id },
-            select: { referrerType: true },
-        });
-        if (!referrerEarnsCommission(referrerRecord?.referrerType)) {
-            return NextResponse.json(
-                { error: 'Payment follow-ups are not available — discount referrers do not earn commission.' },
-                { status: 403 },
-            );
-        }
+
 
         const referralCase = await prisma.case.findFirst({
             where: {

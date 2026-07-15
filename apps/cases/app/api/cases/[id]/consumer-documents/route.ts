@@ -6,7 +6,7 @@ import { existsSync } from 'fs';
 
 const logger = createLogger('api/cases/[id]/consumer-documents');
 
-/** Resolve the Credo consumer linked to this case's primary client. */
+/** Resolve the Crediva consumer linked to this case's primary client. */
 async function getConsumerId(caseId: string): Promise<string | null> {
     const c = await prisma.case.findUnique({
         where: { id: caseId },

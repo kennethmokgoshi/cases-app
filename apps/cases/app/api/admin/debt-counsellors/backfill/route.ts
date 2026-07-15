@@ -1,14 +1,24 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { seedDcPriorityEmails, recordDhsOutcome } from '@zenowethu/shared-lib/src/dc';
+import { classifyDeclineReason } from '@zenowethu/shared-lib/src/dhs/decline-handler';
+import { isManageConsumersEligible } from '@zenowethu/shared-lib/src/dhs/accepted-handler';
 
 const logger = createLogger('api/admin/debt-counsellors/backfill');
 
 /**
  * POST /api/admin/debt-counsellors/backfill
- * One-time operation: creates DebtCounsellor records from existing Case data
- * grouped by ncrdcNo, then links each Case to its DebtCounsellor.
- * Safe to re-run — skips cases already linked.
+ * One-time operation, safe to re-run:
+ *   Phase 1 — creates DebtCounsellor records from existing Case data grouped
+ *             by ncrdcNo, then links each Case to its DebtCounsellor
+ *             (skips cases already linked).
+ *   Phase 2 — seeds each DC's 5-slot priority email list from the legacy
+ *             preferred/lastKnown/DHS email fields (skips DCs that already
+ *             have a priority list), and seeds DhsOutcomeEvent history from
+ *             each linked case's current decline/acceptance state (one event
+ *             per case — historical rates are approximate; events are exact
+ *             from the day this shipped).
  */
 export async function POST() {
     try {
@@ -40,7 +50,13 @@ export async function POST() {
         });
 
         if (cases.length === 0) {
-            return NextResponse.json({ message: 'Nothing to backfill.', created: 0, linked: 0 });
+            const phase2 = await backfillEmailsAndOutcomes();
+            return NextResponse.json({
+                message: `Nothing new to link. ${phase2.summary}`,
+                created: 0,
+                linked: 0,
+                ...phase2.counts,
+            });
         }
 
         // Group by ncrdcNo — pick freshest values (cases ordered by updatedAt desc)
@@ -159,14 +175,83 @@ export async function POST() {
             linked += updateResult.count;
         }
 
-        logger.info('DC backfill complete', { dcGroups: grouped.size, linked });
+        const phase2 = await backfillEmailsAndOutcomes();
+
+        logger.info('DC backfill complete', { dcGroups: grouped.size, linked, ...phase2.counts });
         return NextResponse.json({
-            message: 'Backfill complete.',
+            message: `Backfill complete. ${phase2.summary}`,
             dcGroups: grouped.size,
             linked,
+            ...phase2.counts,
         });
     } catch (error) {
         logger.error('POST /api/admin/debt-counsellors/backfill', { error });
         return NextResponse.json({ error: 'Backfill failed' }, { status: 500 });
     }
+}
+
+/**
+ * Phase 2 of the backfill: seed priority email lists and outcome-event history.
+ * Both seeders are idempotent (priority lists skip DCs that already have one;
+ * recordDhsOutcome dedupes on case + outcome + message), so re-running is safe.
+ */
+async function backfillEmailsAndOutcomes(): Promise<{
+    summary: string;
+    counts: { emailsSeeded: number; declineEvents: number; acceptEvents: number };
+}> {
+    let emailsSeeded = 0;
+    let declineEvents = 0;
+    let acceptEvents = 0;
+
+    const allDcs = await (prisma as any).debtCounsellor.findMany({
+        select: { id: true, preferredEmail: true, lastKnownEmail: true, email: true },
+    });
+    for (const dc of allDcs) {
+        emailsSeeded += await seedDcPriorityEmails(dc);
+    }
+
+    const linkedCases = await prisma.case.findMany({
+        where: { debtCounsellordId: { not: null }, deletedAt: null },
+        select: {
+            id: true,
+            debtCounsellordId: true,
+            declineReason: true,
+            declineLastDetectedAt: true,
+            dhsStatus: true,
+            dhsStatusDate: true,
+            status: true,
+            manuallyAcceptedViaDhs: true,
+            updatedAt: true,
+        },
+    });
+
+    for (const c of linkedCases) {
+        if (c.declineReason) {
+            const r = await recordDhsOutcome({
+                debtCounsellordId: c.debtCounsellordId,
+                caseId: c.id,
+                outcome: 'DECLINED',
+                message: c.declineReason,
+                category: classifyDeclineReason(c.declineReason),
+                source: 'BACKFILL',
+                occurredAt: c.declineLastDetectedAt ?? c.dhsStatusDate ?? c.updatedAt,
+            });
+            if (r.recorded) declineEvents++;
+        }
+        if (isManageConsumersEligible(c)) {
+            const r = await recordDhsOutcome({
+                debtCounsellordId: c.debtCounsellordId,
+                caseId: c.id,
+                outcome: 'ACCEPTED',
+                source: 'BACKFILL',
+                occurredAt: c.dhsStatusDate ?? c.updatedAt,
+            });
+            if (r.recorded) acceptEvents++;
+        }
+    }
+
+    return {
+        summary: `Seeded ${emailsSeeded} priority email(s), ${declineEvents} decline event(s), ${acceptEvents} acceptance event(s).`,
+        counts: { emailsSeeded, declineEvents, acceptEvents },
+    };
 }

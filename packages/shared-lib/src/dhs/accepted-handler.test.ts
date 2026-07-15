@@ -18,7 +18,7 @@ vi.mock('../automation/automation-user', () => ({
     getAutomationUserId: vi.fn().mockResolvedValue('auto-user'),
 }));
 
-vi.mock('../credo/consumer-provisioning', () => ({
+vi.mock('../crediva/consumer-provisioning', () => ({
     provisionConsumerForClient: vi.fn(),
     createPasswordResetTokenForConsumer: vi.fn(),
 }));
@@ -28,7 +28,7 @@ import { sendManualMessage } from '../notifications/service';
 import {
     provisionConsumerForClient,
     createPasswordResetTokenForConsumer,
-} from '../credo/consumer-provisioning';
+} from '../crediva/consumer-provisioning';
 import { handleDhsAccepted, isManageConsumersEligible } from './accepted-handler';
 
 const db = prisma as unknown as {

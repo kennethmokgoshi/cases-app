@@ -10,7 +10,7 @@ const logger = createLogger('api/cases/[id]/resend-consent');
  * POST /api/cases/[id]/resend-consent — the "Resend Confirmation Link" button.
  *
  * Sends the consumer the debt-review-removal consent REMINDER email (the
- * login-gated Credo confirmation link with ID-number login instructions) — worded
+ * login-gated Crediva confirmation link with ID-number login instructions) — worded
  * as a reminder that flag removal cannot continue without their consent, NOT as a
  * fresh "transfer accepted" announcement. Reuses the existing consent token so
  * links already in the consumer's inbox stay valid; issues a new link if the old

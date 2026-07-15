@@ -11,7 +11,32 @@ type DCStats = {
   lastMonth: number
   accepted: number
   declined: number
+  decided: number
+  acceptanceRate: number | null
+  declineRate: number | null
+  lastDeclinedAt: string | null
   topDeclineCategory: string | null
+}
+
+type PriorityEmail = {
+  id: string
+  email: string
+  priority: number
+  source: string
+  lastBouncedAt: string | null
+  notes: string | null
+}
+
+type TopDecliner = {
+  id: string
+  ncrdcNo: string
+  name: string
+  tradingName: string | null
+  declined: number
+  accepted: number
+  declineRate: number | null
+  topDeclineCategory: string | null
+  lastDeclinedAt: string | null
 }
 
 type DCRecord = {
@@ -26,6 +51,7 @@ type DCRecord = {
   email: string | null
   preferredEmail: string | null
   lastKnownEmail: string | null
+  priorityEmails: PriorityEmail[]
   staffNotes: string | null
   updatedAt: string
   updatedBy: string | null
@@ -229,11 +255,18 @@ function EditModal({ record, onClose, onSaved }: { record: DCRecord; onClose: ()
   )
 }
 
+function fmtDate(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 export default function DebtCounsellorAdminPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
 
   const [counsellors, setCounsellors] = useState<DCRecord[]>([])
+  const [topDecliners, setTopDecliners] = useState<TopDecliner[]>([])
+  const [canEdit, setCanEdit] = useState(false)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -242,9 +275,7 @@ export default function DebtCounsellorAdminPage() {
   const [backfilling, setBackfilling] = useState(false)
   const [backfillMsg, setBackfillMsg] = useState('')
 
-  useEffect(() => {
-    if (status === 'authenticated' && !session?.user?.isAdmin) router.push('/')
-  }, [session, status, router])
+  // Viewable by ALL staff; editing controls are gated by canEdit (admin only)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -254,6 +285,8 @@ export default function DebtCounsellorAdminPage() {
       if (!res.ok) throw new Error('Failed to load')
       const data = await res.json()
       setCounsellors(data.counsellors)
+      setTopDecliners(data.topDecliners ?? [])
+      setCanEdit(Boolean(data.canEdit))
       setTotal(data.total)
     } catch {
       setError('Failed to load debt counsellors.')
@@ -288,7 +321,7 @@ export default function DebtCounsellorAdminPage() {
       </div>
     )
   }
-  if (!session?.user?.isAdmin) return null
+  if (!session?.user) return null
 
   return (
     <div className="p-6 max-w-screen-xl mx-auto space-y-6">
@@ -296,7 +329,10 @@ export default function DebtCounsellorAdminPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-white">Debt Counsellors</h1>
-          <p className="text-sm text-gray-400 mt-1">{total} counsellor{total !== 1 ? 's' : ''} on record</p>
+          <p className="text-sm text-gray-400 mt-1">
+            {total} counsellor{total !== 1 ? 's' : ''} on record
+            {!canEdit && <span className="text-gray-600"> · view only — editing is restricted to admins</span>}
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <input
@@ -306,15 +342,57 @@ export default function DebtCounsellorAdminPage() {
             placeholder="Search NCRDC, name, email…"
             className="w-full sm:w-72 bg-black/30 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50"
           />
-          <button
-            onClick={runBackfill}
-            disabled={backfilling}
-            className="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg hover:border-gray-600 hover:text-white transition-all disabled:opacity-50 whitespace-nowrap"
-          >
-            {backfilling ? 'Backfilling…' : 'Backfill from Cases'}
-          </button>
+          {canEdit && (
+            <button
+              onClick={runBackfill}
+              disabled={backfilling}
+              className="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg hover:border-gray-600 hover:text-white transition-all disabled:opacity-50 whitespace-nowrap"
+            >
+              {backfilling ? 'Backfilling…' : 'Backfill from Cases'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Top 5 decliners */}
+      {!loading && topDecliners.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Top {topDecliners.length} Decliners
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {topDecliners.map((td, idx) => (
+              <button
+                key={td.id}
+                onClick={() => router.push(`/admin/debt-counsellors/${td.id}`)}
+                className="bg-white/3 border border-gray-800 rounded-xl p-4 text-left hover:border-red-500/40 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-gray-600">#{idx + 1}</span>
+                  <span className="text-[10px] font-mono text-amber-400">{td.ncrdcNo}</span>
+                </div>
+                <p className="text-sm text-white font-semibold truncate">{td.name}</p>
+                {td.tradingName && td.tradingName !== td.name && (
+                  <p className="text-[10px] text-gray-500 truncate">{td.tradingName}</p>
+                )}
+                <div className="flex items-baseline gap-2 mt-2">
+                  <span className="text-lg font-bold text-red-400">{td.declined}</span>
+                  <span className="text-[10px] text-gray-500">declines</span>
+                  {td.declineRate !== null && (
+                    <span className="text-[10px] text-red-300">({td.declineRate}%)</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-amber-300 truncate mt-1">
+                  {td.topDeclineCategory ? DECLINE_LABELS[td.topDeclineCategory] ?? td.topDeclineCategory : '—'}
+                </p>
+                {td.lastDeclinedAt && (
+                  <p className="text-[9px] text-gray-600 mt-1">Last declined {fmtDate(td.lastDeclinedAt)}</p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {backfillMsg && (
         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-lg px-4 py-2.5 text-sm">{backfillMsg}</div>
@@ -355,15 +433,17 @@ export default function DebtCounsellorAdminPage() {
                     </svg>
                     View
                   </button>
-                  <button
-                    onClick={() => setEditing(dc)}
-                    className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-white transition-colors border border-gray-700 hover:border-gray-600 rounded px-3 py-1.5"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.172-8.172z" />
-                    </svg>
-                    Edit
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => setEditing(dc)}
+                      className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-white transition-colors border border-gray-700 hover:border-gray-600 rounded px-3 py-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.172-8.172z" />
+                      </svg>
+                      Edit
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -379,9 +459,23 @@ export default function DebtCounsellorAdminPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider">Email</p>
-                  <p className="text-xs text-white truncate mt-0.5">{dc.preferredEmail ?? dc.email ?? <span className="text-gray-600 italic">—</span>}</p>
-                  {dc.preferredEmail && dc.email && dc.preferredEmail !== dc.email && (
-                    <p className="text-[10px] text-gray-500 truncate">dhs: {dc.email}</p>
+                  {dc.priorityEmails.length > 0 ? (
+                    <>
+                      <p className="text-xs text-white truncate mt-0.5">
+                        <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-1 mr-1">P1</span>
+                        {dc.priorityEmails.find((e) => !e.lastBouncedAt)?.email ?? dc.priorityEmails[0].email}
+                      </p>
+                      {dc.priorityEmails.length > 1 && (
+                        <p className="text-[10px] text-gray-500">+{dc.priorityEmails.length - 1} more on priority list</p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-white truncate mt-0.5">{dc.preferredEmail ?? dc.email ?? <span className="text-gray-600 italic">—</span>}</p>
+                      {dc.preferredEmail && dc.email && dc.preferredEmail !== dc.email && (
+                        <p className="text-[10px] text-gray-500 truncate">dhs: {dc.email}</p>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="min-w-0">
@@ -404,12 +498,26 @@ export default function DebtCounsellorAdminPage() {
                 <StatPill label="Last Month" value={dc.stats.lastMonth} />
                 <StatPill label="Accepted" value={dc.stats.accepted} accent="text-emerald-400" />
                 <StatPill label="Declined" value={dc.stats.declined} accent="text-red-400" />
-                {dc.stats.total > 0 && (
+                {dc.stats.acceptanceRate !== null && (
                   <div className="flex flex-col items-center bg-black/20 rounded-lg px-3 py-2 min-w-[64px]">
-                    <span className="text-base font-bold text-gray-300">
-                      {Math.round((dc.stats.accepted / dc.stats.total) * 100)}%
+                    <span className={`text-base font-bold ${dc.stats.acceptanceRate >= 50 ? 'text-emerald-400' : 'text-gray-300'}`}>
+                      {dc.stats.acceptanceRate}%
                     </span>
                     <span className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">Accept Rate</span>
+                  </div>
+                )}
+                {dc.stats.declineRate !== null && (
+                  <div className="flex flex-col items-center bg-black/20 rounded-lg px-3 py-2 min-w-[64px]">
+                    <span className={`text-base font-bold ${dc.stats.declineRate >= 50 ? 'text-red-400' : 'text-gray-300'}`}>
+                      {dc.stats.declineRate}%
+                    </span>
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">Decline Rate</span>
+                  </div>
+                )}
+                {dc.stats.lastDeclinedAt && (
+                  <div className="flex flex-col items-center bg-black/20 rounded-lg px-3 py-2 min-w-[64px]">
+                    <span className="text-xs font-semibold text-red-300 mt-1">{fmtDate(dc.stats.lastDeclinedAt)}</span>
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider mt-1">Last Declined Us</span>
                   </div>
                 )}
               </div>

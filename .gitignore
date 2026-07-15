@@ -57,4 +57,9 @@ FromGIt/
 # Local settings and temp logs
 .claude/
 tmp/
+typecheck_output*.txt
+typecheck_*.log
+build_results*.txt
+build_log.txt
+pnpm_check.txt
 

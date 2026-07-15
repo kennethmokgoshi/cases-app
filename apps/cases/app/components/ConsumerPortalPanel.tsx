@@ -113,9 +113,9 @@ export function ConsumerPortalPanel({ caseId }: { caseId: string }) {
   return (
     <div className="mt-6 rounded-xl border border-gray-200 bg-white">
       <div className="border-b border-gray-100 px-5 py-4">
-        <h3 className="text-base font-semibold text-gray-900">Credo Consumer Portal</h3>
+        <h3 className="text-base font-semibold text-gray-900">Crediva Consumer Portal</h3>
         <p className="text-sm text-gray-500">
-          Documents the consumer uploaded via Credo, and document requests raised by staff.
+          Documents the consumer uploaded via Crediva, and document requests raised by staff.
         </p>
       </div>
 
@@ -126,7 +126,7 @@ export function ConsumerPortalPanel({ caseId }: { caseId: string }) {
           <>
             {linked === false && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-                No Credo profile is linked to this case&apos;s client yet. A profile is created
+                No Crediva profile is linked to this case&apos;s client yet. A profile is created
                 automatically when the case is loaded (requires a valid 13-digit ID number).
                 Raising a request below will create and invite one.
               </div>

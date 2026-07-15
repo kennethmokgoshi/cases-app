@@ -1948,7 +1948,7 @@ export default function CaseDetailPage() {
         }
     };
 
-    // Resend the acceptance + consent confirmation link (Credo login-gated) to the
+    // Resend the acceptance + consent confirmation link (Crediva login-gated) to the
     // consumer. Reuses the existing consent token — earlier emailed links stay valid.
     const handleResendConsentLink = async () => {
         setResendConsentLoading(true);
@@ -4002,7 +4002,7 @@ export default function CaseDetailPage() {
                                                                 <button
                                                                     onClick={handleResendConsentLink}
                                                                     disabled={resendConsentLoading}
-                                                                    title="Send the consumer a consent REMINDER email (with the Credo confirmation link and ID-number login instructions) — it makes clear the debt review flag removal cannot continue until they consent. The existing secure link stays valid; does nothing if they have already confirmed."
+                                                                    title="Send the consumer a consent REMINDER email (with the Crediva confirmation link and ID-number login instructions) — it makes clear the debt review flag removal cannot continue until they consent. The existing secure link stays valid; does nothing if they have already confirmed."
                                                                     className="px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
                                                                 >
                                                                     {resendConsentLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Resend Confirmation Link'}

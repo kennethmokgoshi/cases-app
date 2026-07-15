@@ -19,7 +19,7 @@ const CreateSchema = z.object({
     notes: z.string().max(1000).optional(),
 });
 
-/** Resolve (and auto-provision if needed) the Credo consumer for a case's primary client. */
+/** Resolve (and auto-provision if needed) the Crediva consumer for a case's primary client. */
 async function resolveConsumerForCase(caseId: string): Promise<{ consumerId: string; email: string | null } | null> {
     const c = await prisma.case.findUnique({
         where: { id: caseId },
@@ -94,7 +94,7 @@ export async function POST(
         const consumer = await resolveConsumerForCase(caseId);
         if (!consumer) {
             return NextResponse.json(
-                { error: 'This case has no client with a valid ID number, so no Credo profile could be created to request documents from.' },
+                { error: 'This case has no client with a valid ID number, so no Crediva profile could be created to request documents from.' },
                 { status: 400 }
             );
         }

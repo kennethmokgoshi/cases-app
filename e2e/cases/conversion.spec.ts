@@ -14,11 +14,11 @@ test.describe('Cases Service Request Conversion Flow', () => {
     await expect(page).toHaveURL(/.*\/dashboard/);
   });
 
-  test('successfully converts a pending credo request to a case', async ({ page }) => {
-    await page.goto('/credo-requests');
+  test('successfully converts a pending crediva request to a case', async ({ page }) => {
+    await page.goto('/crediva-requests');
 
     // Verify page header
-    await expect(page.locator('h1')).toContainText('Credo Service Requests');
+    await expect(page.locator('h1')).toContainText('Crediva Portal Requests');
 
     // Find first convert button that is not disabled (meaning not yet converted)
     const convertBtn = page.locator('button:has-text("Convert to Case")').first();

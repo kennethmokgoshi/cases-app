@@ -34,6 +34,7 @@ import {
     formatDhsDeclineDate,
     resolveDcIdentity,
 } from './decline-handler';
+import { getBestDcEmail } from '../dc/email-priority';
 
 export interface PreviewMessage {
     channel: 'EMAIL' | 'SMS' | 'WHATSAPP';
@@ -106,8 +107,16 @@ export async function previewDHSDecline(params: {
         process.env.APP_URL ||
         'https://cases.zenowethu.co.za';
 
+    // Must mirror handleDHSDecline's resolution order: extracted email from the
+    // decline text, then the DC's priority contact list (skips bounced
+    // addresses), then the legacy per-case/per-DC fields.
+    const dcRecordId = (caseData as { debtCounsellordId?: string | null }).debtCounsellordId ?? null;
+    const priorityListEmail = dcRecordId
+        ? (await getBestDcEmail(dcRecordId).catch(() => null))?.email ?? null
+        : null;
     const dcEmail =
         extractedEmail ||
+        priorityListEmail ||
         caseData.preferredDcEmail ||
         caseData.debtCounsellor?.preferredEmail ||
         caseData.lastKnownEmail ||

@@ -20,7 +20,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
         const { caseId } = await params;
 
         const referralCase = await prisma.case.findFirst({
-            where: { id: caseId, referrerId: access.referrer.id, deletedAt: null },
+            where: { id: caseId, referrerId: access.referrer.id },
             select: { id: true },
         });
         if (!referralCase) return NextResponse.json({ error: 'Referral not found' }, { status: 404 });
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
         const { caseId } = await params;
 
         const referralCase = await prisma.case.findFirst({
-            where: { id: caseId, referrerId: access.referrer.id, deletedAt: null },
+            where: { id: caseId, referrerId: access.referrer.id },
             select: { id: true, fileNumber: true, assignedToId: true },
         });
         if (!referralCase) return NextResponse.json({ error: 'Referral not found' }, { status: 404 });

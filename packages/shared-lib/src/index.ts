@@ -13,6 +13,9 @@ export * from './statuses';
 // import { ... } from '@zenowethu/shared-lib/src/xds'
 
 export * from './notifications';
+// NOTE: './dc' (DC priority emails + outcome events) is NOT exported here — it
+// imports @zenowethu/database (Prisma), which must never reach client bundles.
+// Deep-import it instead: import { ... } from '@zenowethu/shared-lib/src/dc'
 
 // Payment arrangements + per-app next-update (pure helpers only; Prisma-backed
 // services are Node-only and imported directly from their files)
@@ -56,8 +59,8 @@ export * from './automation/run-logger';
 export * from './automation/workflow-engine';
 export * from './debt-review-removal/removal-paths';
 
-// Credo consumer provisioning & password reset
-export * from './credo';
+// Crediva consumer provisioning & password reset
+export * from './crediva';
 
 // Utils
 export * from './utils/extract-id-number';

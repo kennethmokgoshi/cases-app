@@ -29,7 +29,8 @@ import { createDrrConsentRequest, buildConsentLink, buildCredoConsentLink } from
 import {
     provisionConsumerForClient,
     createPasswordResetTokenForConsumer,
-} from '../credo/consumer-provisioning';
+} from '../crediva/consumer-provisioning';
+import { recordDhsOutcome } from '../dc/outcome-events';
 
 const logger = createLogger('dhs/accepted-handler');
 
@@ -145,6 +146,15 @@ export async function handleDhsAccepted(params: {
             result.errors.push('Case not found');
             return result;
         }
+
+        // Record the acceptance in the DC outcome history (self-dedupes — one
+        // ACCEPTED event per case). Best-effort: never blocks the consent flow.
+        await recordDhsOutcome({
+            debtCounsellordId: (caseData as { debtCounsellordId?: string | null }).debtCounsellordId ?? null,
+            ncrdcNo: caseData.ncrdcNo,
+            caseId,
+            outcome: 'ACCEPTED',
+        }).catch(() => null);
 
         // ── Idempotency ──────────────────────────────────────────────────────
         // A live PENDING/CONSENTED consent request means the consumer has already

@@ -89,6 +89,19 @@ export async function GET() {
                     },
                     orderBy: { createdAt: 'desc' },
                 },
+                missingClientReports: {
+                    select: {
+                        id: true,
+                        clientName: true,
+                        idNumber: true,
+                        notes: true,
+                        status: true,
+                        linkedCaseId: true,
+                        createdAt: true,
+                    },
+                    where: { status: 'PENDING' },
+                    orderBy: { createdAt: 'desc' },
+                },
             },
         });
 
@@ -153,6 +166,17 @@ export async function GET() {
             };
         }));
 
+        // Quote statistics: count invoices of type QUOTE across all referred cases
+        const allInvoices = referrer.cases.flatMap((c) =>
+            c.invoices.filter((i) => i.type === 'QUOTE'),
+        );
+        const quoteStats = {
+            total: allInvoices.length,
+            accepted: allInvoices.filter((i) => i.status === 'ACCEPTED' || i.status === 'CONVERTED').length,
+            pending: allInvoices.filter((i) => i.status === 'SENT').length,
+            rejected: allInvoices.filter((i) => i.status === 'REJECTED').length,
+        };
+
         return NextResponse.json({
             referrer: {
                 id: referrer.id,
@@ -172,6 +196,7 @@ export async function GET() {
             },
             summary: totals,
             discountSummary,
+            quoteStats,
             referrals: referrer.cases.map((referral) => {
                 const commission = referral.referrerCommission;
                 const fin = caseFinancials.get(referral.id);
@@ -226,6 +251,15 @@ export async function GET() {
                 notes: query.notes,
                 createdAt: query.createdAt,
                 updatedAt: query.updatedAt,
+            })),
+            missingClientReports: referrer.missingClientReports.map((report) => ({
+                id: report.id,
+                clientName: report.clientName,
+                idNumber: report.idNumber ? report.idNumber.replace(/^(\d{6})\d+(\d{3})$/, '$1*****$2') : null,
+                notes: report.notes,
+                status: report.status,
+                linkedCaseId: report.linkedCaseId,
+                createdAt: report.createdAt,
             })),
         });
     } catch (error) {

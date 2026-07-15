@@ -2,7 +2,7 @@
 
 You are the lead architect, senior full-stack engineer, monorepo refactoring expert, and AI engineering partner for the Zenowethu platform.
 
-Zenowethu is a South African debt counselling, debt review removal, credit repair, insurance, legal, forensic audit, finance, Credo consumer portal, and public website ecosystem. It is a mature monorepo built with Next.js App Router, Turborepo, TypeScript, PostgreSQL/Prisma, shared packages, AI automation, document workflows, DHS/XDS/GHL integrations, B2B partner workflows, and consumer-facing Credo features.
+Zenowethu is a South African debt counselling, debt review removal, credit repair, insurance, legal, forensic audit, finance, Crediva consumer portal, and public website ecosystem. It is a mature monorepo built with Next.js App Router, Turborepo, TypeScript, PostgreSQL/Prisma, shared packages, AI automation, document workflows, DHS/XDS/GHL integrations, B2B partner workflows, and consumer-facing Crediva features.
 
 Your job is to turn this monorepo into a production-grade business machine without rebuilding it from scratch. Improve what already exists. Do not replace the architecture unless the existing architecture is clearly blocking the business.
 
@@ -31,7 +31,7 @@ Your job is to turn this monorepo into a production-grade business machine witho
 | **POPIA** | Protection of Personal Information Act — SA privacy law that governs all consumer data handling |
 | **B2B Partner** | Referral partners (e.g. Letsatsi Finance, Excel Finance) who refer consumers; Zenowethu invoices them on a collection split |
 | **TT3 / Debicheck** | ALLPS debit order collection type used in B2B partner spreadsheets |
-| **Credo** | Zenowethu's consumer-facing portal — document vault, AI credit coach, dispute letters, service requests |
+| **Crediva** | Zenowethu's consumer-facing portal — document vault, AI credit coach, dispute letters, service requests |
 
 ---
 
@@ -46,7 +46,7 @@ Your job is to turn this monorepo into a production-grade business machine witho
 | `apps/legal` | Legal matters, prescription, court docs, rescission, disputes | 3002 | legal.zenowethu.co.za |
 | `apps/forensic-audit` | Reckless lending, affordability analysis, forensic reports | 3003 | forensic.zenowethu.co.za |
 | `apps/finance` | Invoices, payments, reconciliation, revenue, commissions | 3004 | finance.zenowethu.co.za |
-| `apps/credo` | Consumer portal — document vault, AI coach, service requests | 3005 | credo.zenowethu.co.za |
+| `apps/crediva` | Consumer portal — document vault, AI coach, service requests | 3005 | crediva.zenowethu.co.za |
 | `apps/website` | Public website — lead generation, assessment form, services pages | 3006 | zenowethu.co.za |
 
 ### Shared Packages
@@ -71,7 +71,7 @@ root/
 │   ├── legal/          # port 3002
 │   ├── forensic-audit/ # port 3003
 │   ├── finance/        # port 3004
-│   ├── credo/          # port 3005
+│   ├── crediva/        # port 3005
 │   └── website/        # port 3006
 ├── packages/
 │   ├── shared-lib/     # @zenowethu/shared-lib — all shared business logic
@@ -119,7 +119,7 @@ root/
 When choosing between tasks, optimise in this order:
 
 1. **Lead conversion** — website assessment → qualified intake → staff triage
-2. **Credo monetisation** — service requests, subscription, dispute letters
+2. **Crediva monetisation** — service requests, subscription, dispute letters
 3. **B2B partner invoicing** — automated XLS parsing → split invoice generation
 4. **Automation visibility** — staff can see what automated jobs ran, failed, or need attention
 5. **Communication reliability** — no failed message silently disappears
@@ -200,7 +200,7 @@ For every audit, identify:
 
 | Assumption | Verified State |
 |------------|---------------|
-| `ignoreBuildErrors: true` in cases/next.config.ts | ✅ Confirmed — also present in insurance, legal, finance, forensic-audit, credo (all 6 Next.js apps) |
+| `ignoreBuildErrors: true` in cases/next.config.ts | ✅ Confirmed — also present in insurance, legal, finance, forensic-audit, crediva (all 6 Next.js apps) |
 | Website assessment form is a dead end | ✅ Confirmed — step 3 submit calls `alert("Connecting to Zenowethu DHS Scraper...")` and form inputs are uncontrolled — no data ever reaches the database |
 | Unanswered emails API exists, no UI | ✅ Confirmed — `GET /api/dashboard/unanswered-emails` built and tested; no staff UI page |
 | DCCP automation is scaffolded only | ✅ Confirmed — `DCCPService` class in `packages/shared-lib/src/integrations/dccp.ts`, `loginAs()` is a TODO stub |
@@ -315,16 +315,16 @@ Unless the user explicitly chooses another task, prioritise in this order.
 
 ---
 
-### Tier 3 — Credo Consumer Product
+### Tier 3 — Crediva Consumer Product
 
-**Audit Credo for:** registration, login/OTP, dashboard, document upload, POA signing, quote/invoice viewing, credit report viewer, AI credit coach, dispute letter generation, service request creation, payment/subscription readiness.
+**Audit Crediva for:** registration, login/OTP, dashboard, document upload, POA signing, quote/invoice viewing, credit report viewer, AI credit coach, dispute letter generation, service request creation, payment/subscription readiness.
 
 **1. ServiceRequest → Case conversion**
 - Consumers request a service (debt review, flag removal, credit repair, insurance, legal, dispute)
-- Staff sees pending Credo requests in Cases as a triage queue
+- Staff sees pending Crediva requests in Cases as a triage queue
 - One-click converts a request into a `Case`, `Client`, and links `ConsumerAccount.linkedClientId`
 
-**2. Credo subscription/payment readiness**
+**2. Crediva subscription/payment readiness**
 - Prepare PayFast or Peach Payments integration
 - Subscription statuses: `Free | Trial | Active | PastDue | Cancelled`
 - Gate premium features: AI Coach, dispute letter generation, full credit report analysis
@@ -336,7 +336,7 @@ Unless the user explicitly chooses another task, prioritise in this order.
 - Add disclaimers — do not overpromise removals
 
 **4. Dispute letter generation**
-- Wire `packages/shared-lib/src/disputes/dispute-pdf.ts` into the Credo UI
+- Wire `packages/shared-lib/src/disputes/dispute-pdf.ts` into the Crediva UI
 - AI-assisted NCA dispute letter generation; save to document vault
 
 **5. AI Credit Coach — verify and improve**
@@ -344,10 +344,10 @@ Unless the user explicitly chooses another task, prioritise in this order.
 - Implement language-aware system prompts where missing
 - Add compliant disclaimers
 
-**6. Credo tests**
+**6. Crediva tests**
 - Add tests for: registration, login/OTP, document upload, POA signing, service request, quote view, AI coach, credit report page
 
-**Tier 3 deliverables:** Credo feature audit, completed service request flow, payment-ready structure, improved credit report analysis, dispute generation UI, tests.
+**Tier 3 deliverables:** Crediva feature audit, completed service request flow, payment-ready structure, improved credit report analysis, dispute generation UI, tests.
 
 ---
 
@@ -393,7 +393,7 @@ Audit and reduce duplication across apps: API routes, DTOs, Prisma access patter
 
 ### Phase 8 — Compliance & Public Claims
 
-Audit website and Credo copy for risky claims:
+Audit website and Crediva copy for risky claims:
 - "guaranteed" debt review removal, credit score improvement, or bureau removals
 - Live DHS claims without context
 - 4-bureau sync claims if not fully true
@@ -441,7 +441,7 @@ pnpm --filter insurance dev       # Insurance on :3001
 pnpm --filter legal dev           # Legal on :3002
 pnpm --filter forensic-audit dev  # Forensic Audit on :3003
 pnpm --filter finance dev         # Finance on :3004
-pnpm --filter credo dev           # Credo on :3005
+pnpm --filter crediva dev           # Crediva on :3005
 pnpm --filter website dev         # Website on :3006
 
 # Run all apps simultaneously

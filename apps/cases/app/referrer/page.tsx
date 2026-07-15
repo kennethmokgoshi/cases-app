@@ -102,6 +102,7 @@ type ReferralDetail = {
     statusHistory: { id: string; from: string | null; to: string; timestamp: string }[];
     commission: { amount: number; status: string; paidAt: string | null; paymentRef: string | null };
     comments: PortalComment[];
+    pendingQuote: { id: string; invoiceNumber: string; total: number } | null;
 };
 
 type DiscountPartnerSummary = {
@@ -122,6 +123,23 @@ type DiscountPartnerSummary = {
     paidLastMonth: number;
 };
 
+type MissingClientReport = {
+    id: string;
+    clientName: string;
+    idNumber: string | null;
+    notes: string | null;
+    status: string;
+    linkedCaseId: string | null;
+    createdAt: string;
+};
+
+type QuoteStats = {
+    total: number;
+    accepted: number;
+    pending: number;
+    rejected: number;
+};
+
 type PortalSummary = {
     referrer: ReferrerProfile;
     summary: {
@@ -131,8 +149,10 @@ type PortalSummary = {
         commissionPaid: number;
     };
     discountSummary: DiscountPartnerSummary | null;
+    quoteStats: QuoteStats | null;
     referrals: ReferralRow[];
     paymentQueries: PaymentQuery[];
+    missingClientReports: MissingClientReport[];
 };
 
 type ProfileForm = {
@@ -233,6 +253,8 @@ type ReferralFilterId =
     | 'quoted'
     | 'quoted-this-month'
     | 'quoted-last-month'
+    | 'quoted-accepted'
+    | 'quoted-pending'
     | 'paid'
     | 'paid-this-month'
     | 'paid-last-month';
@@ -250,6 +272,8 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'quoted': { label: 'Quoted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 },
     'quoted-this-month': { label: 'Quoted this month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 0) },
     'quoted-last-month': { label: 'Quoted last month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 1) },
+    'quoted-accepted': { label: 'Quote accepted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && ['QUOTE_ACCEPTED', 'DEPOSIT_PAID', 'PAYING_INSTALMENTS', 'UP_TO_DATE', 'SETTLED', 'COMPLETED', 'SETTLED_SUCCESS'].includes(row.caseStatus) },
+    'quoted-pending': { label: 'Quote pending', matches: (row) => row.caseStatus === 'QUOTE_SUBMITTED' || row.caseStatus === 'AWAITING_QUOTE_DECISION' },
     'paid': { label: 'Files with payments', matches: (row) => row.totalPaid > 0 },
     'paid-this-month': { label: 'Paid this month', matches: (row) => row.paidThisMonth > 0 },
     'paid-last-month': { label: 'Paid last month', matches: (row) => row.paidLastMonth > 0 },
@@ -312,6 +336,300 @@ export default function ReferrerPortalPage() {
     const [commentError, setCommentError] = useState('');
     const [referralFilter, setReferralFilter] = useState<ReferralFilterId>('all');
 
+    // Missing Client reporting state
+    const [showMissingClientModal, setShowMissingClientModal] = useState(false);
+    const [missingClientName, setMissingClientName] = useState('');
+    const [missingClientIdNumber, setMissingClientIdNumber] = useState('');
+    const [missingClientNotes, setMissingClientNotes] = useState('');
+    const [missingClientSubmitting, setMissingClientSubmitting] = useState(false);
+    const [missingClientMessage, setMissingClientMessage] = useState('');
+
+    // Not My Client modal state
+    const [showNotMyClientModal, setShowNotMyClientModal] = useState(false);
+    const [notMyClientSubmitting, setNotMyClientSubmitting] = useState(false);
+
+    // Payment Report state
+    const [showPaymentReportModal, setShowPaymentReportModal] = useState(false);
+    const [reportPaymentAmount, setReportPaymentAmount] = useState('');
+    const [reportPaymentDate, setReportPaymentDate] = useState('');
+    const [reportPaymentNotes, setReportPaymentNotes] = useState('');
+    const [reportPaymentFile, setReportPaymentFile] = useState<File | null>(null);
+    const [reportPaymentSubmitting, setReportPaymentSubmitting] = useState(false);
+    const [reportPaymentError, setReportPaymentError] = useState('');
+
+    // Quote Decision state
+    const [quoteDecisionSubmitting, setQuoteDecisionSubmitting] = useState(false);
+
+    // Claim Client state
+    const [showClaimClientModal, setShowClaimClientModal] = useState(false);
+    const [claimClientName, setClaimClientName] = useState('');
+    const [claimClientIdNumber, setClaimClientIdNumber] = useState('');
+    const [claimClientCellNumber, setClaimClientCellNumber] = useState('');
+    const [claimClientNotes, setClaimClientNotes] = useState('');
+    const [claimClientSubmitting, setClaimClientSubmitting] = useState(false);
+    const [claimClientMessage, setClaimClientMessage] = useState('');
+
+    // Upload Document state
+    const [showUploadDocModal, setShowUploadDocModal] = useState(false);
+    const [uploadDocType, setUploadDocType] = useState('ID_DOCUMENT');
+    const [uploadDocFile, setUploadDocFile] = useState<File | null>(null);
+    const [uploadDocNotes, setUploadDocNotes] = useState('');
+    const [uploadDocSubmitting, setUploadDocSubmitting] = useState(false);
+    const [uploadDocError, setUploadDocError] = useState('');
+
+    // Feedback Request state
+    const [feedbackRequestSubmitting, setFeedbackRequestSubmitting] = useState(false);
+
+    async function handleMissingClientSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!missingClientName.trim()) return;
+
+        setMissingClientSubmitting(true);
+        setMissingClientMessage('');
+        try {
+            const res = await fetch('/api/referrer-portal/missing-client', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clientName: missingClientName.trim(),
+                    idNumber: missingClientIdNumber.trim() || undefined,
+                    notes: missingClientNotes.trim() || undefined,
+                }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                setMissingClientMessage(json.error ?? 'Failed to submit report');
+                return;
+            }
+            setMissingClientMessage('Report submitted successfully to Zenowethu staff!');
+            setMissingClientName('');
+            setMissingClientIdNumber('');
+            setMissingClientNotes('');
+            void loadPortal();
+            setTimeout(() => {
+                setShowMissingClientModal(false);
+                setMissingClientMessage('');
+            }, 2500);
+        } catch {
+            setMissingClientMessage('Failed to submit report');
+        } finally {
+            setMissingClientSubmitting(false);
+        }
+    }
+
+    async function handleNotMyClientConfirm() {
+        if (!selectedCaseId) return;
+        setNotMyClientSubmitting(true);
+        try {
+            const res = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: '[FLAG] This is not my client. Please verify assignment.' }),
+            });
+            const json = await res.json();
+            if (res.ok && json.comment) {
+                setDetail((current) => current ? { ...current, comments: [...current.comments, json.comment] } : current);
+            }
+        } catch {
+            // error handled in modal
+        } finally {
+            setNotMyClientSubmitting(false);
+            setShowNotMyClientModal(false);
+        }
+    }
+
+    async function handlePaymentReportSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!selectedCaseId || !reportPaymentAmount || !reportPaymentDate || !reportPaymentFile) {
+            setReportPaymentError('Please fill all required fields and upload proof of payment.');
+            return;
+        }
+
+        setReportPaymentSubmitting(true);
+        setReportPaymentError('');
+
+        try {
+            const formData = new FormData();
+            formData.append('amount', reportPaymentAmount);
+            formData.append('date', reportPaymentDate);
+            formData.append('notes', reportPaymentNotes);
+            formData.append('proofOfPayment', reportPaymentFile);
+
+            const res = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}/payment-report`, {
+                method: 'POST',
+                body: formData,
+            });
+
+            const json = await res.json();
+            if (!res.ok) {
+                setReportPaymentError(json.error ?? 'Failed to submit payment report');
+                return;
+            }
+
+            const detailRes = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}`, { cache: 'no-store' });
+            if (detailRes.ok) {
+                const detailJson = await detailRes.json();
+                setDetail(detailJson);
+            }
+            
+            void loadPortal();
+
+            alert('Payment reported and proof of payment uploaded successfully!');
+            setShowPaymentReportModal(false);
+            setReportPaymentAmount('');
+            setReportPaymentDate('');
+            setReportPaymentNotes('');
+            setReportPaymentFile(null);
+        } catch {
+            setReportPaymentError('Failed to submit payment report');
+        } finally {
+            setReportPaymentSubmitting(false);
+        }
+    }
+
+    async function handleQuoteDecisionSubmit(decision: 'ACCEPT' | 'REJECT') {
+        if (!selectedCaseId) return;
+        const actionText = decision === 'ACCEPT' ? 'accept' : 'decline';
+        const confirmFlag = confirm(`Are you sure you want to ${actionText} this quote?`);
+        if (!confirmFlag) return;
+
+        setQuoteDecisionSubmitting(true);
+        try {
+            const res = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}/quote-decision`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                alert(json.error ?? `Failed to submit quote decision`);
+                return;
+            }
+
+            const detailRes = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}`, { cache: 'no-store' });
+            if (detailRes.ok) {
+                const detailJson = await detailRes.json();
+                setDetail(detailJson);
+            }
+            void loadPortal();
+            alert(`Quote successfully ${decision === 'ACCEPT' ? 'accepted' : 'declined'}!`);
+        } catch {
+            alert(`Failed to submit quote decision`);
+        } finally {
+            setQuoteDecisionSubmitting(false);
+        }
+    }
+
+    async function handleClaimClientSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!claimClientName.trim()) return;
+
+        setClaimClientSubmitting(true);
+        setClaimClientMessage('');
+        try {
+            const res = await fetch('/api/referrer-portal/claim-client', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clientName: claimClientName.trim(),
+                    idNumber: claimClientIdNumber.trim() || undefined,
+                    cellNumber: claimClientCellNumber.trim() || undefined,
+                    notes: claimClientNotes.trim() || undefined,
+                }),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                setClaimClientMessage(json.error ?? 'Failed to submit claim request');
+                return;
+            }
+            setClaimClientMessage(json.message ?? 'Claim request submitted successfully!');
+            setClaimClientName('');
+            setClaimClientIdNumber('');
+            setClaimClientCellNumber('');
+            setClaimClientNotes('');
+            void loadPortal();
+            setTimeout(() => {
+                setShowClaimClientModal(false);
+                setClaimClientMessage('');
+            }, 3000);
+        } catch {
+            setClaimClientMessage('Failed to submit claim request');
+        } finally {
+            setClaimClientSubmitting(false);
+        }
+    }
+
+    async function handleUploadDocSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!selectedCaseId || !uploadDocFile) {
+            setUploadDocError('Please select a file to upload.');
+            return;
+        }
+
+        setUploadDocSubmitting(true);
+        setUploadDocError('');
+
+        try {
+            const formData = new FormData();
+            formData.append('documentType', uploadDocType);
+            formData.append('notes', uploadDocNotes);
+            formData.append('file', uploadDocFile);
+
+            const res = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}/documents`, {
+                method: 'POST',
+                body: formData,
+            });
+
+            const json = await res.json();
+            if (!res.ok) {
+                setUploadDocError(json.error ?? 'Failed to upload document');
+                return;
+            }
+
+            const detailRes = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}`, { cache: 'no-store' });
+            if (detailRes.ok) {
+                const detailJson = await detailRes.json();
+                setDetail(detailJson);
+            }
+
+            alert('Document uploaded successfully!');
+            setShowUploadDocModal(false);
+            setUploadDocType('ID_DOCUMENT');
+            setUploadDocFile(null);
+            setUploadDocNotes('');
+        } catch {
+            setUploadDocError('Failed to upload document');
+        } finally {
+            setUploadDocSubmitting(false);
+        }
+    }
+
+    async function handleRequestFeedback() {
+        if (!selectedCaseId) return;
+        const confirmFlag = confirm('Would you like to request a feedback update on this case from Zenowethu staff?');
+        if (!confirmFlag) return;
+
+        setFeedbackRequestSubmitting(true);
+        try {
+            const res = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}/feedback-request`, {
+                method: 'POST',
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                alert(json.error ?? 'Failed to request feedback');
+                return;
+            }
+            if (json.comment) {
+                setDetail((current) => current ? { ...current, comments: [...current.comments, json.comment] } : current);
+            }
+            alert('Feedback request logged and staff notified!');
+        } catch {
+            alert('Failed to request feedback');
+        } finally {
+            setFeedbackRequestSubmitting(false);
+        }
+    }
+
     async function loadPortal() {
         setLoading(true);
         setError('');
@@ -348,6 +666,13 @@ export default function ReferrerPortalPage() {
         () => (portalData?.referrals ?? []).filter(REFERRAL_FILTERS[referralFilter].matches),
         [portalData, referralFilter],
     );
+
+    const isNotMyClientFlagged = useMemo(() => {
+        if (!detail?.comments) return false;
+        return detail.comments.some((comment) =>
+            comment.content.includes('[FLAG] This is not my client')
+        );
+    }, [detail]);
 
     function toggleReferralFilter(id: ReferralFilterId) {
         setReferralFilter((current) => (current === id ? 'all' : id));
@@ -516,7 +841,7 @@ export default function ReferrerPortalPage() {
         );
     }
 
-    const { referrer, summary, discountSummary, referrals, paymentQueries } = portalData;
+    const { referrer, summary, discountSummary, quoteStats, referrals, paymentQueries, missingClientReports } = portalData;
 
     // Discount referrers earn no commission — their clients get discounted
     // pricing instead, so the portal shows referral flow and client money
@@ -584,7 +909,60 @@ export default function ReferrerPortalPage() {
         ]
         : null;
 
-    const discountMoneyCards = null;
+    // Quotes stats card — shown only for discount referrers who receive quotes
+    const quotesStatCards: { id: ReferralFilterId; label: string; value: number; accent: string; accentBar: string; caption: string }[] | null =
+        isDiscountReferrer && quoteStats
+            ? [
+                { id: 'quoted', label: 'Total Quotes', value: quoteStats.total, accent: 'text-violet-300', accentBar: 'bg-violet-400', caption: 'All quotes issued for your clients' },
+                { id: 'quoted-accepted', label: 'Accepted', value: quoteStats.accepted, accent: 'text-emerald-300', accentBar: 'bg-emerald-400', caption: 'Quotes accepted by clients' },
+                { id: 'quoted-pending', label: 'Pending', value: quoteStats.pending, accent: 'text-amber-300', accentBar: 'bg-amber-400', caption: 'Quotes awaiting client decision' },
+            ]
+            : null;
+
+    const discountMoneyCards: { id: ReferralFilterId; label: string; value: string; valueClass: string }[] | null =
+        isDiscountReferrer && discountSummary
+            ? [
+                { id: 'quoted', label: 'Total quoted', value: formatMoney(discountSummary.totalQuoted), valueClass: 'text-white' },
+                { id: 'quoted-this-month', label: `Quoted — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.quotedThisMonth), valueClass: 'text-white' },
+                { id: 'quoted-last-month', label: `Quoted — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.quotedLastMonth), valueClass: 'text-white' },
+                { id: 'paid', label: 'Total paid', value: formatMoney(discountSummary.totalPaid), valueClass: 'text-emerald-300' },
+                { id: 'paid-this-month', label: `Paid — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.paidThisMonth), valueClass: 'text-emerald-300' },
+                { id: 'paid-last-month', label: `Paid — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.paidLastMonth), valueClass: 'text-emerald-300' },
+            ]
+            : null;
+
+    const commissionGroups = !isDiscountReferrer && summary
+        ? [
+            {
+                title: 'Referrals',
+                caption: 'Files you have sent our way',
+                accentText: 'text-cyan-300',
+                accentBar: 'bg-cyan-400',
+                value: summary.totalReferrals.toString(),
+            },
+            {
+                title: 'Commission Earned',
+                caption: 'Total approved payouts (paid + pending)',
+                accentText: 'text-blue-300',
+                accentBar: 'bg-blue-400',
+                value: formatMoney(summary.commissionEarned),
+            },
+            {
+                title: 'Pending Payout',
+                caption: 'Commissions waiting for payment',
+                accentText: 'text-yellow-300',
+                accentBar: 'bg-yellow-400',
+                value: formatMoney(summary.commissionPending),
+            },
+            {
+                title: 'Paid Out',
+                caption: 'Commissions successfully paid out',
+                accentText: 'text-emerald-300',
+                accentBar: 'bg-emerald-400',
+                value: formatMoney(summary.commissionPaid),
+            },
+        ]
+        : null;
 
     return (
         <main className="min-h-screen bg-slate-950 text-slate-100">
@@ -620,6 +998,21 @@ export default function ReferrerPortalPage() {
             </header>
 
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                {commissionGroups && (
+                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {commissionGroups.map((group) => (
+                            <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] p-4 flex flex-col justify-between">
+                                <div>
+                                    <div className={`h-1 -mx-4 -mt-4 mb-3 ${group.accentBar}`} />
+                                    <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${group.accentText}`}>{group.title}</p>
+                                    <p className="mt-0.5 text-[11px] text-slate-400 leading-normal">{group.caption}</p>
+                                </div>
+                                <p className="mt-4 text-2xl font-bold text-white">{group.value}</p>
+                            </div>
+                        ))}
+                    </section>
+                )}
+
                 {discountGroups && (
                     <section className="grid gap-3 lg:grid-cols-3">
                         {discountGroups.map((group) => (
@@ -657,6 +1050,50 @@ export default function ReferrerPortalPage() {
                     </section>
                 )}
 
+                {discountMoneyCards && (
+                    <section className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+                        {discountMoneyCards.map((card) => (
+                            <button
+                                key={card.id}
+                                type="button"
+                                onClick={() => toggleReferralFilter(card.id)}
+                                title={`Show files: ${REFERRAL_FILTERS[card.id].label}`}
+                                className={`rounded-lg border border-white/10 bg-white/[0.04] p-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === card.id ? 'ring-1 ring-cyan-300/50' : ''}`}
+                            >
+                                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{card.label}</p>
+                                <p className={`mt-2 text-2xl font-semibold ${card.valueClass}`}>{card.value}</p>
+                            </button>
+                        ))}
+                    </section>
+                )}
+
+                {quotesStatCards && (
+                    <section className="mt-3">
+                        <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
+                            <div className="h-1 bg-violet-400" />
+                            <div className="px-4 pb-2 pt-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-300">Quotes</p>
+                                <p className="mt-0.5 text-[11px] text-slate-400">Quotations issued for your referred clients</p>
+                            </div>
+                            <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
+                                {quotesStatCards.map((card) => (
+                                    <button
+                                        key={card.id}
+                                        type="button"
+                                        onClick={() => toggleReferralFilter(card.id)}
+                                        title={`Filter: ${REFERRAL_FILTERS[card.id].label}`}
+                                        className={`px-4 py-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === card.id ? 'bg-white/[0.08]' : ''}`}
+                                    >
+                                        <p className="text-[11px] uppercase tracking-wide text-slate-400">{card.label}</p>
+                                        <p className={`mt-1 text-3xl font-bold ${card.accent}`}>{card.value}</p>
+                                        <p className="mt-1 text-[10px] text-slate-500">{card.caption}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+                )}
+
                 <section className="mt-6">
                     <div id="referral-tracking" className="rounded-lg border border-white/10 bg-white/[0.03]">
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
@@ -675,10 +1112,27 @@ export default function ReferrerPortalPage() {
                                         <span aria-hidden="true">×</span>
                                     </button>
                                 )}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowClaimClientModal(true)}
+                                    className="rounded-md border border-cyan-400 bg-cyan-500/20 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/30"
+                                >
+                                    Claim a Client
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMissingClientModal(true)}
+                                    className="rounded-md border border-cyan-400 bg-cyan-500/20 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/30"
+                                >
+                                    Report Missing Client
+                                </button>
                                 <span className="text-xs text-slate-400">
                                     {referralFilter === 'all'
-                                        ? `${referrals.length} records`
-                                        : `${visibleReferrals.length} of ${referrals.length} records`}
+                                        ? `${referrals.length} clients`
+                                        : `${visibleReferrals.length} of ${referrals.length} clients`}
+                                    {(missingClientReports?.length ?? 0) > 0 && referralFilter === 'all' && (
+                                        <span className="ml-2 text-amber-400/70">· {missingClientReports.length} unclaimed</span>
+                                    )}
                                 </span>
                             </div>
                         </div>
@@ -688,15 +1142,55 @@ export default function ReferrerPortalPage() {
                                     <tr>
                                         <th className="px-4 py-3">File</th>
                                         <th className="px-4 py-3">Consumer</th>
-                                        <th className="px-4 py-3">Stage</th>
-                                        <th className="px-4 py-3">Quoted</th>
-                                        <th className="px-4 py-3 text-center">Deposit Paid</th>
-                                        <th className="px-4 py-3">Payment Status</th>
-                                        <th className="px-4 py-3">Status</th>
+                                        {isDiscountReferrer ? (
+                                            <>
+                                                <th className="px-4 py-3">Status</th>
+                                                <th className="px-4 py-3">Quote</th>
+                                                <th className="px-4 py-3">Paid</th>
+                                                <th className="px-4 py-3">Referred</th>
+                                                <th className="px-4 py-3">Last activity</th>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <th className="px-4 py-3">Stage</th>
+                                                <th className="px-4 py-3">Quoted</th>
+                                                <th className="px-4 py-3 text-center">Deposit Paid</th>
+                                                <th className="px-4 py-3">Payment Status</th>
+                                                <th className="px-4 py-3">Status</th>
+                                            </>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/10">
                                     {visibleReferrals.map((referral) => {
+                                        if (isDiscountReferrer) {
+                                            return (
+                                                <tr
+                                                    key={referral.caseId}
+                                                    onClick={() => setSelectedCaseId(referral.caseId)}
+                                                    className={`cursor-pointer transition-colors ${referral.caseId === selectedCaseId ? 'bg-cyan-300/[0.07]' : 'hover:bg-white/[0.03]'}`}
+                                                >
+                                                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-cyan-100">{referral.fileNumber}</td>
+                                                    <td className="whitespace-nowrap px-4 py-3 text-white">{referral.consumerLabel}</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${statusToneClass(referral.statusTone)}`}>
+                                                            {referral.referralStatus}
+                                                        </span>
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-100">
+                                                        {referral.quoteTotal != null ? formatMoney(referral.quoteTotal) : <span className="text-slate-500">No quote</span>}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-4 py-3">
+                                                        {referral.totalPaid > 0
+                                                            ? <span className="text-emerald-300">{formatMoney(referral.totalPaid)}</span>
+                                                            : <span className="text-slate-500">—</span>}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.createdAt)}</td>
+                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.lastUpdatedAt)}</td>
+                                                </tr>
+                                            );
+                                        }
+
                                         const stage = referral.commissionStage ?? 'NEW_LEAD';
                                         
                                         // 1. Quoted: yes or no
@@ -778,6 +1272,24 @@ export default function ReferrerPortalPage() {
                                             </td>
                                         </tr>
                                     )}
+                                    {/* ── Unclaimed / Missing Client rows (always shown at the bottom when filter is 'all') ── */}
+                                    {isDiscountReferrer && referralFilter === 'all' && (missingClientReports ?? []).map((report) => (
+                                        <tr key={`missing-${report.id}`} className="opacity-70 hover:opacity-90 transition-opacity">
+                                            <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500">—</td>
+                                            <td className="whitespace-nowrap px-4 py-3">
+                                                <span className="text-slate-300">{report.clientName}</span>
+                                                {report.idNumber && <span className="ml-2 text-xs text-slate-500">{report.idNumber}</span>}
+                                            </td>
+                                            <td className="px-4 py-3" colSpan={isDiscountReferrer ? 4 : 5}>
+                                                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                                    Unclaimed — pending verification
+                                                </span>
+                                                {report.notes && <span className="ml-3 text-xs text-slate-500">{report.notes}</span>}
+                                            </td>
+                                            <td className="whitespace-nowrap px-4 py-3 text-slate-500 text-xs">{formatDate(report.createdAt)}</td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
@@ -798,15 +1310,47 @@ export default function ReferrerPortalPage() {
                                 )}
                             </div>
                             {detail && (
-                                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${statusToneClass(selectedReferral?.statusTone)}`}>
-                                    {detail.referralStatus}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleRequestFeedback}
+                                        disabled={feedbackRequestSubmitting}
+                                        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
+                                    >
+                                        {feedbackRequestSubmitting ? 'Requesting...' : 'Request Feedback'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNotMyClientModal(true)}
+                                        disabled={notMyClientSubmitting || isNotMyClientFlagged}
+                                        className={`rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
+                                            isNotMyClientFlagged
+                                                ? 'border-red-500/40 bg-red-500/20 text-red-300'
+                                                : 'border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/20'
+                                        }`}
+                                    >
+                                        {notMyClientSubmitting ? 'Flagging...' : isNotMyClientFlagged ? 'Flagged as Not Yours' : 'Not My Client'}
+                                    </button>
+                                    <span className={`rounded-full border px-3 py-1 text-xs font-medium ${statusToneClass(selectedReferral?.statusTone)}`}>
+                                        {detail.referralStatus}
+                                    </span>
+                                </div>
                             )}
                         </div>
 
                         {detailLoading && (
                             <div className="flex items-center justify-center px-4 py-10">
                                 <div className="h-8 w-8 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin" />
+                            </div>
+                        )}
+
+                        {!detailLoading && detail && isNotMyClientFlagged && (
+                            <div className="mx-4 mt-4 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-red-200 flex items-start gap-3">
+                                <span className="text-xl leading-none">⚠️</span>
+                                <div>
+                                    <p className="text-sm font-semibold">Flagged: Not Your Client</p>
+                                    <p className="text-xs text-red-300/80 mt-0.5">You have flagged this case as not belonging to you. Zenowethu staff are verifying the case assignment.</p>
+                                </div>
                             </div>
                         )}
 
@@ -845,6 +1389,34 @@ export default function ReferrerPortalPage() {
                                         )}
                                     </div>
 
+                                    {detail.pendingQuote && (
+                                        <div className="rounded-md border border-cyan-400/40 bg-cyan-400/10 p-3">
+                                            <h3 className="text-sm font-semibold text-white">Pending Quotation</h3>
+                                            <p className="mt-1 text-xs text-slate-300">
+                                                Quote <strong>{detail.pendingQuote.invoiceNumber}</strong> is ready: 
+                                                <span className="ml-1.5 text-sm font-semibold text-cyan-300">{formatMoney(detail.pendingQuote.total)}</span>
+                                            </p>
+                                            <div className="mt-3 flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleQuoteDecisionSubmit('ACCEPT')}
+                                                    disabled={quoteDecisionSubmitting}
+                                                    className="flex-1 rounded bg-emerald-500/80 hover:bg-emerald-600/80 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors"
+                                                >
+                                                    {quoteDecisionSubmitting ? 'Processing...' : 'Accept Quote'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleQuoteDecisionSubmit('REJECT')}
+                                                    disabled={quoteDecisionSubmitting}
+                                                    className="flex-1 rounded bg-red-500/80 hover:bg-red-600/80 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors"
+                                                >
+                                                    {quoteDecisionSubmitting ? 'Processing...' : 'Decline Quote'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {detail.services.length > 0 && (
                                         <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
                                             <h3 className="text-sm font-semibold text-white">Requested services</h3>
@@ -860,12 +1432,76 @@ export default function ReferrerPortalPage() {
                                             </div>
                                         </div>
                                     )}
+                                    {isDiscountReferrer && (
+                                        <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
+                                            <h3 className="text-sm font-semibold text-white">Client finances</h3>
+                                            <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                                                <div>
+                                                    <dt className="text-xs text-slate-400">Quote</dt>
+                                                    <dd className="text-white">
+                                                        {detail.financials?.quoteTotal != null ? formatMoney(detail.financials.quoteTotal) : 'No quote yet'}
+                                                    </dd>
+                                                </div>
+                                                <div>
+                                                    <dt className="text-xs text-slate-400">Total paid</dt>
+                                                    <dd className="text-emerald-300">{formatMoney(detail.financials?.totalPaid ?? 0)}</dd>
+                                                </div>
+                                                <div>
+                                                    <dt className="text-xs text-slate-400">Balance</dt>
+                                                    <dd className="text-white">
+                                                        {detail.financials?.outstanding != null ? formatMoney(detail.financials.outstanding) : '—'}
+                                                    </dd>
+                                                </div>
+                                            </dl>
+                                            <h4 className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">Payments received</h4>
+                                            {(detail.financials?.payments.length ?? 0) === 0 ? (
+                                                <p className="mt-1.5 text-sm text-slate-400">No payments recorded yet.</p>
+                                            ) : (
+                                                <ul className="mt-1.5 space-y-1.5">
+                                                    {detail.financials!.payments.map((payment) => (
+                                                        <li key={payment.id} className="flex items-center justify-between gap-3 text-sm">
+                                                            <span className="text-emerald-300">{formatMoney(payment.amount)}</span>
+                                                            <span className="whitespace-nowrap text-xs text-slate-400">{formatDate(payment.date)}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            <p className="mt-3 border-t border-white/10 pt-2 text-xs text-slate-400">
+                                                This client receives your discounted pricing
+                                                {referrer.clientDiscountPercent != null ? ` (${referrer.clientDiscountPercent}% off)` : ''}. No commission is tracked.
+                                            </p>
+                                        </div>
+                                    )}
 
+                                    <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-sm font-semibold text-white">Report Client Payment</h3>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPaymentReportModal(true)}
+                                                className="rounded border border-cyan-400 bg-cyan-500/20 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-500/30 transition-colors"
+                                            >
+                                                Submit Proof of Payment
+                                            </button>
+                                        </div>
+                                        <p className="mt-1 text-xs text-slate-400">
+                                            Report payments made by this client directly to Zenowethu staff.
+                                        </p>
+                                    </div>
 
                                     <div className="rounded-md border border-white/10 bg-slate-900/70 p-3">
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-sm font-semibold text-white">Documents on file</h3>
-                                            <span className="text-xs text-slate-400">{detail.documents.length} received</span>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowUploadDocModal(true)}
+                                                    className="rounded border border-cyan-400 bg-cyan-500/20 px-2 py-0.5 text-xs text-cyan-200 hover:bg-cyan-500/30 transition-colors"
+                                                >
+                                                    Upload Document
+                                                </button>
+                                                <span className="text-xs text-slate-400">{detail.documents.length} received</span>
+                                            </div>
                                         </div>
                                         {detail.documents.length === 0 ? (
                                             <p className="mt-2 text-sm text-slate-400">
@@ -1021,6 +1657,406 @@ export default function ReferrerPortalPage() {
                     </form>
                 </section>
             </div>
+
+            {showMissingClientModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-lg border border-white/10 bg-slate-900 p-6 shadow-xl">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h3 className="text-base font-semibold text-white">Report Missing Client</h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowMissingClientModal(false)}
+                                className="text-slate-400 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handleMissingClientSubmit} className="mt-4 space-y-4">
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Client's Full Name <span className="text-red-400">*</span></span>
+                                <input
+                                    type="text"
+                                    required
+                                    value={missingClientName}
+                                    onChange={(e) => setMissingClientName(e.target.value)}
+                                    placeholder="e.g. Sipho Nkosi"
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Client's SA ID Number (13 digits)</span>
+                                <input
+                                    type="text"
+                                    maxLength={13}
+                                    value={missingClientIdNumber}
+                                    onChange={(e) => setMissingClientIdNumber(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="e.g. 8001015009087"
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Additional details / Notes</span>
+                                <textarea
+                                    value={missingClientNotes}
+                                    onChange={(e) => setMissingClientNotes(e.target.value)}
+                                    placeholder="Any details to help us find the client..."
+                                    rows={3}
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            {missingClientMessage && (
+                                <p className={`text-sm ${missingClientMessage.includes('successfully') ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {missingClientMessage}
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMissingClientModal(false)}
+                                    className="rounded px-4 py-2 text-sm font-semibold text-slate-400 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={missingClientSubmitting}
+                                    className="rounded bg-cyan-500 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
+                                >
+                                    {missingClientSubmitting ? 'Submitting...' : 'Submit Report'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showPaymentReportModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-lg border border-white/10 bg-slate-900 p-6 shadow-xl">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h3 className="text-base font-semibold text-white">Report Client Payment</h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowPaymentReportModal(false)}
+                                className="text-slate-400 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handlePaymentReportSubmit} className="mt-4 space-y-4">
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Amount Paid (R) <span className="text-red-400">*</span></span>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    required
+                                    value={reportPaymentAmount}
+                                    onChange={(e) => setReportPaymentAmount(e.target.value)}
+                                    placeholder="e.g. 1500.00"
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Date Paid <span className="text-red-400">*</span></span>
+                                <input
+                                    type="date"
+                                    required
+                                    value={reportPaymentDate}
+                                    onChange={(e) => setReportPaymentDate(e.target.value)}
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Upload Proof of Payment <span className="text-red-400">*</span></span>
+                                <input
+                                    type="file"
+                                    required
+                                    accept="image/*,application/pdf"
+                                    onChange={(e) => setReportPaymentFile(e.target.files?.[0] ?? null)}
+                                    className="mt-1.5 w-full text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white file:hover:bg-white/15"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Additional notes</span>
+                                <textarea
+                                    value={reportPaymentNotes}
+                                    onChange={(e) => setReportPaymentNotes(e.target.value)}
+                                    placeholder="e.g. Paid via Capitec EFT"
+                                    rows={2}
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            {reportPaymentError && (
+                                <p className="text-sm text-red-400">
+                                    {reportPaymentError}
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPaymentReportModal(false)}
+                                    className="rounded px-4 py-2 text-sm font-semibold text-slate-400 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={reportPaymentSubmitting}
+                                    className="rounded bg-cyan-500 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
+                                >
+                                    {reportPaymentSubmitting ? 'Uploading...' : 'Submit Report'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showClaimClientModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-lg border border-white/10 bg-slate-900 p-6 shadow-xl">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h3 className="text-base font-semibold text-white">Claim a Client</h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowClaimClientModal(false)}
+                                className="text-slate-400 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handleClaimClientSubmit} className="mt-4 space-y-4">
+                            <p className="text-xs text-slate-400">
+                                If you referred a client but do not see them on your dashboard, submit a claim request below. Zenowethu staff will verify and link them.
+                            </p>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Client's Full Name <span className="text-red-400">*</span></span>
+                                <input
+                                    type="text"
+                                    required
+                                    value={claimClientName}
+                                    onChange={(e) => setClaimClientName(e.target.value)}
+                                    placeholder="e.g. Sipho Nkosi"
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Client's SA ID Number (13 digits)</span>
+                                <input
+                                    type="text"
+                                    maxLength={13}
+                                    value={claimClientIdNumber}
+                                    onChange={(e) => setClaimClientIdNumber(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="e.g. 8001015009087"
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Client's Cell Number</span>
+                                <input
+                                    type="text"
+                                    value={claimClientCellNumber}
+                                    onChange={(e) => setClaimClientCellNumber(e.target.value.replace(/[^\d+]/g, ''))}
+                                    placeholder="e.g. 0821234567"
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Supporting details / Notes</span>
+                                <textarea
+                                    value={claimClientNotes}
+                                    onChange={(e) => setClaimClientNotes(e.target.value)}
+                                    placeholder="Any context to help us verify your referral (e.g. date referred)..."
+                                    rows={3}
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            {claimClientMessage && (
+                                <p className={`text-sm ${claimClientMessage.includes('successfully') || claimClientMessage.includes('submitted') ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {claimClientMessage}
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowClaimClientModal(false)}
+                                    className="rounded px-4 py-2 text-sm font-semibold text-slate-400 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={claimClientSubmitting}
+                                    className="rounded bg-cyan-500 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
+                                >
+                                    {claimClientSubmitting ? 'Submitting...' : 'Submit Claim'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showUploadDocModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-lg border border-white/10 bg-slate-900 p-6 shadow-xl">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h3 className="text-base font-semibold text-white">Upload Case Document</h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowUploadDocModal(false)}
+                                className="text-slate-400 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handleUploadDocSubmit} className="mt-4 space-y-4">
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Document Type <span className="text-red-400">*</span></span>
+                                <select
+                                    value={uploadDocType}
+                                    onChange={(e) => setUploadDocType(e.target.value)}
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-white outline-none focus:border-cyan-300"
+                                >
+                                    <option value="ID_DOCUMENT">ID Document</option>
+                                    <option value="CONSENT_FORM">Consent Form</option>
+                                    <option value="POWER_OF_ATTORNEY">Power of Attorney</option>
+                                    <option value="PAYSLIP">Payslip</option>
+                                    <option value="BANK_STATEMENT">Bank Statement</option>
+                                    <option value="FORM_17_1">Form 17.1</option>
+                                    <option value="FORM_17_W">Form 17.W</option>
+                                    <option value="COURT_ORDER">Court Order</option>
+                                    <option value="OTHER">Other / General Document</option>
+                                </select>
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Choose File <span className="text-red-400">*</span></span>
+                                <input
+                                    type="file"
+                                    required
+                                    accept="image/*,application/pdf"
+                                    onChange={(e) => setUploadDocFile(e.target.files?.[0] ?? null)}
+                                    className="mt-1.5 w-full text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white file:hover:bg-white/15"
+                                />
+                            </label>
+                            <label className="block text-sm">
+                                <span className="text-slate-300">Additional notes</span>
+                                <textarea
+                                    value={uploadDocNotes}
+                                    onChange={(e) => setUploadDocNotes(e.target.value)}
+                                    placeholder="Any details to help Zenowethu staff identify this document..."
+                                    rows={2}
+                                    className="mt-1.5 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
+                                />
+                            </label>
+                            {uploadDocError && (
+                                <p className="text-sm text-red-400">
+                                    {uploadDocError}
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUploadDocModal(false)}
+                                    className="rounded px-4 py-2 text-sm font-semibold text-slate-400 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={uploadDocSubmitting}
+                                    className="rounded bg-cyan-500 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50"
+                                >
+                                    {uploadDocSubmitting ? 'Uploading...' : 'Upload'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Not My Client – Premium Confirmation Modal ── */}
+            {showNotMyClientModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+                        onClick={() => setShowNotMyClientModal(false)}
+                    />
+
+                    {/* Modal card */}
+                    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-800 to-slate-900 shadow-2xl shadow-black/60">
+
+                        {/* Coloured accent bar at the top */}
+                        <div className="h-1 w-full bg-gradient-to-r from-red-500 via-orange-400 to-red-600" />
+
+                        {/* Content */}
+                        <div className="px-6 pb-6 pt-5">
+                            {/* Warning icon */}
+                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-red-400/30 bg-red-500/10">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                </svg>
+                            </div>
+
+                            <h3 className="text-center text-base font-semibold text-white">
+                                Not Your Client?
+                            </h3>
+                            <p className="mt-2 text-center text-sm leading-relaxed text-slate-400">
+                                You are about to flag{' '}
+                                <span className="font-medium text-slate-200">
+                                    {detail?.fileNumber ?? 'this file'}
+                                </span>{' '}
+                                as not belonging to you. A notification will be sent to Zenowethu staff to verify the case assignment.
+                            </p>
+
+                            {/* Divider */}
+                            <div className="my-5 h-px w-full bg-white/[0.07]" />
+
+                            {/* What will happen bullets */}
+                            <ul className="space-y-2 text-xs text-slate-400">
+                                <li className="flex items-start gap-2">
+                                    <span className="mt-0.5 flex-shrink-0 text-orange-400">⚠</span>
+                                    A flag comment will be posted on the case discussion thread.
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="mt-0.5 flex-shrink-0 text-cyan-400">🔔</span>
+                                    The assigned case manager will receive an in-app alert.
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="mt-0.5 flex-shrink-0 text-slate-400">ℹ</span>
+                                    No data is deleted — staff will investigate and respond.
+                                </li>
+                            </ul>
+
+                            {/* Actions */}
+                            <div className="mt-6 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNotMyClientModal(false)}
+                                    disabled={notMyClientSubmitting}
+                                    className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleNotMyClientConfirm}
+                                    disabled={notMyClientSubmitting}
+                                    className="flex-1 rounded-xl bg-gradient-to-r from-red-600 to-red-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-900/40 transition-all hover:from-red-500 hover:to-red-400 disabled:opacity-50"
+                                >
+                                    {notMyClientSubmitting ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                            Flagging…
+                                        </span>
+                                    ) : 'Yes, Flag This File'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }

@@ -28,6 +28,7 @@ vi.mock('@zenowethu/database', () => ({
         case: { findFirst: vi.fn() },
         workflowLog: { findMany: vi.fn() },
         caseComment: { findMany: vi.fn() },
+        invoice: { findFirst: vi.fn() },
     },
 }));
 
@@ -43,7 +44,10 @@ function call(caseId = 'case-1') {
 }
 
 describe('GET /api/referrer-portal/referrals/[caseId]', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(prisma.invoice.findFirst).mockResolvedValue(null);
+    });
 
     it('rejects users without a linked referrer profile', async () => {
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
@@ -70,7 +74,7 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
 
         expect(res.status).toBe(404);
         expect(prisma.case.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: 'case-9', referrerId: 'ref-1', deletedAt: null },
+            where: { id: 'case-9', referrerId: 'ref-1' },
         }));
     });
 

@@ -459,7 +459,7 @@ export default function NewInvoicePage() {
           </button>
 
           <p className="text-xs text-gray-600 text-center">
-            A unique link will be generated so the client can view and download this {docLabel.toLowerCase()} in the Credo App.
+            A unique link will be generated so the client can view and download this {docLabel.toLowerCase()} in the Crediva App.
           </p>
         </div>
       </div>

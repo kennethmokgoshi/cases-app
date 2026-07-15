@@ -59,7 +59,7 @@ describe('POST /api/referrer-portal/referrals/[caseId]/comments', () => {
 
         expect(res.status).toBe(404);
         expect(prisma.case.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: 'case-2', referrerId: 'ref-1', deletedAt: null },
+            where: { id: 'case-2', referrerId: 'ref-1' },
         }));
     });
 

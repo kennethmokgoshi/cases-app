@@ -57,7 +57,7 @@ export async function POST(request: Request) {
                         email: consumer.email,
                         idNumber: consumer.idNumber || `TEMP-${Date.now()}`,
                         phone: consumer.phone || '',
-                        type: 'Credo Portal',
+                        type: 'Crediva Portal',
                     },
                 });
                 clientId = newClient.id;
@@ -81,10 +81,10 @@ export async function POST(request: Request) {
                     fileNumber,
                     clientId: clientId!,
                     status: 'NEW_LEAD',
-                    description: `Credo Request: ${serviceReq.services}`,
+                    description: `Crediva Request: ${serviceReq.services}`,
                     services: serviceReq.services || '',
                     totalDebtAmount: serviceReq.total,
-                    acquisitionType: 'Credo Portal',
+                    acquisitionType: 'Crediva Portal',
                     assignedToId: session.user.id,
                 },
             });
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
                     userId: session.user.id,
                     type: 'NOTE',
                     activityType: 'CASE_CREATED',
-                    content: `Case created from Credo Service Request.\nServices Requested: ${serviceReq.services}\nAmount: R ${serviceReq.total.toNumber().toFixed(2)}`,
+                    content: `Case created from Crediva Service Request.\nServices Requested: ${serviceReq.services}\nAmount: R ${serviceReq.total.toNumber().toFixed(2)}`,
                     isInternal: true,
                 },
             });
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
             action: 'CREATE',
             resource: 'Case',
             resourceId: newCaseId,
-            details: { source: 'Credo Service Request', serviceRequestId: requestId }
+            details: { source: 'Crediva Service Request', serviceRequestId: requestId }
         });
         
         return NextResponse.json({ success: true, caseId: newCaseId });

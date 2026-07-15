@@ -48,7 +48,7 @@ const AI_TASKS: { key: string; label: string; description: string; recommended?:
     { key: 'plan_generation',     label: 'Plan Orchestration',    description: 'Multi-step case workflow generation',                recommended: 'gpt-4o' },
     { key: 'contract_analysis',   label: 'Contract Analysis',     description: 'Agreement and contract clause analysis',             recommended: 'anthropic/claude-sonnet-4-5' },
     { key: 'dhs_parsing',         label: 'DHS Report Parsing',    description: 'NCR Debt Help System summary report extraction',     recommended: 'gpt-4o' },
-    { key: 'ai_coach',            label: 'AI Coach (Credo)',       description: 'Consumer-facing credit coaching chatbot',            recommended: 'anthropic/claude-sonnet-4-5' },
+    { key: 'ai_coach',            label: 'AI Coach (Crediva)',       description: 'Consumer-facing credit coaching chatbot',            recommended: 'anthropic/claude-sonnet-4-5' },
 ];
 
 const EMPTY_FORM: FormState = { name: '', provider: 'openai', apiKey: '', baseUrl: '', isActive: true, isDefault: false, models: '', taskAssignments: {} };

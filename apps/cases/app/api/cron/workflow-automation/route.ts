@@ -7,7 +7,7 @@
  *
  * Statuses handled:
  *  1.  NEW_LEAD                → Run DHS Check
- *  2.  OUTSTANDING_DOCS        → Check GHL + Credo for received docs; re-request if missing
+ *  2.  OUTSTANDING_DOCS        → Check GHL + Crediva for received docs; re-request if missing
  *  3.  REQUESTED_VIA_DHS       → Run DHS Check Request Status
  *  4.  NOT_REQUESTED_VIA_DHS   → Verify docs present → Request via DHS
  *  5.  DOCUMENTS_EMAILED       → Check for Form 17.7; upload if found → Request via DHS
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
             return { actioned: true, comment };
         });
 
-        // ── 2. OUTSTANDING_DOCS → Check GHL + Credo for received docs ────────
+        // ── 2. OUTSTANDING_DOCS → Check GHL + Crediva for received docs ────────
         {
             const cases = await getOverdueCases('OUTSTANDING_DOCS');
             let processed = 0, actioned = 0, errors = 0;

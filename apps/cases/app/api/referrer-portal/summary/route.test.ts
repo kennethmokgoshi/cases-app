@@ -81,6 +81,7 @@ describe('GET /api/referrer-portal/summary', () => {
                 },
             ],
             paymentQueries: [],
+            missingClientReports: [],
         } as never);
 
         const res = await GET();
@@ -190,6 +191,7 @@ describe('GET /api/referrer-portal/summary', () => {
                     },
                 ],
                 paymentQueries: [],
+                missingClientReports: [],
             } as never);
 
             const res = await GET();
@@ -219,6 +221,10 @@ describe('GET /api/referrer-portal/summary', () => {
             expect(json.referrals[0]).toMatchObject({ quoteTotal: 5000, totalPaid: 3000, paidThisMonth: 2000, paidLastMonth: 0, statusTone: 'settled', referralStatus: 'Settled Successfully', commissionStage: 'SETTLED' });
             expect(json.referrals[1]).toMatchObject({ statusTone: 'completed', referralStatus: 'Completed', commissionStage: 'NEW_LEAD' });
             expect(json.referrals[2]).toMatchObject({ quoteTotal: 3000, totalPaid: 0, statusTone: 'neutral', referralStatus: 'New referral', commissionStage: 'NEW_LEAD' });
+            // Quote stats: only case-c has an invoice of type QUOTE with status SENT
+            expect(json.quoteStats).toMatchObject({ total: 1, accepted: 0, pending: 1, rejected: 0 });
+            // No missing client reports
+            expect(json.missingClientReports).toEqual([]);
         } finally {
             vi.useRealTimers();
         }

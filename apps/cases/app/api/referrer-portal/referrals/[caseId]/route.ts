@@ -28,7 +28,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
         const { caseId } = await params;
 
         const referralCase = await prisma.case.findFirst({
-            where: { id: caseId, referrerId: access.referrer.id, deletedAt: null },
+            where: { id: caseId, referrerId: access.referrer.id },
             select: {
                 id: true,
                 fileNumber: true,
@@ -85,6 +85,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
             }),
         ]);
 
+        const pendingQuote = await prisma.invoice.findFirst({
+            where: {
+                caseId: referralCase.id,
+                type: 'QUOTE',
+                status: 'SENT',
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, invoiceNumber: true, total: true },
+        });
+
         const commission = referralCase.referrerCommission;
 
         // Client finances are shown to discount partners only — their clients'
@@ -125,6 +135,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
                 : null,
             services: parseCaseServices(referralCase.services),
             financials,
+            pendingQuote: pendingQuote ? {
+                id: pendingQuote.id,
+                invoiceNumber: pendingQuote.invoiceNumber,
+                total: toPortalNumber(pendingQuote.total),
+            } : null,
             documents: referralCase.documents.map((document) => ({
                 id: document.id,
                 label: formatDocumentTypeLabel(document.type),

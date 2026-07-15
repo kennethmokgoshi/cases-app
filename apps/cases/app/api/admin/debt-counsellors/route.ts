@@ -3,19 +3,27 @@ import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
 import { classifyDeclineReason } from '@zenowethu/shared-lib/src/dhs/decline-handler';
+import { promoteDcEmail } from '@zenowethu/shared-lib/src/dc/email-priority';
 
 const logger = createLogger('api/admin/debt-counsellors');
 
+/** Case dhsStatus labels vary ('DECLINED', 'Declined Via DHS'…) — match loosely. */
+const isDeclinedStatus = (s: string | null) => Boolean(s && s.toUpperCase().includes('DECLIN'));
+const isAcceptedStatus = (s: string | null) =>
+    Boolean(s && (s.toUpperCase().includes('ACCEPT') || s.toUpperCase().replace(/[\s_]/g, '').includes('AUTOTRANSFER')));
+
 /**
  * GET /api/admin/debt-counsellors
- * Returns all DebtCounsellor records with aggregate stats.
- * Stats are computed from linked Case records.
+ * Returns all DebtCounsellor records with priority email lists and aggregate
+ * stats. Stats prefer the durable DhsOutcomeEvent history (exact, survives
+ * repeat declines) and fall back to linked Case records for DCs with no
+ * events yet. Readable by ALL staff; editing endpoints stay admin-only.
  */
 export async function GET(request: Request) {
     try {
         const session = await auth();
-        if (!session?.user?.isAdmin) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const { searchParams } = new URL(request.url);
@@ -47,6 +55,24 @@ export async function GET(request: Request) {
                         createdAt: true,
                     },
                 },
+                priorityEmails: {
+                    orderBy: { priority: 'asc' },
+                    select: {
+                        id: true,
+                        email: true,
+                        priority: true,
+                        source: true,
+                        lastBouncedAt: true,
+                        notes: true,
+                    },
+                },
+                outcomeEvents: {
+                    select: {
+                        outcome: true,
+                        category: true,
+                        occurredAt: true,
+                    },
+                },
                 emailHistory: {
                     orderBy: { recordedAt: 'desc' },
                     take: 1,
@@ -65,6 +91,11 @@ export async function GET(request: Request) {
                 declineReason: string | null;
                 createdAt: Date;
             }>;
+            const events = dc.outcomeEvents as Array<{
+                outcome: string;
+                category: string | null;
+                occurredAt: Date;
+            }>;
 
             const total = cases.length;
             const thisYear = cases.filter((c) => c.createdAt >= startOfYear).length;
@@ -72,15 +103,39 @@ export async function GET(request: Request) {
             const lastMonth = cases.filter(
                 (c) => c.createdAt >= startOfLastMonth && c.createdAt < startOfMonth,
             ).length;
-            const accepted = cases.filter((c) => c.dhsStatus === 'ACCEPTED').length;
-            const declined = cases.filter((c) => c.dhsStatus === 'DECLINED').length;
+
+            // Prefer event history (exact); fall back to case snapshots (approximate)
+            const hasEvents = events.length > 0;
+            const accepted = hasEvents
+                ? events.filter((e) => e.outcome === 'ACCEPTED').length
+                : cases.filter((c) => isAcceptedStatus(c.dhsStatus)).length;
+            const declined = hasEvents
+                ? events.filter((e) => e.outcome === 'DECLINED').length
+                : cases.filter((c) => isDeclinedStatus(c.dhsStatus)).length;
+            const decided = accepted + declined;
+            const acceptanceRate = decided > 0 ? Math.round((accepted / decided) * 100) : null;
+            const declineRate = decided > 0 ? Math.round((declined / decided) * 100) : null;
+
+            const lastDeclinedAt = hasEvents
+                ? events
+                    .filter((e) => e.outcome === 'DECLINED')
+                    .reduce<Date | null>((max, e) => (!max || e.occurredAt > max ? e.occurredAt : max), null)
+                : null;
 
             // Most common decline category
             const declineCounts: Record<string, number> = {};
-            for (const c of cases) {
-                if (c.dhsStatus === 'DECLINED' && c.declineReason) {
-                    const cat = classifyDeclineReason(c.declineReason);
-                    declineCounts[cat] = (declineCounts[cat] ?? 0) + 1;
+            if (hasEvents) {
+                for (const e of events) {
+                    if (e.outcome === 'DECLINED' && e.category) {
+                        declineCounts[e.category] = (declineCounts[e.category] ?? 0) + 1;
+                    }
+                }
+            } else {
+                for (const c of cases) {
+                    if (isDeclinedStatus(c.dhsStatus) && c.declineReason) {
+                        const cat = classifyDeclineReason(c.declineReason);
+                        declineCounts[cat] = (declineCounts[cat] ?? 0) + 1;
+                    }
                 }
             }
             const topDeclineCategory =
@@ -98,6 +153,7 @@ export async function GET(request: Request) {
                 email: dc.email,
                 preferredEmail: dc.preferredEmail,
                 lastKnownEmail: dc.lastKnownEmail,
+                priorityEmails: dc.priorityEmails,
                 staffNotes: dc.staffNotes,
                 updatedAt: dc.updatedAt,
                 updatedBy: dc.updatedBy
@@ -110,12 +166,38 @@ export async function GET(request: Request) {
                     lastMonth,
                     accepted,
                     declined,
+                    decided,
+                    acceptanceRate,
+                    declineRate,
+                    lastDeclinedAt,
                     topDeclineCategory,
                 },
             };
         });
 
-        return NextResponse.json({ counsellors: result, total: result.length });
+        // Top 5 DCs by decline volume — the "patterns" summary for the page header
+        const topDecliners = [...result]
+            .filter((dc: any) => dc.stats.declined > 0)
+            .sort((a: any, b: any) => b.stats.declined - a.stats.declined)
+            .slice(0, 5)
+            .map((dc: any) => ({
+                id: dc.id,
+                ncrdcNo: dc.ncrdcNo,
+                name: dc.fullName ?? dc.tradingName ?? dc.ncrdcNo,
+                tradingName: dc.tradingName,
+                declined: dc.stats.declined,
+                accepted: dc.stats.accepted,
+                declineRate: dc.stats.declineRate,
+                topDeclineCategory: dc.stats.topDeclineCategory,
+                lastDeclinedAt: dc.stats.lastDeclinedAt,
+            }));
+
+        return NextResponse.json({
+            counsellors: result,
+            total: result.length,
+            topDecliners,
+            canEdit: Boolean(session.user.isAdmin),
+        });
     } catch (error) {
         logger.error('GET /api/admin/debt-counsellors', { error });
         return NextResponse.json({ error: 'Failed to fetch debt counsellors' }, { status: 500 });
@@ -171,6 +253,16 @@ export async function PATCH(request: Request) {
             where: { id },
             data,
         });
+
+        // Keep the priority list in step with a staff-set preferred email
+        if (fields.preferredEmail && fields.preferredEmail !== '') {
+            await promoteDcEmail({
+                debtCounsellordId: id,
+                email: fields.preferredEmail,
+                source: 'STAFF',
+                notes: `Set by ${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim(),
+            });
+        }
 
         // Track email change in history
         if (fields.email && fields.email !== '') {

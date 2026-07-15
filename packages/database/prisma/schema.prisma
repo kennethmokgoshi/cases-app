@@ -91,6 +91,7 @@ model Referrer {
   project               Project?             @relation(fields: [projectId], references: [id])
   commissions           ReferrerCommission[]
   paymentQueries        ReferrerPaymentQuery[]
+  missingClientReports  ReferrerMissingClientReport[]
   parentReferrer        Referrer?            @relation("ReferrerHierarchy", fields: [parentReferrerId], references: [id])
   referredReferrers     Referrer[]           @relation("ReferrerHierarchy")
 
@@ -150,6 +151,27 @@ model ReferrerPaymentQuery {
   @@index([referrerId])
   @@index([caseId])
   @@index([commissionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// A client that a referrer has reported as "missing" from their portal —
+/// pending verification and linking by Zenowethu staff.
+model ReferrerMissingClientReport {
+  id           String    @id @default(cuid())
+  referrerId   String
+  clientName   String
+  idNumber     String?
+  notes        String?
+  /// PENDING = staff not yet reviewed, LINKED = staff linked to a case, REJECTED = not a referral
+  status       String    @default("PENDING")
+  /// The case linked by staff once the client is verified
+  linkedCaseId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  referrer     Referrer  @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId])
   @@index([status])
   @@index([createdAt])
 }
@@ -373,6 +395,7 @@ model Case {
   paymentArrangements     PaymentArrangement[]
   documentRequests        DocumentRequest[]
   drrConsents             DebtReviewRemovalConsent[]
+  dhsOutcomeEvents        DhsOutcomeEvent[]
 
   debtCounsellordId String?
   debtCounsellor    DebtCounsellor? @relation(fields: [debtCounsellordId], references: [id])
@@ -408,6 +431,8 @@ model DebtCounsellor {
   updatedBy       User?                        @relation("DCUpdatedBy", fields: [updatedById], references: [id])
   cases           Case[]
   emailHistory    DebtCounsellorEmailHistory[]
+  priorityEmails  DebtCounsellorEmail[]
+  outcomeEvents   DhsOutcomeEvent[]
 }
 
 model DebtCounsellorEmailHistory {
@@ -420,6 +445,52 @@ model DebtCounsellorEmailHistory {
   debtCounsellor    DebtCounsellor @relation(fields: [debtCounsellordId], references: [id], onDelete: Cascade)
 
   @@index([debtCounsellordId])
+}
+
+// Priority-ordered contact emails for a debt counsellor (max 5 per DC, enforced in
+// code). Priority 1 is the address the DC has instructed us to use — an email
+// extracted from a DHS decline message is auto-promoted to priority 1, pushing the
+// rest down; when a 6th address arrives the priority-5 entry is dropped (it stays
+// in DebtCounsellorEmailHistory). Bounced entries keep their slot but are skipped
+// when picking the best send address.
+model DebtCounsellorEmail {
+  id                String         @id @default(cuid())
+  debtCounsellordId String
+  email             String
+  priority          Int
+  source            String // DHS | DECLINE_EXTRACTED | STAFF | BACKFILL
+  lastBouncedAt     DateTime?
+  bounceReason      String?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  debtCounsellor    DebtCounsellor @relation(fields: [debtCounsellordId], references: [id], onDelete: Cascade)
+
+  @@unique([debtCounsellordId, email])
+  @@index([debtCounsellordId, priority])
+}
+
+// One row per DHS accept/decline outcome observed for a debt counsellor.
+// Case.declineReason only holds the LATEST decline, so this table is the durable
+// history that acceptance/decline rates and message-pattern stats are computed
+// from. Writers dedupe: the same (case, outcome, message) is recorded once.
+model DhsOutcomeEvent {
+  id                String         @id @default(cuid())
+  debtCounsellordId String
+  caseId            String?
+  outcome           String // ACCEPTED | DECLINED
+  message           String?
+  category          String? // DeclineCategory for DECLINED events
+  extractedEmail    String?
+  source            String         @default("DHS_SYNC") // DHS_SYNC | BACKFILL
+  occurredAt        DateTime       @default(now())
+  createdAt         DateTime       @default(now())
+  debtCounsellor    DebtCounsellor @relation(fields: [debtCounsellordId], references: [id], onDelete: Cascade)
+  case              Case?          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@index([debtCounsellordId, outcome])
+  @@index([debtCounsellordId, occurredAt])
+  @@index([caseId])
 }
 
 model Document {

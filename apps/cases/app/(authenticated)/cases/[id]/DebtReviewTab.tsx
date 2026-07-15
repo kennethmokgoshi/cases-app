@@ -307,7 +307,7 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
     const handleGenerateD4F2Pack = () =>
         generateDocumentPack(D4_F2_PACK, 'D4 to F2 pack', setGeneratingD4F2, { targetStatus: 'F2' });
 
-    // Requests a document from the consumer via the Credo portal + email.
+    // Requests a document from the consumer via the Crediva portal + email.
     const handleRequestConsumerDoc = async (key: string, label: string, notes: string) => {
         setRequestingDoc(prev => ({ ...prev, [key]: true }));
         try {
@@ -318,7 +318,7 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error ?? 'Request failed');
-            showToast('Request sent — the consumer has been notified via Credo and email');
+            showToast('Request sent — the consumer has been notified via Crediva and email');
         } catch (e) {
             showToast(e instanceof Error ? e.message : 'Document request failed', 'error');
         } finally {
@@ -627,7 +627,7 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
                                 <p className="text-xs text-sky-400/80 mt-1">
                                     Use Status F1 when all restructured debts are settled except the mortgage. Use Status F2
                                     when all restructured debts are settled. Paid-up or prescription letters must still be
-                                    uploaded by the consumer, requested through Credo, or requested by email from creditors.
+                                    uploaded by the consumer, requested through Crediva, or requested by email from creditors.
                                     Mortgage not-in-arrears evidence can be the credit report or a statement of account.
                                 </p>
                                 <div className="mt-3 flex gap-3 flex-wrap">
@@ -675,7 +675,7 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
                                     </button>
                                 </div>
                                 <p className="text-[11px] text-sky-400/60 mt-2">
-                                    Requests open an upload task on the consumer&apos;s Credo portal and email them a link.
+                                    Requests open an upload task on the consumer&apos;s Crediva portal and email them a link.
                                 </p>
                             </div>
                         )}

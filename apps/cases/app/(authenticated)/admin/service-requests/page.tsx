@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 import ConvertServiceRequestButton from './convert-button';
 
 export const metadata: Metadata = {
-    title: 'Credo Service Requests',
-    description: 'Manage and convert consumer service requests from Credo',
+    title: 'Crediva Service Requests',
+    description: 'Manage and convert consumer service requests from Crediva',
 };
 
 export default async function ServiceRequestsPage() {
@@ -21,7 +21,7 @@ export default async function ServiceRequestsPage() {
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-slate-900">Credo Service Requests</h1>
+                <h1 className="text-2xl font-bold text-slate-900">Crediva Service Requests</h1>
                 <p className="text-slate-500">View and convert pending requests from the consumer portal into Cases.</p>
             </div>
 

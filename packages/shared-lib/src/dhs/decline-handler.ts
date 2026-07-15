@@ -17,6 +17,8 @@ import { sendManualMessage } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
 import { logger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
+import { promoteDcEmail, getBestDcEmail } from '../dc/email-priority';
+import { recordDhsOutcome } from '../dc/outcome-events';
 
 export type DeclineCategory =
     | 'SEND_DOCS'
@@ -271,6 +273,41 @@ export async function handleDHSDecline(params: {
         const extractedEmail = extractEmailFromReason(declineReason);
         result.extractedEmail = extractedEmail;
 
+        // ── DC contact-book & outcome history maintenance (best-effort) ──────
+        // Record this decline as a durable outcome event (dedupes re-checks) and,
+        // when the DC embedded an email in the decline text, promote it to
+        // priority 1 on their contact list — the DC has just instructed us to
+        // use it. CONTACT_ATTORNEY is excluded: that email is the attorney's,
+        // not the DC's.
+        const dcRecordId: string | null = (caseData as { debtCounsellordId?: string | null }).debtCounsellordId ?? null;
+        try {
+            await recordDhsOutcome({
+                debtCounsellordId: dcRecordId,
+                ncrdcNo: caseData.ncrdcNo,
+                caseId,
+                outcome: 'DECLINED',
+                message: declineReason,
+                category,
+                extractedEmail,
+            });
+            if (dcRecordId && extractedEmail && category !== 'CONTACT_ATTORNEY') {
+                const promo = await promoteDcEmail({
+                    debtCounsellordId: dcRecordId,
+                    email: extractedEmail,
+                    source: 'DECLINE_EXTRACTED',
+                    notes: `Set automatically from DHS decline on case ${caseData.fileNumber}`,
+                });
+                if (promo.promoted) {
+                    result.actionsPerformed.push(
+                        `DC contact list updated: ${extractedEmail} set as priority 1 email${promo.droppedEmail ? ` (dropped ${promo.droppedEmail} from slot 5)` : ''}`
+                    );
+                }
+            }
+        } catch (contactBookError) {
+            // Contact-book upkeep must never block the decline response itself.
+            log.error({ contactBookError }, '[DHS Decline Handler] DC contact-book update failed');
+        }
+
         const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`;
         const clientFirstName = caseData.client.firstName;
         const idNumber = caseData.client.idNumber;
@@ -280,9 +317,15 @@ export async function handleDHSDecline(params: {
             process.env.APP_URL ||
             'https://cases.zenowethu.co.za';
 
-        // DC contact: prefer extracted email from decline text, then known DC emails
+        // DC contact: prefer the extracted email from the decline text (the DC
+        // just instructed us to use it), then the priority contact list (skips
+        // bounced addresses), then the legacy per-case/per-DC email fields.
+        const priorityListEmail = dcRecordId
+            ? (await getBestDcEmail(dcRecordId).catch(() => null))?.email ?? null
+            : null;
         const dcEmail =
             extractedEmail ||
+            priorityListEmail ||
             caseData.preferredDcEmail ||
             caseData.debtCounsellor?.preferredEmail ||
             caseData.lastKnownEmail ||
