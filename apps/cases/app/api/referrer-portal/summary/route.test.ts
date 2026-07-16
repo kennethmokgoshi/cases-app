@@ -222,7 +222,16 @@ describe('GET /api/referrer-portal/summary', () => {
             expect(json.referrals[1]).toMatchObject({ statusTone: 'completed', referralStatus: 'Completed', commissionStage: 'NEW_LEAD' });
             expect(json.referrals[2]).toMatchObject({ quoteTotal: 3000, totalPaid: 0, statusTone: 'neutral', referralStatus: 'New referral', commissionStage: 'NEW_LEAD' });
             // Quote stats: only case-c has an invoice of type QUOTE with status SENT
-            expect(json.quoteStats).toMatchObject({ total: 1, accepted: 0, pending: 1, rejected: 0 });
+            expect(json.quoteStats).toMatchObject({
+                totalCount: 1,
+                totalAmount: 3000,
+                acceptedCount: 0,
+                acceptedAmount: 0,
+                pendingCount: 1,
+                pendingAmount: 3000,
+                rejectedCount: 0,
+                rejectedAmount: 0,
+            });
             // No missing client reports
             expect(json.missingClientReports).toEqual([]);
         } finally {

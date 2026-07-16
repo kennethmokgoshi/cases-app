@@ -166,15 +166,19 @@ export async function GET() {
             };
         }));
 
-        // Quote statistics: count invoices of type QUOTE across all referred cases
+        // Quote statistics: count and sum invoices of type QUOTE across all referred cases
         const allInvoices = referrer.cases.flatMap((c) =>
             c.invoices.filter((i) => i.type === 'QUOTE'),
         );
         const quoteStats = {
-            total: allInvoices.length,
-            accepted: allInvoices.filter((i) => i.status === 'ACCEPTED' || i.status === 'CONVERTED').length,
-            pending: allInvoices.filter((i) => i.status === 'SENT').length,
-            rejected: allInvoices.filter((i) => i.status === 'REJECTED').length,
+            totalCount: allInvoices.length,
+            totalAmount: allInvoices.reduce((sum, i) => sum + toPortalNumber(i.total), 0),
+            acceptedCount: allInvoices.filter((i) => i.status === 'ACCEPTED' || i.status === 'CONVERTED').length,
+            acceptedAmount: allInvoices.filter((i) => i.status === 'ACCEPTED' || i.status === 'CONVERTED').reduce((sum, i) => sum + toPortalNumber(i.total), 0),
+            pendingCount: allInvoices.filter((i) => i.status === 'SENT').length,
+            pendingAmount: allInvoices.filter((i) => i.status === 'SENT').reduce((sum, i) => sum + toPortalNumber(i.total), 0),
+            rejectedCount: allInvoices.filter((i) => i.status === 'REJECTED').length,
+            rejectedAmount: allInvoices.filter((i) => i.status === 'REJECTED').reduce((sum, i) => sum + toPortalNumber(i.total), 0),
         };
 
         return NextResponse.json({

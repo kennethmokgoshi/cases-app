@@ -134,10 +134,14 @@ type MissingClientReport = {
 };
 
 type QuoteStats = {
-    total: number;
-    accepted: number;
-    pending: number;
-    rejected: number;
+    totalCount: number;
+    totalAmount: number;
+    acceptedCount: number;
+    acceptedAmount: number;
+    pendingCount: number;
+    pendingAmount: number;
+    rejectedCount: number;
+    rejectedAmount: number;
 };
 
 type PortalSummary = {
@@ -250,11 +254,13 @@ type ReferralFilterId =
     | 'settled'
     | 'settled-this-month'
     | 'settled-last-month'
+    | 'not-quoted'
     | 'quoted'
     | 'quoted-this-month'
     | 'quoted-last-month'
     | 'quoted-accepted'
     | 'quoted-pending'
+    | 'quoted-declined'
     | 'paid'
     | 'paid-this-month'
     | 'paid-last-month';
@@ -269,11 +275,13 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'settled': { label: 'Settled', matches: (row) => row.statusTone === 'settled' },
     'settled-this-month': { label: 'Settled this month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 0) },
     'settled-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
+    'not-quoted': { label: 'Not Quoted', matches: (row) => row.quoteTotal == null || row.quoteTotal === 0 },
     'quoted': { label: 'Quoted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 },
     'quoted-this-month': { label: 'Quoted this month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 0) },
     'quoted-last-month': { label: 'Quoted last month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 1) },
     'quoted-accepted': { label: 'Quote accepted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && ['QUOTE_ACCEPTED', 'DEPOSIT_PAID', 'PAYING_INSTALMENTS', 'UP_TO_DATE', 'SETTLED', 'COMPLETED', 'SETTLED_SUCCESS'].includes(row.caseStatus) },
     'quoted-pending': { label: 'Quote pending', matches: (row) => row.caseStatus === 'QUOTE_SUBMITTED' || row.caseStatus === 'AWAITING_QUOTE_DECISION' },
+    'quoted-declined': { label: 'Quote declined', matches: (row) => row.caseStatus === 'QUOTE_REJECTED' },
     'paid': { label: 'Files with payments', matches: (row) => row.totalPaid > 0 },
     'paid-this-month': { label: 'Paid this month', matches: (row) => row.paidThisMonth > 0 },
     'paid-last-month': { label: 'Paid last month', matches: (row) => row.paidLastMonth > 0 },
@@ -667,6 +675,14 @@ export default function ReferrerPortalPage() {
         [portalData, referralFilter],
     );
 
+    useEffect(() => {
+        if (visibleReferrals.length > 0) {
+            setSelectedCaseId(visibleReferrals[0].caseId);
+        } else {
+            setSelectedCaseId('');
+        }
+    }, [referralFilter]);
+
     const isNotMyClientFlagged = useMemo(() => {
         if (!detail?.comments) return false;
         return detail.comments.some((comment) =>
@@ -910,12 +926,50 @@ export default function ReferrerPortalPage() {
         : null;
 
     // Quotes stats card — shown only for discount referrers who receive quotes
-    const quotesStatCards: { id: ReferralFilterId; label: string; value: number; accent: string; accentBar: string; caption: string }[] | null =
+    const notQuotedCount = referrals.filter((r) => r.quoteTotal == null || r.quoteTotal === 0).length;
+    const quotesStatCards: { id: ReferralFilterId; label: string; value: string; accent: string; accentBar: string; caption: string }[] | null =
         isDiscountReferrer && quoteStats
             ? [
-                { id: 'quoted', label: 'Total Quotes', value: quoteStats.total, accent: 'text-violet-300', accentBar: 'bg-violet-400', caption: 'All quotes issued for your clients' },
-                { id: 'quoted-accepted', label: 'Accepted', value: quoteStats.accepted, accent: 'text-emerald-300', accentBar: 'bg-emerald-400', caption: 'Quotes accepted by clients' },
-                { id: 'quoted-pending', label: 'Pending', value: quoteStats.pending, accent: 'text-amber-300', accentBar: 'bg-amber-400', caption: 'Quotes awaiting client decision' },
+                {
+                    id: 'not-quoted',
+                    label: 'Not Quoted',
+                    value: `${notQuotedCount} Clients`,
+                    accent: 'text-slate-300',
+                    accentBar: 'bg-slate-400',
+                    caption: 'No quotation created yet',
+                },
+                {
+                    id: 'quoted',
+                    label: 'Total Quotes',
+                    value: `${quoteStats.totalCount} Quotes`,
+                    accent: 'text-violet-300',
+                    accentBar: 'bg-violet-400',
+                    caption: `Total value: ${formatMoney(quoteStats.totalAmount)}`,
+                },
+                {
+                    id: 'quoted-accepted',
+                    label: 'Accepted Quotes',
+                    value: `${quoteStats.acceptedCount} Accepted`,
+                    accent: 'text-emerald-300',
+                    accentBar: 'bg-emerald-400',
+                    caption: `Value: ${formatMoney(quoteStats.acceptedAmount)}`,
+                },
+                {
+                    id: 'quoted-pending',
+                    label: 'Pending Quotes',
+                    value: `${quoteStats.pendingCount} Pending`,
+                    accent: 'text-amber-300',
+                    accentBar: 'bg-amber-400',
+                    caption: `Value: ${formatMoney(quoteStats.pendingAmount)}`,
+                },
+                {
+                    id: 'quoted-declined',
+                    label: 'Declined Quotes',
+                    value: `${quoteStats.rejectedCount} Declined`,
+                    accent: 'text-rose-300',
+                    accentBar: 'bg-rose-400',
+                    caption: `Value: ${formatMoney(quoteStats.rejectedAmount)}`,
+                },
             ]
             : null;
 
@@ -1075,14 +1129,14 @@ export default function ReferrerPortalPage() {
                                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-300">Quotes</p>
                                 <p className="mt-0.5 text-[11px] text-slate-400">Quotations issued for your referred clients</p>
                             </div>
-                            <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
+                            <div className="grid grid-cols-2 md:grid-cols-5 border-t border-white/10">
                                 {quotesStatCards.map((card) => (
                                     <button
                                         key={card.id}
                                         type="button"
                                         onClick={() => toggleReferralFilter(card.id)}
                                         title={`Filter: ${REFERRAL_FILTERS[card.id].label}`}
-                                        className={`px-4 py-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === card.id ? 'bg-white/[0.08]' : ''}`}
+                                        className={`px-4 py-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === card.id ? 'bg-white/[0.08]' : ''} border-r border-b border-white/10`}
                                     >
                                         <p className="text-[11px] uppercase tracking-wide text-slate-400">{card.label}</p>
                                         <p className={`mt-1 text-3xl font-bold ${card.accent}`}>{card.value}</p>
@@ -1153,7 +1207,6 @@ export default function ReferrerPortalPage() {
                                         ) : (
                                             <>
                                                 <th className="px-4 py-3">Stage</th>
-                                                <th className="px-4 py-3">Quoted</th>
                                                 <th className="px-4 py-3 text-center">Deposit Paid</th>
                                                 <th className="px-4 py-3">Payment Status</th>
                                                 <th className="px-4 py-3">Status</th>
@@ -1240,11 +1293,6 @@ export default function ReferrerPortalPage() {
                                                         {STAGE_LABELS[stage] ?? stage}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${isQuoted ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 bg-slate-800/40 text-slate-400'}`}>
-                                                        {isQuoted ? 'Yes' : 'No'}
-                                                    </span>
-                                                </td>
                                                 <td className="px-4 py-3 text-center">
                                                     <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${isDepositPaid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 bg-slate-800/40 text-slate-400'}`}>
                                                         {isDepositPaid ? 'Yes' : 'No'}
@@ -1265,7 +1313,7 @@ export default function ReferrerPortalPage() {
                                     })}
                                     {visibleReferrals.length === 0 && (
                                         <tr>
-                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={7}>
+                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 7 : 6}>
                                                 {referrals.length === 0
                                                     ? 'No referrals are linked yet.'
                                                     : <>No files match “{REFERRAL_FILTERS[referralFilter].label}” yet. <button type="button" onClick={() => setReferralFilter('all')} className="text-cyan-300 underline underline-offset-2">Show all files</button></>}
@@ -1280,7 +1328,7 @@ export default function ReferrerPortalPage() {
                                                 <span className="text-slate-300">{report.clientName}</span>
                                                 {report.idNumber && <span className="ml-2 text-xs text-slate-500">{report.idNumber}</span>}
                                             </td>
-                                            <td className="px-4 py-3" colSpan={isDiscountReferrer ? 4 : 5}>
+                                            <td className="px-4 py-3" colSpan={isDiscountReferrer ? 4 : 3}>
                                                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300">
                                                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
                                                     Unclaimed — pending verification
@@ -1389,7 +1437,7 @@ export default function ReferrerPortalPage() {
                                         )}
                                     </div>
 
-                                    {detail.pendingQuote && (
+                                    {isDiscountReferrer && detail.pendingQuote && (
                                         <div className="rounded-md border border-cyan-400/40 bg-cyan-400/10 p-3">
                                             <h3 className="text-sm font-semibold text-white">Pending Quotation</h3>
                                             <p className="mt-1 text-xs text-slate-300">
