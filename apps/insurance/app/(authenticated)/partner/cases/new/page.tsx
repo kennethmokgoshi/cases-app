@@ -349,7 +349,7 @@ function NewCaseWithAIComponent() {
     // Get selected parent project and its children
     const selectedParent = parentProjects.find(p => p.id === selectedParentId);
     const subprojects = selectedParent?.children?.filter(c =>
-        c.type === 'BRANCH' || c.type === 'FOLDER'
+        c.type === 'BRANCH' || c.type === 'FOLDER' || c.type === 'REFERRER'
     ) || [];
 
     // Helper functions to get partner and branch names from selected projects

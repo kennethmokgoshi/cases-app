@@ -39,6 +39,7 @@ export async function GET() {
                 commissionType: true,
                 fixedCommissionAmount: true,
                 cases: {
+                    where: { deletedAt: null },
                     select: {
                         id: true,
                         fileNumber: true,
@@ -167,18 +168,25 @@ export async function GET() {
         }));
 
         // Quote statistics: count and sum invoices of type QUOTE across all referred cases
+        const pendingStatuses = ['SENT', 'OVERDUE'];
+        const acceptedStatuses = ['ACCEPTED', 'CONVERTED', 'PAID', 'PARTIALLY_PAID'];
+        const declinedStatuses = ['REJECTED', 'CANCELLED'];
+
         const allInvoices = referrer.cases.flatMap((c) =>
-            c.invoices.filter((i) => i.type === 'QUOTE'),
+            c.invoices.filter((i) =>
+                i.type === 'QUOTE' &&
+                [...pendingStatuses, ...acceptedStatuses, ...declinedStatuses].includes(i.status)
+            ),
         );
         const quoteStats = {
             totalCount: allInvoices.length,
             totalAmount: allInvoices.reduce((sum, i) => sum + toPortalNumber(i.total), 0),
-            acceptedCount: allInvoices.filter((i) => i.status === 'ACCEPTED' || i.status === 'CONVERTED').length,
-            acceptedAmount: allInvoices.filter((i) => i.status === 'ACCEPTED' || i.status === 'CONVERTED').reduce((sum, i) => sum + toPortalNumber(i.total), 0),
-            pendingCount: allInvoices.filter((i) => i.status === 'SENT').length,
-            pendingAmount: allInvoices.filter((i) => i.status === 'SENT').reduce((sum, i) => sum + toPortalNumber(i.total), 0),
-            rejectedCount: allInvoices.filter((i) => i.status === 'REJECTED').length,
-            rejectedAmount: allInvoices.filter((i) => i.status === 'REJECTED').reduce((sum, i) => sum + toPortalNumber(i.total), 0),
+            acceptedCount: allInvoices.filter((i) => acceptedStatuses.includes(i.status)).length,
+            acceptedAmount: allInvoices.filter((i) => acceptedStatuses.includes(i.status)).reduce((sum, i) => sum + toPortalNumber(i.total), 0),
+            pendingCount: allInvoices.filter((i) => pendingStatuses.includes(i.status)).length,
+            pendingAmount: allInvoices.filter((i) => pendingStatuses.includes(i.status)).reduce((sum, i) => sum + toPortalNumber(i.total), 0),
+            rejectedCount: allInvoices.filter((i) => declinedStatuses.includes(i.status)).length,
+            rejectedAmount: allInvoices.filter((i) => declinedStatuses.includes(i.status)).reduce((sum, i) => sum + toPortalNumber(i.total), 0),
         };
 
         return NextResponse.json({
@@ -221,6 +229,7 @@ export async function GET() {
                     completedAt: milestones?.completedAt ?? null,
                     quoteTotal: fin?.quoteTotal ?? null,
                     quoteDate: fin?.quoteDate ?? null,
+                    quoteStatuses: referral.invoices.filter((i) => i.type === 'QUOTE').map((i) => i.status),
                     totalPaid: fin?.totalPaid ?? 0,
                     paidThisMonth: (fin?.completedPayments ?? [])
                         .filter((payment) => isInCalendarMonth(payment.date, now))

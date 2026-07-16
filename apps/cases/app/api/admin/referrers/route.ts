@@ -14,7 +14,7 @@ export const ACCOUNT_TYPES = ['CHEQUE', 'SAVINGS', 'CURRENT'] as const;
 
 export const COMMISSION_TYPES = ['FIXED', 'VOLUME_BASED'] as const;
 
-export const REFERRER_TYPES = ['COMMISSION', 'DISCOUNT'] as const;
+export const REFERRER_TYPES = ['COMMISSION', 'DISCOUNT', 'HYBRID'] as const;
 
 const CreateSchema = z.object({
     firstName: z.string().min(1).max(100),
@@ -85,6 +85,8 @@ export async function GET(request: Request) {
                 { idNumber: { contains: search, mode: 'insensitive' } },
                 { email: { contains: search, mode: 'insensitive' } },
                 { cellNumber: { contains: search, mode: 'insensitive' } },
+                { project: { name: { contains: search, mode: 'insensitive' } } },
+                { project: { parent: { name: { contains: search, mode: 'insensitive' } } } },
             ];
         }
         if (isActiveParam === 'true') where.isActive = true;
@@ -264,9 +266,10 @@ export async function POST(request: Request) {
         const { parentReferrerId, memberUserIds: _memberUserIds, ...restData } = data;
         // Keep type-specific config consistent: discount referrers carry no
         // commission amount, commission referrers carry no client discount.
+        // Hybrid referrers carry both.
         if (restData.referrerType === 'DISCOUNT') {
             restData.fixedCommissionAmount = null;
-        } else {
+        } else if (restData.referrerType === 'COMMISSION') {
             restData.clientDiscountPercent = null;
         }
         const referrer = await prisma.referrer.create({

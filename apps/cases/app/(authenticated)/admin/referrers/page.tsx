@@ -74,7 +74,7 @@ const emptyForm = {
     accountHolderName: '',
     notes: '',
     isActive: true,
-    referrerType: 'COMMISSION' as 'COMMISSION' | 'DISCOUNT',
+    referrerType: 'COMMISSION' as 'COMMISSION' | 'DISCOUNT' | 'HYBRID',
     clientDiscountPercent: '',
     commissionType: 'FIXED' as 'FIXED' | 'VOLUME_BASED',
     fixedCommissionAmount: '',
@@ -277,11 +277,11 @@ export default function ReferrersPage() {
                 notes: form.notes.trim() || null,
                 isActive: form.isActive,
                 referrerType: form.referrerType,
-                clientDiscountPercent: form.referrerType === 'DISCOUNT' && form.clientDiscountPercent
+                clientDiscountPercent: (form.referrerType === 'DISCOUNT' || form.referrerType === 'HYBRID') && form.clientDiscountPercent
                     ? parseFloat(form.clientDiscountPercent)
                     : null,
                 commissionType: form.commissionType,
-                fixedCommissionAmount: form.referrerType === 'COMMISSION' && form.commissionType === 'FIXED' && form.fixedCommissionAmount
+                fixedCommissionAmount: (form.referrerType === 'COMMISSION' || form.referrerType === 'HYBRID') && form.commissionType === 'FIXED' && form.fixedCommissionAmount
                     ? parseFloat(form.fixedCommissionAmount)
                     : null,
                 parentReferrerId: form.parentReferrerId || null,
@@ -458,8 +458,8 @@ export default function ReferrersPage() {
                                         {r.firstName} {r.lastName}
                                     </button>
                                     <div className="mt-0.5">
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${r.referrerType === 'DISCOUNT' ? 'text-purple-400 bg-purple-500/10 border-purple-500/30' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'}`}>
-                                            {r.referrerType === 'DISCOUNT' ? 'Discount' : 'Commission'}
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${r.referrerType === 'HYBRID' ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30' : r.referrerType === 'DISCOUNT' ? 'text-purple-400 bg-purple-500/10 border-purple-500/30' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'}`}>
+                                            {r.referrerType === 'HYBRID' ? 'Hybrid' : r.referrerType === 'DISCOUNT' ? 'Discount' : 'Commission'}
                                         </span>
                                     </div>
                                 </td>
@@ -506,8 +506,11 @@ export default function ReferrersPage() {
                                             <div className="text-amber-400 font-medium text-xs whitespace-nowrap">
                                                 R {r.outstandingCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                                             </div>
-                                            <div className="text-gray-500 text-xs whitespace-nowrap mt-1">
-                                                Paid: R {r.paidCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                                            <div className="text-gray-500 text-xs whitespace-nowrap mt-1 flex flex-col items-end">
+                                                <span>Paid: R {r.paidCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</span>
+                                                {r.referrerType === 'HYBRID' && r.clientDiscountPercent != null && (
+                                                    <span className="text-purple-400 mt-0.5">({Number(r.clientDiscountPercent)}% discount)</span>
+                                                )}
                                             </div>
                                         </>
                                     )}
@@ -616,7 +619,7 @@ export default function ReferrersPage() {
                             {/* Referrer Type */}
                             <section>
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Referrer Type</h3>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <button
                                         type="button"
                                         onClick={() => setForm((f) => ({ ...f, referrerType: 'COMMISSION' }))}
@@ -627,7 +630,7 @@ export default function ReferrersPage() {
                                         }`}
                                     >
                                         <p className={`text-sm font-semibold ${form.referrerType === 'COMMISSION' ? 'text-emerald-400' : 'text-gray-300'}`}>Commission</p>
-                                        <p className="text-xs text-gray-400 mt-1">Clients pay full price. The referrer earns a commission per referral.</p>
+                                        <p className="text-xs text-gray-400 mt-1">Clients pay full price. The referrer earns commission.</p>
                                     </button>
                                     <button
                                         type="button"
@@ -639,10 +642,22 @@ export default function ReferrersPage() {
                                         }`}
                                     >
                                         <p className={`text-sm font-semibold ${form.referrerType === 'DISCOUNT' ? 'text-purple-400' : 'text-gray-300'}`}>Discount</p>
-                                        <p className="text-xs text-gray-400 mt-1">Clients get discounted pricing. The referrer earns no commission.</p>
+                                        <p className="text-xs text-gray-400 mt-1">Clients get discount. The referrer earns no commission.</p>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setForm((f) => ({ ...f, referrerType: 'HYBRID' }))}
+                                        className={`text-left rounded-lg border p-3 transition-colors ${
+                                            form.referrerType === 'HYBRID'
+                                                ? 'bg-cyan-500/10 border-cyan-500/50'
+                                                : 'bg-zeno-blue/20 border-zeno-blue/40 hover:border-gray-500'
+                                        }`}
+                                    >
+                                        <p className={`text-sm font-semibold ${form.referrerType === 'HYBRID' ? 'text-cyan-400' : 'text-gray-300'}`}>Hybrid</p>
+                                        <p className="text-xs text-gray-400 mt-1">Clients get discount. The referrer/employee earns commission.</p>
                                     </button>
                                 </div>
-                                {form.referrerType === 'DISCOUNT' && (
+                                {(form.referrerType === 'DISCOUNT' || form.referrerType === 'HYBRID') && (
                                     <div className="mt-3">
                                         <label className="block text-xs text-gray-400 mb-1">Client Discount (%)</label>
                                         <input
@@ -661,7 +676,7 @@ export default function ReferrersPage() {
                             </section>
 
                             {/* Commission Tier — commission referrers only */}
-                            {form.referrerType === 'COMMISSION' && (
+                            {(form.referrerType === 'COMMISSION' || form.referrerType === 'HYBRID') && (
                             <section>
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Commission Rate</h3>
                                 <div className="space-y-3">
@@ -875,7 +890,25 @@ export default function ReferrersPage() {
                                     <p className="text-gray-300 text-sm whitespace-pre-wrap">{detailTarget.notes}</p>
                                 </DetailSection>
                             )}
-                            {detailTarget.referrerType === 'DISCOUNT' ? (
+                            {detailTarget.referrerType === 'HYBRID' ? (
+                                <DetailSection title="Referrer Type">
+                                    <DetailRow label="Type" value={<span className="text-cyan-400">Hybrid</span>} />
+                                    <DetailRow
+                                        label="Client Discount"
+                                        value={detailTarget.clientDiscountPercent != null ? `${Number(detailTarget.clientDiscountPercent)}%` : 'Not set'}
+                                    />
+                                    <DetailRow
+                                        label="Commission Type"
+                                        value={detailTarget.commissionType === 'VOLUME_BASED' ? 'Volume-Based' : 'Fixed Amount'}
+                                    />
+                                    {detailTarget.commissionType === 'FIXED' && (
+                                        <DetailRow
+                                            label="Fixed Amount"
+                                            value={detailTarget.fixedCommissionAmount != null ? `R ${Number(detailTarget.fixedCommissionAmount).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : 'Not set'}
+                                        />
+                                    )}
+                                </DetailSection>
+                            ) : detailTarget.referrerType === 'DISCOUNT' ? (
                                 <DetailSection title="Referrer Type">
                                     <DetailRow label="Type" value={<span className="text-purple-400">Discount</span>} />
                                     <DetailRow
@@ -885,24 +918,24 @@ export default function ReferrersPage() {
                                     <p className="text-gray-400 text-xs">This referrer&apos;s clients get discounted pricing. No commission is earned or tracked for payout.</p>
                                 </DetailSection>
                             ) : (
-                            <DetailSection title="Commission">
-                                <DetailRow label="Referrer Type" value={<span className="text-emerald-400">Commission</span>} />
-                                <DetailRow
-                                    label="Type"
-                                    value={detailTarget.commissionType === 'VOLUME_BASED' ? 'Volume-Based' : 'Fixed'}
-                                />
-                                {detailTarget.commissionType === 'FIXED' && (
+                                <DetailSection title="Commission">
+                                    <DetailRow label="Referrer Type" value={<span className="text-emerald-400">Commission</span>} />
                                     <DetailRow
-                                        label="Fixed Amount"
-                                        value={detailTarget.fixedCommissionAmount != null
-                                            ? `R ${Number(detailTarget.fixedCommissionAmount).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`
-                                            : 'Not set'}
+                                        label="Type"
+                                        value={detailTarget.commissionType === 'VOLUME_BASED' ? 'Volume-Based' : 'Fixed'}
                                     />
-                                )}
-                                {detailTarget.commissionType === 'VOLUME_BASED' && (
-                                    <p className="text-gray-400 text-xs">R200 (1–9 cases) / R300 (10+ cases)</p>
-                                )}
-                            </DetailSection>
+                                    {detailTarget.commissionType === 'FIXED' && (
+                                        <DetailRow
+                                            label="Fixed Amount"
+                                            value={detailTarget.fixedCommissionAmount != null
+                                                ? `R ${Number(detailTarget.fixedCommissionAmount).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`
+                                                : 'Not set'}
+                                        />
+                                    )}
+                                    {detailTarget.commissionType === 'VOLUME_BASED' && (
+                                        <p className="text-gray-400 text-xs">R200 (1–9 cases) / R300 (10+ cases)</p>
+                                    )}
+                                </DetailSection>
                             )}
 
                             {detailTarget.parentReferrer && (

@@ -70,6 +70,14 @@ export async function POST(request: Request) {
         const firstName = nameParts[0] ?? project.name;
         const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '(Referrer)';
 
+        // Check if parent project has clientType: 'B2B' (to determine if this is a B2B branch referrer)
+        const parentProject = project.parentId ? await prisma.project.findUnique({
+            where: { id: project.parentId },
+            select: { clientType: true }
+        }) : null;
+        const isB2BBranch = parentProject?.clientType === 'B2B';
+        const referrerType = isB2BBranch ? 'HYBRID' : 'COMMISSION';
+
         // Mark the project as REFERRER type so it shows in REFERRER-type queries
         await prisma.project.update({
             where: { id: projectId },
@@ -84,6 +92,7 @@ export async function POST(request: Request) {
                 createdById: session.user.id,
                 parentReferrerId: parentReferrerId ?? null,
                 commissionType: 'FIXED',
+                referrerType,
             },
             include: {
                 project: { select: { id: true, name: true, parentId: true } },

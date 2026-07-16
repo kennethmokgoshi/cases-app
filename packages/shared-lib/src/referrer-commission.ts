@@ -9,13 +9,14 @@ import type { ReferrerCommissionStage } from '@zenowethu/database';
  *  DISCOUNT: the referrer's clients get discounted pricing
  *  (Referrer.clientDiscountPercent) and the referrer earns no commission.
  */
-export type ReferrerType = 'COMMISSION' | 'DISCOUNT';
+export type ReferrerType = 'COMMISSION' | 'DISCOUNT' | 'HYBRID';
 
-export const REFERRER_TYPES: ReferrerType[] = ['COMMISSION', 'DISCOUNT'];
+export const REFERRER_TYPES: ReferrerType[] = ['COMMISSION', 'DISCOUNT', 'HYBRID'];
 
 export const REFERRER_TYPE_LABELS: Record<ReferrerType, string> = {
     COMMISSION: 'Commission — clients pay full price, referrer earns per referral',
     DISCOUNT:   'Discount — clients get discounted pricing, no commission',
+    HYBRID:     'Hybrid — clients get discounted pricing, referrer earns commission',
 };
 
 /** Unknown/legacy values are treated as COMMISSION (the historical default). */

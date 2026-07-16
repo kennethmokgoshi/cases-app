@@ -153,8 +153,8 @@ export default function AssignReferrerModal({ isOpen, onClose, caseId, currentRe
                                                 {r.project?.name || r.cellNumber || r.email || '—'}
                                             </p>
                                         </div>
-                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${r.referrerType === 'DISCOUNT' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                            {r.referrerType === 'DISCOUNT' ? 'Discount' : 'Commission'}
+                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${r.referrerType === 'HYBRID' ? 'bg-cyan-500/20 text-cyan-400' : r.referrerType === 'DISCOUNT' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                            {r.referrerType === 'HYBRID' ? 'Hybrid' : r.referrerType === 'DISCOUNT' ? 'Discount' : 'Commission'}
                                         </span>
                                     </button>
                                 );

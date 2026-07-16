@@ -7,7 +7,7 @@ import { canAccessReferrer } from '@/lib/referrer-access';
 const logger = createLogger('api/admin/referrers/[id]');
 
 const COMMISSION_TYPES = ['FIXED', 'VOLUME_BASED'] as const;
-const REFERRER_TYPES = ['COMMISSION', 'DISCOUNT'] as const;
+const REFERRER_TYPES = ['COMMISSION', 'DISCOUNT', 'HYBRID'] as const;
 
 const PatchSchema = z.object({
     firstName: z.string().min(1).max(100).optional(),
@@ -185,7 +185,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const effectiveType = restData.referrerType ?? existing.referrerType;
         if (effectiveType === 'DISCOUNT') {
             restData.fixedCommissionAmount = null;
-        } else {
+        } else if (effectiveType === 'COMMISSION') {
             restData.clientDiscountPercent = null;
         }
         const updated = await prisma.referrer.update({

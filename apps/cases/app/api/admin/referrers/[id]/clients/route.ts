@@ -57,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         }
 
         const cases = await prisma.case.findMany({
-            where: { referrerId: id },
+            where: { referrerId: id, deletedAt: null },
             select: {
                 id: true,
                 fileNumber: true,

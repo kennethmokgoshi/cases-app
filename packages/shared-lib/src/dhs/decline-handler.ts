@@ -19,6 +19,7 @@ import { logger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
 import { promoteDcEmail, getBestDcEmail } from '../dc/email-priority';
 import { recordDhsOutcome } from '../dc/outcome-events';
+import { findPriorDocsEmail, decideDocsResend } from './decline-dedup';
 
 export type DeclineCategory =
     | 'SEND_DOCS'
@@ -40,6 +41,14 @@ export interface DeclineHandlerResult {
     errors: string[];
     /** Email address extracted from the decline reason text, if found */
     extractedEmail: string | null;
+    /**
+     * True when a SEND_DOCS / SEND_DOCS_WITH_NCR document email was NOT sent
+     * because it had already been sent for this decline and the file is not yet
+     * overdue. The caller can surface a "Resend anyway" option.
+     */
+    skippedAsDuplicate: boolean;
+    /** When the earlier document email was sent, when skippedAsDuplicate is true */
+    alreadyHandledAt: Date | null;
 }
 
 // ─── Classification ───────────────────────────────────────────────────────────
@@ -233,10 +242,15 @@ export async function handleDHSDecline(params: {
     caseId: string;
     declineReason: string;
     triggeredByUserId?: string;
+    /**
+     * Bypass the "already emailed the docs for this decline" guard and send the
+     * document email regardless. Set by the staff "Resend anyway" action.
+     */
+    forceResend?: boolean;
 }): Promise<DeclineHandlerResult> {
     // When not triggered by a staff member, attribute actions to the
     // Kenny Mokgoshi system automation user so updates show a name in the UI
-    const { caseId, declineReason } = params;
+    const { caseId, declineReason, forceResend } = params;
     const triggeredByUserId = params.triggeredByUserId ?? (await getAutomationUserId()) ?? undefined;
     const log = logger.child ? logger.child({ module: 'decline-handler', caseId }) : logger;
 
@@ -249,6 +263,8 @@ export async function handleDHSDecline(params: {
         actionsPerformed: [],
         errors: [],
         extractedEmail: null,
+        skippedAsDuplicate: false,
+        alreadyHandledAt: null,
     };
 
     try {
@@ -371,6 +387,49 @@ export async function handleDHSDecline(params: {
         const nextUpdateDate = calculateNextUpdate(basePeriod, caseData.declineFirstDetectedAt);
 
         if (category === 'SEND_DOCS' || category === 'SEND_DOCS_WITH_NCR') {
+            // ── Idempotency guard ───────────────────────────────────────────
+            // Do not re-email the documents if we already sent them for this
+            // decline and the file is not yet overdue. This protects both the
+            // automatic DHS re-check path and repeated staff clicks. The
+            // "Resend anyway" action passes forceResend to bypass it.
+            const declineSince =
+                caseData.declineFirstDetectedAt ??
+                caseData.declineLastDetectedAt ??
+                caseData.dhsApplicationDate ??
+                caseData.statusEntryDate ??
+                caseData.createdAt;
+            const prior = await findPriorDocsEmail({ caseId, dcEmail, since: declineSince });
+            const decision = decideDocsResend({
+                prior,
+                nextUpdate: caseData.nextUpdate ?? null,
+                forceResend,
+                now: handledAt,
+            });
+
+            if (!decision.send) {
+                result.skippedAsDuplicate = true;
+                result.alreadyHandledAt = prior.sentAt;
+                result.statusUpdatedTo = null;
+                const when = prior.sentAt ? formatDhsDeclineDate(prior.sentAt) : 'earlier';
+                const recipientNote = prior.recipient ? ` to ${prior.recipient}` : '';
+                result.actionsPerformed.push(
+                    `Documents already emailed${recipientNote} on ${when} for this decline — not resent (file not overdue).`
+                );
+                await addComment(
+                    caseId,
+                    triggeredByUserId,
+                    `[SYSTEM] DHS Decline Handler: SKIPPED resend — the document email was already sent${recipientNote} on ${when} for this decline and the file is not yet overdue. Use "Resend anyway" to override. DHS decline reason: "${declineReason}"`
+                );
+                log.info({ prior }, '[DHS Decline Handler] SEND_DOCS skipped as duplicate (not overdue)');
+                return result;
+            }
+
+            if (prior.found && decision.overdue) {
+                result.actionsPerformed.push(
+                    `File overdue — resending documents despite an earlier send on ${prior.sentAt ? formatDhsDeclineDate(prior.sentAt) : 'a previous date'}.`
+                );
+            }
+
             const updateData: any = {
                 status: 'REJECTED_EMAIL_DOCS',
                 nextUpdate: nextUpdateDate,

@@ -32,13 +32,12 @@ export async function GET() {
         });
         const linkedIds = new Set(linked.map(r => r.projectId).filter(Boolean) as string[]);
 
-        // Get ACQUISITION_SOURCE projects that are B2C (or untyped/generic) only.
-        // B2B partners (Letsatsi, Shosholoza, etc.) have clientType='B2B' — their
-        // children are branches, not referrers, and must be excluded.
+        // Get ACQUISITION_SOURCE projects (both B2C and B2B partner roots).
+        // Including B2B partner roots (Letsatsi, Shosholoza, etc.) allows their branches
+        // (type FOLDER) to be registered as HYBRID referrers.
         const acquisitionRoots = await prisma.project.findMany({
             where: {
                 type: 'ACQUISITION_SOURCE',
-                clientType: { not: 'B2B' },  // exclude B2B partner roots
             },
             select: { id: true, name: true },
         });

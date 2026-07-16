@@ -221,8 +221,10 @@ export default function ReferrerClientsDashboardPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${isDiscountReferrer ? 'text-purple-400 bg-purple-500/10 border-purple-500/30' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'}`}>
-                        {isDiscountReferrer
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${referrer.referrerType === 'HYBRID' ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30' : isDiscountReferrer ? 'text-purple-400 bg-purple-500/10 border-purple-500/30' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'}`}>
+                        {referrer.referrerType === 'HYBRID'
+                            ? `Hybrid referrer · ${referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}% discount` : '0% discount'}`
+                            : isDiscountReferrer
                             ? `Discount referrer${referrer.clientDiscountPercent != null ? ` · ${referrer.clientDiscountPercent}% for clients` : ''}`
                             : 'Commission referrer'}
                     </span>
@@ -270,13 +272,19 @@ export default function ReferrerClientsDashboardPage() {
             </div>
 
             {/* Stat cards — money & follow-up row */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 gap-4 mb-6">
                 {[
                     { label: 'Total Quoted', value: summary.totalQuoted > 0 ? formatZAR(summary.totalQuoted) : '—', color: 'text-white' },
                     { label: 'Total Collected', value: summary.totalCollected > 0 ? formatZAR(summary.totalCollected) : '—', color: 'text-emerald-400' },
                     { label: 'Client Balance Due', value: summary.totalBalanceDue > 0 ? formatZAR(summary.totalBalanceDue) : '—', color: 'text-amber-400' },
                     { label: 'Updates Overdue', value: summary.updatesOverdue, color: summary.updatesOverdue > 0 ? 'text-red-400' : 'text-gray-400' },
-                    ...(isDiscountReferrer
+                    ...(referrer.referrerType === 'HYBRID'
+                        ? [
+                            { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
+                            { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
+                            { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
+                        ]
+                        : isDiscountReferrer
                         ? [
                             { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
                             { label: 'Commission', value: 'None (discount)', color: 'text-gray-400' },

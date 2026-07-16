@@ -125,7 +125,7 @@ function ReportsContent() {
                         {projects.map((parent) => (
                             <optgroup key={parent.id} label={parent.name}>
                                 <option value={parent.id}>All {parent.name}</option>
-                                {parent.children?.filter((c: any) => c.type === 'BRANCH' || c.type === 'FOLDER').map((child: any) => (
+                                {parent.children?.filter((c: any) => c.type === 'BRANCH' || c.type === 'FOLDER' || c.type === 'REFERRER').map((child: any) => (
                                     <option key={child.id} value={child.id}>{child.name}</option>
                                 ))}
                             </optgroup>

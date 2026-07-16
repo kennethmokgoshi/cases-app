@@ -124,7 +124,7 @@ function PartnerNewCaseComponent() {
 
     const selectedParent = parentProjects.find(p => p.id === selectedParentId);
     const subprojects = selectedParent?.children?.filter(c =>
-        c.type === 'BRANCH' || c.type === 'FOLDER'
+        c.type === 'BRANCH' || c.type === 'FOLDER' || c.type === 'REFERRER'
     ) || [];
 
     const getPartnerNameFromProject = (): string | null => {
@@ -214,7 +214,7 @@ function PartnerNewCaseComponent() {
         }
 
         const selectedParent = parentProjects.find(p => p.id === selectedParentId);
-        const children = selectedParent?.children?.filter(c => c.type === 'BRANCH' || c.type === 'FOLDER') || [];
+        const children = selectedParent?.children?.filter(c => c.type === 'BRANCH' || c.type === 'FOLDER' || c.type === 'REFERRER') || [];
 
         if (children.length > 0) {
             setSelectedSubprojectId(children[0].id);

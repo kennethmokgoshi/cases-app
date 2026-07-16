@@ -122,6 +122,10 @@ describe('referrerEarnsCommission', () => {
         expect(referrerEarnsCommission('COMMISSION')).toBe(true);
     });
 
+    it('returns true for HYBRID referrers', () => {
+        expect(referrerEarnsCommission('HYBRID')).toBe(true);
+    });
+
     it('returns false for DISCOUNT referrers', () => {
         expect(referrerEarnsCommission('DISCOUNT')).toBe(false);
     });
@@ -133,7 +137,7 @@ describe('referrerEarnsCommission', () => {
         expect(referrerEarnsCommission('SOMETHING_ELSE')).toBe(true);
     });
 
-    it('exposes both referrer types', () => {
-        expect(REFERRER_TYPES).toEqual(['COMMISSION', 'DISCOUNT']);
+    it('exposes all referrer types', () => {
+        expect(REFERRER_TYPES).toEqual(['COMMISSION', 'DISCOUNT', 'HYBRID']);
     });
 });

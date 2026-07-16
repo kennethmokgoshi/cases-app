@@ -127,6 +127,11 @@ describe('GET /api/admin/referrers/[id]/clients', () => {
 
         const res = await GET(makeReq(), routeParams);
         expect(res.status).toBe(200);
+
+        expect(prisma.case.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: { referrerId: 'ref-1', deletedAt: null },
+        }));
+
         const json = await res.json();
 
         expect(json.referrer.id).toBe('ref-1');

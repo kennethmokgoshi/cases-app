@@ -34,6 +34,7 @@ import DcFeeInvoiceModal from './DcFeeInvoiceModal';
 import { ConsumerPortalPanel } from '@/app/components/ConsumerPortalPanel';
 import { getCaseHeaderClientAction } from '@/lib/case-header-client-action';
 import CheckInvoiceEmailsButton from '@/components/CheckInvoiceEmailsButton';
+import CheckCommunicationsButton from '@/components/CheckCommunicationsButton';
 import { isInvoiceRequestedFromDcStatus } from '@/lib/mailboxes';
 import { canShowDhsManageConsumers } from '@/lib/dhs-manage-consumers-eligibility';
 
@@ -513,6 +514,12 @@ export default function CaseDetailPage() {
         actionsPerformed?: string[];
         errors?: string[];
         statusUpdatedTo?: string | null;
+        alreadyHandled?: boolean;
+        alreadyHandledSource?: 'NOTIFICATION_LOG' | 'INBOX' | null;
+        alreadyHandledAt?: string | null;
+        canResend?: boolean;
+        message?: string;
+        inboxMatches?: { mailbox: string; from: string; subject: string; date: string | null }[];
     } | null>(null);
     const [isAssistClientConsentOpen, setIsAssistClientConsentOpen] = useState(false);
 
@@ -2681,8 +2688,8 @@ export default function CaseDetailPage() {
                                             )}
                                         </div>
                                         <div className="flex flex-col items-end gap-1 shrink-0">
-                                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${caseData.referrer.referrerType === 'DISCOUNT' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                                {caseData.referrer.referrerType === 'DISCOUNT' ? 'Discount' : 'Commission'}
+                                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${caseData.referrer.referrerType === 'HYBRID' ? 'bg-cyan-500/20 text-cyan-400' : caseData.referrer.referrerType === 'DISCOUNT' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                                {caseData.referrer.referrerType === 'HYBRID' ? 'Hybrid' : caseData.referrer.referrerType === 'DISCOUNT' ? 'Discount' : 'Commission'}
                                             </span>
                                             {!caseData.referrer.isActive && (
                                                 <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-400">
@@ -4396,7 +4403,7 @@ export default function CaseDetailPage() {
                                     const needsClientAction = hasReason && currentReason && requiresClientInvolvement(currentReason);
                                     const needsFeeEmailFollowUp = hasReason && currentReason && requiresFeeEmailFollowUp(currentReason);
 
-                                    const handleDecline = async () => {
+                                    const handleDecline = async (forceResend = false) => {
                                         const reason = caseData.declineReason || declineReason;
                                         if (!reason?.trim()) {
                                             toast.error('No decline reason to handle. Please ensure the decline reason is saved first.');
@@ -4408,11 +4415,14 @@ export default function CaseDetailPage() {
                                             const res = await fetch(`/api/cases/${caseData.id}/dhs-decline/handle`, {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ declineReason: reason }),
+                                                body: JSON.stringify({ declineReason: reason, forceResend }),
                                             });
                                             const data = await res.json();
                                             setDeclineHandleResult(data);
-                                            if (data.success) {
+                                            if (data.alreadyHandled && !forceResend) {
+                                                // Guard stopped a duplicate send — inform, don't error.
+                                                toast(data.message || 'Already handled for this decline — not resent.');
+                                            } else if (data.success) {
                                                 toast.success(`Decline handled: ${data.actionsPerformed?.join(', ') || data.category}`);
                                                 // Refresh case data to show updated status
                                                 fetchCase();
@@ -4472,7 +4482,7 @@ export default function CaseDetailPage() {
                                                     {hasReason && !isEditingDhs && (
                                                         <div className="flex items-center gap-2">
                                                             <button
-                                                                onClick={handleDecline}
+                                                                onClick={() => handleDecline(false)}
                                                                 disabled={isHandlingDecline}
                                                                 className="text-xs text-white bg-orange-600/80 border border-orange-500/50 px-2.5 py-1 rounded hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                                                             >
@@ -4483,6 +4493,7 @@ export default function CaseDetailPage() {
                                                                     </>
                                                                 ) : '⚡ Handle Decline'}
                                                             </button>
+                                                            <CheckCommunicationsButton caseId={caseData.id} />
                                                             {needsFeeEmailFollowUp && (
                                                                 <CheckInvoiceEmailsButton
                                                                     caseId={caseData.id}
@@ -4574,6 +4585,43 @@ export default function CaseDetailPage() {
                                             )}
                                             {/* Decline handler result panel */}
                                             {declineHandleResult && (
+                                                declineHandleResult.alreadyHandled ? (
+                                                    <div className="mt-3 p-3 rounded-lg border text-xs bg-amber-900/10 border-amber-500/30 text-amber-200">
+                                                        <div className="font-semibold mb-1">
+                                                            ⏸️ Already handled — not resent
+                                                            {declineHandleResult.alreadyHandledSource && (
+                                                                <span className="ml-2 font-normal opacity-70">
+                                                                    (found in {declineHandleResult.alreadyHandledSource === 'INBOX' ? 'inbox' : 'sent record'})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="opacity-90">{declineHandleResult.message}</p>
+                                                        {declineHandleResult.alreadyHandledAt && (
+                                                            <div className="mt-1 opacity-70">
+                                                                Last sent: {formatDeclineDate(declineHandleResult.alreadyHandledAt)}
+                                                            </div>
+                                                        )}
+                                                        {declineHandleResult.inboxMatches && declineHandleResult.inboxMatches.length > 0 && (
+                                                            <ul className="mt-2 space-y-1">
+                                                                {declineHandleResult.inboxMatches.map((m, i) => (
+                                                                    <li key={i} className="opacity-80">
+                                                                        <span className="font-medium">{m.subject}</span> — {m.from}
+                                                                        <span className="opacity-60"> · {m.mailbox}</span>
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        )}
+                                                        {declineHandleResult.canResend && (
+                                                            <button
+                                                                onClick={() => handleDecline(true)}
+                                                                disabled={isHandlingDecline}
+                                                                className="mt-2 text-xs text-white bg-orange-600/80 border border-orange-500/50 px-2.5 py-1 rounded hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {isHandlingDecline ? 'Resending…' : '↻ Resend anyway'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ) : (
                                                 <div className={`mt-3 p-3 rounded-lg border text-xs ${
                                                     declineHandleResult.success
                                                         ? 'bg-green-900/10 border-green-500/20 text-green-300'
@@ -4603,6 +4651,7 @@ export default function CaseDetailPage() {
                                                         <div className="mt-1 opacity-70">Status updated to: {declineHandleResult.statusUpdatedTo.replace(/_/g, ' ')}</div>
                                                     )}
                                                 </div>
+                                                )
                                             )}
                                         </div>
                                     );

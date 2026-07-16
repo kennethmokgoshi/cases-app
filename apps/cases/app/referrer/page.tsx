@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { signOut, useSession } from '@zenowethu/ui';
+import { signOut, useSession, confirm, toast } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 
 type ReferrerProfile = {
@@ -35,6 +35,7 @@ type ReferralRow = {
     completedAt: string | null;
     quoteTotal: number | null;
     quoteDate: string | null;
+    quoteStatuses: string[];
     totalPaid: number;
     paidThisMonth: number;
     paidLastMonth: number;
@@ -121,6 +122,9 @@ type DiscountPartnerSummary = {
     totalPaid: number;
     paidThisMonth: number;
     paidLastMonth: number;
+    totalOutstanding: number;
+    outstandingThisMonth: number;
+    outstandingLastMonth: number;
 };
 
 type MissingClientReport = {
@@ -263,7 +267,10 @@ type ReferralFilterId =
     | 'quoted-declined'
     | 'paid'
     | 'paid-this-month'
-    | 'paid-last-month';
+    | 'paid-last-month'
+    | 'outstanding'
+    | 'outstanding-this-month'
+    | 'outstanding-last-month';
 
 const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row: ReferralRow) => boolean }> = {
     'all': { label: 'All referrals', matches: () => true },
@@ -275,16 +282,19 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'settled': { label: 'Settled', matches: (row) => row.statusTone === 'settled' },
     'settled-this-month': { label: 'Settled this month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 0) },
     'settled-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
-    'not-quoted': { label: 'Not Quoted', matches: (row) => row.quoteTotal == null || row.quoteTotal === 0 },
-    'quoted': { label: 'Quoted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 },
+    'not-quoted': { label: 'Not Quoted', matches: (row) => !row.quoteStatuses || row.quoteStatuses.length === 0 },
+    'quoted': { label: 'Quoted', matches: (row) => row.quoteStatuses && row.quoteStatuses.length > 0 },
     'quoted-this-month': { label: 'Quoted this month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 0) },
     'quoted-last-month': { label: 'Quoted last month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 1) },
-    'quoted-accepted': { label: 'Quote accepted', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && ['QUOTE_ACCEPTED', 'DEPOSIT_PAID', 'PAYING_INSTALMENTS', 'UP_TO_DATE', 'SETTLED', 'COMPLETED', 'SETTLED_SUCCESS'].includes(row.caseStatus) },
-    'quoted-pending': { label: 'Quote pending', matches: (row) => row.caseStatus === 'QUOTE_SUBMITTED' || row.caseStatus === 'AWAITING_QUOTE_DECISION' },
-    'quoted-declined': { label: 'Quote declined', matches: (row) => row.caseStatus === 'QUOTE_REJECTED' },
+    'quoted-accepted': { label: 'Quote accepted', matches: (row) => row.quoteStatuses && row.quoteStatuses.some((status) => ['ACCEPTED', 'CONVERTED', 'PAID', 'PARTIALLY_PAID'].includes(status)) },
+    'quoted-pending': { label: 'Quote pending', matches: (row) => row.quoteStatuses && row.quoteStatuses.some((status) => ['SENT', 'OVERDUE'].includes(status)) },
+    'quoted-declined': { label: 'Quote declined', matches: (row) => row.quoteStatuses && row.quoteStatuses.some((status) => ['REJECTED', 'CANCELLED'].includes(status)) },
     'paid': { label: 'Files with payments', matches: (row) => row.totalPaid > 0 },
     'paid-this-month': { label: 'Paid this month', matches: (row) => row.paidThisMonth > 0 },
     'paid-last-month': { label: 'Paid last month', matches: (row) => row.paidLastMonth > 0 },
+    'outstanding': { label: 'Outstanding Balance', matches: (row) => (row.quoteTotal ?? 0) - row.totalPaid > 0 },
+    'outstanding-this-month': { label: 'Outstanding this month', matches: (row) => (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.quoteDate, 0) },
+    'outstanding-last-month': { label: 'Outstanding last month', matches: (row) => (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.quoteDate, 1) },
 };
 
 function formatMoney(value: number): string {
@@ -367,6 +377,11 @@ export default function ReferrerPortalPage() {
 
     // Quote Decision state
     const [quoteDecisionSubmitting, setQuoteDecisionSubmitting] = useState(false);
+    const [quoteDecisionModal, setQuoteDecisionModal] = useState<{
+        isOpen: boolean;
+        decision: 'ACCEPT' | 'REJECT';
+        error?: string;
+    } | null>(null);
 
     // Claim Client state
     const [showClaimClientModal, setShowClaimClientModal] = useState(false);
@@ -387,6 +402,7 @@ export default function ReferrerPortalPage() {
 
     // Feedback Request state
     const [feedbackRequestSubmitting, setFeedbackRequestSubmitting] = useState(false);
+    const [quoteRequestSubmitting, setQuoteRequestSubmitting] = useState(false);
 
     async function handleMissingClientSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -482,7 +498,7 @@ export default function ReferrerPortalPage() {
             
             void loadPortal();
 
-            alert('Payment reported and proof of payment uploaded successfully!');
+            toast.success('Payment reported and proof of payment uploaded successfully!');
             setShowPaymentReportModal(false);
             setReportPaymentAmount('');
             setReportPaymentDate('');
@@ -495,13 +511,20 @@ export default function ReferrerPortalPage() {
         }
     }
 
-    async function handleQuoteDecisionSubmit(decision: 'ACCEPT' | 'REJECT') {
-        if (!selectedCaseId) return;
-        const actionText = decision === 'ACCEPT' ? 'accept' : 'decline';
-        const confirmFlag = confirm(`Are you sure you want to ${actionText} this quote?`);
-        if (!confirmFlag) return;
+    function handleQuoteDecisionSubmit(decision: 'ACCEPT' | 'REJECT') {
+        setQuoteDecisionModal({
+            isOpen: true,
+            decision,
+        });
+    }
+
+    async function handleConfirmQuoteDecision() {
+        if (!quoteDecisionModal || !selectedCaseId) return;
+        const { decision } = quoteDecisionModal;
 
         setQuoteDecisionSubmitting(true);
+        setQuoteDecisionModal(prev => prev ? { ...prev, error: undefined } : null);
+
         try {
             const res = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}/quote-decision`, {
                 method: 'POST',
@@ -510,7 +533,7 @@ export default function ReferrerPortalPage() {
             });
             const json = await res.json();
             if (!res.ok) {
-                alert(json.error ?? `Failed to submit quote decision`);
+                setQuoteDecisionModal(prev => prev ? { ...prev, error: json.error ?? 'Failed to submit quote decision' } : null);
                 return;
             }
 
@@ -520,9 +543,9 @@ export default function ReferrerPortalPage() {
                 setDetail(detailJson);
             }
             void loadPortal();
-            alert(`Quote successfully ${decision === 'ACCEPT' ? 'accepted' : 'declined'}!`);
+            setQuoteDecisionModal(null);
         } catch {
-            alert(`Failed to submit quote decision`);
+            setQuoteDecisionModal(prev => prev ? { ...prev, error: 'Failed to submit quote decision' } : null);
         } finally {
             setQuoteDecisionSubmitting(false);
         }
@@ -600,7 +623,7 @@ export default function ReferrerPortalPage() {
                 setDetail(detailJson);
             }
 
-            alert('Document uploaded successfully!');
+            toast.success('Document uploaded successfully!');
             setShowUploadDocModal(false);
             setUploadDocType('ID_DOCUMENT');
             setUploadDocFile(null);
@@ -614,7 +637,7 @@ export default function ReferrerPortalPage() {
 
     async function handleRequestFeedback() {
         if (!selectedCaseId) return;
-        const confirmFlag = confirm('Would you like to request a feedback update on this case from Zenowethu staff?');
+        const confirmFlag = await confirm('Would you like to request a feedback update on this case from Zenowethu staff?');
         if (!confirmFlag) return;
 
         setFeedbackRequestSubmitting(true);
@@ -624,17 +647,43 @@ export default function ReferrerPortalPage() {
             });
             const json = await res.json();
             if (!res.ok) {
-                alert(json.error ?? 'Failed to request feedback');
+                toast.error(json.error ?? 'Failed to request feedback');
                 return;
             }
             if (json.comment) {
                 setDetail((current) => current ? { ...current, comments: [...current.comments, json.comment] } : current);
             }
-            alert('Feedback request logged and staff notified!');
+            toast.success('Feedback request logged and staff notified!');
         } catch {
-            alert('Failed to request feedback');
+            toast.error('Failed to request feedback');
         } finally {
             setFeedbackRequestSubmitting(false);
+        }
+    }
+
+    async function handleRequestQuote() {
+        if (!selectedCaseId) return;
+        const confirmFlag = await confirm('Would you like to request a quote for this case from Zenowethu staff?');
+        if (!confirmFlag) return;
+
+        setQuoteRequestSubmitting(true);
+        try {
+            const res = await fetch(`/api/referrer-portal/referrals/${selectedCaseId}/quote-request`, {
+                method: 'POST',
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                toast.error(json.error ?? 'Failed to request quote');
+                return;
+            }
+            if (json.comment) {
+                setDetail((current) => current ? { ...current, comments: [...current.comments, json.comment] } : current);
+            }
+            toast.success('Quote request logged and staff notified!');
+        } catch {
+            toast.error('Failed to request quote');
+        } finally {
+            setQuoteRequestSubmitting(false);
         }
     }
 
@@ -973,17 +1022,37 @@ export default function ReferrerPortalPage() {
             ]
             : null;
 
-    const discountMoneyCards: { id: ReferralFilterId; label: string; value: string; valueClass: string }[] | null =
-        isDiscountReferrer && discountSummary
-            ? [
-                { id: 'quoted', label: 'Total quoted', value: formatMoney(discountSummary.totalQuoted), valueClass: 'text-white' },
-                { id: 'quoted-this-month', label: `Quoted — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.quotedThisMonth), valueClass: 'text-white' },
-                { id: 'quoted-last-month', label: `Quoted — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.quotedLastMonth), valueClass: 'text-white' },
-                { id: 'paid', label: 'Total paid', value: formatMoney(discountSummary.totalPaid), valueClass: 'text-emerald-300' },
-                { id: 'paid-this-month', label: `Paid — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.paidThisMonth), valueClass: 'text-emerald-300' },
-                { id: 'paid-last-month', label: `Paid — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.paidLastMonth), valueClass: 'text-emerald-300' },
-            ]
-            : null;
+    const discountMoneyGroups = isDiscountReferrer && discountSummary
+        ? [
+            {
+                title: 'Quoted',
+                accentBar: 'bg-violet-400',
+                total: { id: 'quoted' as ReferralFilterId, label: 'Total Quoted', value: formatMoney(discountSummary.totalQuoted), valueClass: 'text-white' },
+                months: [
+                    { id: 'quoted-this-month' as ReferralFilterId, label: `Quoted — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.quotedThisMonth), valueClass: 'text-white' },
+                    { id: 'quoted-last-month' as ReferralFilterId, label: `Quoted — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.quotedLastMonth), valueClass: 'text-white' },
+                ]
+            },
+            {
+                title: 'Paid',
+                accentBar: 'bg-emerald-400',
+                total: { id: 'paid' as ReferralFilterId, label: 'Total Paid', value: formatMoney(discountSummary.totalPaid), valueClass: 'text-emerald-300' },
+                months: [
+                    { id: 'paid-this-month' as ReferralFilterId, label: `Paid — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.paidThisMonth), valueClass: 'text-emerald-300' },
+                    { id: 'paid-last-month' as ReferralFilterId, label: `Paid — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.paidLastMonth), valueClass: 'text-emerald-300' },
+                ]
+            },
+            {
+                title: 'Outstanding',
+                accentBar: 'bg-amber-400',
+                total: { id: 'outstanding' as ReferralFilterId, label: 'Total Outstanding', value: formatMoney(discountSummary.totalOutstanding), valueClass: 'text-amber-400' },
+                months: [
+                    { id: 'outstanding-this-month' as ReferralFilterId, label: `Outstanding — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.outstandingThisMonth), valueClass: 'text-amber-400' },
+                    { id: 'outstanding-last-month' as ReferralFilterId, label: `Outstanding — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.outstandingLastMonth), valueClass: 'text-amber-400' },
+                ]
+            }
+        ]
+        : null;
 
     const commissionGroups = !isDiscountReferrer && summary
         ? [
@@ -1024,17 +1093,25 @@ export default function ReferrerPortalPage() {
                 <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
                     <div>
                         <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">
-                            {isDiscountReferrer ? 'Referrer Portal · Discount Partner' : 'Referrer Portal'}
+                            {referrer.referrerType === 'HYBRID'
+                                ? 'Referrer Portal · B2B Partner'
+                                : isDiscountReferrer
+                                ? 'Referrer Portal · Discount Partner'
+                                : 'Referrer Portal'}
                         </p>
                         <h1 className="mt-1 text-2xl font-semibold text-white">
                             {referrer.firstName} {referrer.lastName}
                         </h1>
-                        {isDiscountReferrer && (
+                        {referrer.referrerType === 'HYBRID' ? (
+                            <p className="mt-1 text-sm text-slate-300">
+                                B2B Branch Account · Your clients get {referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : '0%'} discount, and you earn commission on referrals.
+                            </p>
+                        ) : isDiscountReferrer ? (
                             <p className="mt-1 text-sm text-slate-300">
                                 Your clients get discounted pricing
                                 {referrer.clientDiscountPercent != null ? ` (${referrer.clientDiscountPercent}% off)` : ''} — no commission applies.
                             </p>
-                        )}
+                        ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <button
@@ -1104,19 +1181,37 @@ export default function ReferrerPortalPage() {
                     </section>
                 )}
 
-                {discountMoneyCards && (
-                    <section className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-                        {discountMoneyCards.map((card) => (
-                            <button
-                                key={card.id}
-                                type="button"
-                                onClick={() => toggleReferralFilter(card.id)}
-                                title={`Show files: ${REFERRAL_FILTERS[card.id].label}`}
-                                className={`rounded-lg border border-white/10 bg-white/[0.04] p-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === card.id ? 'ring-1 ring-cyan-300/50' : ''}`}
-                            >
-                                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{card.label}</p>
-                                <p className={`mt-2 text-2xl font-semibold ${card.valueClass}`}>{card.value}</p>
-                            </button>
+                {discountMoneyGroups && (
+                    <section className="mt-3 grid gap-3 lg:grid-cols-3">
+                        {discountMoneyGroups.map((group) => (
+                            <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] flex flex-col justify-between">
+                                <div>
+                                    <div className={`h-1 ${group.accentBar}`} />
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleReferralFilter(group.total.id)}
+                                        title={`Show files: ${REFERRAL_FILTERS[group.total.id].label}`}
+                                        className={`w-full px-4 py-4 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === group.total.id ? 'bg-white/[0.08] ring-1 ring-inset ring-cyan-300/30' : ''}`}
+                                    >
+                                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{group.total.label}</p>
+                                        <p className={`mt-2 text-3xl font-bold ${group.total.valueClass}`}>{group.total.value}</p>
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-2 divide-x divide-white/10 border-t border-white/10">
+                                    {group.months.map((month) => (
+                                        <button
+                                            key={month.id}
+                                            type="button"
+                                            onClick={() => toggleReferralFilter(month.id)}
+                                            title={`Show files: ${REFERRAL_FILTERS[month.id].label}`}
+                                            className={`px-3 py-3 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === month.id ? 'bg-white/[0.08] ring-1 ring-inset ring-cyan-300/30' : ''}`}
+                                        >
+                                            <p className="text-[11px] uppercase tracking-wide text-slate-400">{month.label}</p>
+                                            <p className={`mt-1 text-lg font-semibold ${month.valueClass}`}>{month.value}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         ))}
                     </section>
                 )}
@@ -1486,8 +1581,18 @@ export default function ReferrerPortalPage() {
                                             <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
                                                 <div>
                                                     <dt className="text-xs text-slate-400">Quote</dt>
-                                                    <dd className="text-white">
-                                                        {detail.financials?.quoteTotal != null ? formatMoney(detail.financials.quoteTotal) : 'No quote yet'}
+                                                    <dd className="text-white flex items-center gap-2 flex-wrap">
+                                                        <span>{detail.financials?.quoteTotal != null ? formatMoney(detail.financials.quoteTotal) : 'No quote yet'}</span>
+                                                        {detail.financials?.quoteTotal == null && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleRequestQuote}
+                                                                disabled={quoteRequestSubmitting}
+                                                                className="rounded border border-cyan-400 bg-cyan-500/20 px-1.5 py-0.5 text-[10px] leading-tight text-cyan-200 hover:bg-cyan-500/30 transition-colors disabled:opacity-50"
+                                                            >
+                                                                {quoteRequestSubmitting ? 'Requesting...' : 'request a quote'}
+                                                            </button>
+                                                        )}
                                                     </dd>
                                                 </div>
                                                 <div>
@@ -1647,10 +1752,20 @@ export default function ReferrerPortalPage() {
 
                 <section className="mt-6">
                     <form onSubmit={handleProfileSave} className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                        <h2 className="text-base font-semibold text-white">{isDiscountReferrer ? 'Profile' : 'Profile and banking'}</h2>
-                        {isDiscountReferrer && (
+                        <h2 className="text-base font-semibold text-white">
+                            {referrer.referrerType === 'HYBRID'
+                                ? 'Profile, banking & partner discount'
+                                : isDiscountReferrer
+                                ? 'Profile'
+                                : 'Profile and banking'}
+                        </h2>
+                        {referrer.referrerType === 'HYBRID' ? (
+                            <p className="mt-1 text-xs text-slate-400">
+                                B2B Partner settings: Your clients benefit from a {referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : '0%'} discount. Please provide banking details below to receive commission payouts.
+                            </p>
+                        ) : isDiscountReferrer ? (
                             <p className="mt-1 text-xs text-slate-400">Banking details are not needed — discount referrers receive no payouts.</p>
-                        )}
+                        ) : null}
                         <div className="mt-4 grid gap-4 sm:grid-cols-2">
                             {(isDiscountReferrer
                                 ? [
@@ -2099,6 +2214,150 @@ export default function ReferrerPortalPage() {
                                             Flagging…
                                         </span>
                                     ) : 'Yes, Flag This File'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Quote Decision – Premium Confirmation Modal ── */}
+            {quoteDecisionModal && quoteDecisionModal.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+                        onClick={() => !quoteDecisionSubmitting && setQuoteDecisionModal(null)}
+                    />
+
+                    {/* Modal card */}
+                    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-800 to-slate-900 shadow-2xl shadow-black/60">
+
+                        {/* Coloured accent bar at the top */}
+                        <div className={`h-1 w-full bg-gradient-to-r ${
+                            quoteDecisionModal.decision === 'ACCEPT'
+                                ? 'from-emerald-500 via-teal-400 to-emerald-600'
+                                : 'from-red-500 via-orange-400 to-red-600'
+                        }`} />
+
+                        {/* Content */}
+                        <div className="px-6 pb-6 pt-5">
+                            {/* Icon */}
+                            {quoteDecisionModal.decision === 'ACCEPT' ? (
+                                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                                    </svg>
+                                </div>
+                            ) : (
+                                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-red-400/30 bg-red-500/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                    </svg>
+                                </div>
+                            )}
+
+                            <h3 className="text-center text-base font-semibold text-white">
+                                {quoteDecisionModal.decision === 'ACCEPT' ? 'Accept Quotation?' : 'Decline Quotation?'}
+                            </h3>
+                            <p className="mt-2 text-center text-sm leading-relaxed text-slate-400">
+                                {quoteDecisionModal.decision === 'ACCEPT' ? (
+                                    <>
+                                        You are about to accept quote{' '}
+                                        <span className="font-medium text-slate-200">
+                                            {detail?.pendingQuote?.invoiceNumber ?? 'this quote'}
+                                        </span>{' '}
+                                        valued at{' '}
+                                        <span className="font-semibold text-emerald-400">
+                                            {detail?.pendingQuote ? formatMoney(detail.pendingQuote.total) : ''}
+                                        </span>.
+                                    </>
+                                ) : (
+                                    <>
+                                        You are about to decline quote{' '}
+                                        <span className="font-medium text-slate-200">
+                                            {detail?.pendingQuote?.invoiceNumber ?? 'this quote'}
+                                        </span>{' '}
+                                        valued at{' '}
+                                        <span className="font-semibold text-red-400">
+                                            {detail?.pendingQuote ? formatMoney(detail.pendingQuote.total) : ''}
+                                        </span>.
+                                    </>
+                                )}
+                            </p>
+
+                            {/* Divider */}
+                            <div className="my-5 h-px w-full bg-white/[0.07]" />
+
+                            {/* What will happen bullets */}
+                            <ul className="space-y-2 text-xs text-slate-400">
+                                {quoteDecisionModal.decision === 'ACCEPT' ? (
+                                    <>
+                                        <li className="flex items-start gap-2">
+                                            <span className="mt-0.5 flex-shrink-0 text-emerald-400">✓</span>
+                                            The payment restructuring schedule will be initiated.
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="mt-0.5 flex-shrink-0 text-cyan-400">🔔</span>
+                                            The assigned case manager will be notified of your approval.
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="mt-0.5 flex-shrink-0 text-slate-400">ℹ</span>
+                                            A confirmation record will be added to the case discussion.
+                                        </li>
+                                    </>
+                                ) : (
+                                    <>
+                                        <li className="flex items-start gap-2">
+                                            <span className="mt-0.5 flex-shrink-0 text-red-400">⚠</span>
+                                            The current quotation will be marked as rejected.
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="mt-0.5 flex-shrink-0 text-cyan-400">🔔</span>
+                                            The case manager will receive an alert to revise proposal details.
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="mt-0.5 flex-shrink-0 text-slate-400">ℹ</span>
+                                            The client will not be billed until a new quote is issued and accepted.
+                                        </li>
+                                    </>
+                                )}
+                            </ul>
+
+                            {quoteDecisionModal.error && (
+                                <div className="mt-4 rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs text-red-300 text-center">
+                                    {quoteDecisionModal.error}
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="mt-6 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setQuoteDecisionModal(null)}
+                                    disabled={quoteDecisionSubmitting}
+                                    className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleConfirmQuoteDecision}
+                                    disabled={quoteDecisionSubmitting}
+                                    className={`flex-1 rounded-xl py-2.5 text-sm font-semibold text-white shadow-lg transition-all disabled:opacity-50 ${
+                                        quoteDecisionModal.decision === 'ACCEPT'
+                                            ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 shadow-emerald-900/40 hover:from-emerald-500 hover:to-emerald-400'
+                                            : 'bg-gradient-to-r from-red-600 to-red-500 shadow-red-900/40 hover:from-red-500 hover:to-red-400'
+                                    }`}
+                                >
+                                    {quoteDecisionSubmitting ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                            {quoteDecisionModal.decision === 'ACCEPT' ? 'Accepting…' : 'Declining…'}
+                                        </span>
+                                    ) : (
+                                        quoteDecisionModal.decision === 'ACCEPT' ? 'Yes, Accept Quote' : 'Yes, Decline Quote'
+                                    )}
                                 </button>
                             </div>
                         </div>

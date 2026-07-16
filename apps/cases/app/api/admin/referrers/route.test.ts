@@ -178,6 +178,9 @@ describe('GET /api/admin/referrers', () => {
         expect(res.status).toBe(200);
         const [callArgs] = vi.mocked(prisma.referrer.findMany).mock.calls;
         expect(callArgs[0].where).toHaveProperty('OR');
+        const orArray = callArgs[0].where.OR;
+        expect(orArray).toContainEqual({ project: { name: { contains: 'John', mode: 'insensitive' } } });
+        expect(orArray).toContainEqual({ project: { parent: { name: { contains: 'John', mode: 'insensitive' } } } });
     });
 });
 
@@ -265,6 +268,31 @@ describe('POST /api/admin/referrers', () => {
             { userId: 'staff-1', role: 'MEMBER' },
             { userId: 'staff-2', role: 'MEMBER' },
         ]);
+    });
+
+    it('allows creating a HYBRID referrer with both commission and discount', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(null);
+        vi.mocked(prisma.project.findFirst).mockResolvedValueOnce({ id: 'root-proj', name: 'Referrals' } as never);
+        vi.mocked(prisma.project.create).mockResolvedValueOnce({ id: 'proj-1', name: 'John Doe' } as never);
+        vi.mocked(prisma.referrer.create).mockResolvedValueOnce({ ...sampleReferrer } as never);
+        const res = await POST(makeReq('http://localhost/api/admin/referrers', 'POST', {
+            firstName: 'John',
+            lastName: 'Doe',
+            idNumber: '8001015009087',
+            referrerType: 'HYBRID',
+            clientDiscountPercent: 10,
+            commissionType: 'FIXED',
+            fixedCommissionAmount: 150,
+        }));
+        expect(res.status).toBe(201);
+        const [createArgs] = vi.mocked(prisma.referrer.create).mock.calls;
+        expect(createArgs[0].data).toMatchObject({
+            referrerType: 'HYBRID',
+            clientDiscountPercent: 10,
+            commissionType: 'FIXED',
+            fixedCommissionAmount: 150,
+        });
     });
 
     it('returns 422 when a selected member is not a staff user', async () => {
@@ -407,6 +435,24 @@ describe('PATCH /api/admin/referrers/[id]', () => {
         const res = await PATCH(makeIdReq('ref-1', 'PATCH', { lastName: 'Smith' }), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(200);
         expect(vi.mocked(prisma.project.update)).toHaveBeenCalledOnce();
+    });
+
+    it('allows admin to update referrer to HYBRID with both commission and discount', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        vi.mocked(prisma.referrer.update).mockResolvedValueOnce({ ...sampleReferrer } as never);
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', {
+            referrerType: 'HYBRID',
+            clientDiscountPercent: 12,
+            fixedCommissionAmount: 200,
+        }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(200);
+        const [updateArgs] = vi.mocked(prisma.referrer.update).mock.calls;
+        expect(updateArgs[0].data).toMatchObject({
+            referrerType: 'HYBRID',
+            clientDiscountPercent: 12,
+            fixedCommissionAmount: 200,
+        });
     });
 });
 

@@ -201,6 +201,9 @@ describe('calculateDiscountPartnerTotals', () => {
             totalPaid: 0,
             paidThisMonth: 0,
             paidLastMonth: 0,
+            totalOutstanding: 0,
+            outstandingThisMonth: 0,
+            outstandingLastMonth: 0,
         });
     });
 
@@ -271,6 +274,9 @@ describe('calculateDiscountPartnerTotals', () => {
             totalPaid: 6500,
             paidThisMonth: 2000,
             paidLastMonth: 500,
+            totalOutstanding: 3000,
+            outstandingThisMonth: 2000,
+            outstandingLastMonth: 1000,
         });
     });
 

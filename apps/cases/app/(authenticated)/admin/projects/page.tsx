@@ -36,6 +36,7 @@ type User = {
     firstName: string;
     lastName: string;
     email: string;
+    userType?: string;
 };
 
 type Group = {
@@ -922,6 +923,7 @@ export default function ProjectsManagement() {
                                             </optgroup>
                                             <optgroup label="Users">
                                                 {allUsers
+                                                    .filter(u => u.userType === 'STAFF' || !u.userType)
                                                     .filter(u => !formMembers.some(m => m.userId === u.id))
                                                     .map(u => (
                                                         <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>
@@ -1102,6 +1104,7 @@ export default function ProjectsManagement() {
                                                     </optgroup>
                                                     <optgroup label="Users">
                                                         {allUsers
+                                                            .filter(u => u.userType === 'STAFF' || !u.userType)
                                                             .filter(u => !modalMembers.some(m => m.userId === u.id))
                                                             .map(u => (
                                                                 <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>

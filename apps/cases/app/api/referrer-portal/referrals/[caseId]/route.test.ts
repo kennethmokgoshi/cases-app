@@ -74,7 +74,7 @@ describe('GET /api/referrer-portal/referrals/[caseId]', () => {
 
         expect(res.status).toBe(404);
         expect(prisma.case.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: 'case-9', referrerId: 'ref-1' },
+            where: { id: 'case-9', referrerId: 'ref-1', deletedAt: null },
         }));
     });
 

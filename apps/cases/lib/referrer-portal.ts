@@ -162,6 +162,9 @@ export type DiscountPartnerTotals = {
     totalPaid: number;
     paidThisMonth: number;
     paidLastMonth: number;
+    totalOutstanding: number;
+    outstandingThisMonth: number;
+    outstandingLastMonth: number;
 };
 
 /** True when the value falls in the calendar month `monthOffset` months before `now` (0 = this month, 1 = last month). */
@@ -205,6 +208,8 @@ export function calculateDiscountPartnerTotals(
                 .filter((payment) => isInCalendarMonth(payment.date, now, 1))
                 .reduce((sum, payment) => sum + payment.amount, 0);
 
+            const referralOutstanding = referral.quoteTotal != null ? Math.max(0, referral.quoteTotal - paid) : 0;
+
             return {
                 totalReferrals: totals.totalReferrals + 1,
                 referralsThisMonth: totals.referralsThisMonth + (isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
@@ -221,6 +226,9 @@ export function calculateDiscountPartnerTotals(
                 totalPaid: roundMoney(totals.totalPaid + paid),
                 paidThisMonth: roundMoney(totals.paidThisMonth + paidThisMonth),
                 paidLastMonth: roundMoney(totals.paidLastMonth + paidLastMonth),
+                totalOutstanding: roundMoney(totals.totalOutstanding + referralOutstanding),
+                outstandingThisMonth: roundMoney(totals.outstandingThisMonth + (isInCalendarMonth(referral.quoteDate, now) ? referralOutstanding : 0)),
+                outstandingLastMonth: roundMoney(totals.outstandingLastMonth + (isInCalendarMonth(referral.quoteDate, now, 1) ? referralOutstanding : 0)),
             };
         },
         {
@@ -239,6 +247,9 @@ export function calculateDiscountPartnerTotals(
             totalPaid: 0,
             paidThisMonth: 0,
             paidLastMonth: 0,
+            totalOutstanding: 0,
+            outstandingThisMonth: 0,
+            outstandingLastMonth: 0,
         },
     );
 }

@@ -100,7 +100,14 @@ describe('GET /api/referrer-portal/summary', () => {
             totalReferrals: 1,
         });
         expect(json.referrals[0].commissionStage).toBe('DEPOSIT_PAID');
-        expect(prisma.referrer.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'ref-1' } }));
+        expect(prisma.referrer.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: 'ref-1' },
+            select: expect.objectContaining({
+                cases: expect.objectContaining({
+                    where: { deletedAt: null },
+                }),
+            }),
+        }));
     });
 
     it('returns discount partner calendar-month totals with quote and payment money', async () => {
@@ -216,6 +223,9 @@ describe('GET /api/referrer-portal/summary', () => {
                 totalPaid: 3000,           // completed payments only — PENDING excluded
                 paidThisMonth: 2000,
                 paidLastMonth: 0,
+                totalOutstanding: 5000,
+                outstandingThisMonth: 2000,
+                outstandingLastMonth: 0,
             });
             // Labels and tones come from the workflow status, never the commission stage.
             expect(json.referrals[0]).toMatchObject({ quoteTotal: 5000, totalPaid: 3000, paidThisMonth: 2000, paidLastMonth: 0, statusTone: 'settled', referralStatus: 'Settled Successfully', commissionStage: 'SETTLED' });

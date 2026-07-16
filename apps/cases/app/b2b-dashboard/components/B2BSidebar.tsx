@@ -150,7 +150,7 @@ export function B2BSidebar() {
         const branches: BranchNode[] = [];
 
         // Find branch-level nodes (type === BRANCH or FOLDER that are children of ACQUISITION_SOURCE)
-        const branchNodes = projectData.filter(p => p.type === 'BRANCH' || p.type === 'FOLDER');
+        const branchNodes = projectData.filter(p => p.type === 'BRANCH' || p.type === 'FOLDER' || p.type === 'REFERRER');
 
         // For each branch, find its Year and Month children
         for (const branch of branchNodes) {
@@ -212,7 +212,7 @@ export function B2BSidebar() {
 
             // Check if this source already has branches we've processed
             const sourceBranches = (childrenOf.get(source.id) || [])
-                .filter(c => c.type === 'BRANCH' || c.type === 'FOLDER');
+                .filter(c => c.type === 'BRANCH' || c.type === 'FOLDER' || c.type === 'REFERRER');
             if (sourceBranches.length > 0) continue; // Already handled above
 
             const years: YearNode[] = [];

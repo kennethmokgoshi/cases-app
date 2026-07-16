@@ -28,7 +28,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
         const { caseId } = await params;
 
         const referralCase = await prisma.case.findFirst({
-            where: { id: caseId, referrerId: access.referrer.id },
+            where: { id: caseId, referrerId: access.referrer.id, deletedAt: null },
             select: {
                 id: true,
                 fileNumber: true,
