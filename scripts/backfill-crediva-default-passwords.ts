@@ -1,13 +1,14 @@
 /**
  * One-time backfill: give every Crediva consumer account WITHOUT a password the
- * shared default password (Client@100New) with mustChangePassword = true, so
- * clients can log in with ID number + default password and are immediately
- * forced to choose their own password.
+ * shared standard default password (Consumer@1) with mustChangePassword = false,
+ * so clients can log in with ID number + default password and change it later
+ * only if they want to.
  *
  * Accounts that already have a password (self-registered or already activated)
  * are NOT touched — overwriting them would lock out consumers who know their
  * own password. Pass --force-unactivated to ALSO reset accounts that have a
- * password but were never activated (activatedAt IS NULL).
+ * password but were never activated (activatedAt IS NULL) — use this to migrate
+ * older auto-provisioned accounts still on the previous default password.
  *
  * Run from the repo root:
  *   npx tsx scripts/backfill-crediva-default-passwords.ts --dry-run
@@ -24,7 +25,7 @@ const prisma = new PrismaClient();
 const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE_UNACTIVATED = process.argv.includes('--force-unactivated');
 
-const DEFAULT_CONSUMER_PASSWORD = 'Client@100New';
+const DEFAULT_CONSUMER_PASSWORD = 'Consumer@1';
 const BCRYPT_COST = 12;
 
 async function main() {
@@ -59,13 +60,13 @@ async function main() {
     where: { id: { in: accounts.map((a) => a.id) } },
     data: {
       password: hash,
-      mustChangePassword: true,
+      mustChangePassword: false,
       failedLoginAttempts: 0,
       lockedUntil: null,
     },
   });
 
-  console.log(`\n✔ Issued default password to ${result.count} account(s). All are flagged mustChangePassword.`);
+  console.log(`\n✔ Issued default password (Consumer@1) to ${result.count} account(s). Change is optional (mustChangePassword=false).`);
 }
 
 main()

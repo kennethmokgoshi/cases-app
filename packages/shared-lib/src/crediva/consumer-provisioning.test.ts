@@ -74,7 +74,7 @@ describe('provisionConsumerForClient', () => {
     expect(result).toEqual({ consumerId: 'byId', created: false, activationToken: null });
   });
 
-  it('creates a new profile with the default password (hashed, must-change) and an activation token', async () => {
+  it('creates a new profile with the default password (hashed, optional change) and an activation token', async () => {
     prismaMock.client.findUnique.mockResolvedValue({
       id: 'c1', firstName: 'Sipho', lastName: 'M', email: 'sipho@x.co.za', phone: '0820000000', idNumber: VALID_ID,
     });
@@ -88,11 +88,11 @@ describe('provisionConsumerForClient', () => {
     expect(prismaMock.consumerAccount.create).toHaveBeenCalledOnce();
     const createArg = prismaMock.consumerAccount.create.mock.calls[0][0];
     // Default password is stored as a bcrypt hash, never plaintext, and the
-    // account is forced to change it on first login.
+    // consumer may change it later (not forced on first login).
     expect(typeof createArg.data.password).toBe('string');
-    expect(createArg.data.password).not.toBe('Client@100New');
+    expect(createArg.data.password).not.toBe('Consumer@1');
     expect(createArg.data.password.startsWith('$2')).toBe(true);
-    expect(createArg.data.mustChangePassword).toBe(true);
+    expect(createArg.data.mustChangePassword).toBe(false);
     expect(createArg.data.source).toBe('AUTO_PROVISIONED');
     expect(createArg.data.idNumber).toBe(VALID_ID);
     expect(result?.created).toBe(true);

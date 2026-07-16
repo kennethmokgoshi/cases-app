@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "@zenowethu/database";
 
 const verifyOtpSchema = z.object({
-  username: z.string().min(1, "Username is required"),
+  // ID number is the only login identifier — see generate-otp for rationale.
+  username: z.string().regex(/^\d{13}$/, "Enter your 13-digit ID number"),
   otpCode: z.string().length(6, "OTP must be 6 digits").regex(/^\d+$/, "OTP must contain only digits"),
 });
 
@@ -12,24 +13,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = verifyOtpSchema.parse(body);
 
-    const username = data.username.trim();
+    const idNumber = data.username.trim();
 
-    // Find consumer by email or ID number
-    let consumer = await prisma.consumerAccount.findFirst({
-      where: { email: username },
+    // Look the consumer up by ID number only.
+    const consumer = await prisma.consumerAccount.findUnique({
+      where: { idNumber },
       select: { id: true },
     });
 
-    if (!consumer && /^\d{13}$/.test(username)) {
-      consumer = await prisma.consumerAccount.findUnique({
-        where: { idNumber: username },
-        select: { id: true },
-      });
-    }
-
     if (!consumer) {
       return NextResponse.json(
-        { error: "Invalid username or OTP" },
+        { error: "Invalid ID number or OTP" },
         { status: 401 }
       );
     }

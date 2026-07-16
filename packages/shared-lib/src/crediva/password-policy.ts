@@ -5,11 +5,18 @@ import { createLogger } from '../logger';
 const logger = createLogger('credo/password-policy');
 
 /**
- * Default password issued to every auto-provisioned Credo client profile.
- * It is a shared, publicly known value — safe ONLY because `mustChangePassword`
- * forces a change on first login before any portal feature is reachable.
+ * Standard default password issued to every auto-provisioned Crediva consumer
+ * profile. The username is the consumer's 13-digit SA ID number and the initial
+ * password is this shared value; the consumer may change it at any time from
+ * Settings but is NOT forced to (see `provisionConsumerForClient`, which sets
+ * `mustChangePassword: false`).
+ *
+ * SECURITY NOTE: because this is a publicly known value and rotation is optional,
+ * anyone who knows a consumer's ID number could sign in until the consumer sets
+ * their own password. This is an accepted product tradeoff for easy first access.
+ * `validatePasswordStrength` still forbids a consumer from *choosing* this value.
  */
-export const DEFAULT_CONSUMER_PASSWORD = 'Client@100New';
+export const DEFAULT_CONSUMER_PASSWORD = 'Consumer@1';
 
 /** A consumer may not reuse any of their last N passwords (current + history). */
 export const PASSWORD_HISTORY_LIMIT = 5;

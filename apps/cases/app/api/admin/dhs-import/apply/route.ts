@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger, provisionConsumerForClient } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { maxZdmSequence, buildZdmFileNumber } from '../../../../../lib/file-number';
 
@@ -207,7 +207,7 @@ export async function POST(request: Request) {
                             // Client + Case in ONE transaction so a failed case never
                             // leaves an orphan client behind (the previous code created
                             // the client first, outside any transaction).
-                            await prisma.$transaction(async (tx) => {
+                            const createdClientId = await prisma.$transaction(async (tx) => {
                                 let client = await tx.client.findUnique({ where: { idNumber: rsaId } });
                                 if (!client) {
                                     client = await tx.client.create({ data: { firstName, lastName, idNumber: rsaId } });
@@ -239,10 +239,16 @@ export async function POST(request: Request) {
                                         } : undefined,
                                     }
                                 });
+                                return client.id;
                             });
                             logger.info(`📁 Created case ${fileNumber} — ${firstName} ${lastName}, DHS ${item.status_code}${isAcceptedViaPortalCreate ? ' (accepted via DHS)' : ''}, services: ${services.join(', ')}`);
                             results.created++;
                             created = true;
+                            // Give the imported consumer a Crediva login (ID + default
+                            // password). Idempotent, non-blocking, never throws.
+                            provisionConsumerForClient(createdClientId).catch(err =>
+                                logger.error(`Crediva provisioning failed for imported client ${createdClientId}:`, err),
+                            );
                         } catch (err: any) {
                             lastErr = err;
                             // fileNumber collided (e.g. a concurrent create) — re-sync the

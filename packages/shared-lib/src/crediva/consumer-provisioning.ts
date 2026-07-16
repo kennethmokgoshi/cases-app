@@ -27,9 +27,11 @@ export interface ProvisionResult {
 /**
  * Ensure a Credo ConsumerAccount exists for the given Client. Idempotent: if the
  * client already has a linked account (or one already exists for the same ID
- * number) nothing is created. Auto-provisioned accounts get the shared default
- * password with `mustChangePassword` set, so first login forces a personal
- * password. The emailed activation link remains an alternative first-login path.
+ * number) nothing is created. Auto-provisioned accounts get the shared standard
+ * default password (`DEFAULT_CONSUMER_PASSWORD`) with `mustChangePassword: false`
+ * — the consumer can log in immediately with their ID number + default password
+ * and change it later from Settings if they wish (they are not forced to). The
+ * emailed activation link remains an alternative first-login path.
  *
  * The ID number is the canonical Credo username, so it is required to provision.
  */
@@ -74,7 +76,8 @@ export async function provisionConsumerForClient(clientId: string): Promise<Prov
     data: {
       email: client.email || `${client.idNumber}@no-email.zenowethu.co.za`,
       password: await getDefaultPasswordHash(),
-      mustChangePassword: true,
+      // Optional change — the consumer may keep the default or set their own.
+      mustChangePassword: false,
       firstName: client.firstName,
       lastName: client.lastName,
       idNumber: client.idNumber,

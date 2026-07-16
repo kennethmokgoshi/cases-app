@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth, createLogger, calculateSlaDeadline, getGHLCredentials } from '@zenowethu/shared-lib';
+import { auth, createLogger, calculateSlaDeadline, getGHLCredentials, provisionConsumerForClient } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { LeadConvertSchema } from '@/lib/schemas';
 
@@ -134,6 +134,12 @@ export async function POST(request: Request, { params }: RouteCtx) {
         });
 
         logger.info(`[convert] Lead ${id} → Case ${newCase.id} (client ${client.id})`);
+
+        // Auto-provision a Crediva consumer profile (ID number = username, shared
+        // default password). Idempotent and never throws — cannot break conversion.
+        provisionConsumerForClient(client.id).catch(err =>
+            logger.error(`[convert] Crediva provisioning failed for client ${client.id}:`, err),
+        );
 
         // ── Sync GHL contact with full details (non-fatal) ─────────────────
         if (lead.ghlContactId) {

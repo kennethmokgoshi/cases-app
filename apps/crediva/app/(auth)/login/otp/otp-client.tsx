@@ -28,7 +28,10 @@ export default function OtpPageClient() {
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username) return;
+    if (username.length !== 13) {
+      setError("Please enter your full 13-digit ID number.");
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -131,7 +134,7 @@ export default function OtpPageClient() {
                 Sign in with OTP
               </h2>
               <p style={{ fontSize: "0.9375rem", color: "#64748B", margin: "0 0 28px" }}>
-                Enter your email or ID number to receive a 6-digit code.
+                Enter your 13-digit ID number to receive a 6-digit code.
               </p>
 
               {error && (
@@ -143,14 +146,16 @@ export default function OtpPageClient() {
               <form onSubmit={handleRequestOtp} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div>
                   <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "#374151", marginBottom: 6, letterSpacing: "0.02em", textTransform: "uppercase" }}>
-                    Email or ID number
+                    ID number
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     className="credo-input"
-                    placeholder="you@example.co.za or 8001015009087"
+                    placeholder="8001015009087"
                     value={username}
-                    onChange={e => setUsername(e.target.value)}
+                    onChange={e => setUsername(e.target.value.replace(/\D/g, "").slice(0, 13))}
+                    maxLength={13}
                     required
                     disabled={loading}
                   />
@@ -158,10 +163,10 @@ export default function OtpPageClient() {
 
                 <button
                   type="submit"
-                  disabled={loading || !username}
+                  disabled={loading || username.length !== 13}
                   style={{
                     padding: "13px 24px",
-                    background: loading || !username ? "#94A3B8" : "#0B1D35",
+                    background: loading || username.length !== 13 ? "#94A3B8" : "#0B1D35",
                     color: "#FFFFFF", border: "none", borderRadius: 9,
                     fontSize: "0.9375rem", fontWeight: 600,
                     cursor: loading || !username ? "not-allowed" : "pointer",

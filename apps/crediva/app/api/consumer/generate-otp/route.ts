@@ -4,7 +4,10 @@ import { prisma } from "@zenowethu/database";
 import { generateOtpCode, sendOtpEmail } from "@zenowethu/shared-lib";
 
 const generateOtpSchema = z.object({
-  username: z.string().min(1, "Username is required"),
+  // The 13-digit SA ID number is the ONLY login identifier. Email and cell
+  // number are not unique (two consumers may legitimately share them), so they
+  // cannot identify a single account and are never accepted as identifiers.
+  username: z.string().regex(/^\d{13}$/, "Enter your 13-digit ID number"),
 });
 
 export async function POST(req: NextRequest) {
@@ -12,25 +15,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = generateOtpSchema.parse(body);
 
-    const username = data.username.trim();
+    const idNumber = data.username.trim();
 
-    // Find consumer by email or ID number
-    let consumer = await prisma.consumerAccount.findFirst({
-      where: { email: username },
+    // Look the consumer up by ID number only. The emailed code is still
+    // delivered to the email on file, but the ID is what identifies the account.
+    const consumer = await prisma.consumerAccount.findUnique({
+      where: { idNumber },
       select: { id: true, email: true, firstName: true },
     });
-
-    if (!consumer && /^\d{13}$/.test(username)) {
-      consumer = await prisma.consumerAccount.findUnique({
-        where: { idNumber: username },
-        select: { id: true, email: true, firstName: true },
-      });
-    }
 
     if (!consumer) {
       // Return generic message for security (don't reveal if account exists)
       return NextResponse.json(
-        { message: "If an account exists with this username, a login code will be sent to the registered email address." },
+        { message: "If an account exists for this ID number, a login code will be sent to the registered email address." },
         { status: 200 }
       );
     }

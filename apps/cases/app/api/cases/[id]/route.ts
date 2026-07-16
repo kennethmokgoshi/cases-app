@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { createLogger, sendStatusChangeNotification } from '@zenowethu/shared-lib';
+import { createLogger, sendStatusChangeNotification, provisionConsumerForClient } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { CasePatchSchema, parseBody } from '@/lib/schemas';
 import { buildProjectDisplayName } from '@/lib/project-path';
@@ -597,6 +597,11 @@ export async function PATCH(
                         }
                     });
                     jointClientIdToConnect = newJoint.id;
+                    // Give the joint client their own Crediva login (ID + default
+                    // password). Idempotent, non-blocking, never throws.
+                    provisionConsumerForClient(newJoint.id).catch(err =>
+                        logger.error(`Crediva provisioning failed for joint client ${newJoint.id}:`, err),
+                    );
                 }
             }
         } else if (jointClient === null) {

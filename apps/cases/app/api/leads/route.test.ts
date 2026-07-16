@@ -6,6 +6,7 @@ vi.mock('@zenowethu/shared-lib', () => ({
     auth:         vi.fn(),
     createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
     calculateSlaDeadline: vi.fn().mockReturnValue(new Date('2026-06-01')),
+    provisionConsumerForClient: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock('@zenowethu/database', () => ({

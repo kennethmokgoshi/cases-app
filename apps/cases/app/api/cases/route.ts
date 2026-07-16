@@ -318,8 +318,52 @@ export async function POST(request: Request) {
             }, { status: 409 });
         }
 
+        // Resolve target creation date from project hierarchy
+        let targetDate = new Date();
+        if (data.projectId) {
+            let monthName: string | null = null;
+            let yearNum: number | null = null;
+            let currId: string | null = data.projectId;
+            while (currId) {
+                const proj = await prisma.project.findUnique({
+                    where: { id: currId },
+                    select: { name: true, type: true, parentId: true }
+                });
+                if (!proj) break;
+                if (proj.type === 'MONTH') {
+                    monthName = proj.name;
+                } else if (proj.type === 'YEAR') {
+                    const parsedYear = parseInt(proj.name, 10);
+                    if (!isNaN(parsedYear)) {
+                        yearNum = parsedYear;
+                    }
+                }
+                currId = proj.parentId;
+            }
+
+            if (monthName && yearNum !== null) {
+                const monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+                const monthIndex = monthNames.indexOf(monthName.toLowerCase());
+                if (monthIndex !== -1) {
+                    const now = new Date();
+                    const maxDays = new Date(yearNum, monthIndex + 1, 0).getDate();
+                    const targetDay = Math.min(now.getDate(), maxDays);
+                    targetDate = new Date(
+                        yearNum,
+                        monthIndex,
+                        targetDay,
+                        now.getHours(),
+                        now.getMinutes(),
+                        now.getSeconds(),
+                        now.getMilliseconds()
+                    );
+                    logger.info(`Resolved targetDate=${targetDate.toISOString()} for MONTH=${monthName} YEAR=${yearNum}`);
+                }
+            }
+        }
+
         const count = await prisma.case.count();
-        const fileNumber = `ZDM-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+        const fileNumber = `ZDM-${targetDate.getFullYear()}-${String(count + 1).padStart(3, '0')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
         // All cases start with null nextUpdate so the automation picks them up on the first cron run.
         const deadline = null;
 
@@ -327,7 +371,10 @@ export async function POST(request: Request) {
         const client = await prisma.client.upsert({
             where: { idNumber: data.client.idNumber },
             update: data.client,
-            create: data.client
+            create: {
+                ...data.client,
+                createdAt: targetDate
+            }
         });
 
         // 2. Handle Joint Client if present
@@ -336,7 +383,10 @@ export async function POST(request: Request) {
             const joint = await prisma.client.upsert({
                 where: { idNumber: data.jointClient.idNumber },
                 update: data.jointClient,
-                create: data.jointClient
+                create: {
+                    ...data.jointClient,
+                    createdAt: targetDate
+                }
             });
             jointClientId = joint.id;
         }
@@ -346,13 +396,22 @@ export async function POST(request: Request) {
         // the case should be credited to that referrer even if the client didn't send referrerId.
         let resolvedReferrerId = data.referrerId ?? null;
         if (!resolvedReferrerId && data.projectId) {
-            const projectReferrer = await prisma.referrer.findUnique({
-                where: { projectId: data.projectId },
-                select: { id: true },
-            });
-            if (projectReferrer) {
-                resolvedReferrerId = projectReferrer.id;
-                logger.info(`Auto-detected referrerId=${resolvedReferrerId} from projectId=${data.projectId}`);
+            let currentProjectId: string | null = data.projectId;
+            while (currentProjectId) {
+                const projectReferrer = await prisma.referrer.findUnique({
+                    where: { projectId: currentProjectId },
+                    select: { id: true },
+                });
+                if (projectReferrer) {
+                    resolvedReferrerId = projectReferrer.id;
+                    logger.info(`Auto-detected referrerId=${resolvedReferrerId} from ancestor projectId=${currentProjectId}`);
+                    break;
+                }
+                const project = await prisma.project.findUnique({
+                    where: { id: currentProjectId },
+                    select: { parentId: true },
+                });
+                currentProjectId = project?.parentId ?? null;
             }
         }
 
@@ -374,6 +433,7 @@ export async function POST(request: Request) {
             data: {
                 fileNumber,
                 status: 'NEW_LEAD',
+                createdAt: targetDate,
                 nextUpdate: deadline,
                 acquisitionType: data.acquisitionType,
                 partnerName: data.partnerName,
