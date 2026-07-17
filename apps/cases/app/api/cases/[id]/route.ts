@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { createLogger, sendStatusChangeNotification, provisionConsumerForClient } from '@zenowethu/shared-lib';
+import { flagCaseIfFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag-db';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { CasePatchSchema, parseBody } from '@/lib/schemas';
 import { buildProjectDisplayName } from '@/lib/project-path';
@@ -896,6 +897,12 @@ export async function PATCH(
                     logger.error(`Failed to send welcome notification (PATCH) for ${updatedCase.id}:`, err);
                 });
             }
+        }
+        // Flag case if current debt counsellor is flagged
+        try {
+            await flagCaseIfFlaggedDC(id, prisma);
+        } catch (flagErr) {
+            logger.warn('Failed to check/flag updated case DC (non-blocking):', flagErr);
         }
 
         return NextResponse.json({

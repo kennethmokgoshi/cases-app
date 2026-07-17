@@ -292,7 +292,7 @@ export async function previewDHSDecline(params: {
     }
 
     else if (category === 'RESUBMIT_LATER') {
-        const basePeriod = getBasePeriodForCategory(category);
+        const basePeriod = getBasePeriodForCategory(category, declineReason);
         preview.statusWouldUpdateTo = null; // status unchanged; only nextUpdate is bumped
         preview.notes.push(`Temporary delay — nextUpdate would be set +${basePeriod} working days and the file re-checked.`);
         if (caseData.client.email) {

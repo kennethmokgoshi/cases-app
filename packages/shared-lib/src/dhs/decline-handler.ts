@@ -152,7 +152,9 @@ export function classifyDeclineReason(reason: string): DeclineCategory {
         r.includes('PENDING FINALIZATION') ||
         r.includes('NOT YET FINALISED') ||
         r.includes('NOT YET FINALIZED') ||
-        r.includes('PLEASE TRY LATER')
+        r.includes('PLEASE TRY LATER') ||
+        r.includes('AWAITING MANAGEMENT') ||
+        r.includes('REQUEST AFTER')
     ) {
         return 'RESUBMIT_LATER';
     }
@@ -180,7 +182,15 @@ export function extractEmailFromReason(reason: string): string | null {
  * - CONTACT_ATTORNEY: 5 days (legal matters in progress)
  * - UNKNOWN: 5 days (default conservative estimate)
  */
-export function getBasePeriodForCategory(category: DeclineCategory): number {
+export function getBasePeriodForCategory(category: DeclineCategory, reason?: string): number {
+    if (category === 'RESUBMIT_LATER' && reason) {
+        const r = reason.toUpperCase();
+        const match = r.match(/(?:REQUEST|RESUBMIT|TRY)(?:\s+AGAIN)?\s+(?:AFTER|IN)\s+(\d+)\s+DAY/);
+        if (match) {
+            return parseInt(match[1], 10);
+        }
+    }
+
     switch (category) {
         case 'RESUBMIT_LATER':
         case 'CLIENT_CONSENT_NEEDED':
@@ -383,7 +393,7 @@ export async function handleDHSDecline(params: {
         const declineRecordedDate = formatDhsDeclineDate(handledAt);
 
         // Calculate nextUpdate based on category and time elapsed since first decline
-        const basePeriod = getBasePeriodForCategory(category);
+        const basePeriod = getBasePeriodForCategory(category, declineReason);
         const nextUpdateDate = calculateNextUpdate(basePeriod, caseData.declineFirstDetectedAt);
 
         if (category === 'SEND_DOCS' || category === 'SEND_DOCS_WITH_NCR') {

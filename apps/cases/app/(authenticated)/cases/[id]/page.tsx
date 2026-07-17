@@ -37,6 +37,7 @@ import CheckInvoiceEmailsButton from '@/components/CheckInvoiceEmailsButton';
 import CheckCommunicationsButton from '@/components/CheckCommunicationsButton';
 import { isInvoiceRequestedFromDcStatus } from '@/lib/mailboxes';
 import { canShowDhsManageConsumers } from '@/lib/dhs-manage-consumers-eligibility';
+import { checkCaseFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag';
 
 
 // Client-side logger (avoid importing createLogger from shared-lib)
@@ -1224,6 +1225,13 @@ export default function CaseDetailPage() {
             return;
         }
 
+        const flaggedInfo = checkCaseFlaggedDC(caseData);
+        let confirmMsg = 'This will submit a transfer request to DHS. Continue?';
+        if (flaggedInfo.flagged) {
+            confirmMsg = `⚠️ WARNING: This client is currently registered with flagged debt counsellor ${flaggedInfo.provider} (${flaggedInfo.matchedName}). Special protocols apply. Are you absolutely sure you want to request a transfer via DHS?`;
+        }
+        if (!await confirm(confirmMsg)) return;
+
         setRequestingTransfer(true);
         setTransferStatus('Checking Docs...');
 
@@ -1991,7 +1999,13 @@ export default function CaseDetailPage() {
             setDhsMessage({ type: 'error', text: 'Client ID number is required' });
             return;
         }
-        if (!await confirm('This will submit a transfer request to DHS. Continue?')) return;
+
+        const flaggedInfo = checkCaseFlaggedDC(caseData);
+        let confirmMsg = 'This will submit a transfer request to DHS. Continue?';
+        if (flaggedInfo.flagged) {
+            confirmMsg = `⚠️ WARNING: This client is currently registered with flagged debt counsellor ${flaggedInfo.provider} (${flaggedInfo.matchedName}). Special protocols apply. Are you absolutely sure you want to request a transfer via DHS?`;
+        }
+        if (!await confirm(confirmMsg)) return;
 
         setDhsLoading(true);
         setDhsMessage(null);
@@ -3530,6 +3544,25 @@ export default function CaseDetailPage() {
                                         )}
                                     </div>
                                 </div>
+
+                                {(() => {
+                                    const flaggedInfo = checkCaseFlaggedDC(caseData);
+                                    if (!flaggedInfo.flagged) return null;
+                                    return (
+                                        <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-start gap-2.5">
+                                            <span className="text-red-400 text-base leading-none mt-0.5">🚩</span>
+                                            <div>
+                                                <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">
+                                                    Flagged Debt Counsellor Alert
+                                                </div>
+                                                <p className="text-xs text-red-300/90 leading-relaxed">
+                                                    This consumer is currently registered with <strong>{flaggedInfo.provider}</strong> ({flaggedInfo.matchedName}). 
+                                                    Please notify management/staff and verify documentation before requesting a transfer via DHS.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* ── File Requests Panel ── */}
                                 <div className="mb-4 rounded-lg border border-white/10 overflow-hidden">

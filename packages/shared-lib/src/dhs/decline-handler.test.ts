@@ -91,6 +91,10 @@ describe('classifyDeclineReason', () => {
         expect(classifyDeclineReason('Currently processing consumer file, please resubmit in 7 days')).toBe('RESUBMIT_LATER');
     });
 
+    it('classifies "Awaiting management response. Please request after 3 days." as RESUBMIT_LATER', () => {
+        expect(classifyDeclineReason('Awaiting management response. Please request after 3 days.')).toBe('RESUBMIT_LATER');
+    });
+
     // UNKNOWN
     it('classifies real-world typo "Please sent tranfer documents" as SEND_DOCS', () => {
         expect(classifyDeclineReason('Please sent tranfer documents to info@onmnconsulting.co.za')).toBe('SEND_DOCS');
@@ -151,6 +155,16 @@ describe('extractEmailFromReason', () => {
 describe('getBasePeriodForCategory', () => {
     it('returns 7 days for RESUBMIT_LATER', () => {
         expect(getBasePeriodForCategory('RESUBMIT_LATER')).toBe(7);
+    });
+
+    it('returns dynamically extracted days for RESUBMIT_LATER when specified in reason', () => {
+        expect(getBasePeriodForCategory('RESUBMIT_LATER', 'Awaiting management response. Please request after 3 days.')).toBe(3);
+        expect(getBasePeriodForCategory('RESUBMIT_LATER', 'Currently processing consumer file, please resubmit in 7 days')).toBe(7);
+        expect(getBasePeriodForCategory('RESUBMIT_LATER', 'Please try again in 5 days')).toBe(5);
+    });
+
+    it('falls back to 7 days for RESUBMIT_LATER when no specific days match', () => {
+        expect(getBasePeriodForCategory('RESUBMIT_LATER', 'Please try again later')).toBe(7);
     });
 
     it('returns 7 days for CLIENT_CONSENT_NEEDED', () => {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { calculateSlaDeadline, sendStatusChangeNotification, auth, createLogger, WORKFLOW_STATUSES } from '@zenowethu/shared-lib';
+import { flagCaseIfFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag-db';
 import { CaseCreateSchema, parseBody } from '@/lib/schemas';
 import { buildProjectDisplayName } from '@/lib/project-path';
 import fs from 'fs';
@@ -185,7 +186,7 @@ export async function GET(request: Request) {
 
         // 4. Execution
         if (slim) {
-            const data = await prisma.case.findMany({ where, select: { id: true, createdAt: true }, take: 1000, orderBy: { createdAt: 'desc' } });
+            const data = await prisma.case.findMany({ where, select: { id: true, createdAt: true, recordedAt: true }, take: 1000, orderBy: { recordedAt: 'desc' } });
             return NextResponse.json(data);
         }
 
@@ -205,13 +206,14 @@ export async function GET(request: Request) {
                     nextUpdate: true,
                     updatedAt: true,
                     createdAt: true,
+                    recordedAt: true,
                     client: { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true } },
                     updatedBy: { select: { firstName: true, lastName: true } },
                     projects: { select: { isPrimary: true, projectId: true, project: { select: { id: true, name: true } } } },
                 },
                 take: isNaN(take) ? 10000 : take,
                 skip: isNaN(skip) ? 0 : skip,
-                orderBy: { createdAt: 'desc' }
+                orderBy: { recordedAt: 'desc' }
             }),
             prisma.case.count({ where })
         ]);
@@ -433,7 +435,11 @@ export async function POST(request: Request) {
             data: {
                 fileNumber,
                 status: 'NEW_LEAD',
+                // createdAt is back-dated to the case's month folder so month/year filters
+                // and the timeline sidebar bucket it correctly. recordedAt is the true
+                // insertion time, used for "latest referrals" ordering.
                 createdAt: targetDate,
+                recordedAt: new Date(),
                 nextUpdate: deadline,
                 acquisitionType: data.acquisitionType,
                 partnerName: data.partnerName,
@@ -455,6 +461,13 @@ export async function POST(request: Request) {
         });
 
         logger.info('Case created successfully:', newCase.id);
+
+        // Flag case if current debt counsellor is flagged
+        try {
+            await flagCaseIfFlaggedDC(newCase.id, prisma);
+        } catch (flagErr) {
+            logger.warn('Failed to check/flag B2B or loaded case DC (non-blocking):', flagErr);
+        }
 
         // Send welcome notification if the client has contact details
         if (client.email || client.phone) {

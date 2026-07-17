@@ -18,3 +18,14 @@ export type { DcEmailSource, DcPriorityEmail, PromoteResult } from './email-prio
 
 export { recordDhsOutcome } from './outcome-events';
 export type { DhsOutcome, RecordOutcomeResult } from './outcome-events';
+
+export {
+    checkFlaggedDebtCounsellor,
+    checkCaseFlaggedDC,
+} from './counsellor-flag';
+export type { FlaggedDcResult } from './counsellor-flag';
+
+export {
+    flagCaseIfFlaggedDC,
+} from './counsellor-flag-db';
+

@@ -32,6 +32,7 @@ type CaseType = {
     } | null;
     status: string;
     createdAt: string;
+    recordedAt?: string;
     updatedAt: string;
     createdById: string;
     projects: Array<{
@@ -323,7 +324,9 @@ function B2BMyCasesComponent() {
                                     <div>
                                         <p className="text-gray-400 mb-1">Created</p>
                                         <p className="text-white font-medium">
-                                            {caseItem.createdAt ? formatDateTime(caseItem.createdAt) : '-'}
+                                            {caseItem.recordedAt || caseItem.createdAt
+                                                ? formatDateTime(caseItem.recordedAt || caseItem.createdAt)
+                                                : '-'}
                                         </p>
                                     </div>
                                     <div>

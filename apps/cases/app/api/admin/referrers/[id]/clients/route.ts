@@ -63,6 +63,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
                 fileNumber: true,
                 status: true,
                 createdAt: true,
+                recordedAt: true,
                 updatedAt: true,
                 nextUpdate: true,
                 serviceFee: true,
@@ -74,7 +75,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
                     select: { stage: true, isEligible: true, isPaid: true, commissionAmount: true, paidAt: true },
                 },
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { recordedAt: 'desc' },
         });
 
         const clients = cases.map((c) => {
@@ -87,7 +88,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
                 caseId: c.id,
                 fileNumber: c.fileNumber,
                 caseStatus: c.status,
-                referredAt: c.createdAt,
+                referredAt: c.recordedAt ?? c.createdAt,
                 lastUpdatedAt: c.updatedAt,
                 lastUpdatedBy: c.updatedBy ? `${c.updatedBy.firstName} ${c.updatedBy.lastName}`.trim() : null,
                 nextUpdate: c.nextUpdate,

@@ -337,7 +337,13 @@ model Case {
   declineFirstDetectedAt  DateTime? // When decline was FIRST detected (never updated, used for window calculation)
   declineLastDetectedAt   DateTime? // Most recent decline detection (updated on each new decline, visible in UI)
   description             String?
+  // createdAt is deliberately back-dated to the case's month folder (project) so the
+  // timeline sidebar and month/year filters bucket the file into the correct reporting
+  // month. recordedAt is the TRUE insertion time (never back-dated) and is what the
+  // list views sort by, so a file loaded today into an older month still surfaces as
+  // the latest referral.
   createdAt               DateTime                   @default(now())
+  recordedAt              DateTime                   @default(now())
   updatedAt               DateTime                   @updatedAt
   assignedToId            String?
   createdById             String?

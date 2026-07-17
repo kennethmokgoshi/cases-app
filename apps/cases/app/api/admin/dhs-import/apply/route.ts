@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger, provisionConsumerForClient } from '@zenowethu/shared-lib';
+import { flagCaseIfFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag-db';
 import { prisma } from '@zenowethu/database';
 import { maxZdmSequence, buildZdmFileNumber } from '../../../../../lib/file-number';
 
@@ -181,6 +182,13 @@ export async function POST(request: Request) {
                         }
                     });
 
+                    // Flag case if current debt counsellor is flagged
+                    try {
+                        await flagCaseIfFlaggedDC(item.caseId, prisma);
+                    } catch (flagErr) {
+                        logger.warn(`Failed to check/flag imported case ${item.caseId} (non-blocking):`, flagErr);
+                    }
+
                     results.updated++;
                     logger.info(`✅ Updated case ${item.caseId} — DHS ${item.status_code}${isAcceptedViaPortal ? ' (accepted via DHS)' : ''}, NCR Sys Ref ${item.ncr_ref}`);
                     continue;
@@ -207,12 +215,12 @@ export async function POST(request: Request) {
                             // Client + Case in ONE transaction so a failed case never
                             // leaves an orphan client behind (the previous code created
                             // the client first, outside any transaction).
-                            const createdClientId = await prisma.$transaction(async (tx) => {
+                            const { clientId, caseId } = await prisma.$transaction(async (tx) => {
                                 let client = await tx.client.findUnique({ where: { idNumber: rsaId } });
                                 if (!client) {
                                     client = await tx.client.create({ data: { firstName, lastName, idNumber: rsaId } });
                                 }
-                                await tx.case.create({
+                                const caseRecord = await tx.case.create({
                                     data: {
                                         fileNumber,
                                         clientId: client.id,
@@ -239,15 +247,23 @@ export async function POST(request: Request) {
                                         } : undefined,
                                     }
                                 });
-                                return client.id;
+                                return { clientId: client.id, caseId: caseRecord.id };
                             });
                             logger.info(`📁 Created case ${fileNumber} — ${firstName} ${lastName}, DHS ${item.status_code}${isAcceptedViaPortalCreate ? ' (accepted via DHS)' : ''}, services: ${services.join(', ')}`);
                             results.created++;
                             created = true;
+
+                            // Flag case if current debt counsellor is flagged
+                            try {
+                                await flagCaseIfFlaggedDC(caseId, prisma);
+                            } catch (flagErr) {
+                                logger.warn(`Failed to check/flag imported case ${caseId} (non-blocking):`, flagErr);
+                            }
+
                             // Give the imported consumer a Crediva login (ID + default
                             // password). Idempotent, non-blocking, never throws.
-                            provisionConsumerForClient(createdClientId).catch(err =>
-                                logger.error(`Crediva provisioning failed for imported client ${createdClientId}:`, err),
+                            provisionConsumerForClient(clientId).catch(err =>
+                                logger.error(`Crediva provisioning failed for imported client ${clientId}:`, err),
                             );
                         } catch (err: any) {
                             lastErr = err;
