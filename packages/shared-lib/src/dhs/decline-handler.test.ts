@@ -9,6 +9,7 @@ vi.mock('../notifications/service', () => ({
 }));
 import {
     buildOutstandingFeesEmail,
+    buildResubmitClientEmail,
     buildSendDocsClientEmail,
     calculateNextUpdate,
     classifyDeclineReason,
@@ -279,7 +280,7 @@ describe('consumer decline email copy', () => {
         expect(body).toContain('Power of Attorney and ID copy');
     });
 
-    it('names the DC and their firm, with the DHS response on its own line, for fees declines', () => {
+    it('names the DC and their firm for fees declines, showing the reason exactly once', () => {
         const body = buildOutstandingFeesEmail({
             clientFirstName: 'Nombulelo',
             dcName: 'Gasant Essack',
@@ -291,8 +292,29 @@ describe('consumer decline email copy', () => {
         });
 
         expect(body).toContain(
-            'Your current Debt Counsellor (Gasant Essack) from (Creditore Debt Counselling) has declined this request.\n\nTheir DHS response reads: "fees outstanding"'
+            'Your current Debt Counsellor (Gasant Essack) from (Creditore Debt Counselling) has declined this request.'
         );
+        // The reason lives in the status block only — no separate "Their DHS response reads" line.
+        expect(body).toContain('Reason given by the current Debt Counsellor:\n"fees outstanding"');
+        expect(body).not.toContain('Their DHS response reads:');
+        // And it must appear exactly once in the whole email.
+        expect(body.split('fees outstanding').length - 1).toBe(1);
+    });
+
+    it('shows the decline reason only once in the resubmit (temporary delay) email', () => {
+        const body = buildResubmitClientEmail({
+            clientFirstName: 'Nokuphiwa',
+            dcName: 'Debt Counsellor',
+            dcFirmName: null,
+            fileNumber: 'ZDM-2026-1044-6E4',
+            declineReason: 'Transfer Under Review: kindly allow 3-7 business days.',
+            transferRequestedDate: '18 Jul 2026',
+            declineRecordedDate: '18 Jul 2026',
+        });
+
+        expect(body).not.toContain('Their DHS response reads:');
+        expect(body).toContain('Reason given by the current Debt Counsellor:');
+        expect(body.split('Transfer Under Review: kindly allow 3-7 business days.').length - 1).toBe(1);
     });
 
     it('omits the firm phrase when no trading name is available', () => {

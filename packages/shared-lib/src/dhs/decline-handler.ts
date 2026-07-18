@@ -1108,8 +1108,6 @@ We are reaching out regarding the transfer of your debt review file to Zenowethu
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request.
 
-Their DHS response reads: "${p.declineReason}"
-
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
     declineRecordedDate: p.declineRecordedDate,
@@ -1157,8 +1155,6 @@ We trust this message finds you well.
 We are writing regarding your debt review file (File No: ${p.fileNumber}) and the transfer of your case to Zenowethu Debt Management.
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request.
-
-Their DHS response reads: "${p.declineReason}"
 
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
@@ -1239,8 +1235,6 @@ We are writing with an update on the transfer of your debt review file (File No:
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request and indicated that a legal matter is involved.
 
-Their DHS response reads: "${p.declineReason}"
-
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
     declineRecordedDate: p.declineRecordedDate,
@@ -1280,8 +1274,6 @@ function buildResubmitClientEmail(p: {
 We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has indicated that the request cannot be processed immediately.
-
-Their DHS response reads: "${p.declineReason}"
 
 ${buildConsumerDeclineStatusBlock({
     transferRequestedDate: p.transferRequestedDate,
