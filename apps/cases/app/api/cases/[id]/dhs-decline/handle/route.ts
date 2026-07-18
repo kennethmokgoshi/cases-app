@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import {
     handleDHSDecline,
-    classifyDeclineReason,
+    classifyDeclineReasonSmart,
     extractEmailFromReason,
     findPriorDocsEmail,
     decideDocsResend,
@@ -84,7 +84,8 @@ export async function POST(
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
-        const category = classifyDeclineReason(declineReason);
+        const classification = await classifyDeclineReasonSmart(declineReason);
+        const category = classification.category;
 
         // Preview mode: classify without executing (?preview=true)
         const { searchParams } = new URL(request.url);
@@ -93,6 +94,9 @@ export async function POST(
             return NextResponse.json({
                 preview: true,
                 category,
+                classificationSource: classification.source,
+                classificationConfidence: classification.confidence,
+                classificationReasoning: classification.reasoning,
                 extractedEmail,
                 description: getCategoryDescription(category, extractedEmail),
             });

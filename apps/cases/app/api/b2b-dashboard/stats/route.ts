@@ -141,10 +141,14 @@ export async function GET() {
                     fileNumber: true,
                     status: true,
                     createdAt: true,
+                    recordedAt: true,
                     updatedAt: true,
                     client: { select: { firstName: true, lastName: true } },
                 },
-                orderBy: { createdAt: 'desc' },
+                // Sort by recordedAt (true insertion time), not createdAt. createdAt is
+                // back-dated to the case's month-folder for reporting buckets, so a file
+                // loaded today into an older month would otherwise never surface as "recent".
+                orderBy: { recordedAt: 'desc' },
                 take: 5,
             }),
         ]);
@@ -162,7 +166,9 @@ export async function GET() {
                 id: c.id,
                 fileNumber: c.fileNumber,
                 status: c.status,
-                createdAt: c.createdAt.toISOString(),
+                // Show the true recording time to the partner. createdAt is back-dated to the
+                // reporting month; recordedAt is when the file actually landed with us.
+                createdAt: c.recordedAt.toISOString(),
                 updatedAt: c.updatedAt.toISOString(),
                 clientName: `${c.client.firstName} ${c.client.lastName}`,
             })),

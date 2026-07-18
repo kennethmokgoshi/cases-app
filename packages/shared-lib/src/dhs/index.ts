@@ -24,6 +24,8 @@ export { lookupDCFromNCR, resolveDCEmail } from './ncr-lookup';
 export type { NCRDCLookupResult, DCEmailResolution } from './ncr-lookup';
 export { handleDHSDecline, classifyDeclineReason, extractEmailFromReason } from './decline-handler';
 export type { DeclineCategory, DeclineHandlerResult } from './decline-handler';
+export { classifyDeclineReasonSmart } from './decline-classifier';
+export type { SmartDeclineClassification, ClassificationSource } from './decline-classifier';
 export { findPriorDocsEmail, decideDocsResend } from './decline-dedup';
 export type { PriorDocsEmail } from './decline-dedup';
 export { handleDhsAccepted, isManageConsumersEligible, READY_TO_CONSENT_STATUS } from './accepted-handler';

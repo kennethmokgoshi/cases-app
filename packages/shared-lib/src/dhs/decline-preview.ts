@@ -14,8 +14,8 @@
  */
 
 import { prisma } from '@zenowethu/database';
+import { classifyDeclineReasonSmart, type ClassificationSource } from './decline-classifier';
 import {
-    classifyDeclineReason,
     extractEmailFromReason,
     getBasePeriodForCategory,
     type DeclineCategory,
@@ -50,6 +50,12 @@ export interface DeclinePreview {
     fileNumber: string;
     declineReason: string;
     category: DeclineCategory;
+    /** How the category was decided: 'ai' (interpreted) or 'rules' (fallback). */
+    classificationSource: ClassificationSource;
+    /** 0..1 confidence in the chosen category. */
+    classificationConfidence: number;
+    /** One-line explanation of why this category was chosen. */
+    classificationReasoning: string;
     /** Workflow status the case WOULD be moved to (final state for the category). */
     statusWouldUpdateTo: string | null;
     /** Email found embedded in the decline text (DC or attorney), if any. */
@@ -79,7 +85,8 @@ export async function previewDHSDecline(params: {
         },
     });
 
-    const category = classifyDeclineReason(declineReason);
+    const classification = await classifyDeclineReasonSmart(declineReason);
+    const category = classification.category;
     const extractedEmail = extractEmailFromReason(declineReason);
 
     const preview: DeclinePreview = {
@@ -87,10 +94,17 @@ export async function previewDHSDecline(params: {
         fileNumber: caseData?.fileNumber ?? caseId,
         declineReason,
         category,
+        classificationSource: classification.source,
+        classificationConfidence: classification.confidence,
+        classificationReasoning: classification.reasoning,
         statusWouldUpdateTo: null,
         extractedEmail,
         messages: [],
-        notes: [],
+        notes: [
+            `Interpreted as ${category} (${classification.source === 'ai' ? 'AI-assisted' : 'rule-based'}, ${Math.round(
+                classification.confidence * 100
+            )}% confidence): ${classification.reasoning}`,
+        ],
     };
 
     if (!caseData) {

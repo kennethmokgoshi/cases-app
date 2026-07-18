@@ -73,6 +73,23 @@ describe('classifyDeclineReason', () => {
         expect(classifyDeclineReason('Consumer has a balance outstanding before transfer can proceed')).toBe('OUTSTANDING_FEES');
     });
 
+    // Boilerplate / conditional-fee guard — must NOT be read as an actual fee demand
+    it('reads a "Transfer Under Review" boilerplate as RESUBMIT_LATER, not OUTSTANDING_FEES', () => {
+        expect(classifyDeclineReason(
+            'Transfer Under Review: Kindly allow the standard turnaround time of 3-7 business days, as the Form 17.7 documents have been received and acknowledged. Please note that a transfer request may be declined if there are any outstanding fees payable to the current Debt Counsellor.'
+        )).toBe('RESUBMIT_LATER');
+    });
+
+    it('does not classify a purely conditional fee mention as OUTSTANDING_FEES', () => {
+        expect(classifyDeclineReason(
+            'A transfer request may be declined if there are any outstanding fees payable.'
+        )).not.toBe('OUTSTANDING_FEES');
+    });
+
+    it('still classifies an assertive fee statement as OUTSTANDING_FEES', () => {
+        expect(classifyDeclineReason('The consumer owes fees that must be settled before we can transfer')).toBe('OUTSTANDING_FEES');
+    });
+
     // CONTACT_ATTORNEY
     it('classifies "attorney" mention as CONTACT_ATTORNEY', () => {
         expect(classifyDeclineReason('File has been handed to attorney Smith at attorney@lawfirm.co.za')).toBe('CONTACT_ATTORNEY');
@@ -165,6 +182,11 @@ describe('getBasePeriodForCategory', () => {
 
     it('falls back to 7 days for RESUBMIT_LATER when no specific days match', () => {
         expect(getBasePeriodForCategory('RESUBMIT_LATER', 'Please try again later')).toBe(7);
+    });
+
+    it('uses the upper bound of a stated turnaround range for RESUBMIT_LATER', () => {
+        expect(getBasePeriodForCategory('RESUBMIT_LATER', 'Allow the standard turnaround time of 3-7 business days')).toBe(7);
+        expect(getBasePeriodForCategory('RESUBMIT_LATER', 'Please allow 5–10 working days')).toBe(10);
     });
 
     it('returns 7 days for CLIENT_CONSENT_NEEDED', () => {

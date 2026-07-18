@@ -20,6 +20,7 @@ import { getAutomationUserId } from '../automation/automation-user';
 import { promoteDcEmail, getBestDcEmail } from '../dc/email-priority';
 import { recordDhsOutcome } from '../dc/outcome-events';
 import { findPriorDocsEmail, decideDocsResend } from './decline-dedup';
+import { classifyDeclineReasonSmart, type ClassificationSource } from './decline-classifier';
 
 export type DeclineCategory =
     | 'SEND_DOCS'
@@ -49,6 +50,12 @@ export interface DeclineHandlerResult {
     skippedAsDuplicate: boolean;
     /** When the earlier document email was sent, when skippedAsDuplicate is true */
     alreadyHandledAt: Date | null;
+    /** How the decline was classified: 'ai' (interpreted) or 'rules' (fallback). */
+    classificationSource: ClassificationSource;
+    /** 0..1 confidence in the chosen category. */
+    classificationConfidence: number;
+    /** One-line explanation of why this category was chosen. */
+    classificationReasoning: string;
 }
 
 // ─── Classification ───────────────────────────────────────────────────────────
@@ -116,20 +123,29 @@ export function classifyDeclineReason(reason: string): DeclineCategory {
         return 'CLIENT_CONSENT_NEEDED';
     }
 
-    // Outstanding fees owed to current DC
+    // Request is progressing / pending — "under review", standard turnaround,
+    // or "received & acknowledged" mean we should wait and re-check, not take a
+    // decline action. Checked BEFORE OUTSTANDING_FEES so a generic policy
+    // disclaimer in the same boilerplate ("a transfer request may be declined
+    // if there are any outstanding fees...") is not mistaken for a real fee
+    // demand against this consumer.
     if (
-        r.includes('CLIENT OWES') ||
-        r.includes('OUTSTANDING FEES') ||
-        r.includes('FEES OUTSTANDING') ||
-        r.includes('OWES FEES') ||
-        r.includes('AMOUNT OUTSTANDING') ||
-        r.includes('SETTLEMENT FEE') ||
-        r.includes('AFTER-CARE FEES') ||
-        r.includes('AFTERCARE FEES') ||
-        r.includes('OUTSTANDING AMOUNT') ||
-        r.includes('FEES DUE') ||
-        r.includes('BALANCE OUTSTANDING')
+        r.includes('UNDER REVIEW') ||
+        r.includes('TURNAROUND TIME') ||
+        r.includes('STANDARD TURNAROUND') ||
+        r.includes('RECEIVED AND ACKNOWLEDGED') ||
+        r.includes('BEING PROCESSED') ||
+        r.includes('STILL PROCESSING') ||
+        (r.includes('ALLOW') && (r.includes('BUSINESS DAYS') || r.includes('WORKING DAYS')))
     ) {
+        return 'RESUBMIT_LATER';
+    }
+
+    // Outstanding fees owed to current DC — only when the DC actually asserts
+    // that THIS consumer owes fees, not when fee wording appears inside a
+    // conditional / policy clause ("...may be declined if there are any
+    // outstanding fees payable...").
+    if (feeMentionIsAssertive(r)) {
         return 'OUTSTANDING_FEES';
     }
 
@@ -162,6 +178,51 @@ export function classifyDeclineReason(reason: string): DeclineCategory {
     return 'UNKNOWN';
 }
 
+/** Fee-related keywords that can indicate the consumer owes the current DC. */
+const FEE_KEYWORDS = [
+    'CLIENT OWES',
+    'OUTSTANDING FEES',
+    'FEES OUTSTANDING',
+    'OWES FEES',
+    'AMOUNT OUTSTANDING',
+    'SETTLEMENT FEE',
+    'AFTER-CARE FEES',
+    'AFTERCARE FEES',
+    'OUTSTANDING AMOUNT',
+    'FEES DUE',
+    'BALANCE OUTSTANDING',
+];
+
+/**
+ * Decide whether a decline reason ASSERTS that this consumer owes fees, as
+ * opposed to merely mentioning fees inside a conditional/policy disclaimer.
+ *
+ * Splits the (already upper-cased) reason into sentences and, for each sentence
+ * containing a fee keyword, checks whether a conditional marker ("if", "may",
+ * "should"…) appears before the keyword. A fee keyword that is only ever
+ * governed by a conditional is treated as boilerplate and does NOT count as an
+ * actual fee demand — e.g. "a transfer request may be declined if there are any
+ * outstanding fees payable" is policy text, not a statement that fees are due.
+ */
+function feeMentionIsAssertive(reasonUpper: string): boolean {
+    const sentences = reasonUpper.split(/[.;\n]+/);
+    for (const sentence of sentences) {
+        const positions = FEE_KEYWORDS
+            .map(keyword => sentence.indexOf(keyword))
+            .filter(index => index >= 0);
+        if (positions.length === 0) continue;
+
+        const firstIdx = Math.min(...positions);
+        const preceding = sentence.slice(0, firstIdx);
+        const conditional =
+            /\b(IF|MAY|MIGHT|SHOULD|WOULD|COULD|UNLESS|PROVIDED|IN THE EVENT|IN CASE|WHERE THERE|CAN BE DECLINED)\b/.test(
+                preceding
+            );
+        if (!conditional) return true; // an assertive, non-conditional mention
+    }
+    return false;
+}
+
 /**
  * Extract the first valid email address from a decline reason text.
  * Useful when the DC embeds their email or an attorney's email in the decline text.
@@ -185,6 +246,12 @@ export function extractEmailFromReason(reason: string): string | null {
 export function getBasePeriodForCategory(category: DeclineCategory, reason?: string): number {
     if (category === 'RESUBMIT_LATER' && reason) {
         const r = reason.toUpperCase();
+        // "allow the standard turnaround time of 3–7 business days" → wait out
+        // the upper bound of the stated window before re-checking.
+        const rangeMatch = r.match(/(\d+)\s*(?:[-–—]|TO)\s*(\d+)\s*(?:BUSINESS|WORKING|CALENDAR)?\s*DAYS/);
+        if (rangeMatch) {
+            return parseInt(rangeMatch[2], 10);
+        }
         const match = r.match(/(?:REQUEST|RESUBMIT|TRY)(?:\s+AGAIN)?\s+(?:AFTER|IN)\s+(\d+)\s+DAY/);
         if (match) {
             return parseInt(match[1], 10);
@@ -275,6 +342,9 @@ export async function handleDHSDecline(params: {
         extractedEmail: null,
         skippedAsDuplicate: false,
         alreadyHandledAt: null,
+        classificationSource: 'rules',
+        classificationConfidence: 0,
+        classificationReasoning: '',
     };
 
     try {
@@ -292,9 +362,23 @@ export async function handleDHSDecline(params: {
             return result;
         }
 
-        const category = classifyDeclineReason(declineReason);
+        const classification = await classifyDeclineReasonSmart(declineReason);
+        const category = classification.category;
         result.category = category;
-        log.info({ category }, `[DHS Decline Handler] Category: ${category}`);
+        result.classificationSource = classification.source;
+        result.classificationConfidence = classification.confidence;
+        result.classificationReasoning = classification.reasoning;
+        log.info(
+            { category, source: classification.source, confidence: classification.confidence },
+            `[DHS Decline Handler] Category: ${category} (${classification.source}, ${Math.round(classification.confidence * 100)}%)`
+        );
+        // Record how the decline was interpreted so staff can see the reasoning
+        // behind the automated action — a smart employee explains its decisions.
+        await addComment(
+            caseId,
+            triggeredByUserId,
+            `[SYSTEM] DHS Decline Handler: Interpreted decline as ${category} (${classification.source === 'ai' ? 'AI-assisted' : 'rule-based'}, ${Math.round(classification.confidence * 100)}% confidence). Reasoning: ${classification.reasoning}`
+        );
 
         const extractedEmail = extractEmailFromReason(declineReason);
         result.extractedEmail = extractedEmail;

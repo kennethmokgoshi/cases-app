@@ -11,7 +11,7 @@ vi.mock('@zenowethu/shared-lib', () => ({
 
 vi.mock('@zenowethu/shared-lib/src/dhs', () => ({
     handleDHSDecline: vi.fn(),
-    classifyDeclineReason: vi.fn(),
+    classifyDeclineReasonSmart: vi.fn(),
     extractEmailFromReason: vi.fn(() => null),
     findPriorDocsEmail: vi.fn(),
     decideDocsResend: vi.fn(),
@@ -25,7 +25,7 @@ import { prisma } from '@zenowethu/database';
 import { auth } from '@zenowethu/shared-lib';
 import {
     handleDHSDecline,
-    classifyDeclineReason,
+    classifyDeclineReasonSmart,
     findPriorDocsEmail,
     decideDocsResend,
 } from '@zenowethu/shared-lib/src/dhs';
@@ -35,7 +35,7 @@ import { POST } from './route';
 const db = prisma as unknown as { case: { findUnique: ReturnType<typeof vi.fn> } };
 const mockedAuth = auth as unknown as ReturnType<typeof vi.fn>;
 const mockedHandle = handleDHSDecline as unknown as ReturnType<typeof vi.fn>;
-const mockedClassify = classifyDeclineReason as unknown as ReturnType<typeof vi.fn>;
+const mockedClassify = classifyDeclineReasonSmart as unknown as ReturnType<typeof vi.fn>;
 const mockedPrior = findPriorDocsEmail as unknown as ReturnType<typeof vi.fn>;
 const mockedDecide = decideDocsResend as unknown as ReturnType<typeof vi.fn>;
 const mockedSweep = searchConsumerAcrossMailboxes as unknown as ReturnType<typeof vi.fn>;
@@ -66,7 +66,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     mockedAuth.mockResolvedValue({ user: { id: 'staff1', userType: 'STAFF' } });
     db.case.findUnique.mockResolvedValue(baseCase);
-    mockedClassify.mockReturnValue('SEND_DOCS');
+    mockedClassify.mockResolvedValue({ category: 'SEND_DOCS', confidence: 0.9, reasoning: 'DC asked for POA and ID.', source: 'ai' });
     mockedHandle.mockResolvedValue(handledResult);
     mockedSweep.mockResolvedValue({ searchedMailboxes: 1, skippedMailboxes: 0, matches: [], perMailbox: [], errors: [] });
 });
@@ -137,7 +137,7 @@ describe('POST /dhs-decline/handle guard', () => {
     });
 
     it('skips the guard for non-document decline categories', async () => {
-        mockedClassify.mockReturnValue('RESUBMIT_LATER');
+        mockedClassify.mockResolvedValue({ category: 'RESUBMIT_LATER', confidence: 0.9, reasoning: 'Try again later.', source: 'ai' });
         const res = await POST(request({ declineReason: 'try again later' }), ctx);
         await res.json();
         expect(mockedPrior).not.toHaveBeenCalled();
