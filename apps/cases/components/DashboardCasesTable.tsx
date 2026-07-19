@@ -36,12 +36,11 @@ export function DashboardCasesTable() {
     useEffect(() => {
         async function fetchCases() {
             try {
-                const response = await fetch('/api/cases');
+                const response = await fetch('/api/cases?orderBy=updatedAt&take=50');
                 if (response.ok) {
                     const data = await response.json();
                     if (Array.isArray(data)) {
-                        // Get last 10 cases
-                        setCases(data.slice(0, 10));
+                        setCases(data);
                     } else {
                         console.error('[DASHBOARD] Cases API returned non-array:', data);
                     }

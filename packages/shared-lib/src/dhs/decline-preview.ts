@@ -26,6 +26,7 @@ import {
     buildConsentSms,
     buildOutstandingFeesEmail,
     buildFeesSms,
+    buildRequestInvoiceEmail,
     buildAttorneyEmail,
     buildAttorneyClientEmail,
     buildAttorneySms,
@@ -233,23 +234,58 @@ export async function previewDHSDecline(params: {
 
     else if (category === 'OUTSTANDING_FEES') {
         preview.statusWouldUpdateTo = 'REJECTED_OWES_FEES';
-        if (caseData.client.email) {
+        if (dcEmail) {
             preview.messages.push({
                 channel: 'EMAIL',
-                to: caseData.client.email,
-                subject: `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`,
-                body: buildOutstandingFeesEmail({
-                    clientFirstName,
-                    dcName,
-                    dcFirmName,
+                to: dcEmail,
+                cc: clientCc,
+                subject: `Request for Invoice/Statement – ${clientName} (ID: ${idNumber})`,
+                body: buildRequestInvoiceEmail({
+                    clientName,
+                    idNumber,
                     fileNumber,
+                    dcName,
                     declineReason,
-                    transferRequestedDate,
-                    declineRecordedDate,
                 }),
             });
+            if (caseData.client.email) {
+                preview.messages.push({
+                    channel: 'EMAIL',
+                    to: caseData.client.email,
+                    subject: `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`,
+                    body: buildOutstandingFeesEmail({
+                        clientFirstName,
+                        dcName,
+                        dcFirmName,
+                        fileNumber,
+                        declineReason,
+                        transferRequestedDate,
+                        declineRecordedDate,
+                    }),
+                });
+            }
         } else {
-            preview.notes.push('Consumer has no email on file — only SMS/WhatsApp would be attempted.');
+            preview.notes.push(
+                'No DC email address available to request invoice. Please set the preferred DC email on this case.'
+            );
+            if (caseData.client.email) {
+                preview.messages.push({
+                    channel: 'EMAIL',
+                    to: caseData.client.email,
+                    subject: `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`,
+                    body: buildOutstandingFeesEmail({
+                        clientFirstName,
+                        dcName,
+                        dcFirmName,
+                        fileNumber,
+                        declineReason,
+                        transferRequestedDate,
+                        declineRecordedDate,
+                    }),
+                });
+            } else {
+                preview.notes.push('Consumer has no email on file — only SMS/WhatsApp would be attempted.');
+            }
         }
         pushClientMobile(buildFeesSms({ clientFirstName, dcName }));
     }

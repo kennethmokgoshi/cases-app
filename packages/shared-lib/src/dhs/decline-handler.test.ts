@@ -9,6 +9,7 @@ vi.mock('../notifications/service', () => ({
 }));
 import {
     buildOutstandingFeesEmail,
+    buildRequestInvoiceEmail,
     buildResubmitClientEmail,
     buildSendDocsClientEmail,
     calculateNextUpdate,
@@ -330,6 +331,23 @@ describe('consumer decline email copy', () => {
 
         expect(body).toContain('Your current Debt Counsellor (Gasant Essack) has declined this request.');
         expect(body).not.toContain('from (');
+    });
+
+    it('formats the request invoice email to the DC correctly', () => {
+        const body = buildRequestInvoiceEmail({
+            clientName: 'Nombulelo Dlamini',
+            idNumber: '8501015009087',
+            fileNumber: 'ZDM-2026-1005-BZP',
+            dcName: 'Gasant Essack',
+            declineReason: 'outstanding fees of R1500',
+        });
+
+        expect(body).toContain('Dear Gasant Essack,');
+        expect(body).toContain('Client:       Nombulelo Dlamini');
+        expect(body).toContain('ID Number:    8501015009087');
+        expect(body).toContain('File Number:  ZDM-2026-1005-BZP');
+        expect(body).toContain('outstanding fees of R1500');
+        expect(body).toContain('Please provide a detailed invoice or statement');
     });
 });
 

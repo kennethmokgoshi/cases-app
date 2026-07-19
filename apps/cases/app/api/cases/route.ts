@@ -61,6 +61,17 @@ export async function GET(request: Request) {
         const filter = searchParams.get('filter'); // overdue, my-cases, new-leads
         const take = parseInt(searchParams.get('take') || '10000');
         const skip = parseInt(searchParams.get('skip') || '0');
+        const orderByParam = searchParams.get('orderBy') || 'recordedAt';
+        const orderDirParam = searchParams.get('orderDir') || 'desc';
+
+        const orderDir = orderDirParam === 'asc' ? 'asc' : 'desc';
+        let orderBy: any = { recordedAt: orderDir };
+        if (orderByParam === 'updatedAt') {
+            orderBy = { updatedAt: orderDir };
+        } else if (orderByParam === 'createdAt') {
+            orderBy = { createdAt: orderDir };
+        }
+
 
         // Load hierarchy once
         const allProjects = await prisma.project.findMany({ select: { id: true, name: true, parentId: true, type: true } });
@@ -186,7 +197,7 @@ export async function GET(request: Request) {
 
         // 4. Execution
         if (slim) {
-            const data = await prisma.case.findMany({ where, select: { id: true, createdAt: true, recordedAt: true }, take: 1000, orderBy: { recordedAt: 'desc' } });
+            const data = await prisma.case.findMany({ where, select: { id: true, createdAt: true, recordedAt: true }, take: 1000, orderBy });
             return NextResponse.json(data);
         }
 
@@ -213,7 +224,7 @@ export async function GET(request: Request) {
                 },
                 take: isNaN(take) ? 10000 : take,
                 skip: isNaN(skip) ? 0 : skip,
-                orderBy: { recordedAt: 'desc' }
+                orderBy
             }),
             prisma.case.count({ where })
         ]);

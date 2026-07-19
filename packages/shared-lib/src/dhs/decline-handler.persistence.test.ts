@@ -177,3 +177,71 @@ describe('handleDHSDecline SEND_DOCS idempotency guard', () => {
         expect(result.statusUpdatedTo).toBe('DOCUMENTS_EMAILED');
     });
 });
+
+describe('handleDHSDecline OUTSTANDING_FEES automated dc invoice request', () => {
+    const feesReason = 'Client has outstanding fees to the current DC.';
+
+    it('sends email to DC and client when DC email is available', async () => {
+        db.case.findUnique.mockResolvedValue({
+            ...baseCase,
+            preferredDcEmail: 'dc@example.co.za',
+            client: {
+                ...baseCase.client,
+                email: 'john@example.com',
+            },
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        const result = await handleDHSDecline({
+            caseId: 'case1',
+            declineReason: feesReason,
+            triggeredByUserId: 'staff1',
+        });
+
+        expect(result.statusUpdatedTo).toBe('REJECTED_OWES_FEES');
+        // Two emails sent: one to DC (cc client) and one to client
+        expect(sendMsg).toHaveBeenCalledTimes(2);
+        
+        // Verify first email call (to DC)
+        const firstCall = sendMsg.mock.calls[0];
+        expect(firstCall[1]).toBe('EMAIL');
+        expect(firstCall[2]).toBe('dc@example.co.za');
+        expect(firstCall[5]?.cc).toEqual(['john@example.com']);
+
+        // Verify second email call (to client)
+        const secondCall = sendMsg.mock.calls[1];
+        expect(secondCall[1]).toBe('EMAIL');
+        expect(secondCall[2]).toBe('john@example.com');
+
+        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (client CC\'d)');
+        expect(result.actionsPerformed).toContain('Outstanding fees email sent to consumer (john@example.com)');
+    });
+
+    it('emails client only and logs warning when DC email is missing', async () => {
+        db.case.findUnique.mockResolvedValue({
+            ...baseCase,
+            preferredDcEmail: null,
+            client: {
+                ...baseCase.client,
+                email: 'john@example.com',
+            },
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        const result = await handleDHSDecline({
+            caseId: 'case1',
+            declineReason: feesReason,
+            triggeredByUserId: 'staff1',
+        });
+
+        expect(result.statusUpdatedTo).toBe('REJECTED_OWES_FEES');
+        // Only 1 email sent (to client)
+        expect(sendMsg).toHaveBeenCalledTimes(1);
+        expect(sendMsg.mock.calls[0][2]).toBe('john@example.com');
+
+        expect(result.errors).toContain(
+            'No DC email address available to request invoice. Please set the preferred DC email on this case.'
+        );
+        expect(result.actionsPerformed).toContain('Outstanding fees email sent to consumer (john@example.com)');
+    });
+});

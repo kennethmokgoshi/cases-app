@@ -8,6 +8,7 @@ import { usesSmtpPassword } from '@/lib/mailboxes';
 import { getSmtpUsernameIfConfigured } from '@/lib/mailbox-smtp';
 import { join } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
+import crypto from 'crypto';
 
 const logger = createLogger('api/cases/[id]/dhs-decline/check-fee-emails');
 
@@ -376,6 +377,13 @@ export async function POST(
                             }
 
                             try {
+                                // Fetch already processed message IDs from ProcessedMailboxMessage for this mailbox
+                                const processedMessages = await prisma.processedMailboxMessage.findMany({
+                                    where: { mailboxAccountId: mailbox.id },
+                                    select: { messageId: true }
+                                });
+                                const skipMessageIds = processedMessages.map(m => m.messageId);
+
                                 const scanResult = await scanMailboxForClient({
                                     config: {
                                         host: mailbox.imapHost,
@@ -386,6 +394,7 @@ export async function POST(
                                     },
                                     idNumber,
                                     since: searchFrom,
+                                    skipMessageIds,
                                     onProgress: (p) => {
                                         const mbxProgress = p.total ? (p.processed / p.total) : 0.5;
                                         const totalProgress = Math.round(((i + mbxProgress) / totalMbx) * 100);
@@ -405,6 +414,21 @@ export async function POST(
                                 if (scanResult.attachments.length > 0) {
                                     await mkdir(uploadDir, { recursive: true });
                                     for (const att of scanResult.attachments) {
+                                        // Compute SHA-256 hash of attachment
+                                        const hash = crypto.createHash('sha256').update(att.buffer).digest('hex');
+
+                                        // Verify if the document already exists in this case to avoid duplicates
+                                        const existingDoc = await prisma.document.findFirst({
+                                            where: {
+                                                caseId,
+                                                fileSize: att.buffer.length,
+                                                fileName: att.fileName,
+                                            }
+                                        });
+                                        if (existingDoc) {
+                                            continue; // Skip already downloaded document
+                                        }
+
                                         const safeName = att.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
                                         const uniqueFileName = `${Date.now()}-${safeName}`;
                                         await writeFile(join(uploadDir, uniqueFileName), att.buffer);
@@ -424,6 +448,26 @@ export async function POST(
                                             },
                                         });
                                         savedDocuments.push(fileUrl);
+
+                                        // Record that this messageId and attachment hash has been processed
+                                        if (att.messageId) {
+                                            await prisma.processedMailboxMessage.upsert({
+                                                where: {
+                                                    mailboxAccountId_messageId: {
+                                                        mailboxAccountId: mailbox.id,
+                                                        messageId: att.messageId,
+                                                    }
+                                                },
+                                                update: {
+                                                    attachmentHash: hash
+                                                },
+                                                create: {
+                                                    mailboxAccountId: mailbox.id,
+                                                    messageId: att.messageId,
+                                                    attachmentHash: hash
+                                                }
+                                            });
+                                        }
                                     }
                                 }
                             } catch (err: any) {

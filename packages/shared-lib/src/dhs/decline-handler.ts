@@ -725,13 +725,6 @@ export async function handleDHSDecline(params: {
             if (!caseData.declineFirstDetectedAt) {
                 updateData.declineFirstDetectedAt = new Date();
             }
-            await safeUpdateCase(
-                caseId,
-                updateData,
-                triggeredByUserId,
-                false
-            );
-            result.statusUpdatedTo = 'REJECTED_OWES_FEES';
 
             const feesEmailBody = buildOutstandingFeesEmail({
                 clientFirstName,
@@ -745,15 +738,79 @@ export async function handleDHSDecline(params: {
             const feesSmsBody = buildFeesSms({ clientFirstName, dcName });
             const feesSubject = `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`;
 
-            if (caseData.client.email) {
-                const emailResult = await sendManualMessage(
-                    caseId, 'EMAIL', caseData.client.email, feesEmailBody, feesSubject
+            // If we have a DC email, request the invoice from them and CC the client
+            if (dcEmail) {
+                const dcInvoiceEmailBody = buildRequestInvoiceEmail({
+                    clientName,
+                    idNumber,
+                    fileNumber,
+                    dcName,
+                    declineReason,
+                });
+                const dcInvoiceSubject = `Request for Invoice/Statement – ${clientName} (ID: ${idNumber})`;
+
+                const dcEmailResult = await sendManualMessage(
+                    caseId,
+                    'EMAIL',
+                    dcEmail,
+                    dcInvoiceEmailBody,
+                    dcInvoiceSubject,
+                    { cc: clientCc }
                 );
-                result.emailSent = emailResult.emailSuccess;
-                if (emailResult.emailSuccess)
-                    result.actionsPerformed.push(`Outstanding fees email sent to consumer (${caseData.client.email})`);
-                else result.errors.push(...emailResult.errors);
+
+                if (dcEmailResult.emailSuccess) {
+                    result.emailSent = true;
+                    result.actionsPerformed.push(`Invoice request emailed to DC at ${dcEmail} (client CC'd)`);
+                    updateData.lastKnownEmail = dcEmail;
+                } else {
+                    result.errors.push(...dcEmailResult.errors);
+                }
+
+                // If DC email succeeded, we still send the client-focused explanation email separately
+                // so the client understands the context.
+                if (dcEmailResult.emailSuccess && caseData.client.email) {
+                    const clientEmailResult = await sendManualMessage(
+                        caseId,
+                        'EMAIL',
+                        caseData.client.email,
+                        feesEmailBody,
+                        feesSubject
+                    );
+                    if (clientEmailResult.emailSuccess) {
+                        result.actionsPerformed.push(`Outstanding fees email sent to consumer (${caseData.client.email})`);
+                    } else {
+                        result.errors.push(...clientEmailResult.errors);
+                    }
+                }
+            } else {
+                result.errors.push(
+                    'No DC email address available to request invoice. Please set the preferred DC email on this case.'
+                );
+                // Still notify client of the decline so they are not left in the dark
+                if (caseData.client.email) {
+                    const clientEmailResult = await sendManualMessage(
+                        caseId,
+                        'EMAIL',
+                        caseData.client.email,
+                        feesEmailBody,
+                        feesSubject
+                    );
+                    result.emailSent = clientEmailResult.emailSuccess;
+                    if (clientEmailResult.emailSuccess) {
+                        result.actionsPerformed.push(`Outstanding fees email sent to consumer (${caseData.client.email})`);
+                    } else {
+                        result.errors.push(...clientEmailResult.errors);
+                    }
+                }
             }
+
+            await safeUpdateCase(
+                caseId,
+                updateData,
+                triggeredByUserId,
+                false
+            );
+            result.statusUpdatedTo = 'REJECTED_OWES_FEES';
 
             await notifyClientSmsOrWa(feesSmsBody);
 
@@ -1184,6 +1241,35 @@ function buildFeesSms(p: {
     return `Hi ${p.clientFirstName}, your DC (${p.dcName}) declined your DHS transfer — outstanding fees must be settled first. We are requesting the invoice and will send it to you. Contact us on 081 747 7616. — Zenowethu`;
 }
 
+function buildRequestInvoiceEmail(p: {
+    clientName: string;
+    idNumber: string;
+    fileNumber: string;
+    dcName: string;
+    declineReason: string;
+}): string {
+    return `Dear ${p.dcName},
+
+Thank you for your response via the NCR Debt Help System (DHS) regarding the transfer request for the following consumer:
+
+  Client:       ${p.clientName}
+  ID Number:    ${p.idNumber}
+  File Number:  ${p.fileNumber}
+
+Your DHS response indicates that there are outstanding fees:
+"${p.declineReason}"
+
+Please provide a detailed invoice or statement of the outstanding amount, along with the firm's banking details, so that we can forward it to the consumer for payment.
+
+Please note: our client (${p.clientName}) has been copied on this email for transparency.
+
+We appreciate your cooperation in resolving this matter.
+
+Yours sincerely,
+
+${SIGNATURE}`;
+}
+
 function buildAttorneyEmail(p: {
     clientName: string;
     idNumber: string;
@@ -1313,6 +1399,7 @@ export {
     buildConsentSms,
     buildOutstandingFeesEmail,
     buildFeesSms,
+    buildRequestInvoiceEmail,
     buildAttorneyEmail,
     buildAttorneyClientEmail,
     buildAttorneySms,

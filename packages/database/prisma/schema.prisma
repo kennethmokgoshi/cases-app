@@ -1876,11 +1876,27 @@ model MailboxAccount {
   owner             User?     @relation("MailboxOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   notes             String?
   lastCheckedAt     DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  processedMessages ProcessedMailboxMessage[]
 
   @@index([isActive])
 }
+
+// Ledger model to track processed emails and attachment hashes to prevent duplicate ingestion.
+model ProcessedMailboxMessage {
+  id               String         @id @default(cuid())
+  mailboxAccountId String
+  messageId        String
+  attachmentHash   String?
+  processedAt      DateTime       @default(now())
+  mailboxAccount   MailboxAccount @relation(fields: [mailboxAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([mailboxAccountId, messageId])
+  @@index([mailboxAccountId])
+  @@index([messageId])
+}
+
 
 model DCCPCredential {
   id        String   @id @default(cuid())

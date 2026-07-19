@@ -98,6 +98,7 @@ export interface ScanResult {
         buffer: Buffer;
         isPoP: boolean;
         isInvoice: boolean;
+        messageId?: string;
     }[];
 }
 
@@ -277,11 +278,13 @@ export async function scanMailboxForClient({
     idNumber,
     since,
     onProgress,
+    skipMessageIds = [],
 }: {
     config: ImapConnectionConfig;
     idNumber: string;
     since: Date;
     onProgress?: (stats: { processed: number; total: number; newEmailsFound: number; invoiceCandidatesFound: number }) => void;
+    skipMessageIds?: string[];
 }): Promise<ScanResult> {
     const client = new ImapFlow({
         host: config.host,
@@ -315,11 +318,18 @@ export async function scanMailboxForClient({
             mimeType: string;
             isPoP: boolean;
             isInvoice: boolean;
+            messageId: string;
         }[] = [];
 
         if (Array.isArray(messageUids) && messageUids.length > 0) {
             for await (const msg of client.fetch(messageUids, { envelope: true, bodyStructure: true, flags: true })) {
                 processed++;
+
+                const messageId = msg.envelope?.messageId || '';
+                if (messageId && skipMessageIds.includes(messageId)) {
+                    continue;
+                }
+
                 if (!msg.flags.has('\\Seen')) {
                     newEmailsFound++;
                 }
@@ -346,6 +356,7 @@ export async function scanMailboxForClient({
                                 mimeType: part.contentType,
                                 isPoP,
                                 isInvoice,
+                                messageId,
                             });
                         }
                     }
@@ -384,6 +395,7 @@ export async function scanMailboxForClient({
                     buffer,
                     isPoP: att.isPoP,
                     isInvoice: att.isInvoice,
+                    messageId: att.messageId,
                 });
             } catch (downloadErr) {
                 logger.error(`Failed to download attachment for message UID ${att.uid}:`, downloadErr);

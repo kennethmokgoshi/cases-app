@@ -76,7 +76,7 @@ describe('previewDHSDecline', () => {
         expect(p.notes.join(' ')).toMatch(/No DC email/i);
     });
 
-    it('OUTSTANDING_FEES: emails consumer, status REJECTED_OWES_FEES', async () => {
+    it('OUTSTANDING_FEES: emails DC (cc client) and consumer, status REJECTED_OWES_FEES', async () => {
         findUnique.mockResolvedValue(mockCase());
         const p = await previewDHSDecline({
             caseId: 'case1',
@@ -84,7 +84,35 @@ describe('previewDHSDecline', () => {
         });
         expect(p.category).toBe('OUTSTANDING_FEES');
         expect(p.statusWouldUpdateTo).toBe('REJECTED_OWES_FEES');
-        expect(p.messages.find(m => m.channel === 'EMAIL')?.to).toBe('john@example.com');
+
+        const emails = p.messages.filter(m => m.channel === 'EMAIL');
+        expect(emails).toHaveLength(2);
+
+        const dcEmail = emails.find(m => m.to === 'dc@example.co.za');
+        expect(dcEmail).toBeDefined();
+        expect(dcEmail?.cc).toEqual(['john@example.com']);
+        expect(dcEmail?.body).toContain('Dear Jane DC,');
+        expect(dcEmail?.body).toContain('Client owes outstanding fees to the current DC.');
+
+        const clientEmail = emails.find(m => m.to === 'john@example.com');
+        expect(clientEmail).toBeDefined();
+        expect(clientEmail?.body).toContain('Dear John,');
+        expect(clientEmail?.body).toContain('Reason given by the current Debt Counsellor:\n"Client owes outstanding fees to the current DC."');
+    });
+
+    it('OUTSTANDING_FEES with no DC email: emails consumer, flags warning note and stays REJECTED_OWES_FEES', async () => {
+        findUnique.mockResolvedValue(mockCase({ preferredDcEmail: null }));
+        const p = await previewDHSDecline({
+            caseId: 'case1',
+            declineReason: 'Client owes outstanding fees to the current DC.',
+        });
+        expect(p.category).toBe('OUTSTANDING_FEES');
+        expect(p.statusWouldUpdateTo).toBe('REJECTED_OWES_FEES');
+
+        const emails = p.messages.filter(m => m.channel === 'EMAIL');
+        expect(emails).toHaveLength(1);
+        expect(emails[0].to).toBe('john@example.com');
+        expect(p.notes.join(' ')).toMatch(/No DC email address available/i);
     });
 
     it('prefers WhatsApp over SMS for the consumer mobile message', async () => {

@@ -21,9 +21,14 @@ vi.mock('@zenowethu/database', () => ({
         },
         document: {
             create: vi.fn(),
+            findFirst: vi.fn(),
         },
         user: {
             findFirst: vi.fn(),
+        },
+        processedMailboxMessage: {
+            findMany: vi.fn(),
+            upsert: vi.fn(),
         },
     },
 }));
@@ -63,9 +68,14 @@ type PrismaMock = {
     };
     document: {
         create: ReturnType<typeof vi.fn>;
+        findFirst: ReturnType<typeof vi.fn>;
     };
     user: {
         findFirst: ReturnType<typeof vi.fn>;
+    };
+    processedMailboxMessage: {
+        findMany: ReturnType<typeof vi.fn>;
+        upsert: ReturnType<typeof vi.fn>;
     };
 };
 
@@ -163,6 +173,9 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
         db.workflowLog.create.mockResolvedValue({ id: 'workflow-1' });
         db.mailboxAccount.findMany.mockResolvedValue(MAILBOXES);
         db.document.create.mockResolvedValue({ id: 'doc-1' });
+        db.document.findFirst.mockResolvedValue(null);
+        db.processedMailboxMessage.findMany.mockResolvedValue([]);
+        db.processedMailboxMessage.upsert.mockResolvedValue({ id: 'pm-1' });
         db.user.findFirst.mockResolvedValue({ id: 'admin-1', role: 'ADMIN' });
         mockedSmtp.mockResolvedValue({ username: '', password: '' });
         (scanMailboxForClient as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
