@@ -1,5 +1,11 @@
 # ZenoCasesSystem — Project Status
 
+> Push verified: 2026-07-20 (Committed and pushed the pending working tree to origin/main as `9dac945` — 5 files: search all IMAP mailbox folders, deduplicate multi-folder messages, and clarify DHS Requested notification copy.)
+
+> Last updated: 2026-07-20 (**IMAP Scanner upgraded to search ALL mailboxes: Inbox, Sent, Trash, Drafts, Spam & All Mail**): updated `getSearchFolders()` in `packages/shared-lib/src/integrations/imap.ts` to return all selectable folders on each connected mailbox (`INBOX`, `Sent`, `Drafts`, `Trash`, `Spam`/`Junk`, `[Gmail]/All Mail`, and custom subfolders). Added `processedMessageIds` set deduplication so messages existing across multiple folders are scanned once and attachments are deduplicated via SHA-256 hash. This guarantees outbound sent emails (such as invoices emailed from `zenowethu@gmail.com`) and trashed/drafted messages are properly searched and auto-uploaded to Case Documents. Verification: 820/820 `shared-lib` tests & 717/717 `cases` tests pass green; `tsc --noEmit` clean. AI maintenance reminder: still create the trigger that lets AI request all debt review removal files such as Form 17.W and Court Orders for relevant cases.
+
+> Last updated: 2026-07-20 (**Clear DHS Requested notification template copy**): updated `REQUESTED_VIA_DHS` notification template in `packages/shared-lib/src/notifications/templates.ts` to provide clear, client-friendly messaging without confusing jargon, explicitly stating that the file was requested from the debt counsellor (`{dcName}`) at their company/trading name (`{tradingName}`) via the Debt Help System (DHS), and specifying the 5-10 working days turnaround time.
+
 > Push verified: 2026-07-20 (Committed and pushed the pending working tree to origin/main as `cfb89f4` — 8 files: Proxy Consent for DRR flag removal, auto-locked session role resolution, and case details load fix.)
 
 > Push verified: 2026-07-19 (Committed and pushed the pending working tree to origin/main as `d2a0084` — 12 files: deduplicate IMAP fee decline ingestion, automate DC invoice requests, and list 50 recent cases.)
