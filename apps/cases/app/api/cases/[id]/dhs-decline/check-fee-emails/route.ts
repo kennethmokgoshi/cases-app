@@ -360,8 +360,14 @@ export async function POST(
 
                             let password: string | null = null;
                             if (mailbox.password) {
-                                password = decryptSecret(mailbox.password);
-                            } else {
+                                try {
+                                    password = decryptSecret(mailbox.password);
+                                } catch (err: any) {
+                                    logger.warn(`Failed to decrypt password for mailbox ${mailbox.emailAddress}:`, err);
+                                    password = null;
+                                }
+                            }
+                            if (!password) {
                                 try {
                                     const smtp = await getSMTPCredentials();
                                     if (usesSmtpPassword(mailbox.emailAddress, mailbox.password, smtp.password ? smtp.username : null)) {
@@ -373,7 +379,7 @@ export async function POST(
                             }
 
                             if (!password) {
-                                mailboxErrors.push(`${mailbox.emailAddress}: No password saved`);
+                                mailboxErrors.push(`${mailbox.emailAddress}: No valid password saved (or saved password could not be decrypted)`);
                                 continue;
                             }
 

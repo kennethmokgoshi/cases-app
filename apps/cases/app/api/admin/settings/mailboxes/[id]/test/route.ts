@@ -49,8 +49,13 @@ export async function POST(
         // password when the address matches its login
         let password: string | null = null;
         if (mailbox.password) {
-            password = decryptSecret(mailbox.password);
-        } else {
+            try {
+                password = decryptSecret(mailbox.password);
+            } catch {
+                password = null;
+            }
+        }
+        if (!password) {
             try {
                 const smtp = await getSMTPCredentials();
                 if (usesSmtpPassword(mailbox.emailAddress, mailbox.password, smtp.password ? smtp.username : null)) {
@@ -63,7 +68,7 @@ export async function POST(
 
         if (!password) {
             return NextResponse.json(
-                { success: false, error: 'No password saved for this mailbox — set it first, then test.' },
+                { success: false, error: 'No valid password saved for this mailbox (or saved password could not be decrypted). Please re-enter and save the password.' },
                 { status: 400 }
             );
         }

@@ -386,14 +386,25 @@ export async function scanMailboxForClient({
                         const checkPart = (part: any) => {
                             if (!part) return;
 
-                            const filename = part.dispositionParameters?.filename || part.parameters?.name || '';
-                            const isAttachment = part.disposition?.toLowerCase() === 'attachment' || part.disposition?.toLowerCase() === 'inline' || Boolean(filename);
-                            const mimeType = (part.contentType || '').toLowerCase();
+                            const filename =
+                                part.filename ||
+                                part.name ||
+                                part.dispositionParameters?.filename ||
+                                part.dispositionParameters?.FILENAME ||
+                                part.parameters?.name ||
+                                part.parameters?.NAME ||
+                                '';
+                            const mimeType = (part.contentType || part.type || '').toLowerCase();
                             const isPdf = mimeType === 'application/pdf' || mimeType.includes('pdf');
                             const isImage = mimeType.startsWith('image/');
-                            const isDoc = isPdf || isImage || mimeType === 'application/octet-stream';
+                            const isDoc = isPdf || isImage || mimeType === 'application/octet-stream' || mimeType.includes('document') || mimeType.includes('sheet');
+                            const isAttachment =
+                                part.disposition?.toLowerCase() === 'attachment' ||
+                                part.disposition?.toLowerCase() === 'inline' ||
+                                Boolean(filename) ||
+                                isPdf;
 
-                            if (isAttachment && isDoc) {
+                            if ((isAttachment || Boolean(filename)) && isDoc) {
                                 const lowerName = filename.toLowerCase();
                                 const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill') || subjectLower.includes('invoice') || subjectLower.includes('fee') || subjectLower.includes('consumer');
                                 const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement') || subjectLower.includes('proof') || subjectLower.includes('payment') || subjectLower.includes('pop');
@@ -406,7 +417,7 @@ export async function scanMailboxForClient({
                                         uid: msg.uid,
                                         part: part.part,
                                         fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
-                                        mimeType: part.contentType || 'application/pdf',
+                                        mimeType: part.contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
                                         isPoP,
                                         isInvoice: isInvoice || !isPoP,
                                         messageId,
