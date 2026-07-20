@@ -2148,10 +2148,16 @@ model DebtReviewRemovalConsent {
   consentedAt DateTime?
   ipAddress   String? // captured at consent for POPIA / ECTA audit trail
   userAgent   String?
-  consentText String? // snapshot of the exact wording the consumer agreed to
-  triggeredAt DateTime? // when the post-consent hook fired (set by the trigger)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  consentText     String? // snapshot of the exact wording the consumer agreed to
+  consentType     String    @default("OWNER") // OWNER (Client Direct - Highest Tier) | PROXY (Staff/B2B/Referrer on behalf)
+  consentedByRole String? // CONSUMER | STAFF | B2B | REFERRER
+  consentedById   String?
+  consentedByName String?
+  consentedByEmail String?
+  notes           String? // Audit notes / reason if approved on behalf
+  triggeredAt     DateTime? // when the post-consent hook fired (set by the trigger)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   case     Case             @relation(fields: [caseId], references: [id])
   client   Client?          @relation(fields: [clientId], references: [id])
@@ -2162,4 +2168,5 @@ model DebtReviewRemovalConsent {
   @@index([clientId])
   @@index([consumerId])
   @@index([status])
+  @@index([consentType])
 }

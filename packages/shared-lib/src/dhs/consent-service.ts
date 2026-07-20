@@ -230,10 +230,22 @@ export interface RecordConsentResult {
     status?: number;
 }
 
+export interface RecordProxyConsentParams {
+    caseId: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    userRole: 'STAFF' | 'B2B' | 'REFERRER';
+    notes?: string;
+    ipAddress?: string;
+    userAgent?: string;
+}
+
 /**
  * Record the consumer's consent against a token, capturing IP + user-agent for the
  * audit trail, then fire the post-consent trigger hook. Idempotent: a second submit
  * on an already-consented token returns success without re-firing the hook.
+ * Records consentType = 'OWNER' (highest tier consent).
  */
 export async function recordDrrConsent(params: {
     token: string;
@@ -247,7 +259,7 @@ export async function recordDrrConsent(params: {
     const { token, ipAddress, userAgent, consumerId, verifiedIdNumber } = params;
     const c = await prisma.debtReviewRemovalConsent.findUnique({
         where: { token },
-        include: { client: { select: { idNumber: true } } },
+        include: { client: { select: { idNumber: true, firstName: true, lastName: true, email: true } } },
     });
 
     if (!c) return { ok: false, error: 'This consent link is not valid.', status: 404 };
@@ -266,18 +278,26 @@ export async function recordDrrConsent(params: {
         return { ok: false, error: 'This consent link has expired. Please contact us for a new link.', status: 410 };
     }
 
+    const clientName = [c.client?.firstName, c.client?.lastName].filter(Boolean).join(' ') || null;
+    const clientEmail = c.client?.email ?? null;
+
     const updated = await prisma.debtReviewRemovalConsent.update({
         where: { id: c.id },
         data: {
             status: 'CONSENTED',
             consentText: DRR_CONSENT_TEXT,
+            consentType: 'OWNER',
+            consentedByRole: 'CONSUMER',
+            consentedById: consumerId ?? c.clientId ?? null,
+            consentedByName: clientName,
+            consentedByEmail: clientEmail,
             consentedAt: new Date(),
             ipAddress: ipAddress ?? null,
             userAgent: userAgent ?? null,
             ...(consumerId ? { consumerId } : {}),
         },
     });
-    logger.info(`[DRR_CONSENT] Consent GRANTED for case ${updated.caseId} (token ${token.slice(0, 8)}…)`);
+    logger.info(`[DRR_CONSENT] OWNER Consent GRANTED for case ${updated.caseId} (token ${token.slice(0, 8)}…)`);
 
     // Fire-and-record the post-consent trigger. Never let a hook failure undo the consent.
     try {
@@ -290,15 +310,71 @@ export async function recordDrrConsent(params: {
 }
 
 /**
- * Fired exactly once when a consumer grants debt review removal consent
+ * Record Proxy Consent for a case (granted by Staff, B2B partner, or Referrer on behalf of the consumer).
+ * Records consentType = 'PROXY', stamps who consented (Name, Email, Role, ID, Notes), and fires the hook.
+ */
+export async function recordDrrProxyConsent(params: RecordProxyConsentParams): Promise<RecordConsentResult> {
+    const { caseId, userId, userName, userEmail, userRole, notes, ipAddress, userAgent } = params;
+
+    const existingCase = await prisma.case.findUnique({
+        where: { id: caseId },
+        select: { id: true, clientId: true },
+    });
+    if (!existingCase) {
+        return { ok: false, error: 'Case not found.', status: 404 };
+    }
+
+    // Reuse existing pending consent or create a new consent record
+    let c = await prisma.debtReviewRemovalConsent.findFirst({
+        where: { caseId, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+    });
+
+    if (!c) {
+        const expiresAt = new Date(Date.now() + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+        c = await prisma.debtReviewRemovalConsent.create({
+            data: {
+                caseId,
+                clientId: existingCase.clientId ?? null,
+                channel: userRole,
+                expiresAt,
+                consentText: DRR_CONSENT_TEXT,
+            },
+        });
+    }
+
+    const updated = await prisma.debtReviewRemovalConsent.update({
+        where: { id: c.id },
+        data: {
+            status: 'CONSENTED',
+            consentType: 'PROXY',
+            consentedByRole: userRole,
+            consentedById: userId,
+            consentedByName: userName,
+            consentedByEmail: userEmail,
+            notes: notes ? notes.trim() : null,
+            consentedAt: new Date(),
+            ipAddress: ipAddress ?? null,
+            userAgent: userAgent ?? null,
+            channel: userRole,
+        },
+    });
+
+    logger.info(`[DRR_CONSENT] PROXY Consent GRANTED by ${userName} (${userRole}) for case ${caseId}`);
+
+    try {
+        await onDebtReviewRemovalConsent(updated.id);
+    } catch (err) {
+        logger.error('[DRR_CONSENT] Post-proxy-consent hook failed (consent still recorded):', err);
+    }
+
+    return { ok: true, alreadyConsented: false, caseId: updated.caseId };
+}
+
+/**
+ * Fired exactly once when debt review removal consent is granted
  * (PENDING → CONSENTED transition only). Records the consent on the case
  * timeline and stamps triggeredAt.
- *
- * The document-readiness pipeline (check credit report / payslip / bank
- * statement, split the combined document, chase the referrer) is deliberately
- * NOT run here: it needs the case files on disk, which only the Cases app can
- * reach. The consent API routes invoke it — the Cases route directly, the Credo
- * route via the Cases internal endpoint (see dhs/drr-readiness.ts).
  */
 export async function onDebtReviewRemovalConsent(consentId: string): Promise<void> {
     const consent = await prisma.debtReviewRemovalConsent.findUnique({
@@ -309,12 +385,11 @@ export async function onDebtReviewRemovalConsent(consentId: string): Promise<voi
 
     logger.info(
         `[DRR_CONSENT] Consent granted for case ${consent.caseId} ` +
-        `(file ${consent.case?.fileNumber ?? '?'}, channel ${consent.channel}) — recording on case timeline.`
+        `(file ${consent.case?.fileNumber ?? '?'}, type ${consent.consentType ?? 'OWNER'}, channel ${consent.channel}) — recording on case timeline.`
     );
 
     // Advance the workflow off "Ready to Consent" so the case header reflects
-    // reality the moment the consumer approves. Only advance from the expected
-    // parking statuses — never clobber a manual staff move.
+    // reality the moment approval is granted. Only advance from expected parking statuses.
     if (consent.case && CONSENT_ADVANCE_FROM_STATUSES.has(consent.case.status ?? '')) {
         await prisma.case
             .update({
@@ -334,18 +409,25 @@ export async function onDebtReviewRemovalConsent(consentId: string): Promise<voi
 
     const automationUserId = await getAutomationUserId().catch(() => null);
     if (automationUserId) {
-        const who = consent.consumer
-            ? `via their Crediva profile (ID ${consent.consumer.idNumber ? consent.consumer.idNumber.slice(0, 6) + '***' : 'on file'})`
-            : 'via the secure emailed link';
+        let commentText = '';
+        if (consent.consentType === 'PROXY') {
+            const roleLabel = consent.consentedByRole === 'B2B' ? 'B2B Partner' : consent.consentedByRole === 'REFERRER' ? 'Referrer' : 'Staff';
+            const notesStr = consent.notes ? ` Notes: "${consent.notes}"` : '';
+            commentText = `[SYSTEM] Debt review removal PROXY CONSENT RECEIVED — approved on behalf of the consumer by ${consent.consentedByName || 'authorized user'} (${roleLabel}${consent.consentedByEmail ? `, ${consent.consentedByEmail}` : ''}).${notesStr} The document readiness check (credit report, payslip, bank statement) is now running; its outcome will be posted here.`;
+        } else {
+            const who = consent.consumer
+                ? `via their Crediva profile (ID ${consent.consumer.idNumber ? consent.consumer.idNumber.slice(0, 6) + '***' : 'on file'})`
+                : 'via the secure emailed link';
+            const clientNameStr = consent.consentedByName ? ` (${consent.consentedByName})` : '';
+            commentText = `[SYSTEM] Debt review removal OWNER CONSENT (Highest Tier) RECEIVED — the consumer${clientNameStr} approved directly ${who}. The document readiness check (credit report, payslip, bank statement) is now running; its outcome will be posted here.`;
+        }
+
         await prisma.caseComment
             .create({
                 data: {
                     caseId: consent.caseId,
                     userId: automationUserId,
-                    content:
-                        `[SYSTEM] Debt review removal CONSENT RECEIVED — the consumer approved ${who}. ` +
-                        `The document readiness check (credit report, payslip, bank statement) is now running; ` +
-                        `its outcome will be posted here.`,
+                    content: commentText,
                     activityType: 'DRR_CONSENT_RECEIVED',
                 },
             })

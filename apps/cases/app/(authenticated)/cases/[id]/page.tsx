@@ -158,6 +158,14 @@ type CaseDetail = {
         createdAt: string;
         consentedAt: string | null;
         expiresAt: string;
+        consentType?: string | null;
+        consentedByRole?: string | null;
+        consentedById?: string | null;
+        consentedByName?: string | null;
+        consentedByEmail?: string | null;
+        notes?: string | null;
+        ipAddress?: string | null;
+        userAgent?: string | null;
     }>;
 
     // Client quotations for this case, newest first (from GET /api/cases/[id])
@@ -365,6 +373,12 @@ export default function CaseDetailPage() {
     const isFinance   = userRole === 'FINANCE';
     const canCreateInvoice = isAdmin || isExecutive || isFinance;
 
+    const sessionUserType = (session?.user as { userType?: string } | undefined)?.userType?.toUpperCase();
+    const loggedInProxyRole: 'STAFF' | 'B2B' | 'REFERRER' =
+        sessionUserType === 'B2B_PARTNER' ? 'B2B' :
+        sessionUserType === 'REFERRER' ? 'REFERRER' :
+        'STAFF';
+
     const [caseData, setCaseData] = useState<CaseDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
@@ -523,6 +537,12 @@ export default function CaseDetailPage() {
         inboxMatches?: { mailbox: string; from: string; subject: string; date: string | null }[];
     } | null>(null);
     const [isAssistClientConsentOpen, setIsAssistClientConsentOpen] = useState(false);
+    const [proxyConsentModalOpen, setProxyConsentModalOpen] = useState(false);
+    const [proxyConsentRole, setProxyConsentRole] = useState<'STAFF' | 'B2B' | 'REFERRER'>('STAFF');
+    const [proxyConsentNotes, setProxyConsentNotes] = useState('');
+    const [proxyConsentLoading, setProxyConsentLoading] = useState(false);
+    const [showDrrAuditDetails, setShowDrrAuditDetails] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     const [description, setDescription] = useState('');
     const [originalDescription, setOriginalDescription] = useState(''); // Track original for cancel
@@ -631,23 +651,27 @@ export default function CaseDetailPage() {
     const fetchCase = useCallback(async () => {
         if (!params.id) return;
         setLoading(true);
+        setFetchError(null);
         try {
             const response = await fetch(`/api/cases/${params.id}`);
             if (!response.ok) {
-                // Case not found or error - redirect to cases list
-                router.push('/cases');
+                if (response.status === 404) {
+                    setFetchError('Case not found.');
+                } else {
+                    setFetchError(`Failed to load case details (Server returned status ${response.status}).`);
+                }
                 return;
             }
             const data = await response.json();
             setCaseData(data);
+            setFetchError(null);
         } catch (error) {
             log.error({ err: error }, 'Error fetching case:', error);
-            // On any error, redirect to cases list
-            router.push('/cases');
+            setFetchError('Failed to load case details due to a network or connection error.');
         } finally {
             setLoading(false);
         }
-    }, [params.id, router]);
+    }, [params.id]);
 
     useEffect(() => {
         fetchCase();
@@ -1993,6 +2017,42 @@ export default function CaseDetailPage() {
         }
     };
 
+    // Record Proxy Consent on behalf of the consumer (by Staff, B2B partner, or Referrer)
+    const handleRecordProxyConsent = async () => {
+        setProxyConsentLoading(true);
+        setDhsMessage(null);
+        try {
+            const res = await fetch(`/api/cases/${params.id}/drr-proxy-consent`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ role: loggedInProxyRole, notes: proxyConsentNotes }),
+            });
+            const result = await res.json();
+            if (!res.ok || !result.success) {
+                throw new Error(result.error || 'Failed to record proxy consent');
+            }
+
+            const caseRes = await fetch(`/api/cases/${params.id}`);
+            if (caseRes.ok) {
+                const updatedCase = await caseRes.json();
+                setCaseData(updatedCase);
+            }
+            setActivityUpdate(prev => prev + 1);
+            setProxyConsentModalOpen(false);
+            setProxyConsentNotes('');
+
+            setDhsMessage({
+                type: 'success',
+                text: result.message || 'Proxy consent successfully recorded. Flag removal process initiated.',
+            });
+        } catch (error: any) {
+            log.error({ err: error }, 'Proxy consent error:', error);
+            setDhsMessage({ type: 'error', text: error?.message || 'Failed to record proxy consent' });
+        } finally {
+            setProxyConsentLoading(false);
+        }
+    };
+
     // DHS Request Transfer
     const handleDHSTransfer = async () => {
         if (!caseData?.client.idNumber) {
@@ -2054,12 +2114,22 @@ export default function CaseDetailPage() {
 
     if (!caseData) {
         return (
-            <div className="max-w-7xl mx-auto">
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 text-center">
-                    <p className="text-red-400 text-lg font-medium mb-4">Case not found</p>
-                    <Link href="/cases" className="text-zeno-cyan hover:text-cyan-300">
-                        ← Back to Cases
-                    </Link>
+            <div className="max-w-7xl mx-auto py-12 px-4">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center space-y-4 max-w-lg mx-auto">
+                    <div className="text-4xl">⚠️</div>
+                    <h2 className="text-xl font-bold text-white">Unable to Load Case</h2>
+                    <p className="text-red-300 text-sm">{fetchError || 'Case not found or could not be loaded.'}</p>
+                    <div className="flex items-center justify-center gap-4 pt-2">
+                        <button
+                            onClick={fetchCase}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-lg"
+                        >
+                            🔄 Retry Loading
+                        </button>
+                        <Link href="/cases" className="text-zeno-cyan hover:text-cyan-300 text-sm font-medium">
+                            ← Back to All Cases
+                        </Link>
+                    </div>
                 </div>
             </div>
         );
@@ -4047,6 +4117,13 @@ export default function CaseDetailPage() {
                                                                 >
                                                                     {resendConsentLoading ? <div className="animate-spin h-3 w-3 border-2 border-white/20 border-t-white rounded-full"></div> : 'Resend Confirmation Link'}
                                                                 </button>
+                                                                <button
+                                                                    onClick={() => setProxyConsentModalOpen(true)}
+                                                                    title="Grant consent on behalf of the client (Staff, B2B partner, or Referrer). Recorded in audit trail for dispute resolution."
+                                                                    className="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm flex items-center gap-1.5"
+                                                                >
+                                                                    <span>✍️</span> Consent on Behalf
+                                                                </button>
                                                             </>
                                                         );
                                                     })()}
@@ -4066,7 +4143,7 @@ export default function CaseDetailPage() {
                                                 </div>
 
                                                 {/* Debt-review-removal CONSENT status — staff must see at a glance
-                                                    whether the consumer has consented before work can proceed. */}
+                                                    whether the consumer has consented before work can proceed, and who approved. */}
                                                 {(() => {
                                                     const consent = caseData.drrConsents?.[0] ?? null;
                                                     const eligible = canShowDhsManageConsumers({
@@ -4076,27 +4153,85 @@ export default function CaseDetailPage() {
                                                     });
                                                     if (!consent && !eligible) return null;
                                                     const fmt = (d: string | null | undefined) =>
-                                                        d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                                                    const pendingAlive = consent?.status === 'PENDING' && new Date(consent.expiresAt) > new Date();
-                                                    const style = consent?.status === 'CONSENTED'
-                                                        ? { box: 'border-emerald-500/30 bg-emerald-500/10', label: 'text-emerald-300', icon: '✓' }
-                                                        : pendingAlive
-                                                            ? { box: 'border-amber-500/30 bg-amber-500/10', label: 'text-amber-300', icon: '⏳' }
-                                                            : consent
-                                                                ? { box: 'border-red-500/30 bg-red-500/10', label: 'text-red-300', icon: '✕' }
-                                                                : { box: 'border-white/10 bg-white/5', label: 'text-gray-300', icon: '•' };
+                                                        d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                                                    const pendingAlive = consent?.status === 'CONSENTED' ? false : consent?.status === 'PENDING' && new Date(consent.expiresAt) > new Date();
+
+                                                    const isOwnerConsent = consent?.status === 'CONSENTED' && (consent.consentType === 'OWNER' || consent.consentedByRole === 'CONSUMER');
+                                                    const isProxyConsent = consent?.status === 'CONSENTED' && (consent.consentType === 'PROXY' || consent.consentedByRole !== 'CONSUMER');
+
+                                                    const style = isOwnerConsent
+                                                        ? { box: 'border-emerald-500/40 bg-emerald-500/10', label: 'text-emerald-300', badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', title: '🟢 OWNER CONSENT (Highest Tier — Client Direct)' }
+                                                        : isProxyConsent
+                                                            ? { box: 'border-sky-500/40 bg-sky-500/10', label: 'text-sky-300', badgeBg: 'bg-sky-500/20 text-sky-300 border-sky-500/40', title: '🔵 PROXY CONSENT (Approved on Behalf)' }
+                                                            : pendingAlive
+                                                                ? { box: 'border-amber-500/30 bg-amber-500/10', label: 'text-amber-300', badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30', title: '⏳ Awaiting Consent' }
+                                                                : consent
+                                                                    ? { box: 'border-red-500/30 bg-red-500/10', label: 'text-red-300', badgeBg: 'bg-red-500/20 text-red-300 border-red-500/30', title: '✕ Link Expired / Cancelled' }
+                                                                    : { box: 'border-white/10 bg-white/5', label: 'text-gray-300', badgeBg: 'bg-white/10 text-gray-300 border-white/20', title: '• Not Yet Requested' };
+
                                                     return (
-                                                        <div className={`mt-3 p-2.5 rounded-lg border ${style.box}`}>
-                                                            <p className={`text-xs font-semibold ${style.label}`}>
-                                                                {style.icon} DRR Consent:{' '}
-                                                                {consent?.status === 'CONSENTED'
-                                                                    ? `Consented on ${fmt(consent.consentedAt)} — work on the debt review flag removal may proceed.`
-                                                                    : pendingAlive
-                                                                        ? `Awaiting consumer consent — link sent ${fmt(consent!.createdAt)}, expires ${fmt(consent!.expiresAt)}. Work cannot proceed until they approve.`
+                                                        <div className={`mt-3 p-3 rounded-lg border ${style.box}`}>
+                                                            <div className="flex items-center justify-between flex-wrap gap-2 mb-1.5">
+                                                                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${style.badgeBg}`}>
+                                                                    {style.title}
+                                                                </span>
+                                                                {consent?.status !== 'CONSENTED' && (
+                                                                    <button
+                                                                        onClick={() => setProxyConsentModalOpen(true)}
+                                                                        className="text-xs px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors"
+                                                                    >
+                                                                        Grant Consent on Behalf
+                                                                    </button>
+                                                                )}
+                                                            </div>
+
+                                                            {consent?.status === 'CONSENTED' ? (
+                                                                <div className="space-y-1.5 mt-2 text-xs">
+                                                                    <p className="text-gray-200">
+                                                                        <strong className="text-white">Who Consented:</strong>{' '}
+                                                                        <span className="font-semibold text-emerald-200">{consent.consentedByName || caseData.client.firstName + ' ' + caseData.client.lastName}</span>
+                                                                        {consent.consentedByEmail ? ` (${consent.consentedByEmail})` : ''}
+                                                                    </p>
+                                                                    <p className="text-gray-300">
+                                                                        <strong className="text-white">Role / Authority:</strong>{' '}
+                                                                        {isOwnerConsent ? 'Consumer (Client Owner — Direct Approval)' : `${consent.consentedByRole || 'Staff'} (Approved on Behalf of Client)`}
+                                                                        {' · '}
+                                                                        <strong className="text-white">Channel:</strong> {consent.channel || 'N/A'}
+                                                                        {' · '}
+                                                                        <strong className="text-white">Date:</strong> {fmt(consent.consentedAt)}
+                                                                    </p>
+                                                                    {consent.notes && (
+                                                                        <p className="text-amber-200 bg-black/20 p-1.5 rounded border border-amber-500/20">
+                                                                            <strong>Audit Notes:</strong> "{consent.notes}"
+                                                                        </p>
+                                                                    )}
+                                                                    <div className="pt-1">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setShowDrrAuditDetails(!showDrrAuditDetails)}
+                                                                            className="text-[11px] text-gray-400 hover:text-white underline flex items-center gap-1"
+                                                                        >
+                                                                            {showDrrAuditDetails ? '▼ Hide Dispute Audit Details' : '▶ Show Dispute Audit Details (IP, User Agent, ID)'}
+                                                                        </button>
+                                                                        {showDrrAuditDetails && (
+                                                                            <div className="mt-2 p-2.5 bg-black/40 rounded border border-white/10 text-[11px] font-mono text-gray-300 space-y-1">
+                                                                                <div><strong className="text-gray-400">Consent Record ID:</strong> {consent.id}</div>
+                                                                                <div><strong className="text-gray-400">Consented By User ID:</strong> {consent.consentedById || 'N/A'}</div>
+                                                                                <div><strong className="text-gray-400">IP Address:</strong> {consent.ipAddress || 'Not captured'}</div>
+                                                                                <div><strong className="text-gray-400">User Agent:</strong> {consent.userAgent || 'Not captured'}</div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <p className={`text-xs ${style.label} mt-1`}>
+                                                                    {pendingAlive
+                                                                        ? `Awaiting consumer consent — link sent ${fmt(consent!.createdAt)}, expires ${fmt(consent!.expiresAt)}. Work cannot proceed until approved or consented on behalf.`
                                                                         : consent
-                                                                            ? `Consent link ${consent.status === 'CANCELLED' ? 'cancelled' : 'expired'} (sent ${fmt(consent.createdAt)}) — use "Resend Confirmation Link" to issue a new one.`
-                                                                            : 'Not yet requested — "Check Request Status" sends the acceptance + consent email once the file is Accepted via DHS.'}
-                                                            </p>
+                                                                            ? `Consent link ${consent.status === 'CANCELLED' ? 'cancelled' : 'expired'} (sent ${fmt(consent.createdAt)}) — use "Resend Confirmation Link" or "Consent on Behalf".`
+                                                                            : 'Not yet requested — "Check Request Status" sends acceptance link, or click "Consent on Behalf" to record manual consent.'}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     );
                                                 })()}
@@ -5604,6 +5739,90 @@ export default function CaseDetailPage() {
                                 className="bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold px-5 py-2 rounded-lg transition-colors text-sm"
                             >
                                 {r350InvoiceSending ? 'Sending…' : 'Send Invoice'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Record Proxy Consent Modal ─────────────────────────────── */}
+            {proxyConsentModalOpen && caseData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                    <div className="bg-zeno-card border border-white/10 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <span>✍️</span> Record Consent on Behalf (Proxy Consent)
+                            </h3>
+                            <button
+                                onClick={() => setProxyConsentModalOpen(false)}
+                                className="text-gray-400 hover:text-white text-lg font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="space-y-3 text-sm text-gray-200">
+                            <div className="p-3 bg-white/5 rounded-lg border border-white/10 space-y-1">
+                                <div><strong className="text-gray-400">Client / Consumer:</strong> {caseData.client.firstName} {caseData.client.lastName}</div>
+                                <div><strong className="text-gray-400">ID Number:</strong> {caseData.client.idNumber}</div>
+                                <div><strong className="text-gray-400">File Number:</strong> {caseData.fileNumber || 'N/A'}</div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                                    Consenting Role / Authority
+                                </label>
+                                <div className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded px-3 py-2 text-white text-sm font-medium flex items-center justify-between">
+                                    <span className="flex items-center gap-2">
+                                        {loggedInProxyRole === 'B2B' && '🏢 B2B Partner Project (On behalf of Client)'}
+                                        {loggedInProxyRole === 'REFERRER' && '🤝 Referrer (On behalf of Client)'}
+                                        {loggedInProxyRole === 'STAFF' && '🛡️ Zenowethu Staff Member (Internal Proxy)'}
+                                    </span>
+                                    <span className="text-xs text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded font-mono">
+                                        Auto-detected ({session?.user?.firstName || session?.user?.name || 'Logged In'})
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                                    Confirmation Notes & Reason <span className="text-gray-400 font-normal">(Recorded for dispute audit trail)</span>
+                                </label>
+                                <textarea
+                                    rows={3}
+                                    value={proxyConsentNotes}
+                                    onChange={(e) => setProxyConsentNotes(e.target.value)}
+                                    placeholder="e.g. Verbal authorization received from client on phone call on 2026-07-20..."
+                                    className="w-full bg-zeno-navy border border-white/20 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 text-sm"
+                                />
+                            </div>
+
+                            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-200">
+                                <strong>Note:</strong> Proxy consent records that consent was approved on behalf of the consumer by your user account. Direct client consent (Owner Consent) remains the highest tier of consent.
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-3 border-t border-white/10">
+                            <button
+                                onClick={() => setProxyConsentModalOpen(false)}
+                                disabled={proxyConsentLoading}
+                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRecordProxyConsent}
+                                disabled={proxyConsentLoading}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60"
+                            >
+                                {proxyConsentLoading ? (
+                                    <>
+                                        <div className="animate-spin h-4 w-4 border-2 border-white/20 border-t-white rounded-full"></div>
+                                        Recording...
+                                    </>
+                                ) : (
+                                    'Confirm Proxy Consent'
+                                )}
                             </button>
                         </div>
                     </div>

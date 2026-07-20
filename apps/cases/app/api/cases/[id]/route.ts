@@ -96,7 +96,15 @@ export async function GET(
                     channel: true,
                     createdAt: true,
                     consentedAt: true,
-                    expiresAt: true
+                    expiresAt: true,
+                    consentType: true,
+                    consentedByRole: true,
+                    consentedById: true,
+                    consentedByName: true,
+                    consentedByEmail: true,
+                    notes: true,
+                    ipAddress: true,
+                    userAgent: true,
                 }
             },
             // Client quotations for this case — the case page shows staff whether a
@@ -137,24 +145,52 @@ export async function GET(
                 });
             }
         } catch (initialError) {
-            logger.error('[API] Case Details GET failed, retrying without assignments:', initialError);
+            logger.error('[API] Case Details GET failed with standard include, retrying with fallback includes:', initialError);
             
-            // Critical Fallback: Retry without assignments if schema/data mismatch
-            const fallbackInclude = { ...standardInclude };
+            // Critical Fallback 1: Retry with basic drrConsents fields (without new audit columns)
+            const fallbackInclude = {
+                ...standardInclude,
+                drrConsents: {
+                    orderBy: { createdAt: 'desc' as const },
+                    take: 1,
+                    select: {
+                        id: true,
+                        status: true,
+                        channel: true,
+                        createdAt: true,
+                        consentedAt: true,
+                        expiresAt: true,
+                    }
+                }
+            };
             delete fallbackInclude.assignments;
-            delete fallbackInclude.jointClient; // Also delete if causing issues in older DBs
-            // Actually, keep it if it's new, but usually fallbacks are for breaking changes.
-            // I'll keep it simple.
 
-            caseDetail = await prisma.case.findUnique({
-                where: { id },
-                include: fallbackInclude
-            });
-
-            if (!caseDetail) {
+            try {
                 caseDetail = await prisma.case.findUnique({
+                    where: { id },
+                    include: fallbackInclude
+                }) || await prisma.case.findUnique({
                     where: { fileNumber: id },
                     include: fallbackInclude
+                });
+            } catch (fallbackError) {
+                logger.error('[API] Case Details GET fallback 1 failed, retrying with bare includes:', fallbackError);
+                // Critical Fallback 2: Bare include (omitting drrConsents if table missing)
+                const bareInclude = {
+                    client: true,
+                    jointClient: true,
+                    documents: true,
+                    workflowLogs: { orderBy: { timestamp: 'desc' as const } },
+                    projects: standardInclude.projects,
+                    referrer: standardInclude.referrer,
+                    invoices: standardInclude.invoices,
+                };
+                caseDetail = await prisma.case.findUnique({
+                    where: { id },
+                    include: bareInclude
+                }) || await prisma.case.findUnique({
+                    where: { fileNumber: id },
+                    include: bareInclude
                 });
             }
         }

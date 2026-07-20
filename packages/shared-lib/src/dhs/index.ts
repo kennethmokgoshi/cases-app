@@ -42,6 +42,7 @@ export {
     getDrrConsentByToken,
     getDrrConsentVerificationState,
     recordDrrConsent,
+    recordDrrProxyConsent,
     onDebtReviewRemovalConsent,
     verifyDrrConsentIdentity,
     DRR_CONSENT_TEXT,
@@ -54,6 +55,7 @@ export type {
     CreateConsentResult,
     ConsentView,
     RecordConsentResult,
+    RecordProxyConsentParams,
     VerifyConsentIdentityResult,
 } from './consent-service';
 export {

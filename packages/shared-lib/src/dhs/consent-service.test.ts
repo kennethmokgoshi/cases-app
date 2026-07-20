@@ -8,7 +8,7 @@ vi.mock('@zenowethu/database', () => ({
             create: vi.fn(),
             update: vi.fn(),
         },
-        case: { update: vi.fn() },
+        case: { update: vi.fn(), findUnique: vi.fn() },
         caseComment: { create: vi.fn() },
     },
 }));
@@ -26,6 +26,7 @@ import {
     getDrrConsentByToken,
     getDrrConsentVerificationState,
     recordDrrConsent,
+    recordDrrProxyConsent,
     DRR_CONSENT_TEXT,
     DRR_CONSENT_VERIFY_ERROR,
     verifyDrrConsentIdentity,
@@ -349,4 +350,81 @@ describe('recordDrrConsent', () => {
         expect(r.ok).toBe(false);
         expect((r as ConsentFailure).status).toBe(404);
     });
+
+    it('stamps consentType=OWNER, consentedByRole=CONSUMER, and client name/email on consumer approval', async () => {
+        drr.findUnique
+            .mockResolvedValueOnce({
+                id: 'c1', token: 't', status: 'PENDING', caseId: 'case1', clientId: 'cl1', expiresAt: new Date(Date.now() + 1e6),
+                client: { idNumber: '8001015009087', firstName: 'Sipho', lastName: 'Dlamini', email: 'sipho@example.com' },
+            })
+            .mockResolvedValueOnce({
+                id: 'c1', caseId: 'case1', consentType: 'OWNER', consentedByName: 'Sipho Dlamini',
+                case: { fileNumber: 'ZDM-1', status: 'READY_TO_CONSENT' }, client: { firstName: 'Sipho', lastName: 'Dlamini' }, consumer: null,
+            });
+        drr.update.mockResolvedValue({ id: 'c1', caseId: 'case1' });
+
+        const r = await recordDrrConsent({ token: 't', verifiedIdNumber: '8001015009087' });
+        expect(r.ok).toBe(true);
+
+        const consentUpdate = drr.update.mock.calls.find(call => call[0].data.status === 'CONSENTED');
+        expect(consentUpdate?.[0].data.consentType).toBe('OWNER');
+        expect(consentUpdate?.[0].data.consentedByRole).toBe('CONSUMER');
+        expect(consentUpdate?.[0].data.consentedByName).toBe('Sipho Dlamini');
+        expect(consentUpdate?.[0].data.consentedByEmail).toBe('sipho@example.com');
+        expect(caseComment.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    content: expect.stringContaining('OWNER CONSENT (Highest Tier) RECEIVED'),
+                }),
+            })
+        );
+    });
 });
+
+describe('recordDrrProxyConsent', () => {
+    const caseModel = (prisma as unknown as { case: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> } }).case;
+
+    it('returns 404 when the case is not found', async () => {
+        caseModel.findUnique.mockResolvedValue(null);
+        const r = await recordDrrProxyConsent({
+            caseId: 'invalid-case', userId: 'u1', userName: 'Jane Staff', userEmail: 'jane@zenowethu.co.za', userRole: 'STAFF',
+        });
+        expect(r.ok).toBe(false);
+        expect(r.status).toBe(404);
+    });
+
+    it('records PROXY consent on behalf of client with Staff/B2B/Referrer details and notes', async () => {
+        caseModel.findUnique.mockResolvedValue({ id: 'case1', clientId: 'client1' });
+        drr.findFirst.mockResolvedValue({ id: 'consent-1', token: 't1', caseId: 'case1' });
+        drr.update.mockResolvedValue({ id: 'consent-1', caseId: 'case1' });
+        drr.findUnique.mockResolvedValue({
+            id: 'consent-1', caseId: 'case1', consentType: 'PROXY', consentedByRole: 'STAFF',
+            consentedByName: 'Jane Staff', consentedByEmail: 'jane@zenowethu.co.za', notes: 'Verbal consent on call',
+            case: { fileNumber: 'ZDM-100', status: 'READY_TO_CONSENT' }, client: null, consumer: null,
+        });
+
+        const r = await recordDrrProxyConsent({
+            caseId: 'case1', userId: 'user-staff-1', userName: 'Jane Staff', userEmail: 'jane@zenowethu.co.za',
+            userRole: 'STAFF', notes: 'Verbal consent on call',
+        });
+
+        expect(r.ok).toBe(true);
+        expect(r.caseId).toBe('case1');
+
+        const updateCall = drr.update.mock.calls.find(call => call[0].data.consentType === 'PROXY');
+        expect(updateCall?.[0].data.consentedByRole).toBe('STAFF');
+        expect(updateCall?.[0].data.consentedById).toBe('user-staff-1');
+        expect(updateCall?.[0].data.consentedByName).toBe('Jane Staff');
+        expect(updateCall?.[0].data.consentedByEmail).toBe('jane@zenowethu.co.za');
+        expect(updateCall?.[0].data.notes).toBe('Verbal consent on call');
+
+        expect(caseComment.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    content: expect.stringContaining('PROXY CONSENT RECEIVED — approved on behalf of the consumer by Jane Staff (Staff, jane@zenowethu.co.za)'),
+                }),
+            })
+        );
+    });
+});
+
