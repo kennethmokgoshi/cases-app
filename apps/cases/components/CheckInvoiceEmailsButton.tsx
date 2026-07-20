@@ -69,6 +69,7 @@ export default function CheckInvoiceEmailsButton({
     menuAlign?: 'left' | 'right';
 }) {
     const [showMenu, setShowMenu] = useState(false);
+    const [selectedLookbackDays, setSelectedLookbackDays] = useState<number>(365);
     const [mailboxes, setMailboxes] = useState<SearchableMailbox[] | null>(null);
     const [isChecking, setIsChecking] = useState(false);
     const [result, setResult] = useState<CheckResult | null>(null);
@@ -101,21 +102,17 @@ export default function CheckInvoiceEmailsButton({
     } | null>(null);
 
     const openMenu = async () => {
-        if (showMenu) {
-            setShowMenu(false);
-            return;
-        }
-        setShowMenu(true);
-        if (mailboxes === null) {
+        setShowMenu(prev => !prev);
+        if (!mailboxes) {
             try {
-                const res = await fetch('/api/admin/settings/mailboxes');
+                const res = await fetch(`/api/cases/${caseId}/dhs-decline/check-fee-emails/verify-request`);
                 if (res.ok) {
                     const data = await res.json();
-                    const searchable = [
-                        ...(data.shared ?? []).filter((m: SearchableMailbox) => m.isActive),
-                        ...(data.personal && data.personal.isActive ? [data.personal] : []),
-                    ];
-                    setMailboxes(searchable);
+                    if (data.mailboxes) {
+                        setMailboxes(data.mailboxes);
+                    } else {
+                        setMailboxes([]);
+                    }
                 } else {
                     setMailboxes([]);
                 }
@@ -142,18 +139,19 @@ export default function CheckInvoiceEmailsButton({
         }
     };
 
-    const runCheck = async (mailboxId: string) => {
+    const runCheck = async (mailboxId: string, overrideLookbackDays?: number) => {
         setShowMenu(false);
         setIsChecking(true);
         setResult(null);
         setScanProgress({ progress: 0, emailsScanned: 0, newEmailsFound: 0 });
         setVerifyRequestResult(null);
+        const lookbackToUse = overrideLookbackDays ?? selectedLookbackDays;
         try {
             const res = await fetch(`/api/cases/${caseId}/dhs-decline/check-fee-emails`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    lookbackDays: 90,
+                    lookbackDays: lookbackToUse,
                     receivedAfter: receivedAfter || undefined,
                     reason: reason || undefined,
                     mailboxId,
@@ -250,13 +248,57 @@ export default function CheckInvoiceEmailsButton({
                     </button>
                 </div>
                 {showMenu && (
-                    <div className={`absolute ${menuAlign === 'right' ? 'right-0' : 'left-0'} top-full mt-1 w-72 bg-zeno-navy border border-cyan-500/30 rounded-lg shadow-2xl z-20 overflow-hidden`}>
-                        <button
-                            onClick={() => runCheck('ALL')}
-                            className="w-full text-left px-3 py-2 text-xs text-white hover:bg-cyan-500/10 transition-colors border-b border-white/10 font-semibold"
-                        >
-                            🔍 Search all mailboxes
-                        </button>
+                    <div className={`absolute ${menuAlign === 'right' ? 'right-0' : 'left-0'} top-full mt-1 w-80 bg-zeno-navy border border-cyan-500/30 rounded-lg shadow-2xl z-20 overflow-hidden`}>
+                        <div className="p-3 border-b border-white/10 bg-white/5">
+                            <div className="text-[10px] uppercase font-semibold tracking-wider text-cyan-300/90 mb-1.5 flex items-center justify-between">
+                                <span className="flex items-center gap-1">📅 Search Date Range</span>
+                                <span className="text-[10px] text-gray-400 font-normal">
+                                    {selectedLookbackDays === 30 ? '30 days' : selectedLookbackDays === 90 ? '90 days' : selectedLookbackDays === 180 ? '6 months' : selectedLookbackDays === 365 ? '1 year' : '3 years'}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-5 gap-1">
+                                {[
+                                    { label: '30d', days: 30 },
+                                    { label: '90d', days: 90 },
+                                    { label: '6mo', days: 180 },
+                                    { label: '1yr', days: 365 },
+                                    { label: '3yr', days: 1095 },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.days}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedLookbackDays(opt.days);
+                                        }}
+                                        className={`px-1.5 py-1 text-[11px] rounded transition-all text-center font-medium ${
+                                            selectedLookbackDays === opt.days
+                                                ? 'bg-cyan-600 text-white shadow-sm font-semibold ring-1 ring-cyan-400'
+                                                : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-2 border-b border-white/10 bg-black/20">
+                            <button
+                                onClick={() => runCheck('ALL')}
+                                className="w-full text-left px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-500/20 bg-cyan-900/30 border border-cyan-500/30 rounded transition-colors font-semibold flex items-center justify-between"
+                            >
+                                <span className="flex items-center gap-1.5">🔍 Search all mailboxes</span>
+                                <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-normal">
+                                    {selectedLookbackDays === 30 ? '30 days' : selectedLookbackDays === 90 ? '90 days' : selectedLookbackDays === 180 ? '6 months' : selectedLookbackDays === 365 ? '1 year' : '3 years'}
+                                </span>
+                            </button>
+                        </div>
+
+                        <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-white/5 border-b border-white/5">
+                            Or Select Specific Mailbox:
+                        </div>
+
                         {mailboxes === null && (
                             <div className="px-3 py-2 text-xs text-gray-400">Loading mailboxes…</div>
                         )}
@@ -269,13 +311,13 @@ export default function CheckInvoiceEmailsButton({
                             <button
                                 key={m.id}
                                 onClick={() => runCheck(m.id)}
-                                className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-cyan-500/10 transition-colors"
+                                className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-cyan-500/10 transition-colors border-b border-white/5 last:border-0"
                             >
-                                <span className="block truncate">
+                                <span className="block truncate font-medium">
                                     {m.emailAddress}
-                                    {m.isDcCommunication && <span className="ml-1.5 text-amber-400">DC comms</span>}
+                                    {m.isDcCommunication && <span className="ml-1.5 text-amber-400 text-[10px]">DC comms</span>}
                                 </span>
-                                <span className="block text-gray-500">
+                                <span className="block text-[11px] text-gray-400">
                                     {m.label}{!m.hasPassword && ' — no password saved yet'}
                                 </span>
                             </button>

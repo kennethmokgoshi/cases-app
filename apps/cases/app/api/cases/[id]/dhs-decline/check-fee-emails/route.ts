@@ -13,7 +13,7 @@ import crypto from 'crypto';
 const logger = createLogger('api/cases/[id]/dhs-decline/check-fee-emails');
 
 const BodySchema = z.object({
-    lookbackDays: z.coerce.number().int().min(1).max(365).default(90),
+    lookbackDays: z.coerce.number().int().min(1).max(1095).default(365),
     receivedAfter: z.coerce.date().optional(),
     reason: z.string().trim().max(1000).optional(),
     // 'ALL' (default) searches every mailbox the caller may use; otherwise a MailboxAccount id
@@ -261,7 +261,8 @@ export async function POST(
                     data.matchPolicy?.serverSideSearchRequired === true &&
                     data.matchPolicy?.openOrFetchOnlyAfterIdentifierMatch === true &&
                     data.matchPolicy?.nonMatchingEmailAction === matchPolicy.nonMatchingEmailAction;
-                return (data.mailboxScope ?? 'ALL') === scopeKey && hasStrictMatchPolicy;
+                const sameReceivedAfter = !data.receivedAfter || data.receivedAfter === searchFrom.toISOString();
+                return (data.mailboxScope ?? 'ALL') === scopeKey && hasStrictMatchPolicy && sameReceivedAfter;
             } catch {
                 return false;
             }

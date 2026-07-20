@@ -201,16 +201,16 @@ Kind regards,
     {
         statusCode: 'REQUESTED_VIA_DHS',
         statusName: 'Requested via DHS',
-        smsTemplate: 'Hi {clientName}, your file {fileNumber} has been submitted to the NCR system. We will update you once processed.',
-        emailSubject: 'File Submitted to NCR - #{fileNumber}',
+        smsTemplate: 'Hi {clientName}, your file {fileNumber} has been requested from {dcName} ({tradingName}) via DHS. This takes 5-10 working days.',
+        emailSubject: 'File Request Submitted via DHS - Ref: #{fileNumber}',
         emailTemplate: `Dear {clientName},
 
-Your credit repair file has been submitted to the National Credit Regulator (NCR) system.
+Your file has been requested from {dcName} from {tradingName} via the Debt Help System (DHS), a system used by debt counsellors to manage client transfers.
 
 File Number: {fileNumber}
-Status: Awaiting NCR Response
+Status: Requested via DHS
 
-This process typically takes 5-10 business days. We will notify you as soon as we receive a response.
+This process takes 5 - 10 working days. We will notify you as soon as we receive a response.
 
 Kind regards,
 {companyName} Team`,

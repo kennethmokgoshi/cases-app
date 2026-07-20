@@ -4665,7 +4665,6 @@ export default function CaseDetailPage() {
                                                             {needsFeeEmailFollowUp && (
                                                                 <CheckInvoiceEmailsButton
                                                                     caseId={caseData.id}
-                                                                    receivedAfter={caseData.declineFirstDetectedAt || caseData.declineLastDetectedAt || null}
                                                                     reason={currentReason || null}
                                                                     onRequested={() => setActivityUpdate(prev => prev + 1)}
                                                                     menuAlign="right"

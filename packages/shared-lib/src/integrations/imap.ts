@@ -179,8 +179,35 @@ export function mapEnvelopeToMatch(
     };
 }
 
+async function getSearchFolders(client: ImapFlow): Promise<string[]> {
+    try {
+        const list = await client.list();
+        if (!list || list.length === 0) return ['INBOX'];
+
+        const folders: string[] = [];
+        // Prioritize INBOX first if selectable
+        const inbox = list.find(m => m.path === 'INBOX' || m.path.toLowerCase() === 'inbox');
+        if (inbox && (!inbox.flags || !inbox.flags.has('\\Noselect'))) {
+            folders.push(inbox.path);
+        }
+
+        for (const m of list) {
+            // Skip non-selectable folders (folders that are purely parent categories without messages)
+            if (m.flags && m.flags.has('\\Noselect')) {
+                continue;
+            }
+            if (m.path && !folders.includes(m.path)) {
+                folders.push(m.path);
+            }
+        }
+        return folders.length > 0 ? folders : ['INBOX'];
+    } catch {
+        return ['INBOX'];
+    }
+}
+
 /**
- * Search a single mailbox's INBOX for any message referencing a consumer by
+ * Search a single mailbox for any message referencing a consumer by
  * ID number and/or full name (first + last). Returns message envelopes only —
  * no bodies or attachments are downloaded — so it is safe to run across several
  * mailboxes interactively. Never throws: connection/search failures are
@@ -223,52 +250,60 @@ export async function searchMailboxForConsumer({
         tls: { rejectUnauthorized: false },
     });
 
-    let lock;
     try {
         await client.connect();
-        lock = await client.getMailboxLock('INBOX');
-
-        // Search per-identifier and merge, so each hit records what matched it.
-        const matchedOnByUid = new Map<number, Set<ConsumerMatchKey>>();
-        const addUids = (uids: unknown, key: ConsumerMatchKey) => {
-            if (!Array.isArray(uids)) return;
-            for (const uid of uids as number[]) {
-                const set = matchedOnByUid.get(uid) ?? new Set<ConsumerMatchKey>();
-                set.add(key);
-                matchedOnByUid.set(uid, set);
-            }
-        };
-
-        if (trimmedId) {
-            addUids(await client.search({ text: trimmedId, since }, { uid: true }), 'ID_NUMBER');
-        }
-        if (fullName) {
-            addUids(await client.search({ text: fullName, since }, { uid: true }), 'NAME');
-        }
-
-        const allUids = [...matchedOnByUid.keys()];
-        const scanned = allUids.length;
-        // Most recent first, capped so a busy mailbox can't flood the response.
-        const uidsToFetch = allUids.sort((a, b) => b - a).slice(0, limit);
-
+        const folders = await getSearchFolders(client);
         const matches: ConsumerEmailMatch[] = [];
-        if (uidsToFetch.length > 0) {
-            for await (const msg of client.fetch(uidsToFetch, { uid: true, envelope: true, flags: true })) {
-                const keys = [...(matchedOnByUid.get(msg.uid) ?? [])];
-                matches.push(mapEnvelopeToMatch(mailboxLabel, msg, keys));
+        let totalScanned = 0;
+
+        for (const folder of folders) {
+            let lock;
+            try {
+                lock = await client.getMailboxLock(folder);
+
+                const matchedOnByUid = new Map<number, Set<ConsumerMatchKey>>();
+                const addUids = (uids: unknown, key: ConsumerMatchKey) => {
+                    if (!Array.isArray(uids)) return;
+                    for (const uid of uids as number[]) {
+                        const set = matchedOnByUid.get(uid) ?? new Set<ConsumerMatchKey>();
+                        set.add(key);
+                        matchedOnByUid.set(uid, set);
+                    }
+                };
+
+                if (trimmedId) {
+                    addUids(await client.search({ text: trimmedId, since }, { uid: true }), 'ID_NUMBER');
+                }
+                if (fullName) {
+                    addUids(await client.search({ text: fullName, since }, { uid: true }), 'NAME');
+                }
+
+                const allUids = [...matchedOnByUid.keys()];
+                totalScanned += allUids.length;
+                const uidsToFetch = allUids.sort((a, b) => b - a).slice(0, limit);
+
+                if (uidsToFetch.length > 0) {
+                    for await (const msg of client.fetch(uidsToFetch, { uid: true, envelope: true, flags: true })) {
+                        const keys = [...(matchedOnByUid.get(msg.uid) ?? [])];
+                        matches.push(mapEnvelopeToMatch(mailboxLabel, msg, keys));
+                    }
+                }
+            } catch (folderErr) {
+                logger.warn(`[IMAP] Consumer search failed for folder ${folder}:`, folderErr);
+            } finally {
+                if (lock) {
+                    try { lock.release(); } catch { /* ignore */ }
+                }
             }
         }
 
         matches.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
-        return { mailbox: mailboxLabel, scanned, matches };
+        return { mailbox: mailboxLabel, scanned: totalScanned, matches: matches.slice(0, limit) };
     } catch (err: unknown) {
         const error = formatImapConnectionError(err, config);
         logger.warn(`[IMAP] Consumer search failed for ${config.username}@${config.host}: ${error}`);
         return { mailbox: mailboxLabel, scanned: 0, matches: [], error };
     } finally {
-        if (lock) {
-            try { lock.release(); } catch { /* ignore */ }
-        }
         try { await client.logout(); } catch { /* ignore */ }
     }
 }
@@ -299,19 +334,14 @@ export async function scanMailboxForClient({
 
     await client.connect();
 
-    let lock;
     try {
-        lock = await client.getMailboxLock('INBOX');
-        const messageUids = await client.search({
-            text: idNumber,
-            since: since,
-        }, { uid: true });
-
-        const emailsScanned = Array.isArray(messageUids) ? messageUids.length : 0;
+        const folders = await getSearchFolders(client);
+        let emailsScanned = 0;
         let newEmailsFound = 0;
         let invoiceCandidatesFound = 0;
         let processed = 0;
         const attachmentsToDownload: {
+            folder: string;
             uid: number;
             part: string;
             fileName: string;
@@ -321,68 +351,101 @@ export async function scanMailboxForClient({
             messageId: string;
         }[] = [];
 
-        if (Array.isArray(messageUids) && messageUids.length > 0) {
-            for await (const msg of client.fetch(messageUids, { envelope: true, bodyStructure: true, flags: true })) {
-                processed++;
+        const processedMessageIds = new Set<string>(skipMessageIds);
 
-                const messageId = msg.envelope?.messageId || '';
-                if (messageId && skipMessageIds.includes(messageId)) {
-                    continue;
-                }
+        for (const folder of folders) {
+            let lock;
+            try {
+                lock = await client.getMailboxLock(folder);
+                const messageUids = await client.search({
+                    text: idNumber,
+                    since: since,
+                }, { uid: true });
 
-                if (!msg.flags.has('\\Seen')) {
-                    newEmailsFound++;
-                }
+                if (Array.isArray(messageUids) && messageUids.length > 0) {
+                    emailsScanned += messageUids.length;
 
-                let hasCandidate = false;
-                const checkPart = (part: any) => {
-                    if (!part) return;
+                    for await (const msg of client.fetch(messageUids, { envelope: true, bodyStructure: true, flags: true })) {
+                        processed++;
 
-                    const filename = part.dispositionParameters?.filename || part.parameters?.name || '';
-                    const isAttachment = part.disposition?.toLowerCase() === 'attachment' || part.disposition?.toLowerCase() === 'inline' || Boolean(filename);
-                    const isPdf = part.contentType?.toLowerCase() === 'application/pdf';
-
-                    if (isAttachment && isPdf) {
-                        const lowerName = filename.toLowerCase();
-                        const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill');
-                        const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement');
-
-                        if (isInvoice || isPoP) {
-                            hasCandidate = true;
-                            attachmentsToDownload.push({
-                                uid: msg.uid,
-                                part: part.part,
-                                fileName: filename || (isInvoice ? 'invoice.pdf' : 'proof_of_payment.pdf'),
-                                mimeType: part.contentType,
-                                isPoP,
-                                isInvoice,
-                                messageId,
-                            });
+                        const messageId = msg.envelope?.messageId || '';
+                        if (messageId && processedMessageIds.has(messageId)) {
+                            continue;
                         }
-                    }
+                        if (messageId) {
+                            processedMessageIds.add(messageId);
+                        }
 
-                    if (Array.isArray(part.childNodes)) {
-                        part.childNodes.forEach(checkPart);
-                    }
-                };
+                        if (!msg.flags.has('\\Seen')) {
+                            newEmailsFound++;
+                        }
 
-                checkPart(msg.bodyStructure);
-                if (hasCandidate) {
-                    invoiceCandidatesFound++;
+                        const subjectLower = (msg.envelope?.subject || '').toLowerCase();
+                        let hasCandidate = false;
+
+                        const checkPart = (part: any) => {
+                            if (!part) return;
+
+                            const filename = part.dispositionParameters?.filename || part.parameters?.name || '';
+                            const isAttachment = part.disposition?.toLowerCase() === 'attachment' || part.disposition?.toLowerCase() === 'inline' || Boolean(filename);
+                            const mimeType = (part.contentType || '').toLowerCase();
+                            const isPdf = mimeType === 'application/pdf' || mimeType.includes('pdf');
+                            const isImage = mimeType.startsWith('image/');
+                            const isDoc = isPdf || isImage || mimeType === 'application/octet-stream';
+
+                            if (isAttachment && isDoc) {
+                                const lowerName = filename.toLowerCase();
+                                const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill') || subjectLower.includes('invoice') || subjectLower.includes('fee') || subjectLower.includes('consumer');
+                                const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement') || subjectLower.includes('proof') || subjectLower.includes('payment') || subjectLower.includes('pop');
+                                const isCandidateDoc = isInvoice || isPoP || isPdf || Boolean(filename);
+
+                                if (isCandidateDoc) {
+                                    hasCandidate = true;
+                                    attachmentsToDownload.push({
+                                        folder,
+                                        uid: msg.uid,
+                                        part: part.part,
+                                        fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
+                                        mimeType: part.contentType || 'application/pdf',
+                                        isPoP,
+                                        isInvoice: isInvoice || !isPoP,
+                                        messageId,
+                                    });
+                                }
+                            }
+
+                            if (Array.isArray(part.childNodes)) {
+                                part.childNodes.forEach(checkPart);
+                            }
+                        };
+
+                        checkPart(msg.bodyStructure);
+                        if (hasCandidate) {
+                            invoiceCandidatesFound++;
+                        }
+
+                        onProgress?.({
+                            processed,
+                            total: emailsScanned,
+                            newEmailsFound,
+                            invoiceCandidatesFound,
+                        });
+                    }
                 }
-
-                onProgress?.({
-                    processed,
-                    total: emailsScanned,
-                    newEmailsFound,
-                    invoiceCandidatesFound,
-                });
+            } catch (folderErr) {
+                logger.warn(`Failed to scan folder ${folder} for ${config.username}:`, folderErr);
+            } finally {
+                if (lock) {
+                    try { lock.release(); } catch { /* ignore */ }
+                }
             }
         }
 
         const attachments: ScanResult['attachments'] = [];
         for (const att of attachmentsToDownload) {
+            let lockFolder;
             try {
+                lockFolder = await client.getMailboxLock(att.folder);
                 const { content } = await client.download(att.uid, att.part, { uid: true });
                 const chunks: Buffer[] = [];
                 for await (const chunk of content) {
@@ -398,7 +461,11 @@ export async function scanMailboxForClient({
                     messageId: att.messageId,
                 });
             } catch (downloadErr) {
-                logger.error(`Failed to download attachment for message UID ${att.uid}:`, downloadErr);
+                logger.error(`Failed to download attachment for message UID ${att.uid} in folder ${att.folder}:`, downloadErr);
+            } finally {
+                if (lockFolder) {
+                    try { lockFolder.release(); } catch { /* ignore */ }
+                }
             }
         }
 
@@ -409,9 +476,6 @@ export async function scanMailboxForClient({
             attachments,
         };
     } finally {
-        if (lock) {
-            try { lock.release(); } catch { /* ignore */ }
-        }
         try {
             await client.logout();
         } catch {
