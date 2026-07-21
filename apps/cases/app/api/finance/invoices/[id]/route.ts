@@ -21,7 +21,7 @@ const UpdateInvoiceSchema = z.object({
   notes:         z.string().max(2000).optional(),
   reference:     z.string().max(100).optional(),
   vatRate:       z.number().min(0).max(1).optional(),
-  bankAccountId: z.string().cuid().nullable().optional(),
+  bankAccountId: z.string().max(100).nullable().optional(),
 }).strict()
 
 export async function GET(
@@ -74,8 +74,19 @@ export async function PATCH(
     const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true, subtotal: true, vatRate: true, type: true, caseId: true } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    if (existing.status === 'PAID' || existing.status === 'CANCELLED') {
-      return NextResponse.json({ error: `Cannot modify a ${existing.status} invoice` }, { status: 409 })
+    if (existing.status === 'PAID' || existing.status === 'CANCELLED' || existing.status === 'CONVERTED') {
+      return NextResponse.json({ error: `Cannot modify a ${existing.status} invoice/quote` }, { status: 409 })
+    }
+
+    const isAdmin = session.user.isAdmin === true
+    const isExecutive = session.user.isExecutive === true
+
+    // Non-draft quotes/invoices can only be modified by Admins or Executives
+    if (existing.status !== 'DRAFT' && !isAdmin && !isExecutive) {
+      return NextResponse.json(
+        { error: 'Only administrators and executives can edit an issued quote or invoice.' },
+        { status: 403 }
+      )
     }
 
     const input = parsed.data

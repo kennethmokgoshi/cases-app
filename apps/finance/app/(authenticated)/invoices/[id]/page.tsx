@@ -6,6 +6,7 @@ import Link from 'next/link'
 import SendInvoiceModal from './SendInvoiceModal'
 import RecordPaymentModal from './RecordPaymentModal'
 import QuoteActions from './QuoteActions'
+import EditQuoteModal from './EditQuoteModal'
 import DeleteDocumentButton from '@/components/finance/DeleteDocumentButton'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -76,6 +77,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     ? (quoteCapture?.overpaidBy ?? 0)
     : Math.max(0, amountPaid - Number(invoice.total))
 
+  const isAdmin = session.user.isAdmin === true
+  const isExecutive = session.user.isExecutive === true
+  const canEditQuote = isQuote && (isAdmin || isExecutive || invoice.status === 'DRAFT') && invoice.status !== 'CONVERTED' && invoice.status !== 'CANCELLED' && invoice.status !== 'PAID'
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Breadcrumb / back navigation */}
@@ -134,6 +139,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </svg>
             Download PDF
           </a>
+
+          {canEditQuote && (
+            <EditQuoteModal
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoiceNumber}
+              initialLineItems={lineItems}
+              initialBankAccountId={invoice.bankAccountId}
+              vatRate={Number(invoice.vatRate)}
+            />
+          )}
 
           {invoice.status !== 'CANCELLED' && invoice.status !== 'PAID' && invoice.status !== 'CONVERTED' && invoice.status !== 'REJECTED' && (
             <SendInvoiceModal

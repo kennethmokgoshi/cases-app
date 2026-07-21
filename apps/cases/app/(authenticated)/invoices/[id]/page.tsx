@@ -7,6 +7,7 @@ import Link from 'next/link'
 import SendInvoiceModal from './SendInvoiceModal'
 import MarkPaidButton from './MarkPaidButton'
 import QuoteActions from './QuoteActions'
+import EditQuoteModal from './EditQuoteModal'
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT:          'bg-gray-500/20 text-gray-400 border border-gray-500/30',
@@ -58,6 +59,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   if (!session?.user) return null
 
   const isAdmin = session.user.isAdmin === true
+  const isExecutive = session.user.isExecutive === true
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
@@ -78,6 +80,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const hasBankingDetails = !!invoice.bankAccountId
   const isQuote = invoice.type === 'QUOTE'
   const docLabel = isQuote ? 'Quotation' : 'Invoice'
+  const canEditQuote = isQuote && (isAdmin || isExecutive || invoice.status === 'DRAFT') && invoice.status !== 'CONVERTED' && invoice.status !== 'CANCELLED' && invoice.status !== 'PAID'
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -117,6 +120,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </svg>
             Download PDF
           </a>
+
+          {canEditQuote && (
+            <EditQuoteModal
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoiceNumber}
+              initialLineItems={lineItems}
+              initialBankAccountId={invoice.bankAccountId}
+              vatRate={Number(invoice.vatRate)}
+            />
+          )}
 
           {invoice.status !== 'CANCELLED' && invoice.status !== 'PAID' && invoice.status !== 'CONVERTED' && invoice.status !== 'REJECTED' && (
             <SendInvoiceModal

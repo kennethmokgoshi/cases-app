@@ -6,17 +6,23 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 const LineItemSchema = z.object({
-  description: z.string().min(1).max(500),
-  quantity: z.number().positive(),
-  unitPrice: z.number().nonnegative() })
+  creditor:     z.string().max(200).optional(),
+  serviceKey:   z.string().max(100).optional(),
+  serviceLabel: z.string().max(200).optional(),
+  description:  z.string().min(1).max(500),
+  quantity:     z.number().positive(),
+  unitPrice:    z.number().nonnegative()
+})
 
 const UpdateInvoiceSchema = z.object({
-  status:    z.enum(['DRAFT', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED']).optional(),
-  lineItems: z.array(LineItemSchema).min(1).max(100).optional(),
-  dueAt:     z.string().datetime().optional(),
-  notes:     z.string().max(2000).optional(),
-  reference: z.string().max(100).optional(),
-  vatRate:   z.number().min(0).max(1).optional() }).strict()
+  status:        z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED']).optional(),
+  lineItems:     z.array(LineItemSchema).min(1).max(100).optional(),
+  dueAt:         z.string().datetime().optional(),
+  notes:         z.string().max(2000).optional(),
+  reference:     z.string().max(100).optional(),
+  vatRate:       z.number().min(0).max(1).optional(),
+  bankAccountId: z.string().max(100).nullable().optional(),
+}).strict()
 
 export async function GET(
   _request: Request,
@@ -30,10 +36,13 @@ export async function GET(
     const invoice = await prisma.invoice.findUnique({
       where: { id },
       include: {
-        client:    { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true, address: true } },
-        case:      { select: { fileNumber: true, acquisitionType: true } },
-        project:   { select: { id: true, name: true } },
-        createdBy: { select: { firstName: true, lastName: true } } } })
+        client:      { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true, address: true } },
+        case:        { select: { fileNumber: true, acquisitionType: true } },
+        project:     { select: { id: true, name: true } },
+        createdBy:   { select: { firstName: true, lastName: true } },
+        bankAccount: { select: { id: true, bankName: true, accountName: true, accountNumber: true, branchCode: true, accountType: true } },
+      }
+    })
 
     if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -63,38 +72,51 @@ export async function PATCH(
   }
 
   try {
-    const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true, type: true, caseId: true } })
+    const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true, type: true, caseId: true, vatRate: true, subtotal: true } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    if (existing.status === 'PAID' || existing.status === 'CANCELLED') {
-      return NextResponse.json({ error: `Cannot modify a ${existing.status} invoice` }, { status: 409 })
+    if (existing.status === 'PAID' || existing.status === 'CANCELLED' || existing.status === 'CONVERTED') {
+      return NextResponse.json({ error: `Cannot modify a ${existing.status} invoice/quote` }, { status: 409 })
+    }
+
+    const isAdmin = session.user.isAdmin === true
+    const isExecutive = session.user.isExecutive === true
+
+    // Non-draft quotes/invoices can only be modified by Admins or Executives
+    if (existing.status !== 'DRAFT' && !isAdmin && !isExecutive) {
+      return NextResponse.json(
+        { error: 'Only administrators and executives can edit an issued quote or invoice.' },
+        { status: 403 }
+      )
     }
 
     const input = parsed.data
-    const updateData: any = {}
+    const updateData: Prisma.InvoiceUpdateInput = {}
 
-    if (input.status)    updateData.status    = input.status
-    if (input.dueAt)     updateData.dueAt     = new Date(input.dueAt)
+    if (input.status) updateData.status = input.status
+    if (input.dueAt) updateData.dueAt = new Date(input.dueAt)
     if (input.notes !== undefined) updateData.notes = input.notes
     if (input.reference !== undefined) updateData.reference = input.reference
 
+    if ('bankAccountId' in input) {
+      updateData.bankAccount = input.bankAccountId
+        ? { connect: { id: input.bankAccountId } }
+        : { disconnect: true }
+    }
+
     if (input.lineItems) {
-      const vatRate  = input.vatRate ?? (existing as unknown as { vatRate: number }).vatRate ?? 0.15
+      const vatRate  = input.vatRate ?? Number(existing.vatRate) ?? 0.15
       const subtotal = input.lineItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-      updateData.lineItems = input.lineItems as any
+      updateData.lineItems = input.lineItems as Prisma.InputJsonValue
       updateData.subtotal  = subtotal
       updateData.vatRate   = vatRate
       updateData.vatAmount = subtotal * vatRate
       updateData.total     = subtotal + subtotal * vatRate
     } else if (input.vatRate !== undefined) {
-      // vatRate changed without new lineItems — need to recalculate
-      const inv = await prisma.invoice.findUnique({ where: { id }, select: { subtotal: true } })
-      if (inv) {
-        const sub = Number(inv.subtotal)
-        updateData.vatRate   = input.vatRate
-        updateData.vatAmount = sub * input.vatRate
-        updateData.total     = sub + sub * input.vatRate
-      }
+      const sub = Number(existing.subtotal)
+      updateData.vatRate   = input.vatRate
+      updateData.vatAmount = sub * input.vatRate
+      updateData.total     = sub + sub * input.vatRate
     }
 
     const updated = await prisma.invoice.update({ where: { id }, data: updateData })

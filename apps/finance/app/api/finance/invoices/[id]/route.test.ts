@@ -7,7 +7,7 @@ vi.mock('@zenowethu/shared-lib', () => ({
 
 vi.mock('@zenowethu/database', () => ({
     prisma: {
-        invoice: { findUnique: vi.fn(), delete: vi.fn() },
+        invoice: { findUnique: vi.fn(), delete: vi.fn(), update: vi.fn() },
     },
     Prisma: {},
 }));
@@ -93,3 +93,103 @@ describe('DELETE /api/finance/invoices/[id]', () => {
         expect(prisma.invoice.delete).not.toHaveBeenCalled();
     });
 });
+
+import { PATCH } from './route';
+
+describe('PATCH /api/finance/invoices/[id]', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(prisma.invoice.update).mockResolvedValue({ id: 'doc-1' } as any);
+    });
+
+    it('returns 401 when unauthenticated', async () => {
+        vi.mocked(auth as any).mockResolvedValue(null);
+        const patchReq = new Request('http://localhost/api/finance/invoices/doc-1', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bankAccountId: 'bank-2' }),
+        });
+        const res = await PATCH(patchReq, { params });
+        expect(res.status).toBe(401);
+    });
+
+    it('blocks regular staff from modifying an issued quote in SENT status', async () => {
+        vi.mocked(auth as any).mockResolvedValue(staff);
+        vi.mocked(prisma.invoice.findUnique).mockResolvedValue({
+            id: 'doc-1',
+            status: 'SENT',
+            type: 'QUOTE',
+            vatRate: 0.15,
+            subtotal: 1000,
+        } as any);
+
+        const patchReq = new Request('http://localhost/api/finance/invoices/doc-1', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bankAccountId: 'bank-2' }),
+        });
+        const res = await PATCH(patchReq, { params });
+        expect(res.status).toBe(403);
+    });
+
+    it('allows Admin to modify line items and bank account on a SENT quote', async () => {
+        vi.mocked(auth as any).mockResolvedValue(admin);
+        vi.mocked(prisma.invoice.findUnique).mockResolvedValue({
+            id: 'doc-1',
+            status: 'SENT',
+            type: 'QUOTE',
+            vatRate: 0.15,
+            subtotal: 1000,
+        } as any);
+
+        const patchReq = new Request('http://localhost/api/finance/invoices/doc-1', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                bankAccountId: 'bank-capitec',
+                lineItems: [
+                    { description: 'Capitec Dispute Fee', quantity: 1, unitPrice: 1500 },
+                ],
+            }),
+        });
+        const res = await PATCH(patchReq, { params });
+        expect(res.status).toBe(200);
+        expect(prisma.invoice.update).toHaveBeenCalledWith({
+            where: { id: 'doc-1' },
+            data: expect.objectContaining({
+                subtotal: 1500,
+                vatAmount: 225,
+                total: 1725,
+                bankAccount: { connect: { id: 'bank-capitec' } },
+            }),
+        });
+    });
+
+    it('allows Executive to modify bank account on a SENT quote', async () => {
+        vi.mocked(auth as any).mockResolvedValue(exec);
+        vi.mocked(prisma.invoice.findUnique).mockResolvedValue({
+            id: 'doc-1',
+            status: 'SENT',
+            type: 'QUOTE',
+            vatRate: 0.15,
+            subtotal: 1000,
+        } as any);
+
+        const patchReq = new Request('http://localhost/api/finance/invoices/doc-1', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                bankAccountId: 'bank-standard',
+            }),
+        });
+        const res = await PATCH(patchReq, { params });
+        expect(res.status).toBe(200);
+        expect(prisma.invoice.update).toHaveBeenCalledWith({
+            where: { id: 'doc-1' },
+            data: expect.objectContaining({
+                bankAccount: { connect: { id: 'bank-standard' } },
+            }),
+        });
+    });
+});
+
