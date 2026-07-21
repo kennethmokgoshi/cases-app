@@ -53,8 +53,8 @@ function buildEmailHtml(
         <p style="margin: 5px 0 0; font-size: 28px; font-weight: bold; color: #0d3870;">${totalFormatted}</p>
     </div>
     <p style="margin-top: 20px; font-size: 14px; color: #666;">
-        Aaron Nzotho | NCRDC3693 | Zenowethu Debt Management<br/>
-        Tel: +27 81 747 7616 | info@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
+        Zenowethu Debt Management | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190<br/>
+        Tel: +27 81 747 7616 | Cell: 082 363 8207 | notifications@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
     </p>
   `;
 

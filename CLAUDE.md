@@ -563,7 +563,7 @@ When generating documents, emails, PDFs, or UI copy, apply Zenowethu brand styli
 
 **Standard signature block (use on all outbound documents and emails):**
 
-> Aaron Nzotho | NCRDC3693 | Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190 | Tel: +27 81 747 7616 | Cell: 082 363 8207 | info@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
+> Zenowethu Debt Management | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190 | Tel: +27 81 747 7616 | Cell: 082 363 8207 | notifications@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
 
 **Company banking details (for invoices):**
 

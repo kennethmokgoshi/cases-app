@@ -44,12 +44,23 @@ export type PublicMailbox = Omit<MailboxRow, 'password' | 'owner'> & {
     ownerName: string | null;
 };
 
+export function isUsableMailboxPassword(password: string | null | undefined): boolean {
+    if (!password) return false;
+    const trimmed = String(password).trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    if (['no-password-saved', 'placeholder', 'dummy', 'none', 'undefined', 'null'].includes(lower)) {
+        return false;
+    }
+    return true;
+}
+
 export function usesSmtpPassword(
     emailAddress: string,
     ownPassword: string | null,
     smtpUsername: string | null | undefined,
 ): boolean {
-    return !ownPassword && Boolean(smtpUsername) && emailAddress.toLowerCase() === smtpUsername!.toLowerCase();
+    return !isUsableMailboxPassword(ownPassword) && Boolean(smtpUsername) && emailAddress.toLowerCase() === smtpUsername!.toLowerCase();
 }
 
 export function isGmailMailbox(emailAddress: string | null | undefined, imapHost: string | null | undefined): boolean {
@@ -60,11 +71,12 @@ export function isGmailMailbox(emailAddress: string | null | undefined, imapHost
 
 export function toPublicMailbox(m: MailboxRow, smtpUsername?: string | null): PublicMailbox {
     const { password, owner, ...rest } = m;
+    const hasOwnPassword = isUsableMailboxPassword(password);
     const smtpFallback = usesSmtpPassword(m.emailAddress, password, smtpUsername);
     return {
         ...rest,
-        hasPassword: Boolean(password) || smtpFallback,
-        passwordSource: password ? 'own' : smtpFallback ? 'smtp' : null,
+        hasPassword: hasOwnPassword || smtpFallback,
+        passwordSource: hasOwnPassword ? 'own' : smtpFallback ? 'smtp' : null,
         ownerName: owner ? `${owner.firstName} ${owner.lastName}` : null,
     };
 }

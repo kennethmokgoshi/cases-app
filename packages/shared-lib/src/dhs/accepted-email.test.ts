@@ -70,7 +70,7 @@ describe('buildAcceptedViaDhsEmail', () => {
 
     it('includes the Zenowethu signature block without the personal counsellor name', () => {
         expect(email).not.toMatch(/Aaron Nzotho/);
-        expect(email).toMatch(/Yours sincerely,\s*\n+NCRDC3693/);
+        expect(email).toMatch(/Yours sincerely,\s*\n+Zenowethu Debt Management\n+NCRDC3693/);
         expect(email).toContain('Member of DCASA');
     });
 

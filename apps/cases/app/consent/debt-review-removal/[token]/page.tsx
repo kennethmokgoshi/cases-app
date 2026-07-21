@@ -228,7 +228,7 @@ export default function DebtReviewRemovalConsentPage() {
       </button>
 
       <p style={{ color: '#94A3B8', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
-        Aaron Nzotho | NCRDC3693 | Zenowethu Debt Management | 081 747 7616 | Member of DCASA
+        Zenowethu Debt Management | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190 | Tel: +27 81 747 7616 | Cell: 082 363 8207 | notifications@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
       </p>
     </Shell>
   );

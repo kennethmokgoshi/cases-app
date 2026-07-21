@@ -55,7 +55,7 @@ function otpEmailHtml(firstName: string, otpCode: string): string {
         <div style="font-size:34px;font-weight:700;letter-spacing:8px;color:#0B1D35;background:#F1F5F9;border-radius:10px;padding:18px;text-align:center;">${otpCode}</div>
         <p style="font-size:13px;color:#94A3B8;margin:20px 0 0;">This code is valid for 15 minutes. If you did not request it, you can safely ignore this email.</p>
         <hr style="border:none;border-top:1px solid #E2E8F0;margin:24px 0;" />
-        <p style="font-size:12px;color:#94A3B8;margin:0;">Aaron Nzotho | NCRDC3693 | Zenowethu | info@zenowethu.co.za | www.zenowethu.co.za</p>
+        <p style="font-size:12px;color:#94A3B8;margin:0;">Zenowethu Debt Management | NCRDC3693 | notifications@zenowethu.co.za | www.zenowethu.co.za</p>
       </div>
     </div>
   </body>

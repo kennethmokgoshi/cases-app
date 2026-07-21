@@ -4,7 +4,7 @@ import { auth, createLogger, getSMTPCredentials } from '@zenowethu/shared-lib';
 import { scanMailboxForClient } from '@zenowethu/shared-lib/src/integrations/imap';
 import { decryptSecret } from '@zenowethu/shared-lib/src/security/encryption';
 import { z } from 'zod';
-import { usesSmtpPassword } from '@/lib/mailboxes';
+import { isUsableMailboxPassword, usesSmtpPassword } from '@/lib/mailboxes';
 import { getSmtpUsernameIfConfigured } from '@/lib/mailbox-smtp';
 import { join } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
@@ -83,7 +83,7 @@ async function getSearchableMailboxes(userId: string): Promise<SearchableMailbox
     ]);
     return rows.map(rest => ({
         ...rest,
-        hasPassword: Boolean(rest.password) || usesSmtpPassword(rest.emailAddress, rest.password, smtpUsername),
+        hasPassword: isUsableMailboxPassword(rest.password) || usesSmtpPassword(rest.emailAddress, rest.password, smtpUsername),
     }));
 }
 
@@ -419,7 +419,11 @@ export async function POST(
                                 invoiceCandidatesFound += scanResult.invoiceCandidatesFound;
 
                                 if (scanResult.attachments.length > 0) {
-                                    await mkdir(uploadDir, { recursive: true });
+                                    try {
+                                        await mkdir(uploadDir, { recursive: true });
+                                    } catch {
+                                        // Directory creation warning/ignored
+                                    }
                                     for (const att of scanResult.attachments) {
                                         // Compute SHA-256 hash of attachment
                                         const hash = crypto.createHash('sha256').update(att.buffer).digest('hex');
@@ -438,7 +442,11 @@ export async function POST(
 
                                         const safeName = att.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
                                         const uniqueFileName = `${Date.now()}-${safeName}`;
-                                        await writeFile(join(uploadDir, uniqueFileName), att.buffer);
+                                        try {
+                                            await writeFile(join(uploadDir, uniqueFileName), att.buffer);
+                                        } catch (wErr) {
+                                            logger.warn(`Could not save attachment file ${uniqueFileName}:`, wErr);
+                                        }
 
                                         const fileUrl = `/uploads/${caseId}/${uniqueFileName}`;
                                         const docType = att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT';

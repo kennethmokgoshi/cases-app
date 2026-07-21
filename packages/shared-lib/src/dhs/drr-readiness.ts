@@ -451,11 +451,11 @@ Thank you for your assistance.
 
 Yours sincerely,
 
-NCRDC3693
 Zenowethu Debt Management
+NCRDC3693
 Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
 Tel: +27 81 747 7616 | Cell: 082 363 8207
-info@zenowethu.co.za | www.zenowethu.co.za
+notifications@zenowethu.co.za | www.zenowethu.co.za
 Member of DCASA`;
 
     const sendResult = await sendManualMessage(caseId, 'EMAIL', recipient, body, subject);

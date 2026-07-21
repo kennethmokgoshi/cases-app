@@ -22,11 +22,11 @@
  * counsellor name (per request) — it leads with the NCRDC registration number.
  * Scoped to this email; other emails keep the shared `SIGNATURE`.
  */
-export const ACCEPTED_SIGNATURE = `NCRDC3693
-Zenowethu Debt Management
+export const ACCEPTED_SIGNATURE = `Zenowethu Debt Management
+NCRDC3693
 Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
 Tel: +27 81 747 7616 | Cell: 082 363 8207
-info@zenowethu.co.za | www.zenowethu.co.za
+notifications@zenowethu.co.za | www.zenowethu.co.za
 Member of DCASA`;
 
 /**
