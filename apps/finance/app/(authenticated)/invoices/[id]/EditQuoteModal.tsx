@@ -123,7 +123,7 @@ export default function EditQuoteModal({
       }, 1200)
     } catch (err: unknown) {
       setError((err as Error).message)
-    } fontally {
+    } finally {
       setSaving(false)
     }
   }
