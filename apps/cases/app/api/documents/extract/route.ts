@@ -44,8 +44,12 @@ export async function POST(request: Request) {
                     // Verify case exists
                     const caseRecord = await prisma.case.findUnique({
                         where: { id: caseId },
-                        include: { projects: { include: { project: true } } }
+                        include: {
+                            client: true,
+                            projects: { include: { project: true } }
+                        }
                     });
+                    const clientIdNumber = caseRecord?.client?.idNumber || undefined;
 
                     if (!caseRecord) {
                         sendUpdate({ type: 'error', message: 'Case not found' });
@@ -171,7 +175,7 @@ export async function POST(request: Request) {
 
                     // Extract documents using AI
                     logger.info('🤖 Starting AI extraction...');
-                    const extraction = await extractDocumentsFromCombinedPdf(base64Pdf, onProgress);
+                    const extraction = await extractDocumentsFromCombinedPdf(base64Pdf, onProgress, undefined, clientIdNumber);
 
                     // Save each extracted document
                     let savedCount = 0;

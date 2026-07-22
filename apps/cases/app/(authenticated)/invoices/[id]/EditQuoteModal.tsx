@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 
 export interface LineItem {
-  description: string
+  description?: string
   quantity: number
   unitPrice: number
   creditor?: string
@@ -86,7 +86,7 @@ export default function EditQuoteModal({
   const handleSave = async () => {
     setError('')
     for (let i = 0; i < lineItems.length; i++) {
-      if (!lineItems[i].description.trim()) {
+      if (!(lineItems[i].description || '').trim()) {
         setError(`Item #${i + 1} requires a description`)
         return
       }

@@ -51,6 +51,8 @@ const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: stri
     'FORM_17W': { label: 'Form 17.W', color: 'bg-violet-500/20 text-violet-300', icon: '📜' },
     'FORM_16': { label: 'Form 16', color: 'bg-violet-400/20 text-violet-200', icon: '📜' },
     'FORM_17_1': { label: 'Form 17.1', color: 'bg-violet-600/20 text-violet-400', icon: '📜' },
+    'FORM_17_2': { label: 'Form 17.2', color: 'bg-violet-600/25 text-violet-300', icon: '📜' },
+    'FORM_17_7': { label: 'Form 17.7', color: 'bg-violet-700/20 text-violet-400', icon: '📜' },
     'SECTION_86': { label: 'Section 86 Notice', color: 'bg-rose-500/20 text-rose-300', icon: '⚖️' },
     'COURT_ORDER': { label: 'Court Order', color: 'bg-rose-600/20 text-rose-400', icon: '🏛️' },
     'DEBT_RESTRUCTURING_PROPOSAL': { label: 'Debt Restructuring Proposal', color: 'bg-amber-500/20 text-amber-300', icon: '📋' },
@@ -758,6 +760,8 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                             <option value="FORM_17W" className="bg-zeno-navy text-white">Form 17.W</option>
                             <option value="FORM_16" className="bg-zeno-navy text-white">Form 16</option>
                             <option value="FORM_17_1" className="bg-zeno-navy text-white">Form 17.1</option>
+                            <option value="FORM_17_2" className="bg-zeno-navy text-white">Form 17.2</option>
+                            <option value="FORM_17_7" className="bg-zeno-navy text-white">Form 17.7</option>
                             <option value="SECTION_86" className="bg-zeno-navy text-white">Section 86 Notice</option>
                             <option value="COURT_ORDER" className="bg-zeno-navy text-white">Court Order</option>
                             <option value="DEBT_RESTRUCTURING_PROPOSAL" className="bg-zeno-navy text-white">Debt Restructuring Proposal</option>

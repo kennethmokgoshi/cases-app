@@ -32,8 +32,12 @@ export async function POST(request: Request) {
         // 1. Fetch Case Record to verify acquisitionType and projects
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
-            include: { projects: { include: { project: true } } }
+            include: {
+                client: true,
+                projects: { include: { project: true } }
+            }
         });
+        const clientIdNumber = caseRecord?.client?.idNumber || undefined;
 
         if (!caseRecord) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
@@ -94,7 +98,7 @@ export async function POST(request: Request) {
             if (validDocs.length === 0) return NextResponse.json({ error: 'Files could not be read' }, { status: 500 });
 
             // Call Batch Analysis
-            const analysis = await batchAnalyzeDocuments(validDocs as any);
+            const analysis = await batchAnalyzeDocuments(validDocs as any, undefined, undefined, clientIdNumber);
 
             // Verify IDs
             const idVerification = verifyIdNumbers(analysis);
@@ -171,7 +175,7 @@ export async function POST(request: Request) {
 
             } else {
                 logger.info('🤖 Starting AI re-extraction & SPLIT for Combined PDF...');
-                const extraction = await extractDocumentsFromCombinedPdf(base64Pdf);
+                const extraction = await extractDocumentsFromCombinedPdf(base64Pdf, undefined, undefined, clientIdNumber);
                 fullAnalysis = extraction.analysis;
 
                 // Verify IDs
@@ -233,7 +237,7 @@ export async function POST(request: Request) {
 
         } else if (['ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA', 'PAYSLIP', 'BANK_STATEMENT'].includes(document.type)) {
             logger.info(`🔍 Re-analyzing single ${document.type}...`);
-            const result = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf');
+            const result = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf', undefined, undefined, clientIdNumber);
             const analysis = result.data;
 
             const updatedData = {

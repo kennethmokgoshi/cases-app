@@ -99,6 +99,7 @@ export interface ScanResult {
         isPoP: boolean;
         isInvoice: boolean;
         messageId?: string;
+        detectedType: string;
     }[];
 }
 
@@ -177,6 +178,92 @@ export function mapEnvelopeToMatch(
         seen: msg.flags instanceof Set ? msg.flags.has('\\Seen') : false,
         matchedOn,
     };
+}
+
+export function classifyDocumentByFilename({
+    filename,
+    subject = '',
+    isInvoice = false,
+    isPoP = false,
+}: {
+    filename: string;
+    subject?: string;
+    isInvoice?: boolean;
+    isPoP?: boolean;
+}): string {
+    const lowerName = filename.toLowerCase();
+    const subjectLower = subject.toLowerCase();
+
+    if (lowerName.includes('17.1') || lowerName.includes('17_1') || lowerName.includes('17-1')) {
+        return 'FORM_17_1';
+    }
+    if (lowerName.includes('17.2') || lowerName.includes('17_2') || lowerName.includes('17-2')) {
+        return 'FORM_17_2';
+    }
+    if (lowerName.includes('17.7') || lowerName.includes('17_7') || lowerName.includes('17-7')) {
+        return 'FORM_17_7';
+    }
+    if (lowerName.includes('17.w') || lowerName.includes('17_w') || lowerName.includes('17w')) {
+        return 'FORM_17W';
+    }
+    if (lowerName.includes('form 16') || lowerName.includes('form_16') || lowerName.includes('form-16')) {
+        return 'FORM_16';
+    }
+    if (lowerName.includes('court order') || lowerName.includes('court_order') || lowerName.includes('order granted') || lowerName.includes('rescission')) {
+        return 'COURT_ORDER';
+    }
+    if (lowerName.includes('credit report') || lowerName.includes('credit_report') || lowerName.includes('creditreport') || lowerName.includes('transunion') || lowerName.includes('experian') || lowerName.includes('xds') || lowerName.includes('compuscan') || lowerName.includes('lightstone') || lowerName.includes('creditprofile')) {
+        if (lowerName.includes('transunion')) return 'CREDIT_REPORT_TRANSUNION';
+        if (lowerName.includes('experian')) return 'CREDIT_REPORT_EXPERIAN';
+        if (lowerName.includes('xds')) return 'CREDIT_REPORT_XDS';
+        if (lowerName.includes('lightstone')) return 'CREDIT_REPORT_LIGHTSTONE';
+        return 'CREDIT_REPORT';
+    }
+    if (lowerName.includes('id doc') || lowerName.includes('identity') || lowerName.includes('passport') || (lowerName.includes('id') && (lowerName.startsWith('id') || lowerName.endsWith('id') || lowerName.includes('_id') || lowerName.includes('-id')))) {
+        return 'ID';
+    }
+    if (lowerName.includes('poa') || lowerName.includes('power of attorney') || lowerName.includes('power_of_attorney') || lowerName.includes('consent')) {
+        return 'ZENOWETHU_POA';
+    }
+    if (lowerName.includes('payslip') || lowerName.includes('salary') || lowerName.includes('advice')) {
+        return 'PAYSLIP';
+    }
+    if (lowerName.includes('bank statement') || lowerName.includes('bank_statement') || (lowerName.includes('statement') && lowerName.includes('bank'))) {
+        return 'BANK_STATEMENT';
+    }
+    if (lowerName.includes('proof of residence') || lowerName.includes('proof_of_residence') || lowerName.includes('utility') || lowerName.includes('municipal') || lowerName.includes('residence')) {
+        return 'PROOF_OF_RESIDENCE';
+    }
+    if (lowerName.includes('paid up') || lowerName.includes('paid-up') || lowerName.includes('paid_up') || lowerName.includes('settlement letter') || lowerName.includes('settled')) {
+        return 'PAID_UP_LETTER';
+    }
+    if (isInvoice) {
+        return 'FEE_INVOICE';
+    }
+    if (isPoP) {
+        return 'PROOF_OF_PAYMENT';
+    }
+    return 'OTHER';
+}
+
+export function isDocTypeInGroup(detectedType: string, docGroup?: string): boolean {
+    if (!docGroup || docGroup === 'ALL') return true;
+    switch (docGroup) {
+        case 'ID_POA':
+            return ['ID', 'ZENOWETHU_POA', 'POA', 'CONSENT_FORM'].includes(detectedType);
+        case 'CREDIT_REPORT':
+            return ['CREDIT_REPORT', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE'].includes(detectedType);
+        case 'DC_INVOICE':
+            return ['FEE_INVOICE', 'DC_FEE_INVOICE'].includes(detectedType);
+        case 'POP':
+            return ['PROOF_OF_PAYMENT'].includes(detectedType);
+        case 'PAID_UP':
+            return ['PAID_UP_LETTER'].includes(detectedType);
+        case 'DEBT_REVIEW_FORMS':
+            return ['FORM_16', 'FORM_17_1', 'FORM_17_2', 'FORM_17_7', 'FORM_17W', 'COURT_ORDER'].includes(detectedType);
+        default:
+            return true;
+    }
 }
 
 async function getSearchFolders(client: ImapFlow): Promise<string[]> {
@@ -314,12 +401,14 @@ export async function scanMailboxForClient({
     since,
     onProgress,
     skipMessageIds = [],
+    docGroup = 'ALL',
 }: {
     config: ImapConnectionConfig;
     idNumber: string;
     since: Date;
     onProgress?: (stats: { processed: number; total: number; newEmailsFound: number; invoiceCandidatesFound: number }) => void;
     skipMessageIds?: string[];
+    docGroup?: string;
 }): Promise<ScanResult> {
     const client = new ImapFlow({
         host: config.host,
@@ -349,6 +438,7 @@ export async function scanMailboxForClient({
             isPoP: boolean;
             isInvoice: boolean;
             messageId: string;
+            detectedType: string;
         }[] = [];
 
         const processedMessageIds = new Set<string>(skipMessageIds);
@@ -411,17 +501,27 @@ export async function scanMailboxForClient({
                                 const isCandidateDoc = isInvoice || isPoP || isPdf || Boolean(filename);
 
                                 if (isCandidateDoc) {
-                                    hasCandidate = true;
-                                    attachmentsToDownload.push({
-                                        folder,
-                                        uid: msg.uid,
-                                        part: part.part,
-                                        fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
-                                        mimeType: part.contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
+                                    const detectedType = classifyDocumentByFilename({
+                                        filename,
+                                        subject: subjectLower,
+                                        isInvoice,
                                         isPoP,
-                                        isInvoice: isInvoice || !isPoP,
-                                        messageId,
                                     });
+
+                                    if (isDocTypeInGroup(detectedType, docGroup)) {
+                                        hasCandidate = true;
+                                        attachmentsToDownload.push({
+                                            folder,
+                                            uid: msg.uid,
+                                            part: part.part,
+                                            fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
+                                            mimeType: part.contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
+                                            isPoP,
+                                            isInvoice: isInvoice || !isPoP,
+                                            messageId,
+                                            detectedType,
+                                        });
+                                    }
                                 }
                             }
 
@@ -470,6 +570,7 @@ export async function scanMailboxForClient({
                     isPoP: att.isPoP,
                     isInvoice: att.isInvoice,
                     messageId: att.messageId,
+                    detectedType: att.detectedType,
                 });
             } catch (downloadErr) {
                 logger.error(`Failed to download attachment for message UID ${att.uid} in folder ${att.folder}:`, downloadErr);

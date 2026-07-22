@@ -141,6 +141,10 @@ describe('GET /api/admin/referrers/[id]/clients', () => {
         expect(json.summary.totalClients).toBe(2);
         expect(json.summary.totalCases).toBe(3);
         expect(json.summary.settled).toBe(1);
+        expect(json.summary.completed).toBe(0);
+        expect(json.summary.inProgress).toBe(2);
+        expect(json.summary.totalCompletedOutstanding).toBe(0);
+        expect(json.summary.totalExpectedRevenue).toBe(2250);
         expect(json.summary.eligible).toBe(2);
         expect(json.summary.paid).toBe(1);
         expect(json.summary.unpaidEligible).toBe(1);
@@ -174,7 +178,19 @@ describe('GET /api/admin/referrers/[id]/clients', () => {
         // rolled-up money: R4,500 quote + R3,000 fee; R5,250 collected; R2,250 due
         expect(json.summary.totalQuoted).toBe(7500);
         expect(json.summary.totalCollected).toBe(5250);
-        expect(json.summary.totalBalanceDue).toBe(2250);
+        expect(json.summary.totalSettledPaid).toBe(3000);
+
+        expect(json.quoteStats).toEqual({
+            notQuotedCount: 2,
+            totalCount: 1,
+            totalAmount: 4500,
+            acceptedCount: 1,
+            acceptedAmount: 4500,
+            pendingCount: 0,
+            pendingAmount: 0,
+            rejectedCount: 0,
+            rejectedAmount: 0,
+        });
 
         expect(json.monthlyTrend).toHaveLength(6);
         expect(json.monthlyTrend[5].count).toBe(2); // current month

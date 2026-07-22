@@ -80,8 +80,12 @@ export async function POST(request: Request) {
         // 2. Fetch Case Record to verify acquisitionType (The source of truth)
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
-            include: { projects: { include: { project: true } } }
+            include: {
+                client: true,
+                projects: { include: { project: true } }
+            }
         });
+        const clientIdNumber = caseRecord?.client?.idNumber || undefined;
 
         const isB2BCase = caseRecord?.acquisitionType === 'B2B';
 
@@ -239,7 +243,7 @@ export async function POST(request: Request) {
 
                 try {
                     // Use the extraction function that splits the PDF
-                    const extraction = await extractDocumentsFromCombinedPdf(combinedDocBase64);
+                    const extraction = await extractDocumentsFromCombinedPdf(combinedDocBase64, undefined, undefined, clientIdNumber);
 
                     logger.info('✅ AI Extraction Results:', extraction.extractedDocuments.length, 'documents found');
                     extractedData = extraction.analysis;
@@ -319,7 +323,7 @@ export async function POST(request: Request) {
                     for (const doc of documentsToAnalyze) {
                         try {
                             logger.info(`🤖 Analyzing ${doc.type}...`);
-                            const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType);
+                            const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType, undefined, undefined, clientIdNumber);
                             const data = extracted.data;
                             
                             // Re-assign refined type if identified

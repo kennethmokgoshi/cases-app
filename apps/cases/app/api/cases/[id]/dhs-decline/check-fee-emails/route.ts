@@ -18,6 +18,7 @@ const BodySchema = z.object({
     reason: z.string().trim().max(1000).optional(),
     // 'ALL' (default) searches every mailbox the caller may use; otherwise a MailboxAccount id
     mailboxId: z.string().trim().min(1).default('ALL'),
+    docGroup: z.string().trim().default('ALL'),
 });
 
 const ACTIVITY_TYPE = 'DHS_FEE_EMAIL_SCAN_REQUESTED';
@@ -209,7 +210,7 @@ export async function POST(
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
-        const { lookbackDays, receivedAfter, reason, mailboxId } = parsed.data;
+        const { lookbackDays, receivedAfter, reason, mailboxId, docGroup } = parsed.data;
         const idNumber = caseData.client.idNumber?.trim();
         if (!idNumber) {
             return NextResponse.json(
@@ -402,6 +403,7 @@ export async function POST(
                                     idNumber,
                                     since: searchFrom,
                                     skipMessageIds,
+                                    docGroup,
                                     onProgress: (p) => {
                                         const mbxProgress = p.total ? (p.processed / p.total) : 0.5;
                                         const totalProgress = Math.round(((i + mbxProgress) / totalMbx) * 100);
@@ -449,7 +451,9 @@ export async function POST(
                                         }
 
                                         const fileUrl = `/uploads/${caseId}/${uniqueFileName}`;
-                                        const docType = att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT';
+                                        const docType = att.detectedType && att.detectedType !== 'OTHER'
+                                            ? att.detectedType
+                                            : (att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT');
 
                                         await prisma.document.create({
                                             data: {

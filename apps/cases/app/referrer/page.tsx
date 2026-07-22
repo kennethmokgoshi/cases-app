@@ -122,9 +122,18 @@ type DiscountPartnerSummary = {
     totalPaid: number;
     paidThisMonth: number;
     paidLastMonth: number;
-    totalOutstanding: number;
-    outstandingThisMonth: number;
-    outstandingLastMonth: number;
+    totalSettledPaid: number;
+    settledPaidThisMonth: number;
+    settledPaidLastMonth: number;
+    totalInProgress: number;
+    inProgressThisMonth: number;
+    inProgressLastMonth: number;
+    totalCompletedOutstanding: number;
+    completedOutstandingThisMonth: number;
+    completedOutstandingLastMonth: number;
+    totalExpectedRevenue: number;
+    expectedRevenueThisMonth: number;
+    expectedRevenueLastMonth: number;
 };
 
 type MissingClientReport = {
@@ -268,9 +277,18 @@ type ReferralFilterId =
     | 'paid'
     | 'paid-this-month'
     | 'paid-last-month'
-    | 'outstanding'
-    | 'outstanding-this-month'
-    | 'outstanding-last-month';
+    | 'settled-paid'
+    | 'settled-paid-this-month'
+    | 'settled-paid-last-month'
+    | 'in-progress'
+    | 'in-progress-this-month'
+    | 'in-progress-last-month'
+    | 'completed-outstanding'
+    | 'completed-outstanding-this-month'
+    | 'completed-outstanding-last-month'
+    | 'expected-revenue'
+    | 'expected-revenue-this-month'
+    | 'expected-revenue-last-month';
 
 const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row: ReferralRow) => boolean }> = {
     'all': { label: 'All referrals', matches: () => true },
@@ -292,9 +310,18 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'paid': { label: 'Files with payments', matches: (row) => row.totalPaid > 0 },
     'paid-this-month': { label: 'Paid this month', matches: (row) => row.paidThisMonth > 0 },
     'paid-last-month': { label: 'Paid last month', matches: (row) => row.paidLastMonth > 0 },
-    'outstanding': { label: 'Outstanding Balance', matches: (row) => (row.quoteTotal ?? 0) - row.totalPaid > 0 },
-    'outstanding-this-month': { label: 'Outstanding this month', matches: (row) => (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.quoteDate, 0) },
-    'outstanding-last-month': { label: 'Outstanding last month', matches: (row) => (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.quoteDate, 1) },
+    'settled-paid': { label: 'Settled Amount', matches: (row) => row.statusTone === 'settled' && row.totalPaid > 0 },
+    'settled-paid-this-month': { label: 'Settled Paid this month', matches: (row) => row.statusTone === 'settled' && row.paidThisMonth > 0 },
+    'settled-paid-last-month': { label: 'Settled Paid last month', matches: (row) => row.statusTone === 'settled' && row.paidLastMonth > 0 },
+    'in-progress': { label: 'In progress', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' },
+    'in-progress-this-month': { label: 'In progress this month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && isInCalendarMonth(row.createdAt, 0) },
+    'in-progress-last-month': { label: 'In progress last month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && isInCalendarMonth(row.createdAt, 1) },
+    'completed-outstanding': { label: 'Outstanding Balance (Completed files)', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 },
+    'completed-outstanding-this-month': { label: 'Outstanding Balance (Completed files) this month', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 0) },
+    'completed-outstanding-last-month': { label: 'Outstanding Balance (Completed files) last month', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 1) },
+    'expected-revenue': { label: 'Expected Revenue files', matches: (row) => (row.quoteStatuses && row.quoteStatuses.some((status) => ['ACCEPTED', 'CONVERTED', 'PAID', 'PARTIALLY_PAID'].includes(status))) || (row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0) },
+    'expected-revenue-this-month': { label: 'Expected Revenue files this month', matches: (row) => (row.quoteStatuses && row.quoteStatuses.some((status) => ['ACCEPTED', 'CONVERTED', 'PAID', 'PARTIALLY_PAID'].includes(status)) && isInCalendarMonth(row.quoteDate, 0)) || (row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 0)) },
+    'expected-revenue-last-month': { label: 'Expected Revenue files last month', matches: (row) => (row.quoteStatuses && row.quoteStatuses.some((status) => ['ACCEPTED', 'CONVERTED', 'PAID', 'PARTIALLY_PAID'].includes(status)) && isInCalendarMonth(row.quoteDate, 1)) || (row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 1)) },
 };
 
 function formatMoney(value: number): string {
@@ -940,6 +967,22 @@ export default function ReferrerPortalPage() {
                 ],
             },
             {
+                title: 'In Progress',
+                caption: 'Active pipeline being processed',
+                accentText: 'text-sky-300',
+                accentBar: 'bg-sky-400',
+                stats: [
+                    { id: 'in-progress', label: 'All time', value: discountSummary.totalInProgress },
+                    {
+                        id: 'in-progress-this-month',
+                        label: calendarMonthName(0),
+                        value: discountSummary.inProgressThisMonth,
+                        delta: discountSummary.inProgressThisMonth - discountSummary.inProgressLastMonth,
+                    },
+                    { id: 'in-progress-last-month', label: calendarMonthName(1), value: discountSummary.inProgressLastMonth },
+                ],
+            },
+            {
                 title: 'Completed',
                 caption: 'Job done — payment still outstanding',
                 accentText: 'text-yellow-300',
@@ -1034,6 +1077,24 @@ export default function ReferrerPortalPage() {
                 ]
             },
             {
+                title: 'Expected Revenue',
+                accentBar: 'bg-indigo-400',
+                total: { id: 'expected-revenue' as ReferralFilterId, label: 'Expected Revenue', value: formatMoney(discountSummary.totalExpectedRevenue), valueClass: 'text-indigo-300' },
+                months: [
+                    { id: 'expected-revenue-this-month' as ReferralFilterId, label: `Expected — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.expectedRevenueThisMonth), valueClass: 'text-indigo-300' },
+                    { id: 'expected-revenue-last-month' as ReferralFilterId, label: `Expected — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.expectedRevenueLastMonth), valueClass: 'text-indigo-300' },
+                ]
+            },
+            {
+                title: 'Out Standing Balance',
+                accentBar: 'bg-yellow-400',
+                total: { id: 'completed-outstanding' as ReferralFilterId, label: 'Outstanding Balance', value: formatMoney(discountSummary.totalCompletedOutstanding), valueClass: 'text-yellow-300' },
+                months: [
+                    { id: 'completed-outstanding-this-month' as ReferralFilterId, label: `Outstanding — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.completedOutstandingThisMonth), valueClass: 'text-yellow-300' },
+                    { id: 'completed-outstanding-last-month' as ReferralFilterId, label: `Outstanding — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.completedOutstandingLastMonth), valueClass: 'text-yellow-300' },
+                ]
+            },
+            {
                 title: 'Paid',
                 accentBar: 'bg-emerald-400',
                 total: { id: 'paid' as ReferralFilterId, label: 'Total Paid', value: formatMoney(discountSummary.totalPaid), valueClass: 'text-emerald-300' },
@@ -1043,12 +1104,12 @@ export default function ReferrerPortalPage() {
                 ]
             },
             {
-                title: 'Outstanding',
-                accentBar: 'bg-amber-400',
-                total: { id: 'outstanding' as ReferralFilterId, label: 'Total Outstanding', value: formatMoney(discountSummary.totalOutstanding), valueClass: 'text-amber-400' },
+                title: 'Settled',
+                accentBar: 'bg-teal-400',
+                total: { id: 'settled-paid' as ReferralFilterId, label: 'Settled Amount', value: formatMoney(discountSummary.totalSettledPaid), valueClass: 'text-teal-300' },
                 months: [
-                    { id: 'outstanding-this-month' as ReferralFilterId, label: `Outstanding — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.outstandingThisMonth), valueClass: 'text-amber-400' },
-                    { id: 'outstanding-last-month' as ReferralFilterId, label: `Outstanding — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.outstandingLastMonth), valueClass: 'text-amber-400' },
+                    { id: 'settled-paid-this-month' as ReferralFilterId, label: `Paid — ${calendarMonthName(0)}`, value: formatMoney(discountSummary.settledPaidThisMonth), valueClass: 'text-teal-300' },
+                    { id: 'settled-paid-last-month' as ReferralFilterId, label: `Paid — ${calendarMonthName(1)}`, value: formatMoney(discountSummary.settledPaidLastMonth), valueClass: 'text-teal-300' },
                 ]
             }
         ]
@@ -1145,7 +1206,7 @@ export default function ReferrerPortalPage() {
                 )}
 
                 {discountGroups && (
-                    <section className="grid gap-3 lg:grid-cols-3">
+                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {discountGroups.map((group) => (
                             <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
                                 <div className={`h-1 ${group.accentBar}`} />
@@ -1182,7 +1243,7 @@ export default function ReferrerPortalPage() {
                 )}
 
                 {discountMoneyGroups && (
-                    <section className="mt-3 grid gap-3 lg:grid-cols-3">
+                    <section className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                         {discountMoneyGroups.map((group) => (
                             <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] flex flex-col justify-between">
                                 <div>

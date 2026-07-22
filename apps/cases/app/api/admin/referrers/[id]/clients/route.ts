@@ -3,6 +3,7 @@ import { auth, createLogger } from '@zenowethu/shared-lib';
 import { summariseCaseFinancials } from '@zenowethu/shared-lib/src/finance/case-financials';
 import { prisma } from '@zenowethu/database';
 import { canAccessReferrer } from '@/lib/referrer-access';
+import { portalStatusTone } from '@/lib/referrer-portal';
 
 const logger = createLogger('api/admin/referrers/[id]/clients');
 
@@ -100,6 +101,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
                     balance: fin.outstanding,
                     overpaid: Math.max(fin.quoteOverpaid, fin.overCollected),
                     percentCollected: fin.feeBasisPercentCollected,
+                    acceptedQuotesTotal: fin.acceptedQuotesTotal,
                 },
                 commission: c.referrerCommission
                     ? {
@@ -125,7 +127,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         const summary = {
             totalClients: uniqueClientIds.size,
             totalCases: cases.length,
-            settled: withCommission.filter((c) => c.commission!.stage === 'SETTLED').length,
+            settled: cases.filter((c) => portalStatusTone(c.status) === 'settled').length,
+            completed: cases.filter((c) => portalStatusTone(c.status) === 'completed').length,
+            inProgress: cases.filter((c) => {
+                const tone = portalStatusTone(c.status);
+                return tone !== 'settled' && tone !== 'completed';
+            }).length,
             inArrears: withCommission.filter((c) => ARREARS_STAGES.has(c.commission!.stage)).length,
             newThisMonth: cases.filter((c) => c.createdAt >= monthStart).length,
             eligible: eligible.length,
@@ -141,8 +148,40 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             // Client-side money across all referred cases (service fee / accepted quotes vs collected payments)
             totalQuoted: round2(clients.reduce((sum, c) => sum + (c.financials.quoteTotal ?? 0), 0)),
             totalCollected: round2(clients.reduce((sum, c) => sum + c.financials.totalPaid, 0)),
-            totalBalanceDue: round2(clients.reduce((sum, c) => sum + (c.financials.balance ?? 0), 0)),
+            totalSettledPaid: round2(clients.reduce((sum, c) => sum + (portalStatusTone(c.caseStatus) === 'settled' ? c.financials.totalPaid : 0), 0)),
+            totalCompletedOutstanding: round2(clients.reduce((sum, c) => sum + (portalStatusTone(c.caseStatus) === 'completed' ? (c.financials.balance ?? 0) : 0), 0)),
+            totalExpectedRevenue: round2(clients.reduce((sum, c) => sum + (c.financials.balance ?? 0), 0)),
             updatesOverdue: clients.filter((c) => c.nextUpdate != null && c.nextUpdate < now).length,
+        };
+
+        // Calculate quoteStats across all cases
+        let notQuotedCount = 0;
+        const activeQuotes: any[] = [];
+        for (const c of cases) {
+            const caseQuotes = c.invoices.filter((i) =>
+                i.type === 'QUOTE' &&
+                ['SENT', 'OVERDUE', 'ACCEPTED', 'CONVERTED', 'PAID', 'PARTIALLY_PAID', 'REJECTED', 'CANCELLED'].includes(i.status)
+            );
+            if (caseQuotes.length === 0) {
+                notQuotedCount++;
+            } else {
+                activeQuotes.push(...caseQuotes);
+            }
+        }
+        const acceptedQuotes = activeQuotes.filter((i) => ['ACCEPTED', 'CONVERTED', 'PAID', 'PARTIALLY_PAID'].includes(i.status) || i.acceptedAt != null);
+        const pendingQuotes = activeQuotes.filter((i) => ['SENT', 'OVERDUE'].includes(i.status) && i.acceptedAt == null);
+        const rejectedQuotes = activeQuotes.filter((i) => ['REJECTED', 'CANCELLED'].includes(i.status) && i.acceptedAt == null);
+
+        const quoteStats = {
+            notQuotedCount,
+            totalCount: activeQuotes.length,
+            totalAmount: round2(activeQuotes.reduce((sum, i) => sum + Number(i.total), 0)),
+            acceptedCount: acceptedQuotes.length,
+            acceptedAmount: round2(acceptedQuotes.reduce((sum, i) => sum + Number(i.total), 0)),
+            pendingCount: pendingQuotes.length,
+            pendingAmount: round2(pendingQuotes.reduce((sum, i) => sum + Number(i.total), 0)),
+            rejectedCount: rejectedQuotes.length,
+            rejectedAmount: round2(rejectedQuotes.reduce((sum, i) => sum + Number(i.total), 0)),
         };
 
         // Commission-stage pipeline breakdown; cases without a commission record are early-stage
@@ -171,7 +210,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
                 clientDiscountPercent: referrer.clientDiscountPercent != null ? Number(referrer.clientDiscountPercent) : null,
                 fixedCommissionAmount: referrer.fixedCommissionAmount != null ? Number(referrer.fixedCommissionAmount) : null,
             },
-            clients, summary, stageBreakdown, monthlyTrend,
+            clients, summary, stageBreakdown, monthlyTrend, quoteStats,
         });
     } catch (error) {
         logger.error('Error fetching referrer clients dashboard:', error);

@@ -189,6 +189,23 @@ export async function GET() {
             rejectedAmount: allInvoices.filter((i) => declinedStatuses.includes(i.status)).reduce((sum, i) => sum + toPortalNumber(i.total), 0),
         };
 
+        const nowForRevenue = new Date();
+        const acceptedThisMonth = allInvoices
+            .filter((i) => acceptedStatuses.includes(i.status) && isInCalendarMonth(i.acceptedAt ?? i.createdAt, nowForRevenue, 0))
+            .reduce((sum, i) => sum + toPortalNumber(i.total), 0);
+        const acceptedLastMonth = allInvoices
+            .filter((i) => acceptedStatuses.includes(i.status) && isInCalendarMonth(i.acceptedAt ?? i.createdAt, nowForRevenue, 1))
+            .reduce((sum, i) => sum + toPortalNumber(i.total), 0);
+
+        const enrichedDiscountSummary = discountSummary
+            ? {
+                  ...discountSummary,
+                  totalExpectedRevenue: discountSummary.totalExpectedRevenue,
+                  expectedRevenueThisMonth: discountSummary.expectedRevenueThisMonth,
+                  expectedRevenueLastMonth: discountSummary.expectedRevenueLastMonth,
+              }
+            : null;
+
         return NextResponse.json({
             referrer: {
                 id: referrer.id,
@@ -207,7 +224,7 @@ export async function GET() {
                 fixedCommissionAmount: toPortalNumber(referrer.fixedCommissionAmount),
             },
             summary: totals,
-            discountSummary,
+            discountSummary: enrichedDiscountSummary,
             quoteStats,
             referrals: referrer.cases.map((referral) => {
                 const commission = referral.referrerCommission;

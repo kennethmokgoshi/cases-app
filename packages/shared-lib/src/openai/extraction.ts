@@ -15,7 +15,8 @@ export async function analyzeDocument(
     documentType: DocType,
     _mimeType?: string | ((msg: string, progress?: number) => void),
     onProgress?: (msg: string, progress?: number) => void,
-    customModelId?: string
+    customModelId?: string,
+    password?: string
 ): Promise<{ data: any; bureauName?: string; identifiedType?: DocType }> {
     try {
         let identifiedType = documentType;
@@ -23,7 +24,7 @@ export async function analyzeDocument(
 
         if (documentType === 'CREDIT_REPORT') {
             onProgress?.('🔍 Identifying credit report type...');
-            const idResult = await identifyCreditReportType(base64Pdf, customModelId);
+            const idResult = await identifyCreditReportType(base64Pdf, customModelId, password);
             identifiedType = idResult.type;
             bureauName = idResult.bureauName;
             onProgress?.(`📑 Identified as: ${bureauName}`);
@@ -35,7 +36,7 @@ export async function analyzeDocument(
         onProgress?.(`📄 Extracting text from ${documentType}...`);
         let extractedText = '';
         try {
-            extractedText = await extractTextFromPdf(base64Pdf, 10);
+            extractedText = await extractTextFromPdf(base64Pdf, 10, password);
         } catch (e) {
             logger.warn({ err: e }, '⚠️ Text extraction failed');
         }
@@ -44,7 +45,7 @@ export async function analyzeDocument(
 
         try {
             onProgress?.(`🖼️ Converting ${documentType} pages to images for OCR...`);
-            const images = await convertPdfToImages(base64Pdf, 6);
+            const images = await convertPdfToImages(base64Pdf, 6, undefined, password);
             images.forEach((imgBase64, index) => {
                 contentParts.push({ type: 'text', text: `[PAGE SCAN] Page: ${index + 1}` });
                 contentParts.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imgBase64}`, detail: 'high' } });
@@ -85,12 +86,13 @@ export async function analyzeDocument(
 export async function extractDocumentsFromCombinedPdf(
     base64Pdf: string,
     onProgress?: (msg: string, progress?: number) => void,
-    customModelId?: string
+    customModelId?: string,
+    password?: string
 ): Promise<{
     extractedDocuments: Array<any>;
     analysis: any;
 }> {
-    const pageInfo = await identifyDocumentPages(base64Pdf, onProgress);
+    const pageInfo = await identifyDocumentPages(base64Pdf, onProgress, password);
     if (!pageInfo.documents || pageInfo.documents.length === 0) return { extractedDocuments: [], analysis: {} };
 
     const splitDocs = await splitPdf(base64Pdf, pageInfo.documents);
@@ -185,7 +187,8 @@ export async function extractDhsDocuments(
 export async function batchAnalyzeDocuments(
     documents: Array<{ base64: string; type: DocType; mimeType?: string }>,
     onProgress?: (msg: string, progress?: number) => void,
-    customModelId?: string
+    customModelId?: string,
+    password?: string
 ): Promise<any> {
     const results: any = {};
     for (let i = 0; i < documents.length; i++) {
@@ -194,7 +197,7 @@ export async function batchAnalyzeDocuments(
         onProgress?.(`🔍 Analyzing ${doc.type} (${i + 1}/${documents.length})...`, progress);
 
         try {
-            const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType, undefined, customModelId);
+            const extracted = await analyzeDocument(doc.base64, doc.type, doc.mimeType, undefined, customModelId, password);
             const data = extracted.data;
             if (doc.type === 'ID') results.id = data;
             else if (doc.type === 'POA') results.poa = data;
@@ -218,9 +221,9 @@ export async function batchAnalyzeDocuments(
 /**
  * Specifically identifies the type of credit report (Major vs Other)
  */
-export async function identifyCreditReportType(base64Pdf: string, customModelId?: string): Promise<{ type: DocType; bureauName: string }> {
+export async function identifyCreditReportType(base64Pdf: string, customModelId?: string, password?: string): Promise<{ type: DocType; bureauName: string }> {
     try {
-        const text = await extractTextFromPdf(base64Pdf, 5);
+        const text = await extractTextFromPdf(base64Pdf, 5, password);
         const { client, model } = await getAiClientForTask('document_analysis');
         const response = await client.chat.completions.create({
             model: customModelId || model,

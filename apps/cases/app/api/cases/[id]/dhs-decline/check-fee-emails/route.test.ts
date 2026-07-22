@@ -189,6 +189,7 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
                     buffer: Buffer.from('mock-pdf'),
                     isPoP: false,
                     isInvoice: true,
+                    detectedType: 'FEE_INVOICE',
                 }
             ],
         });
@@ -403,5 +404,54 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
 
         expect(response.status).toBe(400);
         expect(db.case.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('saves harvested attachments using their detected document type (e.g. FORM_17_7 and FORM_17_1)', async () => {
+        (scanMailboxForClient as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+            emailsScanned: 2,
+            newEmailsFound: 1,
+            invoiceCandidatesFound: 2,
+            attachments: [
+                {
+                    fileName: 'Form_17.1_Client.pdf',
+                    mimeType: 'application/pdf',
+                    buffer: Buffer.from('mock-pdf-17.1'),
+                    isPoP: false,
+                    isInvoice: false,
+                    detectedType: 'FORM_17_1',
+                },
+                {
+                    fileName: 'Form_17.7_Client.pdf',
+                    mimeType: 'application/pdf',
+                    buffer: Buffer.from('mock-pdf-17.7'),
+                    isPoP: false,
+                    isInvoice: false,
+                    detectedType: 'FORM_17_7',
+                }
+            ],
+        });
+
+        db.document.create.mockClear();
+
+        const response = await POST(
+            request({ lookbackDays: 30 }),
+            params
+        );
+
+        expect(response.status).toBe(200);
+        await parseResponse(response);
+        expect(db.document.create).toHaveBeenCalledTimes(2);
+        expect(db.document.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            data: expect.objectContaining({
+                type: 'FORM_17_1',
+                fileName: 'Form_17.1_Client.pdf',
+            })
+        }));
+        expect(db.document.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            data: expect.objectContaining({
+                type: 'FORM_17_7',
+                fileName: 'Form_17.7_Client.pdf',
+            })
+        }));
     });
 });

@@ -223,9 +223,18 @@ describe('GET /api/referrer-portal/summary', () => {
                 totalPaid: 3000,           // completed payments only — PENDING excluded
                 paidThisMonth: 2000,
                 paidLastMonth: 0,
-                totalOutstanding: 5000,
-                outstandingThisMonth: 2000,
-                outstandingLastMonth: 0,
+                totalSettledPaid: 3000,
+                settledPaidThisMonth: 2000,
+                settledPaidLastMonth: 0,
+                totalInProgress: 1,
+                inProgressThisMonth: 0,
+                inProgressLastMonth: 0,
+                totalCompletedOutstanding: 0,
+                completedOutstandingThisMonth: 0,
+                completedOutstandingLastMonth: 0,
+                totalExpectedRevenue: 5000,
+                expectedRevenueThisMonth: 2000,
+                expectedRevenueLastMonth: 0,
             });
             // Labels and tones come from the workflow status, never the commission stage.
             expect(json.referrals[0]).toMatchObject({ quoteTotal: 5000, totalPaid: 3000, paidThisMonth: 2000, paidLastMonth: 0, statusTone: 'settled', referralStatus: 'Settled Successfully', commissionStage: 'SETTLED' });

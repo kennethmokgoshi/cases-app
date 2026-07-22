@@ -162,9 +162,18 @@ export type DiscountPartnerTotals = {
     totalPaid: number;
     paidThisMonth: number;
     paidLastMonth: number;
-    totalOutstanding: number;
-    outstandingThisMonth: number;
-    outstandingLastMonth: number;
+    totalSettledPaid: number;
+    settledPaidThisMonth: number;
+    settledPaidLastMonth: number;
+    totalInProgress: number;
+    inProgressThisMonth: number;
+    inProgressLastMonth: number;
+    totalCompletedOutstanding: number;
+    completedOutstandingThisMonth: number;
+    completedOutstandingLastMonth: number;
+    totalExpectedRevenue: number;
+    expectedRevenueThisMonth: number;
+    expectedRevenueLastMonth: number;
 };
 
 /** True when the value falls in the calendar month `monthOffset` months before `now` (0 = this month, 1 = last month). */
@@ -209,6 +218,11 @@ export function calculateDiscountPartnerTotals(
                 .reduce((sum, payment) => sum + payment.amount, 0);
 
             const referralOutstanding = referral.quoteTotal != null ? Math.max(0, referral.quoteTotal - paid) : 0;
+            const inProgress = !settled && !completed;
+            const completedOutstanding = completed ? referralOutstanding : 0;
+            const settledPaid = settled ? paid : 0;
+            const settledPaidThisMonth = settled ? paidThisMonth : 0;
+            const settledPaidLastMonth = settled ? paidLastMonth : 0;
 
             return {
                 totalReferrals: totals.totalReferrals + 1,
@@ -226,9 +240,18 @@ export function calculateDiscountPartnerTotals(
                 totalPaid: roundMoney(totals.totalPaid + paid),
                 paidThisMonth: roundMoney(totals.paidThisMonth + paidThisMonth),
                 paidLastMonth: roundMoney(totals.paidLastMonth + paidLastMonth),
-                totalOutstanding: roundMoney(totals.totalOutstanding + referralOutstanding),
-                outstandingThisMonth: roundMoney(totals.outstandingThisMonth + (isInCalendarMonth(referral.quoteDate, now) ? referralOutstanding : 0)),
-                outstandingLastMonth: roundMoney(totals.outstandingLastMonth + (isInCalendarMonth(referral.quoteDate, now, 1) ? referralOutstanding : 0)),
+                totalSettledPaid: roundMoney(totals.totalSettledPaid + settledPaid),
+                settledPaidThisMonth: roundMoney(totals.settledPaidThisMonth + settledPaidThisMonth),
+                settledPaidLastMonth: roundMoney(totals.settledPaidLastMonth + settledPaidLastMonth),
+                totalInProgress: totals.totalInProgress + (inProgress ? 1 : 0),
+                inProgressThisMonth: totals.inProgressThisMonth + (inProgress && isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
+                inProgressLastMonth: totals.inProgressLastMonth + (inProgress && isInCalendarMonth(referral.createdAt, now, 1) ? 1 : 0),
+                totalCompletedOutstanding: roundMoney(totals.totalCompletedOutstanding + completedOutstanding),
+                completedOutstandingThisMonth: roundMoney(totals.completedOutstandingThisMonth + (completed && isInCalendarMonth(referral.completedAt, now) ? completedOutstanding : 0)),
+                completedOutstandingLastMonth: roundMoney(totals.completedOutstandingLastMonth + (completed && isInCalendarMonth(referral.completedAt, now, 1) ? completedOutstanding : 0)),
+                totalExpectedRevenue: roundMoney(totals.totalExpectedRevenue + referralOutstanding),
+                expectedRevenueThisMonth: roundMoney(totals.expectedRevenueThisMonth + (isInCalendarMonth(referral.createdAt, now) ? referralOutstanding : 0)),
+                expectedRevenueLastMonth: roundMoney(totals.expectedRevenueLastMonth + (isInCalendarMonth(referral.createdAt, now, 1) ? referralOutstanding : 0)),
             };
         },
         {
@@ -247,9 +270,18 @@ export function calculateDiscountPartnerTotals(
             totalPaid: 0,
             paidThisMonth: 0,
             paidLastMonth: 0,
-            totalOutstanding: 0,
-            outstandingThisMonth: 0,
-            outstandingLastMonth: 0,
+            totalSettledPaid: 0,
+            settledPaidThisMonth: 0,
+            settledPaidLastMonth: 0,
+            totalInProgress: 0,
+            inProgressThisMonth: 0,
+            inProgressLastMonth: 0,
+            totalCompletedOutstanding: 0,
+            completedOutstandingThisMonth: 0,
+            completedOutstandingLastMonth: 0,
+            totalExpectedRevenue: 0,
+            expectedRevenueThisMonth: 0,
+            expectedRevenueLastMonth: 0,
         },
     );
 }

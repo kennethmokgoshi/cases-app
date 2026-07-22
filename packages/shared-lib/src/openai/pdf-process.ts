@@ -10,7 +10,8 @@ import { IDENTIFICATION_PROMPT, DHS_IDENTIFICATION_PROMPT } from './prompts';
  */
 export async function identifyDocumentPages(
     base64Pdf: string,
-    onProgress?: (msg: string, progress?: number) => void
+    onProgress?: (msg: string, progress?: number) => void,
+    password?: string
 ): Promise<{
     documents: Array<{
         type: 'ID' | 'POA' | 'CREDIT_REPORT' | 'CREDIT_REPORT_OTHER' | 'ZENOWETHU_POA' | 'PAYSLIP' | 'BANK_STATEMENT' | 'PROOF_OF_RESIDENCE' | 'OTHER';
@@ -36,7 +37,7 @@ export async function identifyDocumentPages(
             try {
                 logger.info('📄 Calling extractTextFromPdf for identification (all pages)...');
                 // No page limit — the full document text is needed to identify documents on later pages
-                extractedText = await extractTextFromPdf(base64Pdf, 0);
+                extractedText = await extractTextFromPdf(base64Pdf, 0, password);
                 logger.info(`📄 Text extraction returned ${extractedText.length} characters.`);
             } catch (e) {
                 logger.warn({ err: e }, '⚠️ Text extraction failed for identification');
@@ -63,7 +64,7 @@ export async function identifyDocumentPages(
         try {
             const images = await convertPdfToImages(base64Pdf, imageLimit, (msg) => {
                 onProgress?.(msg, 15);
-            });
+            }, password);
             images.forEach((imgBase64, index) => {
                 messages[0].content.push({ type: 'text', text: `[PAGE SCAN] Page: ${index + 1}` });
                 messages[0].content.push({
@@ -112,7 +113,8 @@ export async function identifyDocumentPages(
  */
 export async function identifyDhsDocumentPages(
     base64Pdf: string,
-    onProgress?: (msg: string, progress?: number) => void
+    onProgress?: (msg: string, progress?: number) => void,
+    password?: string
 ): Promise<{
     documents: Array<{
         type: 'ID' | 'ZENOWETHU_POA';
@@ -136,7 +138,7 @@ export async function identifyDhsDocumentPages(
             onProgress?.('⚠️ Large file detected. Using image-based identification...', 12);
         } else {
             try {
-                extractedText = await extractTextFromPdf(base64Pdf, 0); // All pages
+                extractedText = await extractTextFromPdf(base64Pdf, 0, password); // All pages
             } catch (e) {
                 logger.warn({ err: e }, '⚠️ Text extraction failed for DHS identification');
             }
@@ -161,7 +163,7 @@ export async function identifyDhsDocumentPages(
             try {
                 const images = await convertPdfToImages(base64Pdf, imageLimit, (msg) => {
                     onProgress?.(msg, 15);
-                });
+                }, password);
 
                 images.forEach((imgBase64, index) => {
                     messages[0].content.push({ type: 'text', text: `[PAGE SCAN] Page: ${index + 1}` });

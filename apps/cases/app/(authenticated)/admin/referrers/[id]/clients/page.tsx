@@ -5,6 +5,30 @@ import { getWorkflowInfo, formatStatus } from '@/lib/workflow-progress';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { portalStatusTone } from '@/lib/referrer-portal';
+
+type ReferralFilterId =
+    | ''
+    | 'clients'
+    | 'in-progress'
+    | 'completed'
+    | 'settled'
+    | 'total-cases'
+    | 'new-this-month'
+    | 'converted'
+    | 'in-arrears'
+    // money filters
+    | 'quoted'
+    | 'expected-revenue'
+    | 'completed-outstanding'
+    | 'paid'
+    | 'settled-paid'
+    // quote stats filters
+    | 'not-quoted'
+    | 'total-quotes'
+    | 'accepted-quotes'
+    | 'pending-quotes'
+    | 'declined-quotes';
 
 type CommissionStage =
     | 'NEW_LEAD' | 'ADMIN_FEE_PAID' | 'QUOTE_SUBMITTED' | 'QUOTE_ACCEPTED'
@@ -45,6 +69,50 @@ function stageChipColor(stage: string) {
     return 'text-blue-300 bg-blue-500/10 border-blue-500/30';
 }
 
+const CONVERTED_STAGES = new Set<CommissionStage>(['DEPOSIT_PAID', 'PAYING_INSTALMENTS', 'UP_TO_DATE', 'SETTLED']);
+const ARREARS_STAGES = new Set<CommissionStage>(['ARREARS_1M', 'ARREARS_2M', 'ARREARS_3M', 'ARREARS_4M_PLUS']);
+
+function isInCalendarMonth(value: string | null, monthOffset: 0 | 1): boolean {
+    if (!value) return false;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return false;
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    return date.getFullYear() === target.getFullYear() && date.getMonth() === target.getMonth();
+}
+
+const REFERRAL_FILTERS: Record<Exclude<ReferralFilterId, ''>, { label: string; matches: (row: ReferredClient) => boolean }> = {
+    'clients': { label: 'Clients', matches: () => true },
+    'in-progress': { label: 'In Progress', matches: (row) => {
+        const tone = portalStatusTone(row.caseStatus);
+        return tone !== 'settled' && tone !== 'completed';
+    }},
+    'completed': { label: 'Completed', matches: (row) => portalStatusTone(row.caseStatus) === 'completed' },
+    'settled': { label: 'Settled', matches: (row) => portalStatusTone(row.caseStatus) === 'settled' },
+    'total-cases': { label: 'Total Cases', matches: () => true },
+    'new-this-month': { label: 'New This Month', matches: (row) => isInCalendarMonth(row.referredAt, 0) },
+    'converted': { label: 'Converted', matches: (row) => row.commission != null && CONVERTED_STAGES.has(row.commission.stage) },
+    'in-arrears': { label: 'In Arrears', matches: (row) => row.commission != null && ARREARS_STAGES.has(row.commission.stage) },
+    
+    // money filters
+    'quoted': { label: 'Quoted', matches: (row) => row.financials.quoteTotal != null && row.financials.quoteTotal > 0 },
+    'expected-revenue': { label: 'Expected Revenue', matches: (row) => {
+        const hasAccepted = row.financials.acceptedQuotesTotal != null && row.financials.acceptedQuotesTotal > 0;
+        const hasCompletedOutstanding = portalStatusTone(row.caseStatus) === 'completed' && (row.financials.balance ?? 0) > 0;
+        return hasAccepted || hasCompletedOutstanding;
+    }},
+    'completed-outstanding': { label: 'Outstanding Balance (Completed files)', matches: (row) => portalStatusTone(row.caseStatus) === 'completed' && (row.financials.balance ?? 0) > 0 },
+    'paid': { label: 'Total Paid', matches: (row) => row.financials.totalPaid > 0 },
+    'settled-paid': { label: 'Settled Amount', matches: (row) => portalStatusTone(row.caseStatus) === 'settled' && row.financials.totalPaid > 0 },
+
+    // quote filters
+    'not-quoted': { label: 'Not Quoted', matches: (row) => row.financials.quoteSource == null },
+    'total-quotes': { label: 'Total Quotes', matches: (row) => row.financials.quoteSource === 'ACCEPTED_QUOTE' || row.financials.quoteTotal != null },
+    'accepted-quotes': { label: 'Accepted Quotes', matches: (row) => row.financials.quoteSource === 'ACCEPTED_QUOTE' },
+    'pending-quotes': { label: 'Pending Quotes', matches: (row) => row.financials.quoteSource === 'ACCEPTED_QUOTE' && (row.financials.balance ?? 0) > 0 },
+    'declined-quotes': { label: 'Declined Quotes', matches: () => false },
+};
+
 type ReferredClient = {
     caseId: string;
     fileNumber: string;
@@ -61,6 +129,7 @@ type ReferredClient = {
         balance: number | null;
         overpaid: number;
         percentCollected: number | null;
+        acceptedQuotesTotal?: number;
     };
     commission: {
         stage: CommissionStage;
@@ -100,11 +169,26 @@ type DashboardData = {
         conversionRate: number;
         totalQuoted: number;
         totalCollected: number;
-        totalBalanceDue: number;
+        totalSettledPaid: number;
         updatesOverdue: number;
+        inProgress: number;
+        completed: number;
+        totalCompletedOutstanding: number;
+        totalExpectedRevenue: number;
     };
     stageBreakdown: { stage: string; count: number }[];
     monthlyTrend: { month: string; label: string; count: number }[];
+    quoteStats?: {
+        notQuotedCount: number;
+        totalCount: number;
+        totalAmount: number;
+        acceptedCount: number;
+        acceptedAmount: number;
+        pendingCount: number;
+        pendingAmount: number;
+        rejectedCount: number;
+        rejectedAmount: number;
+    };
 };
 
 function formatZAR(amount: number) {
@@ -122,6 +206,7 @@ export default function ReferrerClientsDashboardPage() {
     const [loadError, setLoadError] = useState('');
     const [search, setSearch] = useState('');
     const [stageFilter, setStageFilter] = useState('');
+    const [filterId, setFilterId] = useState<ReferralFilterId>('');
 
     const isManager = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'MANAGER';
 
@@ -155,6 +240,10 @@ export default function ReferrerClientsDashboardPage() {
         return data.clients.filter((c) => {
             const stage = c.commission?.stage ?? 'NO_RECORD';
             if (stageFilter && stage !== stageFilter) return false;
+            if (filterId) {
+                const matcher = REFERRAL_FILTERS[filterId];
+                if (matcher && !matcher.matches(c)) return false;
+            }
             if (!q) return true;
             const haystack = [
                 c.client.firstName, c.client.lastName, c.client.idNumber,
@@ -163,7 +252,7 @@ export default function ReferrerClientsDashboardPage() {
             ].join(' ').toLowerCase();
             return haystack.includes(q);
         });
-    }, [data, search, stageFilter]);
+    }, [data, search, stageFilter, filterId]);
 
     const maxTrend = useMemo(
         () => Math.max(1, ...(data?.monthlyTrend.map((m) => m.count) ?? [1])),
@@ -255,51 +344,176 @@ export default function ReferrerClientsDashboardPage() {
             </div>
 
             {/* Stat cards — pipeline row */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
-                {[
-                    { label: 'Clients', value: summary.totalClients, color: 'text-white' },
-                    { label: 'Cases', value: summary.totalCases, color: 'text-white' },
-                    { label: 'New This Month', value: summary.newThisMonth, color: 'text-zeno-cyan' },
-                    { label: 'Converted', value: `${summary.conversionRate}%`, color: 'text-emerald-400' },
-                    { label: 'Settled', value: summary.settled, color: 'text-emerald-400' },
-                    { label: 'In Arrears', value: summary.inArrears, color: 'text-amber-400' },
-                ].map((s) => (
-                    <div key={s.label} className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-4">
-                        <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                        <p className={`text-xl font-bold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
-                    </div>
-                ))}
+            <div className="space-y-4 mb-6">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                        { id: 'clients' as ReferralFilterId, label: 'Clients', value: summary.totalClients, color: 'text-white', border: 'border-l-4 border-l-cyan-400' },
+                        { id: 'in-progress' as ReferralFilterId, label: 'In Progress', value: summary.inProgress, color: 'text-sky-300', border: 'border-l-4 border-l-sky-400' },
+                        { id: 'completed' as ReferralFilterId, label: 'Completed', value: summary.completed, color: 'text-yellow-300', border: 'border-l-4 border-l-yellow-400' },
+                        { id: 'settled' as ReferralFilterId, label: 'Settled', value: summary.settled, color: 'text-emerald-400', border: 'border-l-4 border-l-emerald-400' },
+                    ].map((s) => {
+                        const active = filterId === s.id;
+                        return (
+                            <button
+                                key={s.label}
+                                onClick={() => setFilterId(active ? '' : s.id)}
+                                className={`text-left bg-zeno-blue/30 border rounded-xl p-5 transition-all ${
+                                    active
+                                        ? 'border-zeno-cyan/50 ring-2 ring-zeno-cyan/35 bg-zeno-cyan/5'
+                                        : 'border-zeno-blue/50 hover:bg-zeno-blue/40'
+                                } ${s.border}`}
+                            >
+                                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1 font-semibold">{s.label}</p>
+                                <p className={`text-2xl font-extrabold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                        { id: 'total-cases' as ReferralFilterId, label: 'Total Cases', value: summary.totalCases, color: 'text-white' },
+                        { id: 'new-this-month' as ReferralFilterId, label: 'New This Month', value: summary.newThisMonth, color: 'text-zeno-cyan' },
+                        { id: 'converted' as ReferralFilterId, label: 'Converted', value: `${summary.conversionRate}%`, color: 'text-emerald-400' },
+                        { id: 'in-arrears' as ReferralFilterId, label: 'In Arrears', value: summary.inArrears, color: 'text-amber-400' },
+                    ].map((s) => {
+                        const active = filterId === s.id;
+                        return (
+                            <button
+                                key={s.label}
+                                onClick={() => setFilterId(active ? '' : s.id)}
+                                className={`text-left bg-zeno-blue/15 border border-zeno-blue/30 rounded-xl p-4 transition-all ${
+                                    active
+                                        ? 'border-zeno-cyan/50 ring-2 ring-zeno-cyan/35 bg-zeno-cyan/5'
+                                        : 'hover:bg-zeno-blue/20'
+                                }`}
+                            >
+                                <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{s.label}</p>
+                                <p className={`text-lg font-bold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {/* Stat cards — money & follow-up row */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 gap-4 mb-6">
-                {[
-                    { label: 'Total Quoted', value: summary.totalQuoted > 0 ? formatZAR(summary.totalQuoted) : '—', color: 'text-white' },
-                    { label: 'Total Collected', value: summary.totalCollected > 0 ? formatZAR(summary.totalCollected) : '—', color: 'text-emerald-400' },
-                    { label: 'Client Balance Due', value: summary.totalBalanceDue > 0 ? formatZAR(summary.totalBalanceDue) : '—', color: 'text-amber-400' },
-                    { label: 'Updates Overdue', value: summary.updatesOverdue, color: summary.updatesOverdue > 0 ? 'text-red-400' : 'text-gray-400' },
-                    ...(referrer.referrerType === 'HYBRID'
-                        ? [
-                            { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
-                            { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
-                            { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
-                        ]
-                        : isDiscountReferrer
-                        ? [
-                            { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
-                            { label: 'Commission', value: 'None (discount)', color: 'text-gray-400' },
-                        ]
-                        : [
-                            { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
-                            { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
-                        ]),
-                ].map((s) => (
-                    <div key={s.label} className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-4">
-                        <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                        <p className={`text-xl font-bold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
+            <div className="space-y-4 mb-6">
+                {(isDiscountReferrer || referrer.referrerType === 'HYBRID') ? (
+                    <>
+                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Client Finance Metrics</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                            {[
+                                { id: 'quoted' as ReferralFilterId, label: 'Total Quoted', value: summary.totalQuoted > 0 ? formatZAR(summary.totalQuoted) : '—', color: 'text-white', border: 'border-l-4 border-l-violet-400' },
+                                { id: 'expected-revenue' as ReferralFilterId, label: 'Expected Revenue', value: summary.totalExpectedRevenue > 0 ? formatZAR(summary.totalExpectedRevenue) : '—', color: 'text-indigo-300', border: 'border-l-4 border-l-indigo-400' },
+                                { id: 'completed-outstanding' as ReferralFilterId, label: 'Out Standing Balance', value: summary.totalCompletedOutstanding > 0 ? formatZAR(summary.totalCompletedOutstanding) : '—', color: 'text-yellow-300', border: 'border-l-4 border-l-yellow-400' },
+                                { id: 'paid' as ReferralFilterId, label: 'Total Paid', value: summary.totalCollected > 0 ? formatZAR(summary.totalCollected) : '—', color: 'text-emerald-400', border: 'border-l-4 border-l-emerald-400' },
+                                { id: 'settled-paid' as ReferralFilterId, label: 'Settled', value: summary.totalSettledPaid > 0 ? formatZAR(summary.totalSettledPaid) : '—', color: 'text-teal-300', border: 'border-l-4 border-l-teal-400' },
+                            ].map((s) => {
+                                const active = filterId === s.id;
+                                return (
+                                    <button
+                                        key={s.label}
+                                        onClick={() => setFilterId(active ? '' : s.id)}
+                                        className={`text-left bg-zeno-blue/30 border rounded-xl p-5 transition-all ${
+                                            active
+                                                ? 'border-zeno-cyan/50 ring-2 ring-zeno-cyan/35 bg-zeno-cyan/5'
+                                                : 'border-zeno-blue/50 hover:bg-zeno-blue/40'
+                                        } ${s.border}`}
+                                    >
+                                        <p className="text-xs text-gray-400 uppercase tracking-wider mb-1 font-semibold">{s.label}</p>
+                                        <p className={`text-2xl font-extrabold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {[
+                            { id: 'quoted' as ReferralFilterId, label: 'Total Quoted', value: summary.totalQuoted > 0 ? formatZAR(summary.totalQuoted) : '—', color: 'text-white', border: 'border-l-4 border-l-violet-400' },
+                            { id: 'paid' as ReferralFilterId, label: 'Total Paid', value: summary.totalCollected > 0 ? formatZAR(summary.totalCollected) : '—', color: 'text-emerald-400', border: 'border-l-4 border-l-emerald-400' },
+                            { id: 'settled-paid' as ReferralFilterId, label: 'Settled', value: summary.totalSettledPaid > 0 ? formatZAR(summary.totalSettledPaid) : '—', color: 'text-teal-300', border: 'border-l-4 border-l-teal-400' },
+                        ].map((s) => {
+                            const active = filterId === s.id;
+                            return (
+                                <button
+                                    key={s.label}
+                                    onClick={() => setFilterId(active ? '' : s.id)}
+                                    className={`text-left bg-zeno-blue/30 border rounded-xl p-5 transition-all ${
+                                        active
+                                            ? 'border-zeno-cyan/50 ring-2 ring-zeno-cyan/35 bg-zeno-cyan/5'
+                                            : 'border-zeno-blue/50 hover:bg-zeno-blue/40'
+                                    } ${s.border}`}
+                                >
+                                    <p className="text-xs text-gray-400 uppercase tracking-wider mb-1 font-semibold">{s.label}</p>
+                                    <p className={`text-2xl font-extrabold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
+                                </button>
+                            );
+                        })}
                     </div>
-                ))}
+                )}
+
+                {/* Configuration / Alerts Row */}
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mt-4">Referrer Config & follow-ups</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                        { label: 'Updates Overdue', value: summary.updatesOverdue, color: summary.updatesOverdue > 0 ? 'text-red-400' : 'text-gray-400', border: summary.updatesOverdue > 0 ? 'border-red-500/30' : 'border-zeno-blue/30' },
+                        ...(referrer.referrerType === 'HYBRID'
+                            ? [
+                                { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
+                                { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
+                                { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
+                            ]
+                            : isDiscountReferrer
+                            ? [
+                                { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
+                                { label: 'Commission', value: 'None (discount)', color: 'text-gray-400' },
+                            ]
+                            : [
+                                { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
+                                { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
+                            ]),
+                    ].map((s) => (
+                        <div key={s.label} className={`bg-zeno-blue/15 border rounded-xl p-4 ${'border' in s ? s.border : 'border-zeno-blue/30'}`}>
+                            <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{s.label}</p>
+                            <p className={`text-lg font-bold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
+                        </div>
+                    ))}
+                </div>
             </div>
+
+            {/* Quotes Scoreboard */}
+            {isDiscountReferrer && data.quoteStats && (
+                <div className="bg-zeno-blue/20 border border-zeno-blue/40 rounded-xl p-5 mb-6">
+                    <h2 className="text-sm font-semibold text-white mb-1">Quotes</h2>
+                    <p className="text-xs text-gray-400 mb-4">Quotations issued for your referred clients</p>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        {[
+                            { id: 'not-quoted' as ReferralFilterId, label: 'Not Quoted', value: `${data.quoteStats.notQuotedCount} Clients`, accent: 'text-gray-300', caption: 'No quotation created yet' },
+                            { id: 'total-quotes' as ReferralFilterId, label: 'Total Quotes', value: `${data.quoteStats.totalCount} Quotes`, accent: 'text-purple-300', caption: `Total value: ${formatZAR(data.quoteStats.totalAmount)}` },
+                            { id: 'accepted-quotes' as ReferralFilterId, label: 'Accepted Quotes', value: `${data.quoteStats.acceptedCount} Accepted`, accent: 'text-emerald-400', caption: `Value: ${formatZAR(data.quoteStats.acceptedAmount)}` },
+                            { id: 'pending-quotes' as ReferralFilterId, label: 'Pending Quotes', value: `${data.quoteStats.pendingCount} Pending`, accent: 'text-amber-400', caption: `Value: ${formatZAR(data.quoteStats.pendingAmount)}` },
+                            { id: 'declined-quotes' as ReferralFilterId, label: 'Declined Quotes', value: `${data.quoteStats.rejectedCount} Declined`, accent: 'text-rose-300', caption: `Value: ${formatZAR(data.quoteStats.rejectedAmount)}` },
+                        ].map((q) => {
+                            const active = filterId === q.id;
+                            return (
+                                <button
+                                    key={q.label}
+                                    onClick={() => setFilterId(active ? '' : q.id)}
+                                    className={`text-left rounded-xl p-4 border transition-all ${
+                                        active
+                                            ? 'bg-zeno-cyan/15 border-zeno-cyan/50 ring-1 ring-zeno-cyan/35'
+                                            : 'bg-zeno-blue/30 border-zeno-blue/50 hover:bg-zeno-blue/40'
+                                    }`}
+                                >
+                                    <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 font-semibold">{q.label}</p>
+                                    <p className={`text-2xl font-extrabold ${q.accent}`}>{q.value}</p>
+                                    {q.caption && <p className="text-[10px] text-gray-500 mt-1 font-medium">{q.caption}</p>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Pipeline + trend */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
@@ -370,9 +584,9 @@ export default function ReferrerClientsDashboardPage() {
                         <option key={s} value={s}>{STAGE_LABELS[s]}</option>
                     ))}
                 </select>
-                {(search || stageFilter) && (
+                {(search || stageFilter || filterId) && (
                     <button
-                        onClick={() => { setSearch(''); setStageFilter(''); }}
+                        onClick={() => { setSearch(''); setStageFilter(''); setFilterId(''); }}
                         className="text-xs text-gray-400 hover:text-white transition-colors px-2"
                     >
                         Clear filters

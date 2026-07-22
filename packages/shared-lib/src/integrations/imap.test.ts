@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatImapConnectionError, mapEnvelopeToMatch } from './imap';
+import { formatImapConnectionError, mapEnvelopeToMatch, classifyDocumentByFilename, isDocTypeInGroup } from './imap';
 
 describe('formatImapConnectionError', () => {
     it('adds the Gmail app-password guidance when ImapFlow only reports Command failed', () => {
@@ -66,5 +66,66 @@ describe('mapEnvelopeToMatch', () => {
         );
         expect(match.seen).toBe(false);
         expect(match.matchedOn).toEqual(['ID_NUMBER', 'NAME']);
+    });
+});
+
+describe('classifyDocumentByFilename', () => {
+    it('classifies documents correctly based on filename keywords', () => {
+        expect(classifyDocumentByFilename({ filename: 'Form 17.1 (Signed).pdf' })).toBe('FORM_17_1');
+        expect(classifyDocumentByFilename({ filename: 'Form 17.2 Transfer.pdf' })).toBe('FORM_17_2');
+        expect(classifyDocumentByFilename({ filename: 'Form_17_7_transfer.pdf' })).toBe('FORM_17_7');
+        expect(classifyDocumentByFilename({ filename: 'Form-17-7.pdf' })).toBe('FORM_17_7');
+        expect(classifyDocumentByFilename({ filename: 'Client_Form17W.pdf' })).toBe('FORM_17W');
+        expect(classifyDocumentByFilename({ filename: 'Form 16 Application.pdf' })).toBe('FORM_16');
+        expect(classifyDocumentByFilename({ filename: 'Court Order Granted.pdf' })).toBe('COURT_ORDER');
+        expect(classifyDocumentByFilename({ filename: 'TransUnion_CreditReport.pdf' })).toBe('CREDIT_REPORT_TRANSUNION');
+        expect(classifyDocumentByFilename({ filename: 'Experian_report_client.pdf' })).toBe('CREDIT_REPORT_EXPERIAN');
+        expect(classifyDocumentByFilename({ filename: 'XDS Credit Profile.pdf' })).toBe('CREDIT_REPORT_XDS');
+        expect(classifyDocumentByFilename({ filename: 'Lightstone_valuation_report.pdf' })).toBe('CREDIT_REPORT_LIGHTSTONE');
+        expect(classifyDocumentByFilename({ filename: 'CreditReport.pdf' })).toBe('CREDIT_REPORT');
+        expect(classifyDocumentByFilename({ filename: 'Identity Document copy.pdf' })).toBe('ID');
+        expect(classifyDocumentByFilename({ filename: 'signed-poa.pdf' })).toBe('ZENOWETHU_POA');
+        expect(classifyDocumentByFilename({ filename: 'June_Payslip.pdf' })).toBe('PAYSLIP');
+        expect(classifyDocumentByFilename({ filename: 'bank statement 3 months.pdf' })).toBe('BANK_STATEMENT');
+        expect(classifyDocumentByFilename({ filename: 'utility_municipal_bill.pdf' })).toBe('PROOF_OF_RESIDENCE');
+        expect(classifyDocumentByFilename({ filename: 'Paid_up_letter_ABSA.pdf' })).toBe('PAID_UP_LETTER');
+        expect(classifyDocumentByFilename({ filename: 'fees-invoice.pdf', isInvoice: true })).toBe('FEE_INVOICE');
+        expect(classifyDocumentByFilename({ filename: 'proof-of-payment.pdf', isPoP: true })).toBe('PROOF_OF_PAYMENT');
+        expect(classifyDocumentByFilename({ filename: 'arbitrary_doc.pdf' })).toBe('OTHER');
+    });
+
+    it('falls back to isInvoice or isPoP when keywords do not match', () => {
+        expect(classifyDocumentByFilename({ filename: 'arbitrary_doc.pdf', isInvoice: true })).toBe('FEE_INVOICE');
+        expect(classifyDocumentByFilename({ filename: 'arbitrary_doc.pdf', isPoP: true })).toBe('PROOF_OF_PAYMENT');
+    });
+});
+
+describe('isDocTypeInGroup', () => {
+    it('verifies doc type membership in groups correctly', () => {
+        expect(isDocTypeInGroup('ID', 'ID_POA')).toBe(true);
+        expect(isDocTypeInGroup('ZENOWETHU_POA', 'ID_POA')).toBe(true);
+        expect(isDocTypeInGroup('FORM_17_1', 'ID_POA')).toBe(false);
+
+        expect(isDocTypeInGroup('CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT')).toBe(true);
+        expect(isDocTypeInGroup('CREDIT_REPORT', 'CREDIT_REPORT')).toBe(true);
+        expect(isDocTypeInGroup('ID', 'CREDIT_REPORT')).toBe(false);
+
+        expect(isDocTypeInGroup('FEE_INVOICE', 'DC_INVOICE')).toBe(true);
+        expect(isDocTypeInGroup('DC_FEE_INVOICE', 'DC_INVOICE')).toBe(true);
+        expect(isDocTypeInGroup('PROOF_OF_PAYMENT', 'DC_INVOICE')).toBe(false);
+
+        expect(isDocTypeInGroup('PROOF_OF_PAYMENT', 'POP')).toBe(true);
+        expect(isDocTypeInGroup('PAID_UP_LETTER', 'PAID_UP')).toBe(true);
+
+        expect(isDocTypeInGroup('FORM_16', 'DEBT_REVIEW_FORMS')).toBe(true);
+        expect(isDocTypeInGroup('FORM_17_1', 'DEBT_REVIEW_FORMS')).toBe(true);
+        expect(isDocTypeInGroup('FORM_17_2', 'DEBT_REVIEW_FORMS')).toBe(true);
+        expect(isDocTypeInGroup('FORM_17_7', 'DEBT_REVIEW_FORMS')).toBe(true);
+        expect(isDocTypeInGroup('FORM_17W', 'DEBT_REVIEW_FORMS')).toBe(true);
+        expect(isDocTypeInGroup('COURT_ORDER', 'DEBT_REVIEW_FORMS')).toBe(true);
+        expect(isDocTypeInGroup('ID', 'DEBT_REVIEW_FORMS')).toBe(false);
+
+        expect(isDocTypeInGroup('ANYTHING', 'ALL')).toBe(true);
+        expect(isDocTypeInGroup('ANYTHING', undefined)).toBe(true);
     });
 });

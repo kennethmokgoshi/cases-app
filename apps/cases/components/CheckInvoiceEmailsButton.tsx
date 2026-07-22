@@ -24,7 +24,7 @@ interface CheckResult {
         configured: boolean;
     }[];
     scanSummary?: {
-        status: 'QUEUED' | 'DUPLICATE' | 'NOT_CONFIGURED';
+        status: 'QUEUED' | 'DUPLICATE' | 'NOT_CONFIGURED' | 'COMPLETED';
         searchFrom: string;
         idNumberMatchRequired: boolean;
         idNumberMatchValue: string;
@@ -41,6 +41,16 @@ interface CheckResult {
     error?: string;
 }
 
+const GROUP_TITLES: Record<string, string> = {
+    'ALL': 'All Documents',
+    'ID_POA': 'ID & POA',
+    'CREDIT_REPORT': 'Credit Reports',
+    'DC_INVOICE': 'DC Invoices',
+    'POP': 'Proofs of Payment',
+    'PAID_UP': 'Paid-Up Letters',
+    'DEBT_REVIEW_FORMS': 'Debt Review Forms',
+};
+
 function formatCount(value: number | null | undefined): string {
     return typeof value === 'number' ? String(value) : 'Pending';
 }
@@ -52,9 +62,6 @@ function formatDate(value: string | undefined): string {
     return parsed.toISOString().slice(0, 10);
 }
 
-// "Check invoice emails" dropdown: search all registered mailboxes or a single
-// one for DC fee invoices / proof-of-payment replies. Self-contained so it can
-// sit in the decline panel and in the Workflow Status card without shared state.
 export default function CheckInvoiceEmailsButton({
     caseId,
     receivedAfter,
@@ -70,8 +77,10 @@ export default function CheckInvoiceEmailsButton({
 }) {
     const [showMenu, setShowMenu] = useState(false);
     const [selectedLookbackDays, setSelectedLookbackDays] = useState<number>(365);
+    const [selectedMailboxId, setSelectedMailboxId] = useState<string>('ALL');
     const [mailboxes, setMailboxes] = useState<SearchableMailbox[] | null>(null);
     const [isChecking, setIsChecking] = useState(false);
+    const [currentGroup, setCurrentGroup] = useState<string>('ALL');
     const [result, setResult] = useState<CheckResult | null>(null);
     const [scanProgress, setScanProgress] = useState<{
         progress: number;
@@ -139,9 +148,10 @@ export default function CheckInvoiceEmailsButton({
         }
     };
 
-    const runCheck = async (mailboxId: string, overrideLookbackDays?: number) => {
+    const runCheck = async (mailboxId: string, overrideLookbackDays?: number, docGroupToUse = 'ALL') => {
         setShowMenu(false);
         setIsChecking(true);
+        setCurrentGroup(docGroupToUse);
         setResult(null);
         setScanProgress({ progress: 0, emailsScanned: 0, newEmailsFound: 0 });
         setVerifyRequestResult(null);
@@ -155,12 +165,13 @@ export default function CheckInvoiceEmailsButton({
                     receivedAfter: receivedAfter || undefined,
                     reason: reason || undefined,
                     mailboxId,
+                    docGroup: docGroupToUse,
                 }),
             });
 
             if (!res.ok) {
                 const data = await res.json();
-                toast.error(data.error || 'Fee-invoice email check failed');
+                toast.error(data.error || 'Email harvest failed');
                 setIsChecking(false);
                 setScanProgress(null);
                 return;
@@ -197,13 +208,13 @@ export default function CheckInvoiceEmailsButton({
                         } else if (chunk.type === 'complete') {
                             setResult(chunk.data);
                             if (chunk.data.success) {
-                                toast.success(chunk.data.message || 'Fee-invoice email check completed.');
+                                toast.success(chunk.data.message || 'Email document harvest completed.');
                                 onRequested?.();
                             } else {
-                                toast.error(chunk.data.error || 'Check failed');
+                                toast.error(chunk.data.error || 'Harvest failed');
                             }
                         } else if (chunk.type === 'error') {
-                            toast.error(chunk.error || 'An error occurred during search');
+                            toast.error(chunk.error || 'An error occurred during email harvest');
                         }
                     } catch (e) {
                         console.error('Error parsing chunk:', e);
@@ -221,114 +232,120 @@ export default function CheckInvoiceEmailsButton({
     return (
         <div className="inline-block">
             <div className="relative">
-                <div className="inline-flex rounded-md shadow-sm">
-                    <button
-                        type="button"
-                        onClick={() => runCheck('ALL')}
-                        disabled={isChecking}
-                        className="text-xs text-white bg-cyan-700/80 border border-cyan-500/50 px-3 py-1 rounded-l hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 border-r-0 font-medium"
-                    >
-                        {isChecking ? (
-                            <>
-                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                Checking...
-                            </>
-                        ) : (
-                            <>🔍 Scan all linked emails</>
-                        )}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={openMenu}
-                        disabled={isChecking}
-                        className="text-xs text-white bg-cyan-700/80 border border-cyan-500/50 px-2 py-1 rounded-r hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center font-medium"
-                        aria-label="Select mailbox"
-                    >
-                        <span className="opacity-60">▾</span>
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    onClick={openMenu}
+                    disabled={isChecking}
+                    className="text-xs text-white bg-cyan-750 border border-cyan-500/50 px-3 py-1.5 rounded hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 font-medium shadow-sm"
+                >
+                    {isChecking ? (
+                        <>
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            Harvesting {GROUP_TITLES[currentGroup]}...
+                        </>
+                    ) : (
+                        <>📧 Harvest from Email ▾</>
+                    )}
+                </button>
+                
                 {showMenu && (
                     <div className={`absolute ${menuAlign === 'right' ? 'right-0' : 'left-0'} top-full mt-1 w-80 bg-zeno-navy border border-cyan-500/30 rounded-lg shadow-2xl z-20 overflow-hidden`}>
-                        <div className="p-3 border-b border-white/10 bg-white/5">
-                            <div className="text-[10px] uppercase font-semibold tracking-wider text-cyan-300/90 mb-1.5 flex items-center justify-between">
-                                <span className="flex items-center gap-1">📅 Search Date Range</span>
-                                <span className="text-[10px] text-gray-400 font-normal">
-                                    {selectedLookbackDays === 30 ? '30 days' : selectedLookbackDays === 90 ? '90 days' : selectedLookbackDays === 180 ? '6 months' : selectedLookbackDays === 365 ? '1 year' : '3 years'}
-                                </span>
+                        <div className="p-3 border-b border-white/10 bg-white/5 space-y-2.5">
+                            <div>
+                                <div className="text-[10px] uppercase font-semibold tracking-wider text-cyan-300/90 mb-1 flex items-center justify-between">
+                                    <span className="flex items-center gap-1">📅 Search Date Range</span>
+                                    <span className="text-[10px] text-gray-400 font-normal">
+                                        {selectedLookbackDays === 30 ? '30 days' : selectedLookbackDays === 90 ? '90 days' : selectedLookbackDays === 180 ? '6 months' : selectedLookbackDays === 365 ? '1 year' : '3 years'}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-5 gap-1">
+                                    {[
+                                        { label: '30d', days: 30 },
+                                        { label: '90d', days: 90 },
+                                        { label: '6mo', days: 180 },
+                                        { label: '1yr', days: 365 },
+                                        { label: '3yr', days: 1095 },
+                                    ].map(opt => (
+                                        <button
+                                            key={opt.days}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedLookbackDays(opt.days);
+                                            }}
+                                            className={`px-1 py-0.5 text-[10px] rounded transition-all text-center font-medium ${
+                                                selectedLookbackDays === opt.days
+                                                    ? 'bg-cyan-600 text-white shadow-sm font-semibold ring-1 ring-cyan-400'
+                                                    : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'
+                                            }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="grid grid-cols-5 gap-1">
-                                {[
-                                    { label: '30d', days: 30 },
-                                    { label: '90d', days: 90 },
-                                    { label: '6mo', days: 180 },
-                                    { label: '1yr', days: 365 },
-                                    { label: '3yr', days: 1095 },
-                                ].map(opt => (
-                                    <button
-                                        key={opt.days}
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedLookbackDays(opt.days);
-                                        }}
-                                        className={`px-1.5 py-1 text-[11px] rounded transition-all text-center font-medium ${
-                                            selectedLookbackDays === opt.days
-                                                ? 'bg-cyan-600 text-white shadow-sm font-semibold ring-1 ring-cyan-400'
-                                                : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'
-                                        }`}
-                                    >
-                                        {opt.label}
-                                    </button>
-                                ))}
+
+                            <div>
+                                <div className="text-[10px] uppercase font-semibold tracking-wider text-cyan-300/90 mb-1 flex items-center justify-between">
+                                    <span className="flex items-center gap-1">📬 Select Mailbox</span>
+                                </div>
+                                <select
+                                    value={selectedMailboxId}
+                                    onChange={(e) => setSelectedMailboxId(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-cyan-500/50"
+                                >
+                                    <option value="ALL" className="bg-zeno-navy text-white">All Connected Mailboxes</option>
+                                    {mailboxes?.map(m => (
+                                        <option key={m.id} value={m.id} className="bg-zeno-navy text-white">
+                                            {m.emailAddress} ({m.label}){!m.hasPassword ? ' [No Password]' : ''}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 
-                        <div className="p-2 border-b border-white/10 bg-black/20">
+                        <div className="p-2 space-y-0.5 bg-black/25 border-b border-white/5">
+                            <div className="px-2.5 py-1 text-[10px] font-semibold text-cyan-300/90 uppercase tracking-wider">
+                                📧 Targeted Extractions
+                            </div>
+                            {[
+                                { key: 'ID_POA', label: 'Extract ID & POA', icon: '🪪' },
+                                { key: 'CREDIT_REPORT', label: 'Extract Credit Reports', icon: '📊' },
+                                { key: 'DC_INVOICE', label: 'Extract DC Invoices', icon: '🧾' },
+                                { key: 'POP', label: 'Extract Proofs of Payment', icon: '💸' },
+                                { key: 'PAID_UP', label: 'Extract Paid-Up Letters', icon: '✉️' },
+                                { key: 'DEBT_REVIEW_FORMS', label: 'Extract Debt Review Forms', icon: '📜' },
+                            ].map(act => (
+                                <button
+                                    key={act.key}
+                                    type="button"
+                                    onClick={() => runCheck(selectedMailboxId, selectedLookbackDays, act.key)}
+                                    className="w-full text-left px-2.5 py-1.5 text-xs text-gray-200 hover:bg-cyan-500/20 hover:text-white rounded transition-colors font-medium flex items-center gap-2"
+                                >
+                                    <span>{act.icon}</span>
+                                    <span>{act.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="p-2 bg-black/45">
                             <button
-                                onClick={() => runCheck('ALL')}
-                                className="w-full text-left px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-500/20 bg-cyan-900/30 border border-cyan-500/30 rounded transition-colors font-semibold flex items-center justify-between"
+                                type="button"
+                                onClick={() => runCheck(selectedMailboxId, selectedLookbackDays, 'ALL')}
+                                className="w-full text-left px-2.5 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 bg-cyan-900/30 border border-cyan-500/30 rounded transition-colors font-semibold flex items-center gap-2"
                             >
-                                <span className="flex items-center gap-1.5">🔍 Search all mailboxes</span>
-                                <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded font-normal">
-                                    {selectedLookbackDays === 30 ? '30 days' : selectedLookbackDays === 90 ? '90 days' : selectedLookbackDays === 180 ? '6 months' : selectedLookbackDays === 365 ? '1 year' : '3 years'}
-                                </span>
+                                <span>🔍</span>
+                                <span>Extract All / Any Documents</span>
                             </button>
                         </div>
-
-                        <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-white/5 border-b border-white/5">
-                            Or Select Specific Mailbox:
-                        </div>
-
-                        {mailboxes === null && (
-                            <div className="px-3 py-2 text-xs text-gray-400">Loading mailboxes…</div>
-                        )}
-                        {mailboxes?.length === 0 && (
-                            <div className="px-3 py-2 text-xs text-gray-400">
-                                No mailboxes registered — ask Admin to add them in Admin → Settings.
-                            </div>
-                        )}
-                        {mailboxes?.map(m => (
-                            <button
-                                key={m.id}
-                                onClick={() => runCheck(m.id)}
-                                className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-cyan-500/10 transition-colors border-b border-white/5 last:border-0"
-                            >
-                                <span className="block truncate font-medium">
-                                    {m.emailAddress}
-                                    {m.isDcCommunication && <span className="ml-1.5 text-amber-400 text-[10px]">DC comms</span>}
-                                </span>
-                                <span className="block text-[11px] text-gray-400">
-                                    {m.label}{!m.hasPassword && ' — no password saved yet'}
-                                </span>
-                            </button>
-                        ))}
                     </div>
                 )}
             </div>
+            
             {isChecking && scanProgress && (
                 <div className="mt-3 p-3 rounded-lg border border-cyan-500/20 bg-cyan-900/10 text-cyan-200 text-xs w-72">
                     <div className="flex justify-between items-center mb-1.5 font-semibold">
-                        <span>Scanning mailboxes...</span>
+                        <span>Harvesting {GROUP_TITLES[currentGroup]}...</span>
                         <span>{scanProgress.progress}%</span>
                     </div>
                     <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden mb-2.5">
@@ -349,6 +366,7 @@ export default function CheckInvoiceEmailsButton({
                     </div>
                 </div>
             )}
+            
             {!isChecking && result && (
                 <div className={`mt-3 p-3 rounded-lg border text-xs ${
                     result.success
@@ -358,7 +376,7 @@ export default function CheckInvoiceEmailsButton({
                         : 'bg-red-900/10 border-red-500/20 text-red-300'
                 }`}>
                     <div className="font-semibold mb-1">
-                        {result.success ? 'Invoice email check' : 'Invoice email check failed'}
+                        {result.success ? `${GROUP_TITLES[currentGroup]} harvest completed` : 'Harvest failed'}
                         {result.duplicate && (
                             <span className="ml-2 font-normal opacity-70">(already requested)</span>
                         )}
@@ -394,7 +412,7 @@ export default function CheckInvoiceEmailsButton({
                                 <div className="font-semibold">{formatCount(result.scanSummary.newEmailsFound)}</div>
                             </div>
                             <div className="rounded border border-white/10 bg-white/5 p-2">
-                                <div className="text-[10px] uppercase tracking-wide opacity-60">Invoice candidates</div>
+                                <div className="text-[10px] uppercase tracking-wide opacity-60">Candidates</div>
                                 <div className="font-semibold">{formatCount(result.scanSummary.invoiceCandidatesFound)}</div>
                             </div>
                             <div className="rounded border border-white/10 bg-white/5 p-2">

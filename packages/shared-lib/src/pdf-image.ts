@@ -93,7 +93,8 @@ async function launchBrowser() {
 export async function convertPdfToImages(
     base64Pdf: string,
     maxPages: number = 0,
-    onProgress?: (msg: string) => void
+    onProgress?: (msg: string) => void,
+    password?: string
 ): Promise<string[]> {
     logger.info(`🖼️ Converting PDF to High-Res Images (Limit: ${maxPages || 'None'})...`);
 
@@ -169,7 +170,7 @@ async function renderPdf(max) {
         for (let i = 0; i < binaryStr.length; i++) {
             pdfData[i] = binaryStr.charCodeAt(i);
         }
-        const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+        const loadingTask = pdfjsLib.getDocument({ data: pdfData, password: ${JSON.stringify(password || '')} });
         const pdf = await loadingTask.promise;
         const images = [];
         const totalPages = pdf.numPages;
@@ -237,7 +238,7 @@ async function renderPdf(max) {
     }
 }
 
-export async function extractTextFromPdf(base64Pdf: string, maxPages: number = 0): Promise<string> {
+export async function extractTextFromPdf(base64Pdf: string, maxPages: number = 0, password?: string): Promise<string> {
     logger.info(`📄 Extracting text from PDF (Limit: ${maxPages || 'None'})...`);
 
     // Optimize PDF if a limit is set
@@ -294,7 +295,7 @@ async function getText(max) {
         if (typeof pdfjsLib === 'undefined') {
             throw new Error('PDF.js library failed to load');
         }
-        const loadingTask = pdfjsLib.getDocument('http://localhost/document.pdf');
+        const loadingTask = pdfjsLib.getDocument({ url: 'http://localhost/document.pdf', password: ${JSON.stringify(password || '')} });
         const pdf = await loadingTask.promise;
         let fullText = '';
         const totalPages = pdf.numPages;
