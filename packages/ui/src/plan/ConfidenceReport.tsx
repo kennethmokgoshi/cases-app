@@ -150,11 +150,15 @@ export function ConfidenceReport({
               setSearchMessage(`Searching mailboxes: Scanned ${chunk.emailsScanned || 0} emails, ${chunk.newEmailsFound || 0} new...`);
             } else if (chunk.type === 'complete') {
               if (chunk.data.success) {
-                const uploadCount = chunk.data.scanSummary?.uploadedDocuments ?? 0;
-                if (uploadCount > 0) {
-                  setSearchSuccess(chunk.data.message || `Harvest complete. Found and uploaded ${uploadCount} document(s).`);
+                if (chunk.data.duplicate) {
+                  setSearchSuccess(chunk.data.message || 'Email search was already performed recently.');
                 } else {
-                  setSearchError(`Harvest complete. No matching documents found in emails.`);
+                  const uploadCount = chunk.data.scanSummary?.uploadedDocuments ?? 0;
+                  if (uploadCount > 0) {
+                    setSearchSuccess(chunk.data.message || `Harvest complete. Found and uploaded ${uploadCount} document(s).`);
+                  } else {
+                    setSearchError(`Harvest complete. No matching documents found in emails.`);
+                  }
                 }
                 onRefresh?.();
               } else {

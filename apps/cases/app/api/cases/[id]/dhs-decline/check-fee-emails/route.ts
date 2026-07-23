@@ -263,7 +263,8 @@ export async function POST(
                     data.matchPolicy?.openOrFetchOnlyAfterIdentifierMatch === true &&
                     data.matchPolicy?.nonMatchingEmailAction === matchPolicy.nonMatchingEmailAction;
                 const sameReceivedAfter = !data.receivedAfter || data.receivedAfter === searchFrom.toISOString();
-                return (data.mailboxScope ?? 'ALL') === scopeKey && hasStrictMatchPolicy && sameReceivedAfter;
+                const sameDocGroup = (data.docGroup ?? 'ALL') === docGroup;
+                return (data.mailboxScope ?? 'ALL') === scopeKey && hasStrictMatchPolicy && sameReceivedAfter && sameDocGroup;
             } catch {
                 return false;
             }
@@ -308,7 +309,7 @@ export async function POST(
                                 configured: m.hasPassword,
                             })),
                             scanSummary: scanSummaryVal,
-                            message: 'A fee-invoice email check was already requested for this case and mailbox selection in the last 24 hours.',
+                            message: `An email search for ${docGroup === 'ALL' ? 'all documents' : docGroup === 'ID_POA' ? 'ID & POA' : docGroup === 'CREDIT_REPORT' ? 'credit reports' : docGroup} was already performed for this case in the last 24 hours.`,
                         }
                     }) + '\n'));
                     controller.close();
@@ -526,6 +527,7 @@ export async function POST(
                         lookbackDays,
                         receivedAfter: searchFrom.toISOString(),
                         mailboxScope: scopeKey,
+                        docGroup,
                         mailboxes: selectedMailboxes.map(m => ({
                             id: m.id,
                             emailAddress: m.emailAddress,

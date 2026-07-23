@@ -4995,49 +4995,49 @@ export default function CaseDetailPage() {
                     </div >
 
                     {/* Enhanced Case Utilities - Tabbed Interface */}
-                    < div ref={tabsPanelRef} className="mt-12 bg-zeno-blue/10 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" >
-                        <nav className="flex bg-zeno-navy/80 border-b border-white/5">
+                    <div ref={tabsPanelRef} className="mt-12 bg-zeno-blue/10 rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
+                        <nav className="flex flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible p-2 gap-1.5 bg-zeno-navy/90 border-b border-white/5 scrollbar-none">
                             <button
                                 onClick={() => setActiveDetailTab('ACTIVITY')}
-                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'ACTIVITY'
-                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'ACTIVITY'
+                                    ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                     }`}
                             >
                                 <span>💬</span> Activity & Journal
                             </button>
                             <button
                                 onClick={() => setActiveDetailTab('DOCUMENTS')}
-                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'DOCUMENTS'
-                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'DOCUMENTS'
+                                    ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                     }`}
                             >
                                 <span>📁</span> Documents
                             </button>
                             <button
                                 onClick={() => setActiveDetailTab('COMMUNICATION')}
-                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'COMMUNICATION'
-                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'COMMUNICATION'
+                                    ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                     }`}
                             >
                                 <span>🗣️</span> Comm Hub
                             </button>
                             <button
                                 onClick={() => setActiveDetailTab('AI_PLAN')}
-                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'AI_PLAN'
-                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'AI_PLAN'
+                                    ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                     }`}
                             >
                                 <span>🤖</span> AI Plan
                             </button>
                             <button
                                 onClick={() => setActiveDetailTab('AI_ASSISTANT')}
-                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'AI_ASSISTANT'
-                                    ? 'text-amber-400 border-b-2 border-amber-400 bg-amber-400/5'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'AI_ASSISTANT'
+                                    ? 'text-amber-400 bg-amber-400/10 border border-amber-500/20 shadow-sm'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                     }`}
                             >
                                 <span>✨</span> AI Assistant
@@ -5045,9 +5045,9 @@ export default function CaseDetailPage() {
                             {isDebtReviewCase && (
                                 <button
                                     onClick={() => setActiveDetailTab('DEBT_REVIEW')}
-                                    className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'DEBT_REVIEW'
-                                        ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                        : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'DEBT_REVIEW'
+                                        ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                         }`}
                                 >
                                     <span>📄</span> Debt Review Docs
@@ -5056,9 +5056,9 @@ export default function CaseDetailPage() {
                             {isDebtReviewCase && (
                                 <button
                                     onClick={() => setActiveDetailTab('COURT_DOCS')}
-                                    className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'COURT_DOCS'
-                                        ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                        : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'COURT_DOCS'
+                                        ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                         }`}
                                 >
                                     <span>⚖️</span> Court Docs
@@ -5066,9 +5066,9 @@ export default function CaseDetailPage() {
                             )}
                             <button
                                 onClick={() => setActiveDetailTab('WORKFLOW')}
-                                className={`flex-1 px-6 py-4 text-sm font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${activeDetailTab === 'WORKFLOW'
-                                    ? 'text-zeno-cyan border-b-2 border-zeno-cyan bg-zeno-cyan/5'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'WORKFLOW'
+                                    ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                                     }`}
                             >
                                 <span>📈</span> Workflow & Payments

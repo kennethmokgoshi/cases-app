@@ -170,11 +170,15 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                             setExtractionMessage(`Searching mailboxes: Scanned ${chunk.emailsScanned || 0} emails, ${chunk.newEmailsFound || 0} new...`);
                         } else if (chunk.type === 'complete') {
                             if (chunk.data.success) {
-                                const uploadCount = chunk.data.scanSummary?.uploadedDocuments ?? 0;
-                                if (uploadCount > 0) {
-                                    setSuccess(chunk.data.message || `Harvest complete. Found and uploaded ${uploadCount} document(s).`);
+                                if (chunk.data.duplicate) {
+                                    setSuccess(chunk.data.message || 'Email search was already performed recently.');
                                 } else {
-                                    setError(`Harvest complete. No matching documents found in emails.`);
+                                    const uploadCount = chunk.data.scanSummary?.uploadedDocuments ?? 0;
+                                    if (uploadCount > 0) {
+                                        setSuccess(chunk.data.message || `Harvest complete. Found and uploaded ${uploadCount} document(s).`);
+                                    } else {
+                                        setError(`Harvest complete. No matching documents found in emails.`);
+                                    }
                                 }
                                 fetchDocuments();
                             } else {
@@ -630,13 +634,13 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
 
     return (
         <div className="bg-zeno-blue/20 rounded-xl border border-white/5 p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
                 <h3 className="text-lg font-semibold text-white">📁 Documents</h3>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                     <div className="relative group">
                         <button
                             disabled={!!reanalyzing || extracting}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 cursor-pointer transition-colors flex items-center gap-2"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 cursor-pointer transition-colors flex items-center gap-2 whitespace-nowrap"
                         >
                             {reanalyzing ? 'Processing...' : '🤖 Re-analyse with AI'}
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
@@ -663,7 +667,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
 
                     {/* Upload & Split Button */}
                     <label className="relative">
-                        <span className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zeno-cyan/20 text-zeno-cyan hover:bg-zeno-cyan/30 cursor-pointer transition-colors flex items-center gap-1">
+                        <span className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zeno-cyan/20 text-zeno-cyan hover:bg-zeno-cyan/30 cursor-pointer transition-colors flex items-center gap-1 whitespace-nowrap">
                             {extracting ? '⏳ Processing...' : '📄 AI Upload & Split'}
                         </span>
                         <input type="file" accept=".pdf" onChange={handleExtract} disabled={extracting} className="sr-only" />
@@ -673,7 +677,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                     <div className="relative group">
                         <button
                             disabled={extractingDhs || extracting}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 cursor-pointer transition-colors flex items-center gap-2"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 cursor-pointer transition-colors flex items-center gap-2 whitespace-nowrap"
                         >
                             {extractingDhs ? '⏳ DHS Processing...' : '🏠 DHS Extraction'}
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
@@ -714,12 +718,11 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                         </div>
                     </div>
 
-
                     {/* Split Existing Button */}
                     <div className="relative group">
                         <button
                             disabled={extracting}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 cursor-pointer transition-colors flex items-center gap-2"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 cursor-pointer transition-colors flex items-center gap-2 whitespace-nowrap"
                         >
                             ✂️ Split Existing
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
@@ -759,7 +762,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                             type="button"
                             onClick={() => handleSearchEmails('ID_POA')}
                             disabled={isSearchingEmails || extracting || extractingDhs}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5 whitespace-nowrap"
                         >
                             🔍 Search Email for ID/POA
                         </button>
@@ -771,7 +774,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                             type="button"
                             onClick={() => handleSearchEmails('CREDIT_REPORT')}
                             disabled={isSearchingEmails || extracting || extractingDhs}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600/20 text-green-300 border border-green-500/30 hover:bg-green-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600/20 text-green-300 border border-green-500/30 hover:bg-green-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5 whitespace-nowrap"
                         >
                             🔍 Search Email for Credit Report
                         </button>
