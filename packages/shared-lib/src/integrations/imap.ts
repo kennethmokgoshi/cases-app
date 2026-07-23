@@ -596,3 +596,248 @@ export async function scanMailboxForClient({
     }
 }
 
+export async function getEmailBodyText(client: ImapFlow, uid: number, bodyStructure: any): Promise<string> {
+    const textParts: { part: string; mimeType: string }[] = [];
+
+    function findTextParts(part: any) {
+        if (!part) return;
+        const contentType = (part.contentType || part.type || '').toLowerCase();
+        if (contentType === 'text/plain' || contentType === 'text/html') {
+            textParts.push({ part: part.part, mimeType: contentType });
+        }
+        if (Array.isArray(part.childNodes)) {
+            for (const child of part.childNodes) {
+                findTextParts(child);
+            }
+        }
+    }
+
+    findTextParts(bodyStructure);
+    if (textParts.length === 0) return '';
+
+    // Prefer text/plain, then text/html
+    const bestPart = textParts.find(p => p.mimeType === 'text/plain') || textParts[0];
+    if (!bestPart) return '';
+
+    try {
+        const { content } = await client.download(uid, bestPart.part, { uid: true });
+        const chunks: Buffer[] = [];
+        for await (const chunk of content) {
+            chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        }
+        const text = Buffer.concat(chunks).toString('utf-8');
+
+        if (bestPart.mimeType === 'text/html') {
+            return text
+                .replace(/<style([\s\S]*?)<\/style>/gi, '')
+                .replace(/<script([\s\S]*?)<\/script>/gi, '')
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+        return text.trim();
+    } catch (err) {
+        logger.warn(`[IMAP] Failed to download body text for UID ${uid} part ${bestPart.part}:`, err);
+        return '';
+    }
+}
+
+export interface CaseEmailUpdate {
+    messageId: string;
+    from: string;
+    to: string;
+    subject: string;
+    date: string | null;
+    body: string;
+    folder: string;
+    uid: number;
+    attachments: {
+        fileName: string;
+        mimeType: string;
+        buffer: Buffer;
+        detectedType: string;
+    }[];
+}
+
+export async function scanMailboxForCaseUpdates({
+    config,
+    idNumber,
+    firstName,
+    lastName,
+    since,
+    limit = 10,
+    skipMessageIds = [],
+}: {
+    config: ImapConnectionConfig;
+    idNumber?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    since: Date;
+    limit?: number;
+    skipMessageIds?: string[];
+}): Promise<CaseEmailUpdate[]> {
+    const trimmedId = asString(idNumber);
+    const trimmedFirst = asString(firstName);
+    const trimmedLast = asString(lastName);
+    const fullName = trimmedFirst && trimmedLast ? `${trimmedFirst} ${trimmedLast}` : null;
+
+    if (!trimmedId && !fullName) {
+        return [];
+    }
+
+    const client = new ImapFlow({
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        auth: { user: config.username, pass: config.password },
+        logger: false,
+        connectionTimeout: 30000,
+        greetingTimeout: 30000,
+        tls: { rejectUnauthorized: false },
+    });
+
+    await client.connect();
+
+    try {
+        const folders = await getSearchFolders(client);
+        const updates: CaseEmailUpdate[] = [];
+        const processedMessageIds = new Set<string>(skipMessageIds);
+
+        for (const folder of folders) {
+            let lock;
+            try {
+                lock = await client.getMailboxLock(folder);
+
+                const matchedOnByUid = new Map<number, Set<ConsumerMatchKey>>();
+                const addUids = (uids: unknown, key: ConsumerMatchKey) => {
+                    if (!Array.isArray(uids)) return;
+                    for (const uid of uids as number[]) {
+                        const set = matchedOnByUid.get(uid) ?? new Set<ConsumerMatchKey>();
+                        set.add(key);
+                        matchedOnByUid.set(uid, set);
+                    }
+                };
+
+                if (trimmedId) {
+                    addUids(await client.search({ text: trimmedId, since }, { uid: true }), 'ID_NUMBER');
+                }
+                if (fullName) {
+                    addUids(await client.search({ text: fullName, since }, { uid: true }), 'NAME');
+                }
+
+                const allUids = [...matchedOnByUid.keys()];
+                const uidsToFetch = allUids.sort((a, b) => b - a).slice(0, limit);
+
+                if (uidsToFetch.length > 0) {
+                    for await (const msg of client.fetch(uidsToFetch, { uid: true, envelope: true, bodyStructure: true, flags: true })) {
+                        const messageId = msg.envelope?.messageId || '';
+                        if (messageId && processedMessageIds.has(messageId)) {
+                            continue;
+                        }
+                        if (messageId) {
+                            processedMessageIds.add(messageId);
+                        }
+
+                        // Download the body text
+                        const body = await getEmailBodyText(client, msg.uid, msg.bodyStructure);
+
+                        // Find and download attachments (PDFs, images, docs)
+                        const attachments: CaseEmailUpdate['attachments'] = [];
+                        const checkAndDownloadParts = async (part: any) => {
+                            if (!part) return;
+
+                            const filename =
+                                part.filename ||
+                                part.name ||
+                                part.dispositionParameters?.filename ||
+                                part.dispositionParameters?.FILENAME ||
+                                part.parameters?.name ||
+                                part.parameters?.NAME ||
+                                '';
+                            const mimeType = (part.contentType || part.type || '').toLowerCase();
+                            const isPdf = mimeType === 'application/pdf' || mimeType.includes('pdf');
+                            const isImage = mimeType.startsWith('image/');
+                            const isDoc = isPdf || isImage || mimeType === 'application/octet-stream' || mimeType.includes('document') || mimeType.includes('sheet');
+                            const isAttachment =
+                                part.disposition?.toLowerCase() === 'attachment' ||
+                                part.disposition?.toLowerCase() === 'inline' ||
+                                Boolean(filename) ||
+                                isPdf;
+
+                            if ((isAttachment || Boolean(filename)) && isDoc) {
+                                try {
+                                    const { content } = await client.download(msg.uid, part.part, { uid: true });
+                                    const chunks: Buffer[] = [];
+                                    for await (const chunk of content) {
+                                        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+                                    }
+                                    const buffer = Buffer.concat(chunks);
+                                    const lowerName = filename.toLowerCase();
+                                    const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill');
+                                    const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement');
+                                    const detectedType = classifyDocumentByFilename({
+                                        filename,
+                                        subject: msg.envelope?.subject || '',
+                                        isInvoice,
+                                        isPoP,
+                                    });
+
+                                    attachments.push({
+                                        fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
+                                        mimeType: part.contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
+                                        buffer,
+                                        detectedType,
+                                    });
+                                } catch (downloadErr) {
+                                    logger.error(`Failed to download attachment ${filename} for message UID ${msg.uid} in folder ${folder}:`, downloadErr);
+                                }
+                            }
+
+                            if (Array.isArray(part.childNodes)) {
+                                for (const child of part.childNodes) {
+                                    await checkAndDownloadParts(child);
+                                }
+                            }
+                        };
+
+                        await checkAndDownloadParts(msg.bodyStructure);
+
+                        let dateStr: string | null = null;
+                        if (msg.envelope?.date) {
+                            const d = msg.envelope.date instanceof Date ? msg.envelope.date : new Date(msg.envelope.date);
+                            dateStr = Number.isNaN(d.getTime()) ? null : d.toISOString();
+                        }
+
+                        updates.push({
+                            messageId,
+                            from: formatAddressList(msg.envelope?.from),
+                            to: formatAddressList(msg.envelope?.to),
+                            subject: msg.envelope?.subject || '(no subject)',
+                            date: dateStr,
+                            body,
+                            folder,
+                            uid: msg.uid,
+                            attachments,
+                        });
+                    }
+                }
+            } catch (folderErr) {
+                logger.warn(`Failed to scan folder ${folder} for updates:`, folderErr);
+            } finally {
+                if (lock) {
+                    try { lock.release(); } catch { /* ignore */ }
+                }
+            }
+        }
+
+        updates.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+        return updates.slice(0, limit);
+    } finally {
+        try {
+            await client.logout();
+        } catch {
+            /* ignore */
+        }
+    }
+}
+

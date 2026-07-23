@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatImapConnectionError, mapEnvelopeToMatch, classifyDocumentByFilename, isDocTypeInGroup } from './imap';
+import { formatImapConnectionError, mapEnvelopeToMatch, classifyDocumentByFilename, isDocTypeInGroup, getEmailBodyText } from './imap';
+import { vi } from 'vitest';
 
 describe('formatImapConnectionError', () => {
     it('adds the Gmail app-password guidance when ImapFlow only reports Command failed', () => {
@@ -127,5 +128,77 @@ describe('isDocTypeInGroup', () => {
 
         expect(isDocTypeInGroup('ANYTHING', 'ALL')).toBe(true);
         expect(isDocTypeInGroup('ANYTHING', undefined)).toBe(true);
+    });
+});
+
+describe('getEmailBodyText', () => {
+    it('downloads and returns text/plain part content', async () => {
+        const mockClient = {
+            download: vi.fn().mockResolvedValue({
+                content: (async function* () {
+                    yield 'Hello World';
+                })()
+            })
+        } as any;
+
+        const bodyStructure = {
+            part: '1',
+            contentType: 'text/plain'
+        };
+
+        const result = await getEmailBodyText(mockClient, 42, bodyStructure);
+        expect(result).toBe('Hello World');
+        expect(mockClient.download).toHaveBeenCalledWith(42, '1', { uid: true });
+    });
+
+    it('prefers text/plain over text/html and strips html tags', async () => {
+        const mockClient = {
+            download: vi.fn().mockImplementation((uid, part) => {
+                if (part === '1.2') {
+                    return {
+                        content: (async function* () {
+                            yield '<p>HTML Content</p>';
+                        })()
+                    };
+                }
+                return {
+                    content: (async function* () {
+                        yield 'Plain text content';
+                    })()
+                };
+            })
+        } as any;
+
+        const bodyStructure = {
+            part: '1',
+            contentType: 'multipart/alternative',
+            childNodes: [
+                { part: '1.1', contentType: 'text/plain' },
+                { part: '1.2', contentType: 'text/html' }
+            ]
+        };
+
+        const result = await getEmailBodyText(mockClient, 42, bodyStructure);
+        expect(result).toBe('Plain text content');
+        expect(mockClient.download).toHaveBeenCalledWith(42, '1.1', { uid: true });
+    });
+
+    it('falls back to text/html and strips tags if no plain text part is found', async () => {
+        const mockClient = {
+            download: vi.fn().mockResolvedValue({
+                content: (async function* () {
+                    yield '<div><p>Hello <b>World</b></p><style>body {color: red;}</style></div>';
+                })()
+            })
+        } as any;
+
+        const bodyStructure = {
+            part: '1',
+            contentType: 'text/html'
+        };
+
+        const result = await getEmailBodyText(mockClient, 42, bodyStructure);
+        expect(result).toBe('Hello World');
+        expect(mockClient.download).toHaveBeenCalledWith(42, '1', { uid: true });
     });
 });
