@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import type { ConfidenceReport as ConfidenceReportType } from '@zenowethu/plan-engine';
 
 interface ConfidenceReportProps {
   confidence: ConfidenceReportType;
   caseId: string;
   onTabSwitch?: (tab: string) => void;
+  uploadedDocTypes?: string[];
+  onRefresh?: () => void;
 }
 
 const DOC_LABELS: Record<string, string> = {
@@ -17,7 +20,53 @@ const DOC_LABELS: Record<string, string> = {
   OTHER: 'Other Document',
 };
 
-export function ConfidenceReport({ confidence, caseId, onTabSwitch }: ConfidenceReportProps) {
+const ID_DOC_TYPES = ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'];
+const POA_DOC_TYPES = ['POA', 'ZENOWETHU_POA', 'ZDM_POA', 'ZDM', 'POWER_OF_ATTORNEY', 'AUTHORIZATION', 'APPLICATION_FORM'];
+const CREDIT_REPORT_DOC_TYPES = ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT', 'CREDIT_REPORT_OTHER', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'EXPERIAN', 'TRANSUNION', 'XDS', 'CLEAR_SCORE', 'KUDOUGH'];
+
+export function getMissingDocsStatus(confidence: ConfidenceReportType, uploadedDocTypes?: string[]) {
+  const hasId = uploadedDocTypes
+    ? uploadedDocTypes.some((t) => ID_DOC_TYPES.includes(t))
+    : confidence.presentItems.includes('ID_DOCUMENT') || confidence.presentItems.includes('ID');
+
+  const hasPoa = uploadedDocTypes
+    ? uploadedDocTypes.some((t) => POA_DOC_TYPES.includes(t))
+    : confidence.presentItems.includes('POA') ||
+      confidence.presentItems.includes('POWER_OF_ATTORNEY') ||
+      confidence.presentItems.includes('ZENOWETHU_POA');
+
+  const hasCreditReport = uploadedDocTypes
+    ? uploadedDocTypes.some((t) => CREDIT_REPORT_DOC_TYPES.includes(t))
+    : confidence.presentItems.some((item) =>
+        [
+          'CREDIT_REPORT',
+          'CREDIT_REPORT_TRANSUNION',
+          'CREDIT_REPORT_EXPERIAN',
+          'CREDIT_REPORT_XDS',
+          'CREDIT_REPORT_LIGHTSTONE',
+        ].includes(item),
+      );
+
+  return {
+    isMissingIdPoa: !hasId || !hasPoa,
+    isMissingCreditReport: !hasCreditReport,
+  };
+}
+
+export function ConfidenceReport({
+  confidence,
+  caseId,
+  onTabSwitch,
+  uploadedDocTypes,
+  onRefresh,
+}: ConfidenceReportProps) {
+  const [isSearching, setIsSearching] = useState(false);
+  const [activeGroup, setActiveGroup] = useState<'ID_POA' | 'CREDIT_REPORT' | null>(null);
+  const [searchProgress, setSearchProgress] = useState(0);
+  const [searchMessage, setSearchMessage] = useState('');
+  const [searchError, setSearchError] = useState('');
+  const [searchSuccess, setSearchSuccess] = useState('');
+
   const scoreColor =
     confidence.score >= 80
       ? 'text-green-400'
@@ -52,6 +101,85 @@ export function ConfidenceReport({ confidence, caseId, onTabSwitch }: Confidence
     seen.add(d.type);
     return true;
   });
+
+  const { isMissingIdPoa, isMissingCreditReport } = getMissingDocsStatus(confidence, uploadedDocTypes);
+
+  const handleSearchEmails = async (docGroup: 'ID_POA' | 'CREDIT_REPORT') => {
+    setIsSearching(true);
+    setActiveGroup(docGroup);
+    setSearchProgress(5);
+    setSearchMessage(`Searching connected mailboxes for ${docGroup === 'ID_POA' ? 'ID & POA' : 'Credit Report'}...`);
+    setSearchError('');
+    setSearchSuccess('');
+
+    try {
+      const res = await fetch(`/api/cases/${caseId}/dhs-decline/check-fee-emails`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lookbackDays: 365,
+          mailboxId: 'ALL',
+          docGroup,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Email harvest failed');
+      }
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error('No reader available');
+
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const chunk = JSON.parse(line);
+            if (chunk.type === 'progress') {
+              setSearchProgress(chunk.progress || 0);
+              setSearchMessage(`Searching mailboxes: Scanned ${chunk.emailsScanned || 0} emails, ${chunk.newEmailsFound || 0} new...`);
+            } else if (chunk.type === 'complete') {
+              if (chunk.data.success) {
+                const uploadCount = chunk.data.scanSummary?.uploadedDocuments ?? 0;
+                if (uploadCount > 0) {
+                  setSearchSuccess(chunk.data.message || `Harvest complete. Found and uploaded ${uploadCount} document(s).`);
+                } else {
+                  setSearchError(`Harvest complete. No matching documents found in emails.`);
+                }
+                onRefresh?.();
+              } else {
+                throw new Error(chunk.data.error || 'Harvest failed');
+              }
+            } else if (chunk.type === 'error') {
+              throw new Error(chunk.error || 'An error occurred during email harvest');
+            }
+          } catch (e: any) {
+            console.error('Error parsing line:', e);
+            if (e.message && (e.message.includes('Harvest') || e.message.includes('error'))) {
+              throw e;
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      setSearchError(e.message || 'Failed to search emails');
+    } finally {
+      setIsSearching(false);
+      setActiveGroup(null);
+      setSearchProgress(0);
+      setSearchMessage('');
+    }
+  };
 
   return (
     <div className="bg-white/5 border border-white/10 rounded-xl p-6">
@@ -135,6 +263,61 @@ export function ConfidenceReport({ confidence, caseId, onTabSwitch }: Confidence
               ? '✓ All required documents present — ready to proceed'
               : `✗ Missing required documents (${confidence.missingRequired.length}) — cannot generate plan`}
           </div>
+
+          {/* Email Search Section */}
+          {(isMissingIdPoa || isMissingCreditReport) && (
+            <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap gap-2 items-center">
+              <span className="text-xs text-gray-400 mr-2 font-medium">📬 Missing files? Search connected mailboxes:</span>
+              {isMissingIdPoa && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchEmails('ID_POA')}
+                  disabled={isSearching}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/50 hover:text-white transition-all duration-200"
+                >
+                  {isSearching && activeGroup === 'ID_POA' ? 'Searching ID/POA...' : '🔍 Search Emails for ID/POA'}
+                </button>
+              )}
+              {isMissingCreditReport && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchEmails('CREDIT_REPORT')}
+                  disabled={isSearching}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-600/30 text-green-300 border border-green-500/30 hover:bg-green-600/50 hover:text-white transition-all duration-200"
+                >
+                  {isSearching && activeGroup === 'CREDIT_REPORT' ? 'Searching Credit...' : '🔍 Search Emails for Credit Report'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Search Progress */}
+          {isSearching && (
+            <div className="mt-3 p-3 rounded-lg border border-cyan-500/20 bg-cyan-900/10 text-cyan-200 text-xs">
+              <div className="flex justify-between items-center mb-1.5 font-semibold">
+                <span>{searchMessage}</span>
+                <span>{searchProgress}%</span>
+              </div>
+              <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-cyan-400 h-1.5 transition-all duration-300 ease-out"
+                  style={{ width: `${searchProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Search Status Messages */}
+          {searchError && (
+            <div className="mt-3 p-2 bg-red-500/20 border border-red-500/30 rounded text-red-400 text-xs">
+              {searchError}
+            </div>
+          )}
+          {searchSuccess && (
+            <div className="mt-3 p-2 bg-green-500/20 border border-green-500/30 rounded text-green-400 text-xs">
+              {searchSuccess}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -77,6 +77,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     const [uploading, setUploading] = useState(false);
     const [extracting, setExtracting] = useState(false);
     const [extractingDhs, setExtractingDhs] = useState(false);
+    const [isSearchingEmails, setIsSearchingEmails] = useState(false);
     const [reanalyzing, setReanalyzing] = useState<string | null>(null); // Track specific doc ID being re-analyzed
     const [uploadType, setUploadType] = useState('OTHER');
     const [error, setError] = useState('');
@@ -89,6 +90,17 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     const [accessEmail, setAccessEmail] = useState('');
     const [accessLoading, setAccessLoading] = useState(false);
     const [allUsers, setAllUsers] = useState<{ id: string; firstName: string; lastName: string; email: string }[]>([]);
+
+    const ID_DOC_TYPES = ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'];
+    const POA_DOC_TYPES = ['POA', 'ZENOWETHU_POA', 'ZDM_POA', 'ZDM', 'POWER_OF_ATTORNEY', 'AUTHORIZATION', 'APPLICATION_FORM'];
+    const CREDIT_REPORT_DOC_TYPES = ['CREDIT_REPORT', 'CREDIT_BUREAU_REPORT', 'CREDIT_REPORT_OTHER', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'EXPERIAN', 'TRANSUNION', 'XDS', 'CLEAR_SCORE', 'KUDOUGH'];
+
+    const hasId = documents.some((d) => ID_DOC_TYPES.includes(d.type.toUpperCase()));
+    const hasPoa = documents.some((d) => POA_DOC_TYPES.includes(d.type.toUpperCase()));
+    const hasCreditReport = documents.some((d) => CREDIT_REPORT_DOC_TYPES.includes(d.type.toUpperCase()));
+
+    const isMissingIdPoa = !hasId || !hasPoa;
+    const isMissingCreditReport = !hasCreditReport;
 
     // Track client-side hydration
     useEffect(() => {
@@ -110,6 +122,81 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
             logger.error('Error fetching documents:', e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSearchEmails = async (docGroup: 'ID_POA' | 'CREDIT_REPORT') => {
+        setIsSearchingEmails(true);
+        setExtractionProgress(5);
+        setExtractionMessage(`Searching connected mailboxes for ${docGroup === 'ID_POA' ? 'ID & POA' : 'Credit Report'}...`);
+        setError('');
+        setSuccess('');
+
+        try {
+            const res = await fetch(`/api/cases/${caseId}/dhs-decline/check-fee-emails`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lookbackDays: 365,
+                    mailboxId: 'ALL',
+                    docGroup,
+                }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Email harvest failed');
+            }
+
+            const reader = res.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) throw new Error('No reader available');
+
+            let buffer = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const chunk = JSON.parse(line);
+                        if (chunk.type === 'progress') {
+                            setExtractionProgress(chunk.progress || 0);
+                            setExtractionMessage(`Searching mailboxes: Scanned ${chunk.emailsScanned || 0} emails, ${chunk.newEmailsFound || 0} new...`);
+                        } else if (chunk.type === 'complete') {
+                            if (chunk.data.success) {
+                                const uploadCount = chunk.data.scanSummary?.uploadedDocuments ?? 0;
+                                if (uploadCount > 0) {
+                                    setSuccess(chunk.data.message || `Harvest complete. Found and uploaded ${uploadCount} document(s).`);
+                                } else {
+                                    setError(`Harvest complete. No matching documents found in emails.`);
+                                }
+                                fetchDocuments();
+                            } else {
+                                throw new Error(chunk.data.error || 'Harvest failed');
+                            }
+                        } else if (chunk.type === 'error') {
+                            throw new Error(chunk.error || 'An error occurred during email harvest');
+                        }
+                    } catch (e: any) {
+                        logger.error('Error parsing line:', e);
+                        if (e.message && (e.message.includes('Harvest') || e.message.includes('error'))) {
+                            throw e;
+                        }
+                    }
+                }
+            }
+        } catch (e: any) {
+            setError(e.message || 'Failed to search emails');
+        } finally {
+            setIsSearchingEmails(false);
+            setExtractionProgress(0);
+            setExtractionMessage('');
         }
     };
 
@@ -665,10 +752,34 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                             </div>
                         </div>
                     </div>
+
+                    {/* Search Email for ID/POA Button */}
+                    {isMissingIdPoa && (
+                        <button
+                            type="button"
+                            onClick={() => handleSearchEmails('ID_POA')}
+                            disabled={isSearchingEmails || extracting || extractingDhs}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5"
+                        >
+                            🔍 Search Email for ID/POA
+                        </button>
+                    )}
+
+                    {/* Search Email for Credit Report Button */}
+                    {isMissingCreditReport && (
+                        <button
+                            type="button"
+                            onClick={() => handleSearchEmails('CREDIT_REPORT')}
+                            disabled={isSearchingEmails || extracting || extractingDhs}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600/20 text-green-300 border border-green-500/30 hover:bg-green-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5"
+                        >
+                            🔍 Search Email for Credit Report
+                        </button>
+                    )}
                 </div>
 
                 {/* Extraction Progress Bar */}
-                {(extracting || extractingDhs) && (
+                {(extracting || extractingDhs || isSearchingEmails) && (
                     <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
                         <div className="bg-zeno-navy/50 rounded-lg border border-zeno-cyan/20 p-4">
                             <div className="flex justify-between items-center mb-2">

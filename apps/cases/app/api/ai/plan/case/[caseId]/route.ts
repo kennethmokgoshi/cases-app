@@ -29,6 +29,11 @@ export async function GET(
             events: { orderBy: { createdAt: 'desc' }, take: 10 },
           },
         },
+        documents: {
+          select: {
+            type: true,
+          },
+        },
       },
     });
 
@@ -43,12 +48,14 @@ export async function GET(
     } catch {}
 
     const confidence = await checkConfidence(caseId, isFlagRemoval);
+    const uploadedDocTypes = caseRecord.documents.map((d) => d.type.toUpperCase());
 
     return NextResponse.json({
       plan: caseRecord.plan,
       confidence,
       planReadyToStart: caseRecord.planReadyToStart,
       acquisitionType: caseRecord.acquisitionType,
+      uploadedDocTypes,
     });
   } catch (error) {
     console.error('[AI Plan GET]', error);

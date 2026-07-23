@@ -52,6 +52,7 @@ interface PlanData {
   confidence: ConfidenceReportType;
   planReadyToStart: boolean;
   acquisitionType: string;
+  uploadedDocTypes?: string[];
 }
 
 interface AIPlanTabProps {
@@ -347,7 +348,12 @@ export function AIPlanTab({ caseId }: AIPlanTabProps) {
       )}
 
       {/* SECTION 1: Confidence Report */}
-      <ConfidenceReport confidence={confidence} caseId={caseId} />
+      <ConfidenceReport
+        confidence={confidence}
+        caseId={caseId}
+        uploadedDocTypes={planData.uploadedDocTypes}
+        onRefresh={fetchPlanData}
+      />
 
       {/* SECTION 2: Readiness Checkbox */}
       <div className="bg-white/5 border border-white/10 rounded-xl p-4">
