@@ -58,7 +58,7 @@ export async function POST(
         if (!password) {
             try {
                 const smtp = await getSMTPCredentials();
-                if (usesSmtpPassword(mailbox.emailAddress, mailbox.password, smtp.password ? smtp.username : null)) {
+                if (usesSmtpPassword(mailbox.emailAddress, password, smtp.password ? smtp.username : null)) {
                     password = smtp.password;
                 }
             } catch {

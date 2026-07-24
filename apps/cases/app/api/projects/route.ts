@@ -199,17 +199,21 @@ export async function GET(request: NextRequest) {
                 return NextResponse.json(projectsWithCounts);
             }
 
+            // Slim payload. Every flat-list consumer (admin/projects, projects,
+            // partners, resources, api-keys, documents) rebuilds the tree from
+            // parentId client-side and resolves member names from a separate
+            // /api/users fetch — so the `parent`/`children` includes were
+            // discarded on arrival and the `members -> user` join was pure
+            // overfetch. With ~9k membership rows that join ballooned the
+            // response to ~2.9MB / 4.5s; dropping it lands ~0.5MB. We keep
+            // members {userId, role} for the count badges + members modal and
+            // _count.children for the sub-project counts. `include` still
+            // returns every scalar Project field, so no consumer loses data.
             const projects = await prisma.project.findMany({
                 where: whereClause,
                 include: {
-                    parent: true,
                     _count: { select: { children: true } },
-                    members: {
-                        include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } }
-                    },
-                    children: {
-                        select: { id: true, name: true, type: true }
-                    }
+                    members: { select: { userId: true, role: true } }
                 },
                 orderBy: { name: 'asc' }
             });

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@zenowethu/database', () => ({
     prisma: {
         case: { findUnique: vi.fn() },
-        caseComment: { findMany: vi.fn(), create: vi.fn() },
+        caseComment: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
         document: { findFirst: vi.fn(), create: vi.fn() },
         workflowLog: { create: vi.fn() },
     },
@@ -42,11 +42,11 @@ import { scanMailboxForCaseUpdates } from '@zenowethu/shared-lib/src/integration
 import { analyzeEmailForCaseUpdate } from '@zenowethu/shared-lib/src/ai/case-updates';
 import { sendManualMessage } from '@zenowethu/shared-lib/src/notifications/service';
 import { getSearchableMailboxesWithPasswords } from '@/lib/mailbox-search';
-import { POST } from './route';
+import { GET, POST } from './route';
 
 const db = prisma as unknown as {
     case: { findUnique: ReturnType<typeof vi.fn> };
-    caseComment: { findMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+    caseComment: { findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
     document: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
     workflowLog: { create: ReturnType<typeof vi.fn> };
 };
@@ -73,10 +73,11 @@ const baseCase = {
 
 beforeEach(() => {
     vi.clearAllMocks();
-    mockedAuth.mockResolvedValue({ user: { id: 'staff1', userType: 'STAFF' } });
+    mockedAuth.mockResolvedValue({ user: { id: 'staff1', userType: 'STAFF', name: 'Kenneth Mokgoshi' } });
     db.case.findUnique.mockResolvedValue(baseCase);
     db.caseComment.findMany.mockResolvedValue([]);
-    db.caseComment.create.mockResolvedValue({ id: 'comment-1' });
+    db.caseComment.findFirst.mockResolvedValue(null);
+    db.caseComment.create.mockResolvedValue({ id: 'comment-1', createdAt: new Date('2026-07-24T09:00:00Z') });
     db.workflowLog.create.mockResolvedValue({ id: 'wf-1' });
     db.document.findFirst.mockResolvedValue(null);
     db.document.create.mockResolvedValue({ id: 'doc-1' });
@@ -93,24 +94,28 @@ beforeEach(() => {
         },
     ]);
 
-    mockedScan.mockResolvedValue([
-        {
-            messageId: 'msg-1',
-            from: 'debtcounsellor@firm.co.za',
-            to: 'ops@zenowethu.co.za',
-            subject: 'Transfer complete',
-            date: '2026-07-23T10:00:00Z',
-            body: 'Hello, the transfer is complete. Find Form 17.W attached.',
-            attachments: [
-                {
-                    fileName: 'form_17w.pdf',
-                    mimeType: 'application/pdf',
-                    buffer: Buffer.from('mock-pdf'),
-                    detectedType: 'FORM_17W',
-                },
-            ],
-        },
-    ]);
+    mockedScan.mockImplementation(async ({ onFoldersResolved }: any) => {
+        onFoldersResolved?.(['INBOX', 'Sent']);
+        return [
+            {
+                messageId: 'msg-1',
+                from: 'debtcounsellor@firm.co.za',
+                to: 'ops@zenowethu.co.za',
+                subject: 'Transfer complete',
+                date: '2026-07-23T10:00:00Z',
+                body: 'Hello, the transfer is complete. Find Form 17.W attached.',
+                folder: 'INBOX',
+                attachments: [
+                    {
+                        fileName: 'form_17w.pdf',
+                        mimeType: 'application/pdf',
+                        buffer: Buffer.from('mock-pdf'),
+                        detectedType: 'FORM_17W',
+                    },
+                ],
+            },
+        ];
+    });
 
     mockedAnalyze.mockResolvedValue({
         isRelevant: true,
@@ -197,6 +202,102 @@ describe('POST /check-updates', () => {
 
         expect(res.status).toBe(200);
         expect(json.updates).toHaveLength(0); // No updates logged
-        expect(db.caseComment.create).not.toHaveBeenCalled();
+        // No per-email update comment...
+        expect(db.caseComment.create).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ activityType: 'CASE_EMAIL_UPDATE_PROCESSED' }),
+            }),
+        );
+        // ...but the scan run itself is still logged.
+        expect(db.caseComment.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ activityType: 'CASE_UPDATE_SCAN_RUN' }),
+            }),
+        );
+    });
+
+    it('always logs a scan-run entry with who/when/mailboxes/folders, even with no updates', async () => {
+        mockedScan.mockImplementation(async ({ onFoldersResolved }: any) => {
+            onFoldersResolved?.(['INBOX', 'Sent']);
+            return [];
+        });
+
+        const res = await POST(request({ lookbackDays: 90 }), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.updates).toHaveLength(0);
+        expect(json.scanRun).toBeDefined();
+        expect(json.scanRun.ranByName).toBe('Kenneth Mokgoshi');
+        expect(json.scanRun.scannedInbox).toBe(true);
+        expect(json.scanRun.scannedSent).toBe(true);
+        expect(json.scanRun.mailboxes).toContain('ops@zenowethu.co.za');
+
+        const scanRunCall = db.caseComment.create.mock.calls.find(
+            (c: any[]) => c[0]?.data?.activityType === 'CASE_UPDATE_SCAN_RUN',
+        );
+        expect(scanRunCall).toBeTruthy();
+        const activityData = JSON.parse(scanRunCall![0].data.activityData);
+        expect(activityData.ranByName).toBe('Kenneth Mokgoshi');
+        expect(activityData.scannedInbox).toBe(true);
+        expect(activityData.scannedSent).toBe(true);
+        expect(db.workflowLog.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ action: 'CASE_UPDATE_SCAN_RUN' }),
+            }),
+        );
+    });
+
+    it('records a per-mailbox error when a mailbox scan throws', async () => {
+        mockedScan.mockRejectedValue(new Error('IMAP auth failed'));
+
+        const res = await POST(request(), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.scanRun.errors).toEqual(['ops@zenowethu.co.za: IMAP auth failed']);
+    });
+});
+
+describe('GET /check-updates (last scan lookup)', () => {
+    it('rejects unauthenticated callers', async () => {
+        mockedAuth.mockResolvedValue(null);
+        const res = await GET(request(), ctx);
+        expect(res.status).toBe(401);
+    });
+
+    it('returns lastScan: null when no scan has run', async () => {
+        db.caseComment.findFirst.mockResolvedValue(null);
+        const res = await GET(request(), ctx);
+        const json = await res.json();
+        expect(res.status).toBe(200);
+        expect(json.lastScan).toBeNull();
+    });
+
+    it('returns the most recent scan metadata', async () => {
+        db.caseComment.findFirst.mockResolvedValue({
+            createdAt: new Date('2026-07-24T09:00:00Z'),
+            user: { firstName: 'Kenneth', lastName: 'Mokgoshi' },
+            activityData: JSON.stringify({
+                ranByName: 'Kenneth Mokgoshi',
+                lookbackDays: 180,
+                mailboxes: [{ email: 'ops@zenowethu.co.za', folders: ['INBOX', 'Sent'] }],
+                scannedInbox: true,
+                scannedSent: true,
+                updatesFound: 2,
+                updates: [{ subject: 'Transfer complete' }],
+                errors: [],
+            }),
+        });
+
+        const res = await GET(request(), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.lastScan.ranByName).toBe('Kenneth Mokgoshi');
+        expect(json.lastScan.scannedInbox).toBe(true);
+        expect(json.lastScan.scannedSent).toBe(true);
+        expect(json.lastScan.mailboxes).toEqual(['ops@zenowethu.co.za']);
+        expect(json.lastScan.updates).toHaveLength(1);
     });
 });

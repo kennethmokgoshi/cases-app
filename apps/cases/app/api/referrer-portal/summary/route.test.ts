@@ -144,6 +144,8 @@ describe('GET /api/referrer-portal/summary', () => {
                         id: 'case-a',
                         fileNumber: 'ZDM-A',
                         status: 'SETTLED_SUCCESS',
+                        isCompleted: true,
+                        isSettled: true,
                         createdAt: thisMonth,
                         serviceFee: { toNumber: () => 5000 },
                         payments: [
@@ -172,6 +174,8 @@ describe('GET /api/referrer-portal/summary', () => {
                         id: 'case-b',
                         fileNumber: 'ZDM-B',
                         status: 'COMPLETED',
+                        isCompleted: true,
+                        isSettled: false,
                         createdAt: lastMonth,
                         serviceFee: null,
                         payments: [],
@@ -186,6 +190,8 @@ describe('GET /api/referrer-portal/summary', () => {
                         id: 'case-c',
                         fileNumber: 'ZDM-C',
                         status: 'NEW_LEAD',
+                        isCompleted: false,
+                        isSettled: false,
                         createdAt: older,
                         serviceFee: null,
                         payments: [],
@@ -211,12 +217,18 @@ describe('GET /api/referrer-portal/summary', () => {
                 totalReferrals: 3,
                 referralsThisMonth: 1,     // case-a
                 referralsLastMonth: 1,     // case-b
-                totalCompleted: 1,         // case-b — work done, payment outstanding
-                completedThisMonth: 0,
-                completedLastMonth: 1,
-                totalSettled: 1,           // case-a — workflow status SETTLED_SUCCESS
-                settledThisMonth: 1,
-                settledLastMonth: 0,
+                totalInProgress: 1,        // case-c — neither completed nor settled
+                inProgressThisMonth: 0,
+                inProgressLastMonth: 0,
+                totalSettledNotCompleted: 0,
+                settledNotCompletedThisMonth: 0,
+                settledNotCompletedLastMonth: 0,
+                totalCompletedNotSettled: 1,  // case-b — work done, payment outstanding
+                completedNotSettledThisMonth: 0,
+                completedNotSettledLastMonth: 1,
+                totalBothSettledAndCompleted: 1,  // case-a — both settled and completed
+                bothSettledAndCompletedThisMonth: 0,
+                bothSettledAndCompletedLastMonth: 1,
                 totalLost: 0,
                 lostThisMonth: 0,
                 lostLastMonth: 0,
@@ -229,9 +241,6 @@ describe('GET /api/referrer-portal/summary', () => {
                 totalSettledPaid: 3000,
                 settledPaidThisMonth: 2000,
                 settledPaidLastMonth: 0,
-                totalInProgress: 1,
-                inProgressThisMonth: 0,
-                inProgressLastMonth: 0,
                 totalCompletedOutstanding: 0,
                 completedOutstandingThisMonth: 0,
                 completedOutstandingLastMonth: 0,

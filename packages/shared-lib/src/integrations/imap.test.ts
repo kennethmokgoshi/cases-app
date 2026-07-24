@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatImapConnectionError, mapEnvelopeToMatch, classifyDocumentByFilename, isDocTypeInGroup, getEmailBodyText } from './imap';
+import { formatImapConnectionError, mapEnvelopeToMatch, classifyDocumentByFilename, isDocTypeInGroup, getEmailBodyText, classifyScannedFolders } from './imap';
 import { vi } from 'vitest';
 
 describe('formatImapConnectionError', () => {
@@ -98,6 +98,20 @@ describe('classifyDocumentByFilename', () => {
     it('falls back to isInvoice or isPoP when keywords do not match', () => {
         expect(classifyDocumentByFilename({ filename: 'arbitrary_doc.pdf', isInvoice: true })).toBe('FEE_INVOICE');
         expect(classifyDocumentByFilename({ filename: 'arbitrary_doc.pdf', isPoP: true })).toBe('PROOF_OF_PAYMENT');
+    });
+});
+
+describe('classifyScannedFolders', () => {
+    it('detects inbox and sent folders across common naming conventions', () => {
+        expect(classifyScannedFolders(['INBOX', '[Gmail]/Sent Mail'])).toEqual({
+            scannedInbox: true,
+            scannedSent: true,
+            folders: ['INBOX', '[Gmail]/Sent Mail'],
+        });
+        expect(classifyScannedFolders(['Inbox', 'Sent Items'])).toMatchObject({ scannedInbox: true, scannedSent: true });
+        expect(classifyScannedFolders(['INBOX'])).toMatchObject({ scannedInbox: true, scannedSent: false });
+        expect(classifyScannedFolders(['Archive', 'Drafts'])).toMatchObject({ scannedInbox: false, scannedSent: false });
+        expect(classifyScannedFolders([])).toMatchObject({ scannedInbox: false, scannedSent: false });
     });
 });
 

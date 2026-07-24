@@ -189,12 +189,18 @@ describe('calculateDiscountPartnerTotals', () => {
             totalReferrals: 0,
             referralsThisMonth: 0,
             referralsLastMonth: 0,
-            totalCompleted: 0,
-            completedThisMonth: 0,
-            completedLastMonth: 0,
-            totalSettled: 0,
-            settledThisMonth: 0,
-            settledLastMonth: 0,
+            totalInProgress: 0,
+            inProgressThisMonth: 0,
+            inProgressLastMonth: 0,
+            totalSettledNotCompleted: 0,
+            settledNotCompletedThisMonth: 0,
+            settledNotCompletedLastMonth: 0,
+            totalCompletedNotSettled: 0,
+            completedNotSettledThisMonth: 0,
+            completedNotSettledLastMonth: 0,
+            totalBothSettledAndCompleted: 0,
+            bothSettledAndCompletedThisMonth: 0,
+            bothSettledAndCompletedLastMonth: 0,
             totalLost: 0,
             lostThisMonth: 0,
             lostLastMonth: 0,
@@ -207,9 +213,6 @@ describe('calculateDiscountPartnerTotals', () => {
             totalSettledPaid: 0,
             settledPaidThisMonth: 0,
             settledPaidLastMonth: 0,
-            totalInProgress: 0,
-            inProgressThisMonth: 0,
-            inProgressLastMonth: 0,
             totalCompletedOutstanding: 0,
             completedOutstandingThisMonth: 0,
             completedOutstandingLastMonth: 0,
@@ -222,10 +225,12 @@ describe('calculateDiscountPartnerTotals', () => {
     it('splits totals into all-time, this-month, and last-month buckets', () => {
         const totals = calculateDiscountPartnerTotals([
             {
-                // Settled this month, referred this month.
+                // Both settled and completed this month, referred this month.
                 createdAt: thisMonth,
                 stage: 'SETTLED',
                 caseStatus: 'SETTLED_SUCCESS',
+                isSettled: true,
+                isCompleted: true,
                 settledAt: thisMonth,
                 completedAt: lastMonth,
                 quoteTotal: 5000,
@@ -236,10 +241,12 @@ describe('calculateDiscountPartnerTotals', () => {
                 ],
             },
             {
-                // Settled last month via case status (no commission stage).
+                // Settled but not completed last month via case status (no commission stage).
                 createdAt: older,
                 stage: null,
                 caseStatus: 'SETTLED',
+                isSettled: true,
+                isCompleted: false,
                 settledAt: lastMonth,
                 completedAt: null,
                 quoteTotal: 3000,
@@ -247,10 +254,12 @@ describe('calculateDiscountPartnerTotals', () => {
                 payments: [{ amount: 3000, date: older }],
             },
             {
-                // Work completed last month, payment outstanding.
+                // Completed but not settled last month, payment outstanding.
                 createdAt: lastMonth,
                 stage: null,
                 caseStatus: 'COMPLETED',
+                isCompleted: true,
+                isSettled: false,
                 settledAt: null,
                 completedAt: lastMonth,
                 quoteTotal: 4000,
@@ -258,10 +267,12 @@ describe('calculateDiscountPartnerTotals', () => {
                 payments: [{ amount: 1500, date: lastMonth }],
             },
             {
-                // Still being worked, but quoted and paid last month.
+                // Still being worked (neither completed nor settled), quoted and paid last month.
                 createdAt: lastMonth,
                 stage: 'PAYING_INSTALMENTS',
                 caseStatus: 'REQUESTED_VIA_DHS',
+                isCompleted: false,
+                isSettled: false,
                 settledAt: null,
                 completedAt: null,
                 quoteTotal: 1500,
@@ -274,12 +285,18 @@ describe('calculateDiscountPartnerTotals', () => {
             totalReferrals: 4,
             referralsThisMonth: 1,
             referralsLastMonth: 2,
-            totalCompleted: 1,
-            completedThisMonth: 0,
-            completedLastMonth: 1,
-            totalSettled: 2,
-            settledThisMonth: 1,
-            settledLastMonth: 1,
+            totalInProgress: 1,
+            inProgressThisMonth: 0,
+            inProgressLastMonth: 1,
+            totalSettledNotCompleted: 1,
+            settledNotCompletedThisMonth: 0,
+            settledNotCompletedLastMonth: 1,
+            totalCompletedNotSettled: 1,
+            completedNotSettledThisMonth: 0,
+            completedNotSettledLastMonth: 1,
+            totalBothSettledAndCompleted: 1,
+            bothSettledAndCompletedThisMonth: 0,
+            bothSettledAndCompletedLastMonth: 1,
             totalLost: 0,
             lostThisMonth: 0,
             lostLastMonth: 0,
@@ -292,9 +309,6 @@ describe('calculateDiscountPartnerTotals', () => {
             totalSettledPaid: 6000,
             settledPaidThisMonth: 2000,
             settledPaidLastMonth: 0,
-            totalInProgress: 1,
-            inProgressThisMonth: 0,
-            inProgressLastMonth: 1,
             totalCompletedOutstanding: 2500,
             completedOutstandingThisMonth: 0,
             completedOutstandingLastMonth: 2500,
@@ -307,19 +321,19 @@ describe('calculateDiscountPartnerTotals', () => {
     it('counts by workflow status — the lagging commission stage never overrides it', () => {
         const totals = calculateDiscountPartnerTotals([
             // Stage still says QUOTE_ACCEPTED but the case status is the truth: completed.
-            { createdAt: thisMonth, stage: 'QUOTE_ACCEPTED', caseStatus: 'COMPLETED', settledAt: null, completedAt: thisMonth, quoteTotal: null, quoteDate: null, payments: [] },
+            { createdAt: thisMonth, stage: 'QUOTE_ACCEPTED', caseStatus: 'COMPLETED', isCompleted: true, isSettled: false, settledAt: null, completedAt: thisMonth, quoteTotal: null, quoteDate: null, payments: [] },
             // Stage says SETTLED (COMPLETED maps there for payouts) but the file is still being worked.
-            { createdAt: thisMonth, stage: 'SETTLED', caseStatus: 'REQUESTED_VIA_DHS', settledAt: null, completedAt: null, quoteTotal: null, quoteDate: null, payments: [] },
+            { createdAt: thisMonth, stage: 'SETTLED', caseStatus: 'REQUESTED_VIA_DHS', isCompleted: false, isSettled: false, settledAt: null, completedAt: null, quoteTotal: null, quoteDate: null, payments: [] },
         ], now);
-        expect(totals.totalCompleted).toBe(1);
-        expect(totals.completedThisMonth).toBe(1);
-        expect(totals.totalSettled).toBe(0);
+        expect(totals.totalCompletedNotSettled).toBe(1);
+        expect(totals.completedNotSettledThisMonth).toBe(1);
+        expect(totals.totalBothSettledAndCompleted).toBe(0);
     });
 
     it('ignores future-dated and invalid dates for month buckets', () => {
         const future = new Date('2026-08-01T12:00:00Z');
         const totals = calculateDiscountPartnerTotals([
-            { createdAt: future, stage: null, caseStatus: null, settledAt: null, completedAt: null, quoteTotal: 100, quoteDate: 'not-a-date', payments: [{ amount: 50, date: future }] },
+            { createdAt: future, stage: null, caseStatus: null, isCompleted: false, isSettled: false, settledAt: null, completedAt: null, quoteTotal: 100, quoteDate: 'not-a-date', payments: [{ amount: 50, date: future }] },
         ], now);
         expect(totals.referralsThisMonth).toBe(0);
         expect(totals.quotedThisMonth).toBe(0);

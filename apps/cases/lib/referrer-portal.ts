@@ -135,6 +135,10 @@ export type DiscountPartnerReferralInput = {
     stage?: string | null;
     /** Raw case workflow status — used when no commission stage exists. */
     caseStatus?: string | null;
+    /** Whether work is completed */
+    isCompleted?: boolean;
+    /** Whether payment is settled */
+    isSettled?: boolean;
     /** When the referral reached a settled state — used to bucket settlements by month. */
     settledAt?: Date | string | null;
     /** When the work was completed — used to bucket completions by month. */
@@ -150,12 +154,18 @@ export type DiscountPartnerTotals = {
     totalReferrals: number;
     referralsThisMonth: number;
     referralsLastMonth: number;
-    totalCompleted: number;
-    completedThisMonth: number;
-    completedLastMonth: number;
-    totalSettled: number;
-    settledThisMonth: number;
-    settledLastMonth: number;
+    totalInProgress: number;
+    inProgressThisMonth: number;
+    inProgressLastMonth: number;
+    totalSettledNotCompleted: number;
+    settledNotCompletedThisMonth: number;
+    settledNotCompletedLastMonth: number;
+    totalCompletedNotSettled: number;
+    completedNotSettledThisMonth: number;
+    completedNotSettledLastMonth: number;
+    totalBothSettledAndCompleted: number;
+    bothSettledAndCompletedThisMonth: number;
+    bothSettledAndCompletedLastMonth: number;
     totalLost: number;
     lostThisMonth: number;
     lostLastMonth: number;
@@ -168,9 +178,6 @@ export type DiscountPartnerTotals = {
     totalSettledPaid: number;
     settledPaidThisMonth: number;
     settledPaidLastMonth: number;
-    totalInProgress: number;
-    inProgressThisMonth: number;
-    inProgressLastMonth: number;
     totalCompletedOutstanding: number;
     completedOutstandingThisMonth: number;
     completedOutstandingLastMonth: number;
@@ -205,13 +212,9 @@ export function calculateDiscountPartnerTotals(
 ): DiscountPartnerTotals {
     return referrals.reduce<DiscountPartnerTotals>(
         (totals, referral) => {
-            // The case's workflow status is the truth about where the file is;
-            // the commission stage only tracks the payout pipeline and can lag
-            // (most workflow statuses never update it), so status wins.
-            const tone = portalStatusTone(referral.caseStatus ?? referral.stage);
-            const settled = tone === 'settled';
-            const completed = tone === 'completed';
-            const lost = tone === 'lost';
+            const isCompleted = referral.isCompleted ?? false;
+            const isSettled = referral.isSettled ?? false;
+            const lost = portalStatusTone(referral.caseStatus ?? referral.stage) === 'lost';
             const quoted = referral.quoteTotal != null && referral.quoteTotal > 0;
             const paid = referral.payments.reduce((sum, payment) => sum + payment.amount, 0);
             const paidThisMonth = referral.payments
@@ -222,22 +225,31 @@ export function calculateDiscountPartnerTotals(
                 .reduce((sum, payment) => sum + payment.amount, 0);
 
             const referralOutstanding = referral.quoteTotal != null ? Math.max(0, referral.quoteTotal - paid) : 0;
-            const inProgress = !settled && !completed && !lost;
-            const completedOutstanding = completed ? referralOutstanding : 0;
-            const settledPaid = settled ? paid : 0;
-            const settledPaidThisMonth = settled ? paidThisMonth : 0;
-            const settledPaidLastMonth = settled ? paidLastMonth : 0;
+            const inProgress = !isSettled && !isCompleted && !lost;
+            const settledNotCompleted = isSettled && !isCompleted;
+            const completedNotSettled = isCompleted && !isSettled;
+            const bothSettledAndCompleted = isSettled && isCompleted;
+            const completedOutstanding = completedNotSettled ? referralOutstanding : 0;
+            const settledPaid = isSettled ? paid : 0;
+            const settledPaidThisMonth = isSettled ? paidThisMonth : 0;
+            const settledPaidLastMonth = isSettled ? paidLastMonth : 0;
 
             return {
                 totalReferrals: totals.totalReferrals + 1,
                 referralsThisMonth: totals.referralsThisMonth + (isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
                 referralsLastMonth: totals.referralsLastMonth + (isInCalendarMonth(referral.createdAt, now, 1) ? 1 : 0),
-                totalCompleted: totals.totalCompleted + (completed ? 1 : 0),
-                completedThisMonth: totals.completedThisMonth + (completed && isInCalendarMonth(referral.completedAt, now) ? 1 : 0),
-                completedLastMonth: totals.completedLastMonth + (completed && isInCalendarMonth(referral.completedAt, now, 1) ? 1 : 0),
-                totalSettled: totals.totalSettled + (settled ? 1 : 0),
-                settledThisMonth: totals.settledThisMonth + (settled && isInCalendarMonth(referral.settledAt, now) ? 1 : 0),
-                settledLastMonth: totals.settledLastMonth + (settled && isInCalendarMonth(referral.settledAt, now, 1) ? 1 : 0),
+                totalInProgress: totals.totalInProgress + (inProgress ? 1 : 0),
+                inProgressThisMonth: totals.inProgressThisMonth + (inProgress && isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
+                inProgressLastMonth: totals.inProgressLastMonth + (inProgress && isInCalendarMonth(referral.createdAt, now, 1) ? 1 : 0),
+                totalSettledNotCompleted: totals.totalSettledNotCompleted + (settledNotCompleted ? 1 : 0),
+                settledNotCompletedThisMonth: totals.settledNotCompletedThisMonth + (settledNotCompleted && isInCalendarMonth(referral.settledAt, now) ? 1 : 0),
+                settledNotCompletedLastMonth: totals.settledNotCompletedLastMonth + (settledNotCompleted && isInCalendarMonth(referral.settledAt, now, 1) ? 1 : 0),
+                totalCompletedNotSettled: totals.totalCompletedNotSettled + (completedNotSettled ? 1 : 0),
+                completedNotSettledThisMonth: totals.completedNotSettledThisMonth + (completedNotSettled && isInCalendarMonth(referral.completedAt, now) ? 1 : 0),
+                completedNotSettledLastMonth: totals.completedNotSettledLastMonth + (completedNotSettled && isInCalendarMonth(referral.completedAt, now, 1) ? 1 : 0),
+                totalBothSettledAndCompleted: totals.totalBothSettledAndCompleted + (bothSettledAndCompleted ? 1 : 0),
+                bothSettledAndCompletedThisMonth: totals.bothSettledAndCompletedThisMonth + (bothSettledAndCompleted && isInCalendarMonth(referral.completedAt, now) ? 1 : 0),
+                bothSettledAndCompletedLastMonth: totals.bothSettledAndCompletedLastMonth + (bothSettledAndCompleted && isInCalendarMonth(referral.completedAt, now, 1) ? 1 : 0),
                 totalLost: totals.totalLost + (lost ? 1 : 0),
                 lostThisMonth: totals.lostThisMonth + (lost && isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
                 lostLastMonth: totals.lostLastMonth + (lost && isInCalendarMonth(referral.createdAt, now, 1) ? 1 : 0),
@@ -250,12 +262,9 @@ export function calculateDiscountPartnerTotals(
                 totalSettledPaid: roundMoney(totals.totalSettledPaid + settledPaid),
                 settledPaidThisMonth: roundMoney(totals.settledPaidThisMonth + settledPaidThisMonth),
                 settledPaidLastMonth: roundMoney(totals.settledPaidLastMonth + settledPaidLastMonth),
-                totalInProgress: totals.totalInProgress + (inProgress ? 1 : 0),
-                inProgressThisMonth: totals.inProgressThisMonth + (inProgress && isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
-                inProgressLastMonth: totals.inProgressLastMonth + (inProgress && isInCalendarMonth(referral.createdAt, now, 1) ? 1 : 0),
                 totalCompletedOutstanding: roundMoney(totals.totalCompletedOutstanding + completedOutstanding),
-                completedOutstandingThisMonth: roundMoney(totals.completedOutstandingThisMonth + (completed && isInCalendarMonth(referral.completedAt, now) ? completedOutstanding : 0)),
-                completedOutstandingLastMonth: roundMoney(totals.completedOutstandingLastMonth + (completed && isInCalendarMonth(referral.completedAt, now, 1) ? completedOutstanding : 0)),
+                completedOutstandingThisMonth: roundMoney(totals.completedOutstandingThisMonth + (completedNotSettled && isInCalendarMonth(referral.completedAt, now) ? completedOutstanding : 0)),
+                completedOutstandingLastMonth: roundMoney(totals.completedOutstandingLastMonth + (completedNotSettled && isInCalendarMonth(referral.completedAt, now, 1) ? completedOutstanding : 0)),
                 totalExpectedRevenue: roundMoney(totals.totalExpectedRevenue + referralOutstanding),
                 expectedRevenueThisMonth: roundMoney(totals.expectedRevenueThisMonth + (isInCalendarMonth(referral.createdAt, now) ? referralOutstanding : 0)),
                 expectedRevenueLastMonth: roundMoney(totals.expectedRevenueLastMonth + (isInCalendarMonth(referral.createdAt, now, 1) ? referralOutstanding : 0)),
@@ -265,12 +274,18 @@ export function calculateDiscountPartnerTotals(
             totalReferrals: 0,
             referralsThisMonth: 0,
             referralsLastMonth: 0,
-            totalCompleted: 0,
-            completedThisMonth: 0,
-            completedLastMonth: 0,
-            totalSettled: 0,
-            settledThisMonth: 0,
-            settledLastMonth: 0,
+            totalInProgress: 0,
+            inProgressThisMonth: 0,
+            inProgressLastMonth: 0,
+            totalSettledNotCompleted: 0,
+            settledNotCompletedThisMonth: 0,
+            settledNotCompletedLastMonth: 0,
+            totalCompletedNotSettled: 0,
+            completedNotSettledThisMonth: 0,
+            completedNotSettledLastMonth: 0,
+            totalBothSettledAndCompleted: 0,
+            bothSettledAndCompletedThisMonth: 0,
+            bothSettledAndCompletedLastMonth: 0,
             totalLost: 0,
             lostThisMonth: 0,
             lostLastMonth: 0,
@@ -283,9 +298,6 @@ export function calculateDiscountPartnerTotals(
             totalSettledPaid: 0,
             settledPaidThisMonth: 0,
             settledPaidLastMonth: 0,
-            totalInProgress: 0,
-            inProgressThisMonth: 0,
-            inProgressLastMonth: 0,
             totalCompletedOutstanding: 0,
             completedOutstandingThisMonth: 0,
             completedOutstandingLastMonth: 0,

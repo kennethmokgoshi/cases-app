@@ -280,6 +280,8 @@ model Case {
   statusEntryDate         DateTime                   @default(now())
   deadline                DateTime?
   isOverdue               Boolean                    @default(false)
+  isCompleted             Boolean                    @default(false) // Work completed
+  isSettled               Boolean                    @default(false) // Payment received
   daysInStatus            Int                        @default(0)
   serviceFee              Decimal?
   instalments             Int                        @default(1)

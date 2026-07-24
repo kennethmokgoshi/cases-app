@@ -96,3 +96,51 @@ describe('GET /api/projects memberOnly', () => {
         expect(finalProjectQuery.where?.id?.in).not.toContain('ruphas-year');
     });
 });
+
+describe('GET /api/projects?flat=true&all=true (admin list)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(auth).mockResolvedValue({
+            user: { id: 'admin-1', role: 'ADMIN', isAdmin: true, userType: 'STAFF', b2bPartnerId: null },
+        } as never);
+
+        vi.mocked(prisma.project.findMany).mockResolvedValue([
+            { id: 'p1', name: 'Alpha', parentId: null, _count: { children: 2 }, members: [{ userId: 'u1', role: 'MANAGER' }] },
+            { id: 'p2', name: 'Beta', parentId: 'p1', _count: { children: 0 }, members: [] },
+        ] as never);
+
+        // Cast around Prisma's groupBy generic, which trips TS's circular-type
+        // guard (TS2615) when vi.mocked tries to resolve its signature.
+        (prisma.caseProject.groupBy as unknown as { mockResolvedValue: (v: unknown) => void })
+            .mockResolvedValue([{ projectId: 'p1', _count: { caseId: 5 } }]);
+    });
+
+    it('returns a slim payload without the members->user join or parent/children includes', async () => {
+        const res = await GET(new Request('http://localhost/api/projects?flat=true&all=true') as never);
+
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(Array.isArray(json)).toBe(true);
+
+        const query = vi.mocked(prisma.project.findMany).mock.calls[0]?.[0] as {
+            include?: Record<string, unknown>;
+        };
+        // The expensive user join is gone — only userId/role are selected.
+        expect(query.include?.members).toEqual({ select: { userId: true, role: true } });
+        // The tree is rebuilt client-side, so these includes must not be fetched.
+        expect(query.include).not.toHaveProperty('parent');
+        expect(query.include).not.toHaveProperty('children');
+        expect(query.include?._count).toEqual({ select: { children: true } });
+    });
+
+    it('still merges active case counts into each project', async () => {
+        const res = await GET(new Request('http://localhost/api/projects?flat=true&all=true') as never);
+        const json = await res.json();
+
+        const alpha = json.find((p: { id: string }) => p.id === 'p1');
+        const beta = json.find((p: { id: string }) => p.id === 'p2');
+        expect(alpha._count.cases).toBe(5);
+        expect(alpha._count.children).toBe(2);
+        expect(beta._count.cases).toBe(0);
+    });
+});

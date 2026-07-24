@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, createLogger, getSMTPCredentials } from '@zenowethu/shared-lib';
-import { scanMailboxForClient } from '@zenowethu/shared-lib/src/integrations/imap';
+import { scanMailboxForClient, classifyScannedFolders } from '@zenowethu/shared-lib/src/integrations/imap';
 import { decryptSecret } from '@zenowethu/shared-lib/src/security/encryption';
 import { z } from 'zod';
 import { isUsableMailboxPassword, usesSmtpPassword } from '@/lib/mailboxes';
@@ -210,6 +210,21 @@ export async function POST(
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
+        // Who is running this scan — recorded on the activity so the journal (and
+        // the pre-run confirmation modal) can show exactly who ran it and when.
+        const runByUser = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { firstName: true, lastName: true, email: true },
+        });
+        const runByName = runByUser
+            ? (`${runByUser.firstName ?? ''} ${runByUser.lastName ?? ''}`.trim() || runByUser.email || 'Unknown user')
+            : 'Unknown user';
+        const runBy = {
+            id: session.user.id,
+            name: runByName,
+            email: runByUser?.email ?? null,
+        };
+
         const { lookbackDays, receivedAfter, reason, mailboxId, docGroup } = parsed.data;
         const idNumber = caseData.client.idNumber?.trim();
         if (!idNumber) {
@@ -337,6 +352,7 @@ export async function POST(
                     let invoiceCandidatesFound = 0;
                     const savedDocuments: string[] = [];
                     const mailboxErrors: string[] = [];
+                    const foldersScannedSet = new Set<string>();
 
                     if (inboxConfigured && configuredMailboxes.length > 0) {
                         const systemUser = await prisma.user.findFirst({
@@ -372,7 +388,7 @@ export async function POST(
                             if (!password) {
                                 try {
                                     const smtp = await getSMTPCredentials();
-                                    if (usesSmtpPassword(mailbox.emailAddress, mailbox.password, smtp.password ? smtp.username : null)) {
+                                    if (usesSmtpPassword(mailbox.emailAddress, password, smtp.password ? smtp.username : null)) {
                                         password = smtp.password;
                                     }
                                 } catch {
@@ -405,6 +421,9 @@ export async function POST(
                                     since: searchFrom,
                                     skipMessageIds,
                                     docGroup,
+                                    onFoldersResolved: (folders) => {
+                                        folders.forEach(f => foldersScannedSet.add(f));
+                                    },
                                     onProgress: (p) => {
                                         const mbxProgress = p.total ? (p.processed / p.total) : 0.5;
                                         const totalProgress = Math.round(((i + mbxProgress) / totalMbx) * 100);
@@ -517,12 +536,16 @@ export async function POST(
                         scanSummary.note += ` Mailbox errors: ${mailboxErrors.join('; ')}`;
                     }
 
+                    const foldersScanned = [...foldersScannedSet];
+                    const { scannedInbox, scannedSent } = classifyScannedFolders(foldersScanned);
+
                     const activityData = {
                         action: 'CHECK_DC_FEE_INVOICE_EMAILS',
                         caseId,
                         fileNumber: caseData.fileNumber,
                         clientName,
                         idNumber,
+                        runBy,
                         matchPolicy,
                         lookbackDays,
                         receivedAfter: searchFrom.toISOString(),
@@ -535,6 +558,9 @@ export async function POST(
                             configured: m.hasPassword,
                         })),
                         mailboxConfigured: inboxConfigured,
+                        foldersScanned,
+                        scannedInbox,
+                        scannedSent,
                         scanSummary,
                     };
 
@@ -554,12 +580,19 @@ export async function POST(
                             ? 'Mailbox credentials are saved; the inbox worker can match DC invoice replies and proof-of-payment replies to this case.'
                             : 'No mailbox has a saved password yet; ask Admin to set mailbox passwords in Admin → Settings before the app can read the inbox automatically.';
 
+                    const foldersLine = scanStatus === 'COMPLETED'
+                        ? (foldersScanned.length > 0
+                            ? `Folders scanned: ${foldersScanned.join(', ')} (Inbox: ${scannedInbox ? 'yes' : 'no'}, Sent: ${scannedSent ? 'yes' : 'no'}).`
+                            : 'Folders scanned: none (no readable mailbox returned any folders).')
+                        : 'Folders scanned: pending inbox worker.';
+
                     const content = [
-                        `Fee-invoice email check requested for ${clientName} (${caseData.client.idNumber}).`,
+                        `Search Email for ${docGroup === 'ALL' ? 'all documents' : docGroup === 'ID_POA' ? 'ID/POA' : docGroup === 'CREDIT_REPORT' ? 'Credit Report' : docGroup} run by ${runByName} for ${clientName} (${caseData.client.idNumber}).`,
                         `Search from: ${formatDateOnly(searchFrom)}.`,
                         `Strict match rule: only emails containing client ID number ${idNumber} may be opened/read; non-matching emails must be skipped unopened.`,
                         `Mailboxes: ${mailboxId === 'ALL' ? `all (${mailboxSummary})` : mailboxSummary}.`,
                         `Mailbox summary: ${selectedMailboxes.length} selected, ${configuredMailboxes.length} readable, ${selectedMailboxes.length - configuredMailboxes.length} skipped.`,
+                        foldersLine,
                         emailCountsLine,
                         configLine,
                         mailboxErrors.length > 0 ? `Errors: ${mailboxErrors.join('; ')}` : null,
@@ -611,7 +644,12 @@ export async function POST(
                             scanQueued: false,
                             inboxConfigured,
                             activityId: comment.id,
+                            runBy,
+                            ranAt: new Date().toISOString(),
                             mailboxes: activityData.mailboxes,
+                            foldersScanned,
+                            scannedInbox,
+                            scannedSent,
                             matchPolicy,
                             scanSummary,
                             message: scanStatus === 'COMPLETED'
@@ -637,6 +675,83 @@ export async function POST(
         });
     } catch (error) {
         logger.error('Error requesting fee-invoice email check:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+// Returns the most recent "Search Email" scan for this case (optionally filtered
+// by docGroup) so the UI can show a pre-run confirmation: who ran it, when, which
+// mailboxes/folders were scanned, and the result summary — before running again.
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (session.user.userType === 'B2B_PARTNER') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const { id: caseId } = await params;
+        const url = new URL(request.url);
+        const docGroup = (url.searchParams.get('docGroup') || 'ALL').trim();
+
+        const recent = await prisma.caseComment.findMany({
+            where: { caseId, activityType: ACTIVITY_TYPE },
+            orderBy: { createdAt: 'desc' },
+            take: 25,
+            select: {
+                id: true,
+                createdAt: true,
+                content: true,
+                activityData: true,
+                user: { select: { firstName: true, lastName: true, email: true } },
+            },
+        });
+
+        const match = recent.find(r => {
+            try {
+                const data = JSON.parse(r.activityData ?? '{}');
+                return (data.docGroup ?? 'ALL') === docGroup;
+            } catch {
+                return false;
+            }
+        });
+
+        if (!match) {
+            return NextResponse.json({ found: false, docGroup });
+        }
+
+        let data: any = {};
+        try {
+            data = JSON.parse(match.activityData ?? '{}');
+        } catch {
+            data = {};
+        }
+
+        const runByName = data.runBy?.name
+            || (match.user ? `${match.user.firstName ?? ''} ${match.user.lastName ?? ''}`.trim() || match.user.email : null)
+            || 'Unknown user';
+
+        return NextResponse.json({
+            found: true,
+            docGroup,
+            activityId: match.id,
+            ranAt: match.createdAt,
+            runByName,
+            runByEmail: data.runBy?.email ?? match.user?.email ?? null,
+            mailboxes: Array.isArray(data.mailboxes) ? data.mailboxes : [],
+            foldersScanned: Array.isArray(data.foldersScanned) ? data.foldersScanned : [],
+            scannedInbox: data.scannedInbox ?? null,
+            scannedSent: data.scannedSent ?? null,
+            scanSummary: data.scanSummary ?? null,
+            content: match.content ?? null,
+        });
+    } catch (error) {
+        logger.error('Error fetching most recent email scan:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

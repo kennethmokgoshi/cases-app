@@ -25,6 +25,7 @@ vi.mock('@zenowethu/database', () => ({
         },
         user: {
             findFirst: vi.fn(),
+            findUnique: vi.fn(),
         },
         processedMailboxMessage: {
             findMany: vi.fn(),
@@ -45,12 +46,17 @@ vi.mock('@zenowethu/shared-lib', () => ({
 
 vi.mock('@zenowethu/shared-lib/src/integrations/imap', () => ({
     scanMailboxForClient: vi.fn(),
+    classifyScannedFolders: (folders: string[]) => ({
+        scannedInbox: folders.some(f => f.trim().toLowerCase() === 'inbox'),
+        scannedSent: folders.some(f => /sent/i.test(f)),
+        folders,
+    }),
 }));
 
 import { prisma } from '@zenowethu/database';
 import { auth, getSMTPCredentials } from '@zenowethu/shared-lib';
 import { scanMailboxForClient } from '@zenowethu/shared-lib/src/integrations/imap';
-import { POST } from './route';
+import { POST, GET } from './route';
 
 type PrismaMock = {
     case: {
@@ -72,6 +78,7 @@ type PrismaMock = {
     };
     user: {
         findFirst: ReturnType<typeof vi.fn>;
+        findUnique: ReturnType<typeof vi.fn>;
     };
     processedMailboxMessage: {
         findMany: ReturnType<typeof vi.fn>;
@@ -177,11 +184,15 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
         db.processedMailboxMessage.findMany.mockResolvedValue([]);
         db.processedMailboxMessage.upsert.mockResolvedValue({ id: 'pm-1' });
         db.user.findFirst.mockResolvedValue({ id: 'admin-1', role: 'ADMIN' });
+        db.user.findUnique.mockResolvedValue({ firstName: 'Thabo', lastName: 'Molefe', email: 'thabo@zenowethu.co.za' });
         mockedSmtp.mockResolvedValue({ username: '', password: '' });
-        (scanMailboxForClient as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        (scanMailboxForClient as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (args: any) => {
+            args?.onFoldersResolved?.(['INBOX', '[Gmail]/Sent Mail']);
+            return {
             emailsScanned: 5,
             newEmailsFound: 2,
             invoiceCandidatesFound: 1,
+            foldersScanned: ['INBOX', '[Gmail]/Sent Mail'],
             attachments: [
                 {
                     fileName: 'invoice-1.pdf',
@@ -192,6 +203,7 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
                     detectedType: 'FEE_INVOICE',
                 }
             ],
+            };
         });
     });
 
@@ -453,5 +465,96 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
                 fileName: 'Form_17.7_Client.pdf',
             })
         }));
+    });
+
+    it('records who ran the scan and which folders (inbox/sent) were searched', async () => {
+        const response = await POST(request({ docGroup: 'ID_POA' }), params);
+        await parseResponse(response);
+
+        const activityData = JSON.parse(db.caseComment.create.mock.calls[0][0].data.activityData);
+        expect(activityData.runBy).toMatchObject({
+            id: 'staff-1',
+            name: 'Thabo Molefe',
+            email: 'thabo@zenowethu.co.za',
+        });
+        expect(activityData.foldersScanned).toEqual(['INBOX', '[Gmail]/Sent Mail']);
+        expect(activityData.scannedInbox).toBe(true);
+        expect(activityData.scannedSent).toBe(true);
+        expect(activityData.docGroup).toBe('ID_POA');
+
+        const content = db.caseComment.create.mock.calls[0][0].data.content as string;
+        expect(content).toContain('run by Thabo Molefe');
+        expect(content).toContain('Folders scanned: INBOX, [Gmail]/Sent Mail (Inbox: yes, Sent: yes).');
+    });
+});
+
+describe('GET /api/cases/[id]/dhs-decline/check-fee-emails', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockedAuth.mockResolvedValue({ user: { id: 'staff-1', userType: 'STAFF' } });
+    });
+
+    function getRequest(docGroup?: string): Request {
+        const url = docGroup
+            ? `https://cases.zenowethu.co.za/api/cases/case-1/dhs-decline/check-fee-emails?docGroup=${docGroup}`
+            : 'https://cases.zenowethu.co.za/api/cases/case-1/dhs-decline/check-fee-emails';
+        return new Request(url, { method: 'GET' });
+    }
+
+    it('returns the most recent scan for the requested docGroup', async () => {
+        db.caseComment.findMany.mockResolvedValue([
+            {
+                id: 'scan-credit',
+                createdAt: new Date('2026-07-24T09:00:00.000Z'),
+                content: 'Credit scan note',
+                activityData: JSON.stringify({ docGroup: 'CREDIT_REPORT', runBy: { name: 'Someone Else' } }),
+                user: { firstName: 'Someone', lastName: 'Else', email: 'else@zenowethu.co.za' },
+            },
+            {
+                id: 'scan-idpoa',
+                createdAt: new Date('2026-07-23T09:00:00.000Z'),
+                content: 'ID/POA scan note',
+                activityData: JSON.stringify({
+                    docGroup: 'ID_POA',
+                    runBy: { name: 'Thabo Molefe', email: 'thabo@zenowethu.co.za' },
+                    mailboxes: [{ id: 'mbx-1', emailAddress: 'transfers@zenowethu.co.za' }],
+                    foldersScanned: ['INBOX', 'Sent'],
+                    scannedInbox: true,
+                    scannedSent: true,
+                    scanSummary: { status: 'COMPLETED', emailsScanned: 5, uploadedDocuments: 1 },
+                }),
+                user: { firstName: 'Thabo', lastName: 'Molefe', email: 'thabo@zenowethu.co.za' },
+            },
+        ]);
+
+        const response = await GET(getRequest('ID_POA'), params);
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.found).toBe(true);
+        expect(body.activityId).toBe('scan-idpoa');
+        expect(body.runByName).toBe('Thabo Molefe');
+        expect(body.scannedInbox).toBe(true);
+        expect(body.scannedSent).toBe(true);
+        expect(body.mailboxes[0].emailAddress).toBe('transfers@zenowethu.co.za');
+        expect(body.scanSummary.uploadedDocuments).toBe(1);
+    });
+
+    it('returns found:false when no scan exists for the docGroup', async () => {
+        db.caseComment.findMany.mockResolvedValue([]);
+
+        const response = await GET(getRequest('ID_POA'), params);
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(body.found).toBe(false);
+    });
+
+    it('rejects unauthenticated and partner callers', async () => {
+        mockedAuth.mockResolvedValueOnce(null);
+        expect((await GET(getRequest('ID_POA'), params)).status).toBe(401);
+
+        mockedAuth.mockResolvedValueOnce({ user: { id: 'partner-1', userType: 'B2B_PARTNER' } });
+        expect((await GET(getRequest('ID_POA'), params)).status).toBe(403);
     });
 });

@@ -13,6 +13,28 @@ const logger = {
     debug: (...args: any[]) => console.debug('[DEBUG]', ...args)
 };
 
+type LastScanInfo = {
+    found: boolean;
+    docGroup: string;
+    activityId?: string;
+    ranAt?: string;
+    runByName?: string;
+    runByEmail?: string | null;
+    mailboxes?: { id: string; emailAddress: string; isDcCommunication?: boolean; configured?: boolean }[];
+    foldersScanned?: string[];
+    scannedInbox?: boolean | null;
+    scannedSent?: boolean | null;
+    scanSummary?: {
+        status?: string;
+        emailsScanned?: number | null;
+        newEmailsFound?: number | null;
+        invoiceCandidatesFound?: number | null;
+        uploadedDocuments?: number | null;
+        note?: string;
+    } | null;
+    content?: string | null;
+};
+
 type DocumentAccessGrant = {
     userId: string;
     grantedAt: string;
@@ -90,6 +112,12 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
     const [accessEmail, setAccessEmail] = useState('');
     const [accessLoading, setAccessLoading] = useState(false);
     const [allUsers, setAllUsers] = useState<{ id: string; firstName: string; lastName: string; email: string }[]>([]);
+    const [scanModal, setScanModal] = useState<{
+        docGroup: 'ID_POA' | 'CREDIT_REPORT';
+        loading: boolean;
+        showResults: boolean;
+        lastScan: LastScanInfo | null;
+    } | null>(null);
 
     const ID_DOC_TYPES = ['ID', 'PASSPORT', 'IDENTITY_DOCUMENT', 'SMART_CARD', 'GREEN_ID_BOOK'];
     const POA_DOC_TYPES = ['POA', 'ZENOWETHU_POA', 'ZDM_POA', 'ZDM', 'POWER_OF_ATTORNEY', 'AUTHORIZATION', 'APPLICATION_FORM'];
@@ -201,6 +229,20 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
             setIsSearchingEmails(false);
             setExtractionProgress(0);
             setExtractionMessage('');
+        }
+    };
+
+    // Open the pre-run confirmation modal, then fetch the most recent scan so we
+    // can show who last ran it and when before the user decides to run it again.
+    const openScanModal = async (docGroup: 'ID_POA' | 'CREDIT_REPORT') => {
+        setScanModal({ docGroup, loading: true, showResults: false, lastScan: null });
+        try {
+            const res = await fetch(`/api/cases/${caseId}/dhs-decline/check-fee-emails?docGroup=${docGroup}`);
+            const data: LastScanInfo = res.ok ? await res.json() : { found: false, docGroup };
+            setScanModal((prev) => (prev && prev.docGroup === docGroup ? { ...prev, loading: false, lastScan: data } : prev));
+        } catch (e) {
+            logger.error('Error fetching last scan info:', e);
+            setScanModal((prev) => (prev && prev.docGroup === docGroup ? { ...prev, loading: false, lastScan: { found: false, docGroup } } : prev));
         }
     };
 
@@ -760,7 +802,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                     {isMissingIdPoa && (
                         <button
                             type="button"
-                            onClick={() => handleSearchEmails('ID_POA')}
+                            onClick={() => openScanModal('ID_POA')}
                             disabled={isSearchingEmails || extracting || extractingDhs}
                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5 whitespace-nowrap"
                         >
@@ -772,7 +814,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
                     {isMissingCreditReport && (
                         <button
                             type="button"
-                            onClick={() => handleSearchEmails('CREDIT_REPORT')}
+                            onClick={() => openScanModal('CREDIT_REPORT')}
                             disabled={isSearchingEmails || extracting || extractingDhs}
                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600/20 text-green-300 border border-green-500/30 hover:bg-green-600/40 hover:text-white cursor-pointer transition-colors flex items-center gap-1.5 whitespace-nowrap"
                         >
@@ -1067,6 +1109,126 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
             </div>
 
             {/* Access Management Modal */}
+            {/* Search Email pre-run confirmation modal */}
+            {scanModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-zeno-navy border border-white/10 rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-white font-semibold text-base">
+                                    🔍 Search Email for {scanModal.docGroup === 'ID_POA' ? 'ID/POA' : 'Credit Report'}
+                                </h2>
+                                <p className="text-gray-400 text-xs mt-0.5">Scans connected mailboxes (Inbox &amp; Sent) for the client's documents.</p>
+                            </div>
+                            <button
+                                onClick={() => setScanModal(null)}
+                                className="text-gray-400 hover:text-white transition-colors text-lg leading-none"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {scanModal.loading ? (
+                            <div className="py-8 text-center text-sm text-gray-400 flex items-center justify-center gap-2">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zeno-cyan opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-zeno-cyan"></span>
+                                </span>
+                                Checking for a previous scan…
+                            </div>
+                        ) : scanModal.lastScan?.found ? (
+                            <>
+                                <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10 space-y-1.5">
+                                    <p className="text-sm text-white">
+                                        Last run by <span className="font-semibold text-zeno-cyan">{scanModal.lastScan.runByName || 'Unknown user'}</span>
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                        {scanModal.lastScan.ranAt ? new Date(scanModal.lastScan.ranAt).toLocaleString() : 'Unknown time'}
+                                    </p>
+                                    {(scanModal.lastScan.mailboxes?.length ?? 0) > 0 && (
+                                        <p className="text-xs text-gray-400">
+                                            <span className="text-gray-500">Mailboxes:</span>{' '}
+                                            {scanModal.lastScan.mailboxes!.map(m => m.emailAddress).join(', ')}
+                                        </p>
+                                    )}
+                                    <p className="text-xs text-gray-400">
+                                        <span className="text-gray-500">Folders:</span>{' '}
+                                        Inbox {scanModal.lastScan.scannedInbox ? '✅' : '—'} · Sent {scanModal.lastScan.scannedSent ? '✅' : '—'}
+                                        {(scanModal.lastScan.foldersScanned?.length ?? 0) > 0 && (
+                                            <span className="text-gray-500"> ({scanModal.lastScan.foldersScanned!.join(', ')})</span>
+                                        )}
+                                    </p>
+                                </div>
+
+                                {scanModal.showResults && (
+                                    <div className="mb-4 p-3 rounded-lg bg-zeno-navy/70 border border-zeno-cyan/20">
+                                        <p className="text-xs font-medium text-zeno-cyan uppercase mb-2">Most recent scan results</p>
+                                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-300 mb-2">
+                                            <div>Emails scanned: <span className="font-semibold text-white">{scanModal.lastScan.scanSummary?.emailsScanned ?? '—'}</span></div>
+                                            <div>New emails: <span className="font-semibold text-white">{scanModal.lastScan.scanSummary?.newEmailsFound ?? '—'}</span></div>
+                                            <div>Candidates: <span className="font-semibold text-white">{scanModal.lastScan.scanSummary?.invoiceCandidatesFound ?? '—'}</span></div>
+                                            <div>Documents uploaded: <span className="font-semibold text-white">{scanModal.lastScan.scanSummary?.uploadedDocuments ?? '—'}</span></div>
+                                        </div>
+                                        {scanModal.lastScan.content && (
+                                            <pre className="text-[11px] text-gray-400 whitespace-pre-wrap max-h-40 overflow-y-auto border-t border-white/5 pt-2">{scanModal.lastScan.content}</pre>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="flex flex-wrap gap-2 justify-end">
+                                    <button
+                                        onClick={() => setScanModal(null)}
+                                        className="px-4 py-2 text-sm font-medium rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => setScanModal(prev => prev ? { ...prev, showResults: !prev.showResults } : prev)}
+                                        className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
+                                    >
+                                        {scanModal.showResults ? 'Hide Results' : 'View Most Recent Results'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const dg = scanModal.docGroup;
+                                            setScanModal(null);
+                                            handleSearchEmails(dg);
+                                        }}
+                                        className="px-4 py-2 text-sm font-medium rounded-lg bg-cyan-600/30 text-cyan-200 border border-cyan-500/40 hover:bg-cyan-600/50 hover:text-white transition-colors"
+                                    >
+                                        Run Again
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
+                                    <p className="text-sm text-gray-300">No previous email scan on record for this document group.</p>
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                    <button
+                                        onClick={() => setScanModal(null)}
+                                        className="px-4 py-2 text-sm font-medium rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const dg = scanModal.docGroup;
+                                            setScanModal(null);
+                                            handleSearchEmails(dg);
+                                        }}
+                                        className="px-4 py-2 text-sm font-medium rounded-lg bg-cyan-600/30 text-cyan-200 border border-cyan-500/40 hover:bg-cyan-600/50 hover:text-white transition-colors"
+                                    >
+                                        Run Scan
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {accessModal && isAdmin && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="bg-zeno-navy border border-white/10 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">

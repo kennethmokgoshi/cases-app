@@ -27,7 +27,7 @@ type Project = {
     parentId: string | null;
     parent?: Project;
     children?: Project[];
-    members?: { userId: string; role: string; user: { firstName: string; lastName: string; email: string } }[];
+    members?: { userId: string; role: string }[];
     _count?: { cases: number; children: number };
 };
 
@@ -442,6 +442,11 @@ export default function ProjectsManagement() {
 
     const displayedProjects = getDisplayedProjects();
 
+    // Resolve member display names from the separately-fetched user list. The
+    // project list payload only carries {userId, role} (no user join) to keep
+    // it small, so the members tooltip looks names up here.
+    const userById = new Map(allUsers.map(u => [u.id, u]));
+
     // Pagination logic
     const totalPages = Math.ceil(displayedProjects.length / ITEMS_PER_PAGE);
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -540,7 +545,10 @@ export default function ProjectsManagement() {
                                     : 'bg-transparent text-gray-500 border-gray-700/30 hover:bg-white/5 hover:text-gray-300'
                                     }`}
                                 title={project.members && project.members.length > 0
-                                    ? `Members:\n${project.members.map(m => `• ${m.user.firstName} ${m.user.lastName} (${m.role})`).join('\n')}`
+                                    ? `Members:\n${project.members.map(m => {
+                                        const u = userById.get(m.userId);
+                                        return `• ${u ? `${u.firstName} ${u.lastName}` : m.userId} (${m.role})`;
+                                    }).join('\n')}`
                                     : 'No members assigned. Click to manage.'
                                 }
                             >

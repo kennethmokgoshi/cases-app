@@ -61,7 +61,8 @@ export async function getSearchableMailboxesWithPasswords(userId: string): Promi
             } catch {
                 password = null;
             }
-        } else if (smtp?.password && usesSmtpPassword(row.emailAddress, row.password, smtpUsername)) {
+        }
+        if (!password && smtp?.password && usesSmtpPassword(row.emailAddress, password, smtpUsername)) {
             password = smtp.password;
         }
         return {

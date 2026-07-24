@@ -17,6 +17,33 @@ const BodySchema = z.object({
 });
 
 const ACTIVITY_TYPE = 'CASE_EMAIL_UPDATE_PROCESSED';
+/** Activity logged for every scan run (whether or not any updates were found). */
+const SCAN_RUN_ACTIVITY_TYPE = 'CASE_UPDATE_SCAN_RUN';
+
+function isInboxFolder(path: string): boolean {
+    const p = path.toLowerCase();
+    return p === 'inbox' || p.endsWith('/inbox') || p.endsWith('.inbox');
+}
+
+function isSentFolder(path: string): boolean {
+    return /sent/i.test(path);
+}
+
+interface MailboxScan {
+    email: string;
+    folders: string[];
+    error?: string;
+}
+
+/** Human-readable list of the folder categories scanned across all mailboxes. */
+function describeFolders(scannedInbox: boolean, scannedSent: boolean, folders: string[]): string {
+    const parts = [
+        `Inbox ${scannedInbox ? '✓' : '—'}`,
+        `Sent Items ${scannedSent ? '✓' : '—'}`,
+    ];
+    const list = folders.length > 0 ? ` (${folders.join(', ')})` : '';
+    return `${parts.join(', ')}${list}`;
+}
 
 export async function POST(
     request: Request,
@@ -114,9 +141,12 @@ export async function POST(
 
         const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
         const processedUpdates: any[] = [];
+        const mailboxScans: MailboxScan[] = [];
         const uploadDir = join(process.cwd(), 'storage', 'uploads', caseId);
 
         for (const mailbox of readableMailboxes) {
+            const scanEntry: MailboxScan = { email: mailbox.emailAddress, folders: [] };
+            mailboxScans.push(scanEntry);
             try {
                 const emails = await scanMailboxForCaseUpdates({
                     config: {
@@ -132,6 +162,9 @@ export async function POST(
                     since,
                     limit: 10,
                     skipMessageIds,
+                    onFoldersResolved: (folders) => {
+                        scanEntry.folders = folders;
+                    },
                 });
 
                 for (const email of emails) {
@@ -308,18 +341,164 @@ export async function POST(
                     }
                 }
             } catch (err: any) {
+                scanEntry.error = err?.message ? String(err.message) : String(err);
                 logger.error(`Error scanning/processing updates for mailbox ${mailbox.emailAddress}:`, err);
             }
         }
+
+        // Always record a scan-run entry in the case timeline — who ran it, when,
+        // which mailboxes/folders were scanned — even when nothing new was found.
+        const allFolders = [...new Set(mailboxScans.flatMap((m) => m.folders))];
+        const scannedInbox = allFolders.some(isInboxFolder);
+        const scannedSent = allFolders.some(isSentFolder);
+        const scanErrors = mailboxScans
+            .filter((m) => m.error)
+            .map((m) => `${m.email}: ${m.error}`);
+        const ranByName =
+            session.user.name ||
+            [firstName, lastName].filter(Boolean).join(' ') ||
+            'A staff member';
+
+        const rangeLabel =
+            lookbackDays % 365 === 0
+                ? `last ${lookbackDays / 365} year(s)`
+                : `last ${lookbackDays} days`;
+
+        const scanContent = [
+            `🔄 Case update check run by ${session.user.name || 'staff'}.`,
+            `Range: ${rangeLabel} (since ${since.toLocaleDateString('en-ZA')}).`,
+            `Mailboxes scanned (${mailboxScans.length}): ${mailboxScans.map((m) => m.email).join(', ') || 'none'}.`,
+            `Folders scanned: ${describeFolders(scannedInbox, scannedSent, allFolders)}.`,
+            `Result: ${processedUpdates.length} new update(s) found.`,
+            scanErrors.length > 0 ? `Errors:\n${scanErrors.map((e) => `• ${e}`).join('\n')}` : null,
+        ]
+            .filter((line): line is string => Boolean(line))
+            .join('\n');
+
+        const scanActivityData = {
+            scanType: 'CHECK_FOR_UPDATES',
+            ranByUserId: session.user.id,
+            ranByName,
+            lookbackDays,
+            since: since.toISOString(),
+            mailboxes: mailboxScans.map((m) => ({
+                email: m.email,
+                folders: m.folders,
+                error: m.error ?? null,
+            })),
+            scannedInbox,
+            scannedSent,
+            updatesFound: processedUpdates.length,
+            updates: processedUpdates,
+            errors: scanErrors,
+        };
+
+        const scanRunComment = await prisma.caseComment.create({
+            data: {
+                caseId,
+                userId: session.user.id,
+                content: scanContent,
+                type: 'NOTE',
+                isInternal: true,
+                activityType: SCAN_RUN_ACTIVITY_TYPE,
+                activityData: JSON.stringify(scanActivityData),
+            },
+        });
+        await prisma.workflowLog.create({
+            data: {
+                caseId,
+                fromStatus: caseData.status,
+                toStatus: caseData.status,
+                action: SCAN_RUN_ACTIVITY_TYPE,
+                userId: session.user.id,
+                notes: scanContent,
+            },
+        });
 
         return NextResponse.json({
             success: true,
             message: `Check completed. Scanned ${readableMailboxes.length} mailbox(es). Found ${processedUpdates.length} update(s).`,
             updates: processedUpdates,
             mailboxesScanned: readableMailboxes.length,
+            scanRun: {
+                ranByName,
+                ranAt: scanRunComment.createdAt,
+                lookbackDays,
+                mailboxes: mailboxScans.map((m) => m.email),
+                scannedInbox,
+                scannedSent,
+                updatesFound: processedUpdates.length,
+                errors: scanErrors,
+            },
         });
     } catch (error) {
         logger.error('Error in check-updates handler:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+/**
+ * Returns metadata about the most recent "Check for Updates" scan for this case
+ * (who ran it, when, which mailboxes/folders were scanned, and the updates it
+ * found). Used to show a pre-run confirmation so staff can avoid re-scanning
+ * unnecessarily and can re-open the most recent results.
+ */
+export async function GET(
+    _request: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (session.user.userType === 'B2B_PARTNER') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const { id: caseId } = await params;
+
+        const last = await prisma.caseComment.findFirst({
+            where: { caseId, activityType: SCAN_RUN_ACTIVITY_TYPE },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                user: { select: { firstName: true, lastName: true } },
+            },
+        });
+
+        if (!last) {
+            return NextResponse.json({ lastScan: null });
+        }
+
+        let data: Record<string, any> = {};
+        try {
+            data = JSON.parse(last.activityData ?? '{}');
+        } catch {
+            data = {};
+        }
+
+        const ranByName =
+            data.ranByName ||
+            [last.user?.firstName, last.user?.lastName].filter(Boolean).join(' ') ||
+            'A staff member';
+
+        return NextResponse.json({
+            lastScan: {
+                ranByName,
+                ranAt: last.createdAt,
+                lookbackDays: data.lookbackDays ?? null,
+                mailboxes: Array.isArray(data.mailboxes)
+                    ? data.mailboxes.map((m: any) => m.email).filter(Boolean)
+                    : [],
+                scannedInbox: Boolean(data.scannedInbox),
+                scannedSent: Boolean(data.scannedSent),
+                updatesFound: data.updatesFound ?? 0,
+                updates: Array.isArray(data.updates) ? data.updates : [],
+                errors: Array.isArray(data.errors) ? data.errors : [],
+            },
+        });
+    } catch (error) {
+        logger.error('Error in check-updates GET handler:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

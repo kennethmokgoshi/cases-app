@@ -92,6 +92,8 @@ export interface ScanResult {
     emailsScanned: number;
     newEmailsFound: number;
     invoiceCandidatesFound: number;
+    /** Folder paths that were actually searched (e.g. ["INBOX", "Sent Mail"]). */
+    foldersScanned: string[];
     attachments: {
         fileName: string;
         mimeType: string;
@@ -266,6 +268,21 @@ export function isDocTypeInGroup(detectedType: string, docGroup?: string): boole
     }
 }
 
+/**
+ * Categorise the raw folder paths that were searched into human-meaningful
+ * buckets so activity logs can state whether Inbox and/or Sent were scanned.
+ * Pure — safe to unit test without a live IMAP server.
+ */
+export function classifyScannedFolders(folders: string[]): {
+    scannedInbox: boolean;
+    scannedSent: boolean;
+    folders: string[];
+} {
+    const scannedInbox = folders.some(f => f.trim().toLowerCase() === 'inbox');
+    const scannedSent = folders.some(f => /sent/i.test(f));
+    return { scannedInbox, scannedSent, folders };
+}
+
 async function getSearchFolders(client: ImapFlow): Promise<string[]> {
     try {
         const list = await client.list();
@@ -400,6 +417,7 @@ export async function scanMailboxForClient({
     idNumber,
     since,
     onProgress,
+    onFoldersResolved,
     skipMessageIds = [],
     docGroup = 'ALL',
 }: {
@@ -407,6 +425,9 @@ export async function scanMailboxForClient({
     idNumber: string;
     since: Date;
     onProgress?: (stats: { processed: number; total: number; newEmailsFound: number; invoiceCandidatesFound: number }) => void;
+    /** Called once the folders for this mailbox are resolved (e.g. INBOX, Sent),
+     *  so callers can record which folders were actually scanned. */
+    onFoldersResolved?: (folders: string[]) => void;
     skipMessageIds?: string[];
     docGroup?: string;
 }): Promise<ScanResult> {
@@ -425,6 +446,7 @@ export async function scanMailboxForClient({
 
     try {
         const folders = await getSearchFolders(client);
+        onFoldersResolved?.(folders);
         let emailsScanned = 0;
         let newEmailsFound = 0;
         let invoiceCandidatesFound = 0;
@@ -585,6 +607,7 @@ export async function scanMailboxForClient({
             emailsScanned,
             newEmailsFound,
             invoiceCandidatesFound,
+            foldersScanned: folders,
             attachments,
         };
     } finally {
@@ -667,6 +690,7 @@ export async function scanMailboxForCaseUpdates({
     since,
     limit = 10,
     skipMessageIds = [],
+    onFoldersResolved,
 }: {
     config: ImapConnectionConfig;
     idNumber?: string | null;
@@ -675,6 +699,9 @@ export async function scanMailboxForCaseUpdates({
     since: Date;
     limit?: number;
     skipMessageIds?: string[];
+    /** Called once the folders for this mailbox are resolved (e.g. INBOX, Sent),
+     *  so callers can record which folders were actually scanned. */
+    onFoldersResolved?: (folders: string[]) => void;
 }): Promise<CaseEmailUpdate[]> {
     const trimmedId = asString(idNumber);
     const trimmedFirst = asString(firstName);
@@ -700,6 +727,7 @@ export async function scanMailboxForCaseUpdates({
 
     try {
         const folders = await getSearchFolders(client);
+        onFoldersResolved?.(folders);
         const updates: CaseEmailUpdate[] = [];
         const processedMessageIds = new Set<string>(skipMessageIds);
 

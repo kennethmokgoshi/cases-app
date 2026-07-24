@@ -13,12 +13,28 @@ interface CaseUpdateResult {
     notificationMsg: string | null;
 }
 
+interface ScanRunMeta {
+    ranByName: string;
+    ranAt: string;
+    lookbackDays: number;
+    mailboxes: string[];
+    scannedInbox: boolean;
+    scannedSent: boolean;
+    updatesFound: number;
+    errors?: string[];
+}
+
 interface ScanResponse {
     success: boolean;
     message?: string;
     updates?: CaseUpdateResult[];
     mailboxesScanned?: number;
+    scanRun?: ScanRunMeta;
     error?: string;
+}
+
+interface LastScan extends ScanRunMeta {
+    updates: CaseUpdateResult[];
 }
 
 function formatDateTime(value: string | null | undefined): string {
@@ -47,8 +63,48 @@ export default function CheckForUpdatesButton({
     const [showResultModal, setShowResultModal] = useState(false);
     const [result, setResult] = useState<ScanResponse | null>(null);
 
+    // Pre-run confirmation (who last ran the check + when)
+    const [showPreRunModal, setShowPreRunModal] = useState(false);
+    const [loadingPreRun, setLoadingPreRun] = useState(false);
+    const [lastScan, setLastScan] = useState<LastScan | null>(null);
+
+    // On main-button click: look up the most recent scan first. If one exists,
+    // show a confirmation so the user can re-run or just view the last results.
+    const handleMainClick = async () => {
+        setShowMenu(false);
+        setLoadingPreRun(true);
+        try {
+            const res = await fetch(`/api/cases/${caseId}/check-updates`, { method: 'GET' });
+            const data = await res.json();
+            if (res.ok && data.lastScan) {
+                setLastScan(data.lastScan as LastScan);
+                setShowPreRunModal(true);
+                return;
+            }
+        } catch {
+            // Fall through to running the check directly on lookup failure.
+        } finally {
+            setLoadingPreRun(false);
+        }
+        // No prior scan (or lookup failed) — just run it.
+        runCheck(selectedLookbackDays);
+    };
+
+    const viewLastResults = () => {
+        if (!lastScan) return;
+        setResult({
+            success: true,
+            updates: lastScan.updates,
+            mailboxesScanned: lastScan.mailboxes.length,
+            scanRun: lastScan,
+        });
+        setShowPreRunModal(false);
+        setShowResultModal(true);
+    };
+
     const runCheck = async (lookback: number) => {
         setShowMenu(false);
+        setShowPreRunModal(false);
         setIsChecking(true);
         setResult(null);
         
@@ -89,28 +145,28 @@ export default function CheckForUpdatesButton({
             <div className="flex items-center gap-1">
                 <button
                     type="button"
-                    onClick={() => runCheck(selectedLookbackDays)}
-                    disabled={isChecking}
+                    onClick={handleMainClick}
+                    disabled={isChecking || loadingPreRun}
                     className="text-xs text-white bg-indigo-650 hover:bg-indigo-600 border border-indigo-500/50 px-3 py-1.5 rounded hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 font-medium shadow-sm"
                     title="Check connected mailboxes for updates since selected range"
                 >
-                    {isChecking ? (
+                    {isChecking || loadingPreRun ? (
                         <>
                             <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
-                            Checking updates...
+                            {loadingPreRun ? 'Loading...' : 'Checking updates...'}
                         </>
                     ) : (
                         <>🔄 Check for Updates</>
                     )}
                 </button>
-                
+
                 <button
                     type="button"
                     onClick={() => setShowMenu(!showMenu)}
-                    disabled={isChecking}
+                    disabled={isChecking || loadingPreRun}
                     className="text-xs text-white bg-indigo-750 hover:bg-indigo-700 border border-indigo-500/50 px-2 py-1.5 rounded transition-all disabled:opacity-50 flex items-center justify-center"
                     title="Select Date Range"
                 >
@@ -153,6 +209,76 @@ export default function CheckForUpdatesButton({
                 </>
             )}
 
+            {/* Pre-run Confirmation — who last ran the check and when */}
+            {showPreRunModal && lastScan && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200" onClick={() => setShowPreRunModal(false)}>
+                    <div
+                        className="bg-zeno-navy border border-indigo-500/20 rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-white/5">
+                            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                                <span>🔄</span> Check for Updates
+                            </h3>
+                            <button onClick={() => setShowPreRunModal(false)} className="text-white/60 hover:text-white text-lg leading-none">×</button>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-4">
+                            <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-2">
+                                <p className="text-sm text-gray-200">
+                                    Last checked by{' '}
+                                    <span className="font-semibold text-white">{lastScan.ranByName}</span>
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                    🕒 {formatDateTime(lastScan.ranAt)}
+                                </p>
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${lastScan.scannedInbox ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-white/5 text-gray-500 border-white/10'}`}>
+                                        Inbox {lastScan.scannedInbox ? '✓' : '—'}
+                                    </span>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${lastScan.scannedSent ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-white/5 text-gray-500 border-white/10'}`}>
+                                        Sent Items {lastScan.scannedSent ? '✓' : '—'}
+                                    </span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-indigo-500/30 bg-indigo-500/15 text-indigo-300 font-medium">
+                                        {lastScan.updatesFound} update(s) found
+                                    </span>
+                                </div>
+                                {lastScan.mailboxes.length > 0 && (
+                                    <p className="text-[10px] text-gray-500 pt-1 leading-relaxed">
+                                        Mailboxes: {lastScan.mailboxes.join(', ')}
+                                    </p>
+                                )}
+                            </div>
+
+                            <p className="text-xs text-gray-400">
+                                Would you like to run the check again, or view the results of the most recent scan?
+                            </p>
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-white/10 bg-white/5 flex flex-wrap justify-end gap-2">
+                            <button
+                                onClick={() => setShowPreRunModal(false)}
+                                className="text-xs text-white/70 hover:text-white px-3 py-2 rounded font-medium transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={viewLastResults}
+                                className="text-xs text-indigo-200 bg-white/5 hover:bg-white/10 border border-indigo-500/30 px-4 py-2 rounded font-semibold transition-all"
+                            >
+                                View Recent Results
+                            </button>
+                            <button
+                                onClick={() => runCheck(selectedLookbackDays)}
+                                className="text-xs text-white bg-indigo-650 hover:bg-indigo-600 px-4 py-2 rounded font-semibold transition-all shadow-md"
+                            >
+                                Run Check Again
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Sweep Results Modal */}
             {showResultModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200" onClick={() => setShowResultModal(false)}>
@@ -168,9 +294,31 @@ export default function CheckForUpdatesButton({
                         </div>
 
                         <div className="px-6 py-5 overflow-y-auto space-y-4">
-                            <p className="text-xs text-gray-400">
-                                Scanned connected mailboxes for updates since {formatDateTime(new Date(Date.now() - selectedLookbackDays * 24 * 60 * 60 * 1000).toISOString())}.
-                            </p>
+                            {result?.scanRun ? (
+                                <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-1.5">
+                                    <p className="text-xs text-gray-300">
+                                        Run by <span className="font-semibold text-white">{result.scanRun.ranByName}</span>
+                                        {' • '}{formatDateTime(result.scanRun.ranAt)}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${result.scanRun.scannedInbox ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-white/5 text-gray-500 border-white/10'}`}>
+                                            Inbox {result.scanRun.scannedInbox ? '✓' : '—'}
+                                        </span>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${result.scanRun.scannedSent ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-white/5 text-gray-500 border-white/10'}`}>
+                                            Sent Items {result.scanRun.scannedSent ? '✓' : '—'}
+                                        </span>
+                                    </div>
+                                    {result.scanRun.mailboxes.length > 0 && (
+                                        <p className="text-[10px] text-gray-500 leading-relaxed">
+                                            Mailboxes: {result.scanRun.mailboxes.join(', ')}
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-gray-400">
+                                    Scanned connected mailboxes for updates since {formatDateTime(new Date(Date.now() - selectedLookbackDays * 24 * 60 * 60 * 1000).toISOString())}.
+                                </p>
+                            )}
 
                             {updates.length === 0 ? (
                                 <div className="text-center py-8 bg-white/5 border border-white/5 rounded-xl space-y-2">
