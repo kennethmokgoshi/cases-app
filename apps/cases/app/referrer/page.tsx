@@ -1432,6 +1432,7 @@ export default function ReferrerPortalPage() {
                                                 <th className="px-4 py-3">Status</th>
                                                 <th className="px-4 py-3">Quote</th>
                                                 <th className="px-4 py-3">Paid</th>
+                                                <th className="px-4 py-3">Balance</th>
                                                 <th className="px-4 py-3">Referred</th>
                                                 <th className="px-4 py-3">Last activity</th>
                                             </>
@@ -1462,12 +1463,26 @@ export default function ReferrerPortalPage() {
                                                         </span>
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-100">
-                                                        {referral.quoteTotal != null ? formatMoney(referral.quoteTotal) : <span className="text-slate-500">No quote</span>}
+                                                        {referral.quoteTotal != null
+                                                            ? formatMoney(referral.quoteTotal)
+                                                            : (referral.quoteStatuses?.some((s) => ['REJECTED', 'CANCELLED'].includes(s))
+                                                                ? <span className="text-rose-400">Rejected</span>
+                                                                : <span className="text-slate-500">No quote</span>)}
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 py-3">
                                                         {referral.totalPaid > 0
                                                             ? <span className="text-emerald-300">{formatMoney(referral.totalPaid)}</span>
                                                             : <span className="text-slate-500">—</span>}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-4 py-3">
+                                                        {referral.quoteTotal != null && referral.quoteTotal > 0 ? (
+                                                            (() => {
+                                                                const balance = referral.quoteTotal - referral.totalPaid;
+                                                                const isOverpaid = balance < 0;
+                                                                const textColor = isOverpaid ? 'text-emerald-300' : balance > 0 ? 'text-rose-400' : 'text-slate-500';
+                                                                return <span className={textColor}>{isOverpaid ? '-' : ''}{formatMoney(Math.abs(balance))}</span>;
+                                                            })()
+                                                        ) : <span className="text-slate-500">—</span>}
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.createdAt)}</td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.lastUpdatedAt)}</td>
@@ -1544,7 +1559,7 @@ export default function ReferrerPortalPage() {
                                     })}
                                     {visibleReferrals.length === 0 && (
                                         <tr>
-                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 7 : 6}>
+                                            <td className="px-4 py-8 text-center text-slate-400" colSpan={isDiscountReferrer ? 8 : 6}>
                                                 {referrals.length === 0
                                                     ? 'No referrals are linked yet.'
                                                     : <>No files match “{REFERRAL_FILTERS[referralFilter].label}” yet. <button type="button" onClick={() => setReferralFilter('all')} className="text-cyan-300 underline underline-offset-2">Show all files</button></>}
@@ -1559,7 +1574,7 @@ export default function ReferrerPortalPage() {
                                                 <span className="text-slate-300">{report.clientName}</span>
                                                 {report.idNumber && <span className="ml-2 text-xs text-slate-500">{report.idNumber}</span>}
                                             </td>
-                                            <td className="px-4 py-3" colSpan={isDiscountReferrer ? 4 : 3}>
+                                            <td className="px-4 py-3" colSpan={isDiscountReferrer ? 5 : 3}>
                                                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300">
                                                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
                                                     Unclaimed — pending verification
