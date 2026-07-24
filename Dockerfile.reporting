@@ -131,7 +131,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/packages/database/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/apps/reporting/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/reporting/.next/standalone/ ./
 COPY --from=builder /app/apps/reporting/public ./apps/reporting/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/reporting/.next/static ./apps/reporting/.next/static
 
