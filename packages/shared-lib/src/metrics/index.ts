@@ -61,3 +61,4 @@ export function getDisputeDeadlineStatus(startDate: Date, totalDays: number = 20
 }
 
 export * from './prescription';
+export * from './activity-verification';

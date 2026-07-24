@@ -48,6 +48,7 @@ Your job is to turn this monorepo into a production-grade business machine witho
 | `apps/finance` | Invoices, payments, reconciliation, revenue, commissions | 3004 | finance.zenowethu.co.za |
 | `apps/crediva` | Consumer portal — document vault, AI coach, service requests | 3005 | crediva.zenowethu.co.za |
 | `apps/website` | Public website — lead generation, assessment form, services pages | 3006 | zenowethu.co.za |
+| `apps/reporting` | Staff work timesheet reporting & activity signature auditing | 3008 | reporting.zenowethu.co.za |
 
 ### Shared Packages
 
@@ -72,7 +73,8 @@ root/
 │   ├── forensic-audit/ # port 3003
 │   ├── finance/        # port 3004
 │   ├── crediva/        # port 3005
-│   └── website/        # port 3006
+│   ├── website/        # port 3006
+│   └── reporting/      # port 3008
 ├── packages/
 │   ├── shared-lib/     # @zenowethu/shared-lib — all shared business logic
 │   ├── ui/             # @zenowethu/ui — shared React components
@@ -443,6 +445,7 @@ pnpm --filter forensic-audit dev  # Forensic Audit on :3003
 pnpm --filter finance dev         # Finance on :3004
 pnpm --filter crediva dev           # Crediva on :3005
 pnpm --filter website dev         # Website on :3006
+pnpm --filter reporting dev       # Reporting on :3008
 
 # Run all apps simultaneously
 pnpm dev                          # Starts all apps via Turborepo

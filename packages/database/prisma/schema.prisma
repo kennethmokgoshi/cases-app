@@ -628,6 +628,8 @@ model User {
   paymentArrangementsCreated PaymentArrangement[]           @relation("ArrangementCreator")
   instalmentsHonoured        PaymentArrangementInstalment[] @relation("InstalmentHonouredBy")
   personalMailbox            MailboxAccount?                @relation("MailboxOwner")
+  workLogs                   WorkLog[]                      @relation("UserWorkLogs")
+  verifiedWorkLogs           WorkLog[]                      @relation("WorkLogVerifier")
 }
 
 // Debit order mandate lifecycle — capture, send, sign-back, NuPay registration
@@ -2170,3 +2172,26 @@ model DebtReviewRemovalConsent {
   @@index([status])
   @@index([consentType])
 }
+
+model WorkLog {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation("UserWorkLogs", fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime  // The date the work was performed
+  category        String    // e.g. CLIENT_CALLS, CLIENT_EMAILS, B2B_QUERIES, SOCIAL_MEDIA, GENERAL_ADMIN, OTHER
+  description     String    // Employee description of what was done
+  durationMinutes Int       // Time spent in minutes
+  fileNumber      String?   // Optional reference to a specific Case fileNumber
+  isVerified      Boolean   @default(false)
+  verifiedById    String?
+  verifiedAt      DateTime?
+  verifiedBy      User?     @relation("WorkLogVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([date])
+  @@index([category])
+  @@index([fileNumber])
+}
+
