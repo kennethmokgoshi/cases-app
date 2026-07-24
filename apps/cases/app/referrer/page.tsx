@@ -1263,9 +1263,9 @@ export default function ReferrerPortalPage() {
                                     <p className="mt-0.5 text-[11px] text-slate-400">{group.caption}</p>
                                 </div>
                                 <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
-                                    {group.stats.map((stat) => (
+                                    {group.stats.map((stat, idx) => (
                                         <button
-                                            key={stat.id}
+                                            key={`${stat.id}-${idx}`}
                                             type="button"
                                             onClick={() => toggleReferralFilter(stat.id)}
                                             title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
