@@ -156,6 +156,9 @@ export type DiscountPartnerTotals = {
     totalSettled: number;
     settledThisMonth: number;
     settledLastMonth: number;
+    totalLost: number;
+    lostThisMonth: number;
+    lostLastMonth: number;
     totalQuoted: number;
     quotedThisMonth: number;
     quotedLastMonth: number;
@@ -208,6 +211,7 @@ export function calculateDiscountPartnerTotals(
             const tone = portalStatusTone(referral.caseStatus ?? referral.stage);
             const settled = tone === 'settled';
             const completed = tone === 'completed';
+            const lost = tone === 'lost';
             const quoted = referral.quoteTotal != null && referral.quoteTotal > 0;
             const paid = referral.payments.reduce((sum, payment) => sum + payment.amount, 0);
             const paidThisMonth = referral.payments
@@ -218,7 +222,7 @@ export function calculateDiscountPartnerTotals(
                 .reduce((sum, payment) => sum + payment.amount, 0);
 
             const referralOutstanding = referral.quoteTotal != null ? Math.max(0, referral.quoteTotal - paid) : 0;
-            const inProgress = !settled && !completed;
+            const inProgress = !settled && !completed && !lost;
             const completedOutstanding = completed ? referralOutstanding : 0;
             const settledPaid = settled ? paid : 0;
             const settledPaidThisMonth = settled ? paidThisMonth : 0;
@@ -234,6 +238,9 @@ export function calculateDiscountPartnerTotals(
                 totalSettled: totals.totalSettled + (settled ? 1 : 0),
                 settledThisMonth: totals.settledThisMonth + (settled && isInCalendarMonth(referral.settledAt, now) ? 1 : 0),
                 settledLastMonth: totals.settledLastMonth + (settled && isInCalendarMonth(referral.settledAt, now, 1) ? 1 : 0),
+                totalLost: totals.totalLost + (lost ? 1 : 0),
+                lostThisMonth: totals.lostThisMonth + (lost && isInCalendarMonth(referral.createdAt, now) ? 1 : 0),
+                lostLastMonth: totals.lostLastMonth + (lost && isInCalendarMonth(referral.createdAt, now, 1) ? 1 : 0),
                 totalQuoted: roundMoney(totals.totalQuoted + (quoted ? referral.quoteTotal! : 0)),
                 quotedThisMonth: roundMoney(totals.quotedThisMonth + (quoted && isInCalendarMonth(referral.quoteDate, now) ? referral.quoteTotal! : 0)),
                 quotedLastMonth: roundMoney(totals.quotedLastMonth + (quoted && isInCalendarMonth(referral.quoteDate, now, 1) ? referral.quoteTotal! : 0)),
@@ -264,6 +271,9 @@ export function calculateDiscountPartnerTotals(
             totalSettled: 0,
             settledThisMonth: 0,
             settledLastMonth: 0,
+            totalLost: 0,
+            lostThisMonth: 0,
+            lostLastMonth: 0,
             totalQuoted: 0,
             quotedThisMonth: 0,
             quotedLastMonth: 0,

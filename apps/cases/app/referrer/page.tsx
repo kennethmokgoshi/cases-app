@@ -116,6 +116,9 @@ type DiscountPartnerSummary = {
     totalSettled: number;
     settledThisMonth: number;
     settledLastMonth: number;
+    totalLost: number;
+    lostThisMonth: number;
+    lostLastMonth: number;
     totalQuoted: number;
     quotedThisMonth: number;
     quotedLastMonth: number;
@@ -267,6 +270,9 @@ type ReferralFilterId =
     | 'settled'
     | 'settled-this-month'
     | 'settled-last-month'
+    | 'lost'
+    | 'lost-this-month'
+    | 'lost-last-month'
     | 'not-quoted'
     | 'quoted'
     | 'quoted-this-month'
@@ -300,6 +306,9 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'settled': { label: 'Settled', matches: (row) => row.statusTone === 'settled' },
     'settled-this-month': { label: 'Settled this month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 0) },
     'settled-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
+    'lost': { label: 'Lost', matches: (row) => row.statusTone === 'lost' },
+    'lost-this-month': { label: 'Lost this month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 0) },
+    'lost-last-month': { label: 'Lost last month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 1) },
     'not-quoted': { label: 'Not Quoted', matches: (row) => !row.quoteStatuses || row.quoteStatuses.length === 0 },
     'quoted': { label: 'Quoted', matches: (row) => row.quoteStatuses && row.quoteStatuses.length > 0 },
     'quoted-this-month': { label: 'Quoted this month', matches: (row) => row.quoteTotal != null && row.quoteTotal > 0 && isInCalendarMonth(row.quoteDate, 0) },
@@ -313,9 +322,9 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'settled-paid': { label: 'Settled Amount', matches: (row) => row.statusTone === 'settled' && row.totalPaid > 0 },
     'settled-paid-this-month': { label: 'Settled Paid this month', matches: (row) => row.statusTone === 'settled' && row.paidThisMonth > 0 },
     'settled-paid-last-month': { label: 'Settled Paid last month', matches: (row) => row.statusTone === 'settled' && row.paidLastMonth > 0 },
-    'in-progress': { label: 'In progress', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' },
-    'in-progress-this-month': { label: 'In progress this month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && isInCalendarMonth(row.createdAt, 0) },
-    'in-progress-last-month': { label: 'In progress last month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && isInCalendarMonth(row.createdAt, 1) },
+    'in-progress': { label: 'In progress', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' },
+    'in-progress-this-month': { label: 'In progress this month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' && isInCalendarMonth(row.createdAt, 0) },
+    'in-progress-last-month': { label: 'In progress last month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' && isInCalendarMonth(row.createdAt, 1) },
     'completed-outstanding': { label: 'Outstanding Balance (Completed files)', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 },
     'completed-outstanding-this-month': { label: 'Outstanding Balance (Completed files) this month', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 0) },
     'completed-outstanding-last-month': { label: 'Outstanding Balance (Completed files) last month', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 1) },
@@ -1012,6 +1021,22 @@ export default function ReferrerPortalPage() {
                         delta: discountSummary.settledThisMonth - discountSummary.settledLastMonth,
                     },
                     { id: 'settled-last-month', label: calendarMonthName(1), value: discountSummary.settledLastMonth },
+                ],
+            },
+            {
+                title: 'Lost',
+                caption: 'Withdrawn or cancelled',
+                accentText: 'text-slate-400',
+                accentBar: 'bg-slate-500',
+                stats: [
+                    { id: 'lost', label: 'All time', value: discountSummary.totalLost },
+                    {
+                        id: 'lost-this-month',
+                        label: calendarMonthName(0),
+                        value: discountSummary.lostThisMonth,
+                        delta: discountSummary.lostThisMonth - discountSummary.lostLastMonth,
+                    },
+                    { id: 'lost-last-month', label: calendarMonthName(1), value: discountSummary.lostLastMonth },
                 ],
             },
         ]

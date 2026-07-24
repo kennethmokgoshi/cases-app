@@ -129,9 +129,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             totalCases: cases.length,
             settled: cases.filter((c) => portalStatusTone(c.status) === 'settled').length,
             completed: cases.filter((c) => portalStatusTone(c.status) === 'completed').length,
+            lost: cases.filter((c) => portalStatusTone(c.status) === 'lost').length,
             inProgress: cases.filter((c) => {
                 const tone = portalStatusTone(c.status);
-                return tone !== 'settled' && tone !== 'completed';
+                return tone !== 'settled' && tone !== 'completed' && tone !== 'lost';
             }).length,
             inArrears: withCommission.filter((c) => ARREARS_STAGES.has(c.commission!.stage)).length,
             newThisMonth: cases.filter((c) => c.createdAt >= monthStart).length,

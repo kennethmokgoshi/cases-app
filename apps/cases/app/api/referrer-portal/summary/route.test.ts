@@ -217,6 +217,9 @@ describe('GET /api/referrer-portal/summary', () => {
                 totalSettled: 1,           // case-a — workflow status SETTLED_SUCCESS
                 settledThisMonth: 1,
                 settledLastMonth: 0,
+                totalLost: 0,
+                lostThisMonth: 0,
+                lostLastMonth: 0,
                 totalQuoted: 8000,         // 5000 service fee + 3000 accepted quote
                 quotedThisMonth: 5000,     // only case-a's fee basis dates to July
                 quotedLastMonth: 0,

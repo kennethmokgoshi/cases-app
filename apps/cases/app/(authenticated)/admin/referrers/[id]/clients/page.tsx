@@ -13,6 +13,7 @@ type ReferralFilterId =
     | 'in-progress'
     | 'completed'
     | 'settled'
+    | 'lost'
     | 'total-cases'
     | 'new-this-month'
     | 'converted'
@@ -85,15 +86,16 @@ const REFERRAL_FILTERS: Record<Exclude<ReferralFilterId, ''>, { label: string; m
     'clients': { label: 'Clients', matches: () => true },
     'in-progress': { label: 'In Progress', matches: (row) => {
         const tone = portalStatusTone(row.caseStatus);
-        return tone !== 'settled' && tone !== 'completed';
+        return tone !== 'settled' && tone !== 'completed' && tone !== 'lost';
     }},
     'completed': { label: 'Completed', matches: (row) => portalStatusTone(row.caseStatus) === 'completed' },
     'settled': { label: 'Settled', matches: (row) => portalStatusTone(row.caseStatus) === 'settled' },
+    'lost': { label: 'Lost', matches: (row) => portalStatusTone(row.caseStatus) === 'lost' },
     'total-cases': { label: 'Total Cases', matches: () => true },
     'new-this-month': { label: 'New This Month', matches: (row) => isInCalendarMonth(row.referredAt, 0) },
     'converted': { label: 'Converted', matches: (row) => row.commission != null && CONVERTED_STAGES.has(row.commission.stage) },
     'in-arrears': { label: 'In Arrears', matches: (row) => row.commission != null && ARREARS_STAGES.has(row.commission.stage) },
-    
+
     // money filters
     'quoted': { label: 'Quoted', matches: (row) => row.financials.quoteTotal != null && row.financials.quoteTotal > 0 },
     'expected-revenue': { label: 'Expected Revenue', matches: (row) => {
@@ -159,6 +161,7 @@ type DashboardData = {
         totalClients: number;
         totalCases: number;
         settled: number;
+        lost: number;
         inArrears: number;
         newThisMonth: number;
         eligible: number;
@@ -345,12 +348,13 @@ export default function ReferrerClientsDashboardPage() {
 
             {/* Stat cards — pipeline row */}
             <div className="space-y-4 mb-6">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                     {[
                         { id: 'clients' as ReferralFilterId, label: 'Clients', value: summary.totalClients, color: 'text-white', border: 'border-l-4 border-l-cyan-400' },
                         { id: 'in-progress' as ReferralFilterId, label: 'In Progress', value: summary.inProgress, color: 'text-sky-300', border: 'border-l-4 border-l-sky-400' },
                         { id: 'completed' as ReferralFilterId, label: 'Completed', value: summary.completed, color: 'text-yellow-300', border: 'border-l-4 border-l-yellow-400' },
                         { id: 'settled' as ReferralFilterId, label: 'Settled', value: summary.settled, color: 'text-emerald-400', border: 'border-l-4 border-l-emerald-400' },
+                        { id: 'lost' as ReferralFilterId, label: 'Lost', value: summary.lost, color: 'text-slate-400', border: 'border-l-4 border-l-slate-500' },
                     ].map((s) => {
                         const active = filterId === s.id;
                         return (
