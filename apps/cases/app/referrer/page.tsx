@@ -960,12 +960,14 @@ export default function ReferrerPortalPage() {
 
     // Monthly scoreboard for referrers: every stat is clickable and
     // filters the tracking table to the files behind the number.
+    // Merged groups: In Progress includes Settled Not Completed; Completed includes Both Settled & Completed
     const discountGroups: {
         title: string;
         caption: string;
         accentText: string;
         accentBar: string;
         stats: { id: ReferralFilterId; label: string; value: number; delta?: number }[];
+        breakdown?: { label: string; count: number; subtext?: string }[];
     }[] | null = discountSummary
         ? [
             {
@@ -985,68 +987,52 @@ export default function ReferrerPortalPage() {
                 ],
             },
             {
-                title: 'In Progress',
-                caption: 'Active pipeline being processed',
+                title: 'Work Pipeline',
+                caption: 'Cases being worked or awaiting work',
                 accentText: 'text-sky-300',
                 accentBar: 'bg-sky-400',
                 stats: [
-                    { id: 'in-progress', label: 'All time', value: discountSummary.totalInProgress },
+                    {
+                        id: 'in-progress',
+                        label: 'All time',
+                        value: discountSummary.totalInProgress + discountSummary.totalSettledNotCompleted
+                    },
                     {
                         id: 'in-progress-this-month',
                         label: calendarMonthName(0),
-                        value: discountSummary.inProgressThisMonth,
-                        delta: discountSummary.inProgressThisMonth - discountSummary.inProgressLastMonth,
+                        value: discountSummary.inProgressThisMonth + discountSummary.settledNotCompletedThisMonth,
+                        delta: (discountSummary.inProgressThisMonth + discountSummary.settledNotCompletedThisMonth) - (discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth),
                     },
-                    { id: 'in-progress-last-month', label: calendarMonthName(1), value: discountSummary.inProgressLastMonth },
+                    { id: 'in-progress-last-month', label: calendarMonthName(1), value: discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth },
                 ],
+                breakdown: [
+                    { label: 'In Progress', count: discountSummary.totalInProgress, subtext: 'being worked' },
+                    { label: 'Paid Upfront', count: discountSummary.totalSettledNotCompleted, subtext: 'awaiting work' },
+                ]
             },
             {
-                title: 'Settled',
-                caption: 'Paid upfront — work still ongoing',
-                accentText: 'text-teal-300',
-                accentBar: 'bg-teal-400',
-                stats: [
-                    { id: 'settled-not-completed', label: 'All time', value: discountSummary.totalSettledNotCompleted },
-                    {
-                        id: 'settled-not-completed-this-month',
-                        label: calendarMonthName(0),
-                        value: discountSummary.settledNotCompletedThisMonth,
-                        delta: discountSummary.settledNotCompletedThisMonth - discountSummary.settledNotCompletedLastMonth,
-                    },
-                    { id: 'settled-not-completed-last-month', label: calendarMonthName(1), value: discountSummary.settledNotCompletedLastMonth },
-                ],
-            },
-            {
-                title: 'Completed',
-                caption: 'Job done — payment still outstanding',
-                accentText: 'text-yellow-300',
-                accentBar: 'bg-yellow-400',
-                stats: [
-                    { id: 'completed-not-settled', label: 'All time', value: discountSummary.totalCompletedNotSettled },
-                    {
-                        id: 'completed-not-settled-this-month',
-                        label: calendarMonthName(0),
-                        value: discountSummary.completedNotSettledThisMonth,
-                        delta: discountSummary.completedNotSettledThisMonth - discountSummary.completedNotSettledLastMonth,
-                    },
-                    { id: 'completed-not-settled-last-month', label: calendarMonthName(1), value: discountSummary.completedNotSettledLastMonth },
-                ],
-            },
-            {
-                title: 'Both Settled & Completed',
-                caption: 'Done, dusted, and fully paid',
+                title: 'Completed Work',
+                caption: 'Work done with payment status',
                 accentText: 'text-emerald-300',
                 accentBar: 'bg-emerald-400',
                 stats: [
-                    { id: 'both-settled-and-completed', label: 'All time', value: discountSummary.totalBothSettledAndCompleted },
                     {
-                        id: 'both-settled-and-completed-this-month',
-                        label: calendarMonthName(0),
-                        value: discountSummary.bothSettledAndCompletedThisMonth,
-                        delta: discountSummary.bothSettledAndCompletedThisMonth - discountSummary.bothSettledAndCompletedLastMonth,
+                        id: 'completed-not-settled',
+                        label: 'All time',
+                        value: discountSummary.totalCompletedNotSettled + discountSummary.totalBothSettledAndCompleted
                     },
-                    { id: 'both-settled-and-completed-last-month', label: calendarMonthName(1), value: discountSummary.bothSettledAndCompletedLastMonth },
+                    {
+                        id: 'completed-not-settled-this-month',
+                        label: calendarMonthName(0),
+                        value: discountSummary.completedNotSettledThisMonth + discountSummary.bothSettledAndCompletedThisMonth,
+                        delta: (discountSummary.completedNotSettledThisMonth + discountSummary.bothSettledAndCompletedThisMonth) - (discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth),
+                    },
+                    { id: 'completed-not-settled-last-month', label: calendarMonthName(1), value: discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth },
                 ],
+                breakdown: [
+                    { label: 'Awaiting Payment', count: discountSummary.totalCompletedNotSettled, subtext: 'invoice outstanding' },
+                    { label: 'Fully Paid', count: discountSummary.totalBothSettledAndCompleted, subtext: 'settled & completed' },
+                ]
             },
             {
                 title: 'Lost',
@@ -1256,7 +1242,7 @@ export default function ReferrerPortalPage() {
                 )}
 
                 {discountGroups && (
-                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {discountGroups.map((group) => (
                             <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
                                 <div className={`h-1 ${group.accentBar}`} />
@@ -1287,6 +1273,16 @@ export default function ReferrerPortalPage() {
                                         </button>
                                     ))}
                                 </div>
+                                {group.breakdown && (
+                                    <div className="border-t border-white/10 px-3 py-2 text-xs text-slate-400">
+                                        {group.breakdown.map((item) => (
+                                            <div key={item.label} className="flex justify-between py-1">
+                                                <span>{item.label}</span>
+                                                <span className="text-white">{item.count} {item.subtext ? `(${item.subtext})` : ''}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </section>
