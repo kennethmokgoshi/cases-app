@@ -1256,7 +1256,7 @@ export default function ReferrerPortalPage() {
                 )}
 
                 {discountGroups && (
-                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         {discountGroups.map((group) => (
                             <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
                                 <div className={`h-1 ${group.accentBar}`} />
