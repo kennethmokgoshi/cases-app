@@ -180,20 +180,7 @@ USER nextjs
 
 EXPOSE 3000
 
-# Set port based on which app (determined at build time from APP arg)
-RUN case "$APP" in \
-    reporting) echo "PORT=3008" > /app-port.env ;; \
-    insurance) echo "PORT=3001" > /app-port.env ;; \
-    legal) echo "PORT=3002" > /app-port.env ;; \
-    forensic-audit) echo "PORT=3003" > /app-port.env ;; \
-    finance) echo "PORT=3004" > /app-port.env ;; \
-    crediva) echo "PORT=3005" > /app-port.env ;; \
-    website) echo "PORT=3006" > /app-port.env ;; \
-    *) echo "PORT=3000" > /app-port.env ;; \
-    esac
-
+ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
-ENV APP_NAME=${APP}
 
-# Runtime: source port config, run migrations, start the app
-CMD . /app-port.env && prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP_NAME}/server.js
+CMD prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP_NAME}/server.js
