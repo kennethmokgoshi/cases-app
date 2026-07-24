@@ -15,8 +15,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Standalone output requires symlinks, which fail with EPERM on Windows host builds
-  output: process.platform === 'win32' ? undefined : 'standalone',
+  output: 'standalone',
   transpilePackages: ['@zenowethu/ui', '@zenowethu/shared-lib'],
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
   turbopack: {
