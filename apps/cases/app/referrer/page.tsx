@@ -1043,7 +1043,7 @@ export default function ReferrerPortalPage() {
         : null;
 
     // Quotes stats card — shown only for discount referrers who receive quotes
-    const notQuotedCount = referrals.filter((r) => r.quoteTotal == null || r.quoteTotal === 0).length;
+    const notQuotedCount = referrals.filter((r) => !r.quoteStatuses || r.quoteStatuses.length === 0).length;
     const quotesStatCards: { id: ReferralFilterId; label: string; value: string; accent: string; accentBar: string; caption: string }[] | null =
         isDiscountReferrer && quoteStats
             ? [
@@ -1231,7 +1231,7 @@ export default function ReferrerPortalPage() {
                 )}
 
                 {discountGroups && (
-                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                         {discountGroups.map((group) => (
                             <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
                                 <div className={`h-1 ${group.accentBar}`} />
