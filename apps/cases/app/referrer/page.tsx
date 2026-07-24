@@ -1475,14 +1475,23 @@ export default function ReferrerPortalPage() {
                                                             : <span className="text-slate-500">—</span>}
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 py-3">
-                                                        {referral.quoteTotal != null && referral.quoteTotal > 0 ? (
-                                                            (() => {
-                                                                const balance = referral.quoteTotal - referral.totalPaid;
-                                                                const isOverpaid = balance < 0;
-                                                                const textColor = isOverpaid ? 'text-emerald-300' : balance > 0 ? 'text-rose-400' : 'text-slate-500';
-                                                                return <span className={textColor}>{isOverpaid ? '-' : ''}{formatMoney(Math.abs(balance))}</span>;
-                                                            })()
-                                                        ) : <span className="text-slate-500">—</span>}
+                                                        {(() => {
+                                                            const quote = referral.quoteTotal ?? 0;
+                                                            const paid = referral.totalPaid ?? 0;
+                                                            const balance = quote - paid;
+
+                                                            // Show balance if: has quote OR has payment
+                                                            if (quote > 0 || paid > 0) {
+                                                                const isCredit = balance < 0;
+                                                                const textColor = isCredit ? 'text-emerald-300' : balance > 0 ? 'text-rose-400' : 'text-slate-500';
+                                                                return (
+                                                                    <span className={textColor}>
+                                                                        {isCredit ? '−' : ''}{formatMoney(Math.abs(balance))}
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return <span className="text-slate-500">—</span>;
+                                                        })()}
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.createdAt)}</td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.lastUpdatedAt)}</td>
