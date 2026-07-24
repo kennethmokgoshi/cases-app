@@ -957,6 +957,8 @@ export default function ReferrerPortalPage() {
         accentText: string;
         accentBar: string;
         stats: { id: ReferralFilterId; label: string; value: number; delta?: number }[];
+        isComposite?: boolean;
+        breakdown?: { title: string; accentText: string; stats: { id: ReferralFilterId; label: string; value: number }[] }[];
     }[] | null = discountSummary
         ? [
             {
@@ -993,9 +995,10 @@ export default function ReferrerPortalPage() {
             },
             {
                 title: 'Completed',
-                caption: 'Job done — payment still outstanding',
+                caption: 'Job done — includes paid and outstanding',
                 accentText: 'text-yellow-300',
                 accentBar: 'bg-yellow-400',
+                isComposite: true,
                 stats: [
                     { id: 'completed', label: 'All time', value: discountSummary.totalCompleted },
                     {
@@ -1006,21 +1009,33 @@ export default function ReferrerPortalPage() {
                     },
                     { id: 'completed-last-month', label: calendarMonthName(1), value: discountSummary.completedLastMonth },
                 ],
-            },
-            {
-                title: 'Settled',
-                caption: 'Done, dusted, and fully paid',
-                accentText: 'text-emerald-300',
-                accentBar: 'bg-emerald-400',
-                stats: [
-                    { id: 'settled', label: 'All time', value: discountSummary.totalSettled },
+                breakdown: [
                     {
-                        id: 'settled-this-month',
-                        label: calendarMonthName(0),
-                        value: discountSummary.settledThisMonth,
-                        delta: discountSummary.settledThisMonth - discountSummary.settledLastMonth,
+                        title: 'Not Settled',
+                        accentText: 'text-yellow-400',
+                        stats: [
+                            { id: 'completed-outstanding', label: 'All time', value: discountSummary.totalCompleted - discountSummary.totalSettled },
+                            {
+                                id: 'completed-outstanding-this-month',
+                                label: calendarMonthName(0),
+                                value: discountSummary.completedOutstandingThisMonth > 0 ? Math.floor(discountSummary.completedThisMonth - (discountSummary.settledThisMonth ?? 0)) : 0,
+                            },
+                            { id: 'completed-outstanding-last-month', label: calendarMonthName(1), value: discountSummary.completedLastMonth - discountSummary.settledLastMonth },
+                        ],
                     },
-                    { id: 'settled-last-month', label: calendarMonthName(1), value: discountSummary.settledLastMonth },
+                    {
+                        title: 'Settled',
+                        accentText: 'text-emerald-400',
+                        stats: [
+                            { id: 'settled', label: 'All time', value: discountSummary.totalSettled },
+                            {
+                                id: 'settled-this-month',
+                                label: calendarMonthName(0),
+                                value: discountSummary.settledThisMonth,
+                            },
+                            { id: 'settled-last-month', label: calendarMonthName(1), value: discountSummary.settledLastMonth },
+                        ],
+                    },
                 ],
             },
             {
@@ -1232,36 +1247,86 @@ export default function ReferrerPortalPage() {
 
                 {discountGroups && (
                     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                        {discountGroups.map((group) => (
-                            <div key={group.title} className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
+                        {discountGroups.map((group: any) => (
+                            <div key={group.title} className={`overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] ${group.isComposite ? 'lg:col-span-2' : ''}`}>
                                 <div className={`h-1 ${group.accentBar}`} />
                                 <div className="px-4 pb-2 pt-3">
                                     <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${group.accentText}`}>{group.title}</p>
                                     <p className="mt-0.5 text-[11px] text-slate-400">{group.caption}</p>
                                 </div>
-                                <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
-                                    {group.stats.map((stat) => (
-                                        <button
-                                            key={stat.id}
-                                            type="button"
-                                            onClick={() => toggleReferralFilter(stat.id)}
-                                            title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
-                                            className={`px-3 py-3 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === stat.id ? 'bg-white/[0.08]' : ''}`}
-                                        >
-                                            <p className="text-[11px] uppercase tracking-wide text-slate-400">{stat.label}</p>
-                                            <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
-                                            {stat.delta != null && (
-                                                <p className={`mt-1 text-[11px] font-medium ${stat.delta > 0 ? 'text-emerald-300' : stat.delta < 0 ? 'text-orange-300' : 'text-slate-400'}`}>
-                                                    {stat.delta > 0
-                                                        ? `▲ ${stat.delta} up on last month`
-                                                        : stat.delta < 0
-                                                            ? `▼ ${Math.abs(stat.delta)} down on last month`
-                                                            : 'Level with last month'}
-                                                </p>
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
+
+                                {!group.isComposite ? (
+                                    <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
+                                        {group.stats.map((stat: any) => (
+                                            <button
+                                                key={stat.id}
+                                                type="button"
+                                                onClick={() => toggleReferralFilter(stat.id)}
+                                                title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
+                                                className={`px-3 py-3 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === stat.id ? 'bg-white/[0.08]' : ''}`}
+                                            >
+                                                <p className="text-[11px] uppercase tracking-wide text-slate-400">{stat.label}</p>
+                                                <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
+                                                {stat.delta != null && (
+                                                    <p className={`mt-1 text-[11px] font-medium ${stat.delta > 0 ? 'text-emerald-300' : stat.delta < 0 ? 'text-orange-300' : 'text-slate-400'}`}>
+                                                        {stat.delta > 0
+                                                            ? `▲ ${stat.delta} up on last month`
+                                                            : stat.delta < 0
+                                                                ? `▼ ${Math.abs(stat.delta)} down on last month`
+                                                                : 'Level with last month'}
+                                                    </p>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
+                                            {group.stats.map((stat: any) => (
+                                                <button
+                                                    key={stat.id}
+                                                    type="button"
+                                                    onClick={() => toggleReferralFilter(stat.id)}
+                                                    title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
+                                                    className={`px-3 py-3 text-left transition-colors hover:bg-white/[0.07] ${referralFilter === stat.id ? 'bg-white/[0.08]' : ''}`}
+                                                >
+                                                    <p className="text-[11px] uppercase tracking-wide text-slate-400">{stat.label}</p>
+                                                    <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
+                                                    {stat.delta != null && (
+                                                        <p className={`mt-1 text-[11px] font-medium ${stat.delta > 0 ? 'text-emerald-300' : stat.delta < 0 ? 'text-orange-300' : 'text-slate-400'}`}>
+                                                            {stat.delta > 0
+                                                                ? `▲ ${stat.delta} up on last month`
+                                                                : stat.delta < 0
+                                                                    ? `▼ ${Math.abs(stat.delta)} down on last month`
+                                                                    : 'Level with last month'}
+                                                        </p>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="grid grid-cols-2 divide-x divide-white/10 border-t border-white/10">
+                                            {group.breakdown?.map((section: any) => (
+                                                <div key={section.title} className="px-3 py-3">
+                                                    <p className={`text-xs font-semibold uppercase tracking-wide ${section.accentText}`}>{section.title}</p>
+                                                    <div className="mt-2 space-y-1.5">
+                                                        {section.stats.map((stat: any) => (
+                                                            <button
+                                                                key={stat.id}
+                                                                type="button"
+                                                                onClick={() => toggleReferralFilter(stat.id)}
+                                                                title={`Show files: ${REFERRAL_FILTERS[stat.id].label}`}
+                                                                className="w-full text-left transition-colors hover:bg-white/[0.07] rounded px-1.5 py-1"
+                                                            >
+                                                                <p className="text-[10px] text-slate-400">{stat.label}</p>
+                                                                <p className="text-lg font-semibold text-white">{stat.value}</p>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         ))}
                     </section>
