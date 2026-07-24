@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { signOut, useSession, confirm, toast } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
+import { CreditTransferModal } from './CreditTransferModal';
 
 type ReferrerProfile = {
     id: string;
@@ -466,6 +467,10 @@ export default function ReferrerPortalPage() {
     // Feedback Request state
     const [feedbackRequestSubmitting, setFeedbackRequestSubmitting] = useState(false);
     const [quoteRequestSubmitting, setQuoteRequestSubmitting] = useState(false);
+
+    // Credit Transfer state
+    const [showCreditTransferModal, setShowCreditTransferModal] = useState(false);
+    const [creditTransferSourceCase, setCreditTransferSourceCase] = useState<ReferralRow | null>(null);
 
     async function handleMissingClientSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -1474,24 +1479,48 @@ export default function ReferrerPortalPage() {
                                                             ? <span className="text-emerald-300">{formatMoney(referral.totalPaid)}</span>
                                                             : <span className="text-slate-500">—</span>}
                                                     </td>
-                                                    <td className="whitespace-nowrap px-4 py-3">
-                                                        {(() => {
-                                                            const quote = referral.quoteTotal ?? 0;
-                                                            const paid = referral.totalPaid ?? 0;
-                                                            const balance = quote - paid;
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            {(() => {
+                                                                const quote = referral.quoteTotal ?? 0;
+                                                                const paid = referral.totalPaid ?? 0;
+                                                                const balance = quote - paid;
 
-                                                            // Show balance if: has quote OR has payment
-                                                            if (quote > 0 || paid > 0) {
-                                                                const isCredit = balance < 0;
-                                                                const textColor = isCredit ? 'text-emerald-300' : balance > 0 ? 'text-rose-400' : 'text-slate-500';
-                                                                return (
-                                                                    <span className={textColor}>
-                                                                        {isCredit ? '−' : ''}{formatMoney(Math.abs(balance))}
-                                                                    </span>
-                                                                );
-                                                            }
-                                                            return <span className="text-slate-500">—</span>;
-                                                        })()}
+                                                                // Show balance if: has quote OR has payment
+                                                                if (quote > 0 || paid > 0) {
+                                                                    const isCredit = balance < 0;
+                                                                    const textColor = isCredit ? 'text-emerald-300' : balance > 0 ? 'text-rose-400' : 'text-slate-500';
+                                                                    return (
+                                                                        <span className={textColor}>
+                                                                            {isCredit ? '−' : ''}{formatMoney(Math.abs(balance))}
+                                                                        </span>
+                                                                    );
+                                                                }
+                                                                return <span className="text-slate-500">—</span>;
+                                                            })()}
+                                                            {(() => {
+                                                                const quote = referral.quoteTotal ?? 0;
+                                                                const paid = referral.totalPaid ?? 0;
+                                                                const balance = quote - paid;
+                                                                // Show transfer button if there's a credit (negative balance)
+                                                                if (balance < 0) {
+                                                                    return (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setCreditTransferSourceCase(referral);
+                                                                                setShowCreditTransferModal(true);
+                                                                            }}
+                                                                            className="whitespace-nowrap rounded px-2 py-1 text-xs font-medium text-cyan-300 hover:bg-cyan-300/10"
+                                                                            title="Transfer this credit to another case"
+                                                                        >
+                                                                            Transfer
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </div>
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.createdAt)}</td>
                                                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">{formatDate(referral.lastUpdatedAt)}</td>
@@ -2524,6 +2553,14 @@ export default function ReferrerPortalPage() {
                     </div>
                 </div>
             )}
+
+            <CreditTransferModal
+                isOpen={showCreditTransferModal}
+                sourceCase={creditTransferSourceCase}
+                allCases={referrals}
+                onClose={() => setShowCreditTransferModal(false)}
+                onSuccess={() => void loadPortal()}
+            />
         </main>
     );
 }
