@@ -1010,12 +1010,12 @@ export default function ReferrerPortalPage() {
                         value: discountSummary.totalInProgress + discountSummary.totalSettledNotCompleted
                     },
                     {
-                        id: 'work-pipeline' as ReferralFilterId,
+                        id: 'in-progress-this-month' as ReferralFilterId,
                         label: calendarMonthName(0),
                         value: discountSummary.inProgressThisMonth + discountSummary.settledNotCompletedThisMonth,
                         delta: (discountSummary.inProgressThisMonth + discountSummary.settledNotCompletedThisMonth) - (discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth),
                     },
-                    { id: 'work-pipeline' as ReferralFilterId, label: calendarMonthName(1), value: discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth },
+                    { id: 'in-progress-last-month' as ReferralFilterId, label: calendarMonthName(1), value: discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth },
                 ],
                 breakdown: [
                     { label: 'In Progress', count: discountSummary.totalInProgress, subtext: 'being worked' },
@@ -1034,12 +1034,12 @@ export default function ReferrerPortalPage() {
                         value: discountSummary.totalCompletedNotSettled + discountSummary.totalBothSettledAndCompleted
                     },
                     {
-                        id: 'completed-work' as ReferralFilterId,
+                        id: 'completed-not-settled-this-month' as ReferralFilterId,
                         label: calendarMonthName(0),
                         value: discountSummary.completedNotSettledThisMonth + discountSummary.bothSettledAndCompletedThisMonth,
                         delta: (discountSummary.completedNotSettledThisMonth + discountSummary.bothSettledAndCompletedThisMonth) - (discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth),
                     },
-                    { id: 'completed-work' as ReferralFilterId, label: calendarMonthName(1), value: discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth },
+                    { id: 'completed-not-settled-last-month' as ReferralFilterId, label: calendarMonthName(1), value: discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth },
                 ],
                 breakdown: [
                     { label: 'Awaiting Payment', count: discountSummary.totalCompletedNotSettled, subtext: 'invoice outstanding' },
