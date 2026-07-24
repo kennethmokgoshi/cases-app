@@ -80,18 +80,6 @@ export async function POST(request: Request) {
                 },
             });
 
-            // Create a payment record on destination case to reflect the credit
-            await tx.payment.create({
-                data: {
-                    caseId: toCaseId,
-                    amount,
-                    status: 'COMPLETED',
-                    date: new Date(),
-                    notes: `Credit transfer from ${fromCase.fileNumber} (Ref ID: ${creditTransfer.id})`,
-                    recordedById: access.sessionUserId,
-                },
-            });
-
             return creditTransfer;
         });
 
