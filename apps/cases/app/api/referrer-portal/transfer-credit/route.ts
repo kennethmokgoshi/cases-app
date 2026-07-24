@@ -53,14 +53,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Cases must belong to your referral network' }, { status: 403 });
         }
 
-        // Verify source case has sufficient credit (totalPaid >= amount being transferred)
-        if (!fromCase.totalPaid || fromCase.totalPaid < amount) {
-            return NextResponse.json({
-                error: 'Insufficient credit available',
-                available: fromCase.totalPaid ?? 0,
-            }, { status: 400 });
-        }
-
         // Verify source and destination are different
         if (fromCaseId === toCaseId) {
             return NextResponse.json({ error: 'Source and destination must be different cases' }, { status: 400 });
