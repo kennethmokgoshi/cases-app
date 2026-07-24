@@ -245,6 +245,8 @@ export async function GET() {
                     referralStatus: portalStageLabel(referral.status),
                     statusTone: portalStatusTone(referral.status),
                     caseStatus: referral.status,
+                    isCompleted: referral.isCompleted,
+                    isSettled: referral.isSettled,
                     createdAt: referral.createdAt,
                     settledAt: milestones?.settledAt ?? null,
                     completedAt: milestones?.completedAt ?? null,

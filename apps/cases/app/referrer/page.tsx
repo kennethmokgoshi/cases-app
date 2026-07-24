@@ -30,6 +30,8 @@ type ReferralRow = {
     referralStatus: string;
     statusTone: PortalStatusTone;
     caseStatus: string;
+    isCompleted: boolean;
+    isSettled: boolean;
     createdAt: string;
     settledAt: string | null;
     completedAt: string | null;
@@ -318,18 +320,18 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'settled-not-completed': { label: 'Settled (not completed)', matches: (row) => row.statusTone === 'settled' },
     'settled-not-completed-this-month': { label: 'Settled this month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 0) },
     'settled-not-completed-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
-    'completed-not-settled': { label: 'Completed — payment outstanding', matches: (row) => row.statusTone === 'completed' },
-    'completed-not-settled-this-month': { label: 'Completed this month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 0) },
-    'completed-not-settled-last-month': { label: 'Completed last month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 1) },
-    'both-settled-and-completed': { label: 'Both settled and completed', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' },
-    'both-settled-and-completed-this-month': { label: 'Both settled and completed this month', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 0) },
-    'both-settled-and-completed-last-month': { label: 'Both settled and completed last month', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 1) },
+    'completed-not-settled': { label: 'Completed — payment outstanding', matches: (row) => row.isCompleted && !row.isSettled },
+    'completed-not-settled-this-month': { label: 'Completed this month', matches: (row) => row.isCompleted && !row.isSettled && isInCalendarMonth(row.completedAt, 0) },
+    'completed-not-settled-last-month': { label: 'Completed last month', matches: (row) => row.isCompleted && !row.isSettled && isInCalendarMonth(row.completedAt, 1) },
+    'both-settled-and-completed': { label: 'Both settled and completed', matches: (row) => row.isCompleted && row.isSettled },
+    'both-settled-and-completed-this-month': { label: 'Both settled and completed this month', matches: (row) => row.isCompleted && row.isSettled && isInCalendarMonth(row.completedAt, 0) },
+    'both-settled-and-completed-last-month': { label: 'Both settled and completed last month', matches: (row) => row.isCompleted && row.isSettled && isInCalendarMonth(row.completedAt, 1) },
     'work-pipeline': { label: 'Work Pipeline', matches: (row) => row.statusTone === 'progress' || row.statusTone === 'detour' || row.statusTone === 'attention' || row.statusTone === 'neutral' },
     'work-pipeline-in-progress': { label: 'In Progress (being worked)', matches: (row) => row.statusTone === 'progress' || row.statusTone === 'detour' || row.statusTone === 'attention' || row.statusTone === 'neutral' },
     'work-pipeline-settled': { label: 'Settled (awaiting work)', matches: (row) => row.statusTone === 'settled' },
-    'completed-work': { label: 'Completed Work', matches: (row) => row.statusTone === 'completed' },
-    'completed-work-outstanding': { label: 'Awaiting Payment', matches: (row) => row.statusTone === 'completed' },
-    'completed-work-paid': { label: 'Fully Paid', matches: (row) => row.statusTone === 'settled' },
+    'completed-work': { label: 'Completed Work', matches: (row) => row.isCompleted },
+    'completed-work-outstanding': { label: 'Awaiting Payment', matches: (row) => row.isCompleted && !row.isSettled },
+    'completed-work-paid': { label: 'Fully Paid', matches: (row) => row.isCompleted && row.isSettled },
     'lost': { label: 'Lost', matches: (row) => row.statusTone === 'lost' },
     'lost-this-month': { label: 'Lost this month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 0) },
     'lost-last-month': { label: 'Lost last month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 1) },
