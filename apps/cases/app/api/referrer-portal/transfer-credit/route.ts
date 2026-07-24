@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
         // Fetch both cases with referrer check
         const [fromCase, toCase] = await Promise.all([
-            prisma.case.findUnique({ where: { id: fromCaseId }, select: { id: true, referrerId: true, totalPaid: true, fileNumber: true } }),
+            prisma.case.findUnique({ where: { id: fromCaseId }, select: { id: true, referrerId: true, fileNumber: true } }),
             prisma.case.findUnique({ where: { id: toCaseId }, select: { id: true, referrerId: true, fileNumber: true } }),
         ]);
 
