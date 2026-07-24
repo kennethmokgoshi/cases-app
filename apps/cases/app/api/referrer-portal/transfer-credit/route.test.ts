@@ -8,6 +8,11 @@ vi.mock('@/lib/referrer-portal-access', () => ({
     getCurrentReferrerPortalAccess: vi.fn(),
 }));
 
+vi.mock('@zenowethu/shared-lib', () => ({
+    createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+    auth: vi.fn(),
+}));
+
 vi.mock('@zenowethu/database', () => ({
     prisma: {
         case: {
@@ -28,12 +33,52 @@ vi.mock('@zenowethu/database', () => ({
 
 import { prisma } from '@zenowethu/database';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
+import { auth } from '@zenowethu/shared-lib';
 import { POST } from './route';
 
 describe('POST /api/referrer-portal/transfer-credit', () => {
     beforeEach(() => vi.clearAllMocks());
 
+    it('returns 401 when user is not authenticated', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(null);
+
+        const request = new Request('http://localhost/api/referrer-portal/transfer-credit', {
+            method: 'POST',
+            body: JSON.stringify({
+                fromCaseId: 'case-1',
+                toCaseId: 'case-2',
+                amount: 1000,
+            }),
+        });
+
+        const res = await POST(request);
+        expect(res.status).toBe(401);
+    });
+
+    it('returns 403 when user does not have required role (FINANCE, EXECUTIVE, ADMIN)', async () => {
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'REFERRER', email: 'user@example.com' },
+        } as never);
+
+        const request = new Request('http://localhost/api/referrer-portal/transfer-credit', {
+            method: 'POST',
+            body: JSON.stringify({
+                fromCaseId: 'case-1',
+                toCaseId: 'case-2',
+                amount: 1000,
+            }),
+        });
+
+        const res = await POST(request);
+        expect(res.status).toBe(403);
+        const json = await res.json();
+        expect(json.error).toContain('finance, executive, and admin');
+    });
+
     it('returns 403 when user is not linked to a referrer', async () => {
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'FINANCE', email: 'user@example.com' },
+        } as never);
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: false,
             status: 403,
@@ -54,6 +99,9 @@ describe('POST /api/referrer-portal/transfer-credit', () => {
     });
 
     it('returns 400 for invalid request data', async () => {
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'FINANCE', email: 'user@example.com' },
+        } as never);
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: true,
             sessionUserId: 'user-1',
@@ -76,6 +124,9 @@ describe('POST /api/referrer-portal/transfer-credit', () => {
     });
 
     it('returns 404 when source or destination case not found', async () => {
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'FINANCE', email: 'user@example.com' },
+        } as never);
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: true,
             sessionUserId: 'user-1',
@@ -98,6 +149,9 @@ describe('POST /api/referrer-portal/transfer-credit', () => {
     });
 
     it('returns 403 when cases do not belong to referrer', async () => {
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'FINANCE', email: 'user@example.com' },
+        } as never);
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: true,
             sessionUserId: 'user-1',
@@ -131,6 +185,9 @@ describe('POST /api/referrer-portal/transfer-credit', () => {
     });
 
     it('returns 400 when source case has insufficient credit', async () => {
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'FINANCE', email: 'user@example.com' },
+        } as never);
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: true,
             sessionUserId: 'user-1',
@@ -166,6 +223,9 @@ describe('POST /api/referrer-portal/transfer-credit', () => {
     });
 
     it('returns 400 when source and destination are the same', async () => {
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'FINANCE', email: 'user@example.com' },
+        } as never);
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: true,
             sessionUserId: 'user-1',
@@ -216,6 +276,9 @@ describe('POST /api/referrer-portal/transfer-credit', () => {
             },
         };
 
+        vi.mocked(auth).mockResolvedValueOnce({
+            user: { role: 'FINANCE', email: 'user@example.com' },
+        } as never);
         vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
             ok: true,
             sessionUserId: 'user-1',

@@ -397,8 +397,12 @@ function nullableFormValue(value: string): string | null {
 
 export default function ReferrerPortalPage() {
     const router = useRouter();
-    const { status } = useSession();
+    const { status, data: session } = useSession();
     const [portalData, setPortalData] = useState<PortalSummary | null>(null);
+
+    // Check if user has permission to transfer credits
+    const userRole = (session?.user as any)?.role?.toUpperCase();
+    const canTransferCredits = ['FINANCE', 'EXECUTIVE', 'ADMIN'].includes(userRole);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
@@ -1502,8 +1506,8 @@ export default function ReferrerPortalPage() {
                                                                 const quote = referral.quoteTotal ?? 0;
                                                                 const paid = referral.totalPaid ?? 0;
                                                                 const balance = quote - paid;
-                                                                // Show transfer button if there's a credit (negative balance)
-                                                                if (balance < 0) {
+                                                                // Show transfer button if there's a credit (negative balance) AND user has permission
+                                                                if (balance < 0 && canTransferCredits) {
                                                                     return (
                                                                         <button
                                                                             type="button"
@@ -2554,13 +2558,15 @@ export default function ReferrerPortalPage() {
                 </div>
             )}
 
-            <CreditTransferModal
-                isOpen={showCreditTransferModal}
-                sourceCase={creditTransferSourceCase}
-                allCases={referrals}
-                onClose={() => setShowCreditTransferModal(false)}
-                onSuccess={() => void loadPortal()}
-            />
+            {canTransferCredits && (
+                <CreditTransferModal
+                    isOpen={showCreditTransferModal}
+                    sourceCase={creditTransferSourceCase}
+                    allCases={referrals}
+                    onClose={() => setShowCreditTransferModal(false)}
+                    onSuccess={() => void loadPortal()}
+                />
+            )}
         </main>
     );
 }

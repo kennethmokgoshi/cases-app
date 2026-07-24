@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
+import { auth } from '@zenowethu/shared-lib';
 import { z } from 'zod';
 
 const logger = createLogger('api/referrer-portal/transfer-credit');
@@ -15,6 +16,16 @@ const transferCreditSchema = z.object({
 
 export async function POST(request: Request) {
     try {
+        // Check user role — only FINANCE, EXECUTIVE, ADMIN can transfer
+        const session = await auth();
+        if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const userRole = (session.user as any).role?.toUpperCase();
+        const allowedRoles = ['FINANCE', 'EXECUTIVE', 'ADMIN'];
+        if (!allowedRoles.includes(userRole)) {
+            return NextResponse.json({ error: 'Only finance, executive, and admin staff can transfer credits' }, { status: 403 });
+        }
+
         const access = await getCurrentReferrerPortalAccess();
         if (access.ok !== true) return NextResponse.json({ error: access.error }, { status: access.status });
 
