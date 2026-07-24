@@ -178,9 +178,19 @@ RUN chown -R nextjs:nodejs apps/${APP}/.next storage/uploads
 
 USER nextjs
 
-EXPOSE 3008
+EXPOSE 3000
 
-ENV PORT=3008
+# Set port based on which app (reported in APP build arg)
+RUN if [ "$APP" = "reporting" ]; then echo "3008" > /tmp/app_port; \
+    elif [ "$APP" = "insurance" ]; then echo "3001" > /tmp/app_port; \
+    elif [ "$APP" = "legal" ]; then echo "3002" > /tmp/app_port; \
+    elif [ "$APP" = "forensic-audit" ]; then echo "3003" > /tmp/app_port; \
+    elif [ "$APP" = "finance" ]; then echo "3004" > /tmp/app_port; \
+    elif [ "$APP" = "crediva" ]; then echo "3005" > /tmp/app_port; \
+    elif [ "$APP" = "website" ]; then echo "3006" > /tmp/app_port; \
+    else echo "3000" > /tmp/app_port; fi
+
+ENV PORT=$(cat /tmp/app_port)
 ENV HOSTNAME="0.0.0.0"
 
 # In a monorepo, standalone output preserves directory structure:
