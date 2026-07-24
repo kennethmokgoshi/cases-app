@@ -180,14 +180,18 @@ USER nextjs
 
 EXPOSE 3000
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+# Set port based on which app (determined at build time from APP arg)
+RUN if [ "$APP" = "reporting" ]; then echo "PORT=3008" > /app-port.env; \
+    elif [ "$APP" = "insurance" ]; then echo "PORT=3001" > /app-port.env; \
+    elif [ "$APP" = "legal" ]; then echo "PORT=3002" > /app-port.env; \
+    elif [ "$APP" = "forensic-audit" ]; then echo "PORT=3003" > /app-port.env; \
+    elif [ "$APP" = "finance" ]; then echo "PORT=3004" > /app-port.env; \
+    elif [ "$APP" = "crediva" ]; then echo "PORT=3005" > /app-port.env; \
+    elif [ "$APP" = "website" ]; then echo "PORT=3006" > /app-port.env; \
+    else echo "PORT=3000" > /app-port.env; fi
 
-# In a monorepo, standalone output preserves directory structure:
-# server.js is at apps/<APP>/server.js, not at root.
-# Use shell form so $APP_NAME is expanded at runtime.
+ENV HOSTNAME="0.0.0.0"
 ENV APP_NAME=${APP}
-# Apply any pending DB migrations before starting the server. If migration
-# fails the container exits (server never starts against a stale schema),
-# which surfaces the problem instead of serving broken code.
-CMD prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP_NAME}/server.js
+
+# Runtime: source port config, run migrations, start the app
+CMD . /app-port.env && prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP_NAME}/server.js
