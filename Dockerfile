@@ -178,10 +178,9 @@ RUN chown -R nextjs:nodejs apps/${APP}/.next storage/uploads
 
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 3008
 
-ARG PORT=3000
-ENV PORT=$PORT
+ENV PORT=3008
 ENV HOSTNAME="0.0.0.0"
 
 # In a monorepo, standalone output preserves directory structure:
