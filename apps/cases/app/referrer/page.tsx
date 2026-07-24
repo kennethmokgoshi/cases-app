@@ -279,6 +279,12 @@ type ReferralFilterId =
     | 'both-settled-and-completed'
     | 'both-settled-and-completed-this-month'
     | 'both-settled-and-completed-last-month'
+    | 'work-pipeline'
+    | 'work-pipeline-in-progress'
+    | 'work-pipeline-settled'
+    | 'completed-work'
+    | 'completed-work-outstanding'
+    | 'completed-work-paid'
     | 'lost'
     | 'lost-this-month'
     | 'lost-last-month'
@@ -318,6 +324,12 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'both-settled-and-completed': { label: 'Both settled and completed', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' },
     'both-settled-and-completed-this-month': { label: 'Both settled and completed this month', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 0) },
     'both-settled-and-completed-last-month': { label: 'Both settled and completed last month', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 1) },
+    'work-pipeline': { label: 'Work Pipeline', matches: (row) => (row.statusTone === 'progress' || row.statusTone === 'detour' || row.statusTone === 'attention' || row.statusTone === 'neutral') || row.statusTone === 'settled' },
+    'work-pipeline-in-progress': { label: 'In Progress (being worked)', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' },
+    'work-pipeline-settled': { label: 'Settled (awaiting work)', matches: (row) => row.statusTone === 'settled' },
+    'completed-work': { label: 'Completed Work', matches: (row) => row.statusTone === 'completed' },
+    'completed-work-outstanding': { label: 'Awaiting Payment', matches: (row) => row.statusTone === 'completed' },
+    'completed-work-paid': { label: 'Fully Paid', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' },
     'lost': { label: 'Lost', matches: (row) => row.statusTone === 'lost' },
     'lost-this-month': { label: 'Lost this month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 0) },
     'lost-last-month': { label: 'Lost last month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 1) },
@@ -993,17 +1005,17 @@ export default function ReferrerPortalPage() {
                 accentBar: 'bg-sky-400',
                 stats: [
                     {
-                        id: 'in-progress',
+                        id: 'work-pipeline' as ReferralFilterId,
                         label: 'All time',
                         value: discountSummary.totalInProgress + discountSummary.totalSettledNotCompleted
                     },
                     {
-                        id: 'in-progress-this-month',
+                        id: 'work-pipeline' as ReferralFilterId,
                         label: calendarMonthName(0),
                         value: discountSummary.inProgressThisMonth + discountSummary.settledNotCompletedThisMonth,
                         delta: (discountSummary.inProgressThisMonth + discountSummary.settledNotCompletedThisMonth) - (discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth),
                     },
-                    { id: 'in-progress-last-month', label: calendarMonthName(1), value: discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth },
+                    { id: 'work-pipeline' as ReferralFilterId, label: calendarMonthName(1), value: discountSummary.inProgressLastMonth + discountSummary.settledNotCompletedLastMonth },
                 ],
                 breakdown: [
                     { label: 'In Progress', count: discountSummary.totalInProgress, subtext: 'being worked' },
@@ -1017,17 +1029,17 @@ export default function ReferrerPortalPage() {
                 accentBar: 'bg-emerald-400',
                 stats: [
                     {
-                        id: 'completed-not-settled',
+                        id: 'completed-work' as ReferralFilterId,
                         label: 'All time',
                         value: discountSummary.totalCompletedNotSettled + discountSummary.totalBothSettledAndCompleted
                     },
                     {
-                        id: 'completed-not-settled-this-month',
+                        id: 'completed-work' as ReferralFilterId,
                         label: calendarMonthName(0),
                         value: discountSummary.completedNotSettledThisMonth + discountSummary.bothSettledAndCompletedThisMonth,
                         delta: (discountSummary.completedNotSettledThisMonth + discountSummary.bothSettledAndCompletedThisMonth) - (discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth),
                     },
-                    { id: 'completed-not-settled-last-month', label: calendarMonthName(1), value: discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth },
+                    { id: 'completed-work' as ReferralFilterId, label: calendarMonthName(1), value: discountSummary.completedNotSettledLastMonth + discountSummary.bothSettledAndCompletedLastMonth },
                 ],
                 breakdown: [
                     { label: 'Awaiting Payment', count: discountSummary.totalCompletedNotSettled, subtext: 'invoice outstanding' },
@@ -1275,12 +1287,23 @@ export default function ReferrerPortalPage() {
                                 </div>
                                 {group.breakdown && (
                                     <div className="border-t border-white/10 px-3 py-2 text-xs text-slate-400">
-                                        {group.breakdown.map((item) => (
-                                            <div key={item.label} className="flex justify-between py-1">
-                                                <span>{item.label}</span>
-                                                <span className="text-white">{item.count} {item.subtext ? `(${item.subtext})` : ''}</span>
-                                            </div>
-                                        ))}
+                                        {group.breakdown.map((item) => {
+                                            const filterId = group.title === 'Work Pipeline'
+                                                ? (item.subtext?.includes('being worked') ? 'work-pipeline-in-progress' : 'work-pipeline-settled')
+                                                : (item.subtext?.includes('invoice') ? 'completed-work-outstanding' : 'completed-work-paid');
+                                            return (
+                                                <button
+                                                    key={item.label}
+                                                    type="button"
+                                                    onClick={() => toggleReferralFilter(filterId as ReferralFilterId)}
+                                                    title={`Show files: ${item.label}`}
+                                                    className="w-full flex justify-between py-1 text-left transition-colors hover:text-cyan-300 cursor-pointer"
+                                                >
+                                                    <span className="hover:underline">{item.label}</span>
+                                                    <span className="text-white">{item.count} {item.subtext ? `(${item.subtext})` : ''}</span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
