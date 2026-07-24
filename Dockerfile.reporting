@@ -70,7 +70,7 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 RUN cd packages/database && npx prisma generate
-RUN cd apps/${APP} && pnpm run build
+RUN cd apps/reporting && pnpm run build && ls -la .next/ && find .next -name "server.js" -o -name "standalone" -type d
 
 # ── runner stage ──────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS runner
