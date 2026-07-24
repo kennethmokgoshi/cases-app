@@ -145,7 +145,10 @@ export async function GET() {
         const caseMilestones = new Map(referrer.cases.map((referral) => {
             const logs = referral.workflowLogs ?? [];
             const settledLog = logs.find((log) => portalStatusTone(log.toStatus) === 'settled');
-            const completedLog = logs.find((log) => portalStatusTone(log.toStatus) === 'completed');
+            const completedLog = logs.find((log) => {
+                const tone = portalStatusTone(log.toStatus);
+                return tone === 'completed' || tone === 'settled';
+            });
             const stage = referral.referrerCommission?.stage ?? null;
             return [referral.id, {
                 settledAt: settledLog?.timestamp
