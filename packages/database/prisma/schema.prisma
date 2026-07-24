@@ -92,6 +92,7 @@ model Referrer {
   commissions           ReferrerCommission[]
   paymentQueries        ReferrerPaymentQuery[]
   missingClientReports  ReferrerMissingClientReport[]
+  creditTransfers       CreditTransfer[]
   parentReferrer        Referrer?            @relation("ReferrerHierarchy", fields: [parentReferrerId], references: [id])
   referredReferrers     Referrer[]           @relation("ReferrerHierarchy")
 
@@ -404,6 +405,8 @@ model Case {
   documentRequests        DocumentRequest[]
   drrConsents             DebtReviewRemovalConsent[]
   dhsOutcomeEvents        DhsOutcomeEvent[]
+  creditTransfersFrom     CreditTransfer[]         @relation("CreditTransferFrom")
+  creditTransfersTo       CreditTransfer[]         @relation("CreditTransferTo")
 
   debtCounsellordId String?
   debtCounsellor    DebtCounsellor? @relation(fields: [debtCounsellordId], references: [id])
@@ -632,6 +635,8 @@ model User {
   personalMailbox            MailboxAccount?                @relation("MailboxOwner")
   workLogs                   WorkLog[]                      @relation("UserWorkLogs")
   verifiedWorkLogs           WorkLog[]                      @relation("WorkLogVerifier")
+  creditTransfersCreated     CreditTransfer[]               @relation("CreditTransferCreator")
+  creditTransfersReversed    CreditTransfer[]               @relation("CreditTransferReverser")
 }
 
 // Debit order mandate lifecycle — capture, send, sign-back, NuPay registration
@@ -2195,5 +2200,32 @@ model WorkLog {
   @@index([date])
   @@index([category])
   @@index([fileNumber])
+}
+
+model CreditTransfer {
+  id                String   @id @default(cuid())
+  fromCaseId        String
+  toCaseId          String
+  referrerId        String
+  amount            Decimal
+  notes             String?
+  transferredById    String
+  status            String   @default("COMPLETED") // COMPLETED | REVERSED
+  reversedAt        DateTime?
+  reversedById      String?
+  reversedBy        User?    @relation("CreditTransferReverser", fields: [reversedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  fromCase          Case     @relation("CreditTransferFrom", fields: [fromCaseId], references: [id], onDelete: Cascade)
+  toCase            Case     @relation("CreditTransferTo", fields: [toCaseId], references: [id], onDelete: Cascade)
+  referrer          Referrer @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+  transferredBy     User     @relation("CreditTransferCreator", fields: [transferredById], references: [id], onDelete: Restrict)
+
+  @@index([fromCaseId])
+  @@index([toCaseId])
+  @@index([referrerId])
+  @@index([status])
+  @@index([createdAt])
 }
 
