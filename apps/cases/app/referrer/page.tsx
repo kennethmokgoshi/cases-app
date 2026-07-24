@@ -110,12 +110,18 @@ type DiscountPartnerSummary = {
     totalReferrals: number;
     referralsThisMonth: number;
     referralsLastMonth: number;
-    totalCompleted: number;
-    completedThisMonth: number;
-    completedLastMonth: number;
-    totalSettled: number;
-    settledThisMonth: number;
-    settledLastMonth: number;
+    totalInProgress: number;
+    inProgressThisMonth: number;
+    inProgressLastMonth: number;
+    totalSettledNotCompleted: number;
+    settledNotCompletedThisMonth: number;
+    settledNotCompletedLastMonth: number;
+    totalCompletedNotSettled: number;
+    completedNotSettledThisMonth: number;
+    completedNotSettledLastMonth: number;
+    totalBothSettledAndCompleted: number;
+    bothSettledAndCompletedThisMonth: number;
+    bothSettledAndCompletedLastMonth: number;
     totalLost: number;
     lostThisMonth: number;
     lostLastMonth: number;
@@ -128,9 +134,6 @@ type DiscountPartnerSummary = {
     totalSettledPaid: number;
     settledPaidThisMonth: number;
     settledPaidLastMonth: number;
-    totalInProgress: number;
-    inProgressThisMonth: number;
-    inProgressLastMonth: number;
     totalCompletedOutstanding: number;
     completedOutstandingThisMonth: number;
     completedOutstandingLastMonth: number;
@@ -264,12 +267,18 @@ type ReferralFilterId =
     | 'all'
     | 'referrals-this-month'
     | 'referrals-last-month'
-    | 'completed'
-    | 'completed-this-month'
-    | 'completed-last-month'
-    | 'settled'
-    | 'settled-this-month'
-    | 'settled-last-month'
+    | 'in-progress'
+    | 'in-progress-this-month'
+    | 'in-progress-last-month'
+    | 'settled-not-completed'
+    | 'settled-not-completed-this-month'
+    | 'settled-not-completed-last-month'
+    | 'completed-not-settled'
+    | 'completed-not-settled-this-month'
+    | 'completed-not-settled-last-month'
+    | 'both-settled-and-completed'
+    | 'both-settled-and-completed-this-month'
+    | 'both-settled-and-completed-last-month'
     | 'lost'
     | 'lost-this-month'
     | 'lost-last-month'
@@ -286,9 +295,6 @@ type ReferralFilterId =
     | 'settled-paid'
     | 'settled-paid-this-month'
     | 'settled-paid-last-month'
-    | 'in-progress'
-    | 'in-progress-this-month'
-    | 'in-progress-last-month'
     | 'completed-outstanding'
     | 'completed-outstanding-this-month'
     | 'completed-outstanding-last-month'
@@ -300,12 +306,18 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'all': { label: 'All referrals', matches: () => true },
     'referrals-this-month': { label: 'Referred this month', matches: (row) => isInCalendarMonth(row.createdAt, 0) },
     'referrals-last-month': { label: 'Referred last month', matches: (row) => isInCalendarMonth(row.createdAt, 1) },
-    'completed': { label: 'Completed — payment outstanding', matches: (row) => row.statusTone === 'completed' },
-    'completed-this-month': { label: 'Completed this month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 0) },
-    'completed-last-month': { label: 'Completed last month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 1) },
-    'settled': { label: 'Settled', matches: (row) => row.statusTone === 'settled' },
-    'settled-this-month': { label: 'Settled this month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 0) },
-    'settled-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
+    'in-progress': { label: 'In progress', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' },
+    'in-progress-this-month': { label: 'In progress this month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' && isInCalendarMonth(row.createdAt, 0) },
+    'in-progress-last-month': { label: 'In progress last month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' && isInCalendarMonth(row.createdAt, 1) },
+    'settled-not-completed': { label: 'Settled (not completed)', matches: (row) => row.statusTone === 'settled' },
+    'settled-not-completed-this-month': { label: 'Settled this month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 0) },
+    'settled-not-completed-last-month': { label: 'Settled last month', matches: (row) => row.statusTone === 'settled' && isInCalendarMonth(row.settledAt, 1) },
+    'completed-not-settled': { label: 'Completed — payment outstanding', matches: (row) => row.statusTone === 'completed' },
+    'completed-not-settled-this-month': { label: 'Completed this month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 0) },
+    'completed-not-settled-last-month': { label: 'Completed last month', matches: (row) => row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 1) },
+    'both-settled-and-completed': { label: 'Both settled and completed', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' },
+    'both-settled-and-completed-this-month': { label: 'Both settled and completed this month', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 0) },
+    'both-settled-and-completed-last-month': { label: 'Both settled and completed last month', matches: (row) => row.statusTone === 'settled' && row.statusTone === 'completed' && isInCalendarMonth(row.completedAt, 1) },
     'lost': { label: 'Lost', matches: (row) => row.statusTone === 'lost' },
     'lost-this-month': { label: 'Lost this month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 0) },
     'lost-last-month': { label: 'Lost last month', matches: (row) => row.statusTone === 'lost' && isInCalendarMonth(row.createdAt, 1) },
@@ -322,9 +334,6 @@ const REFERRAL_FILTERS: Record<ReferralFilterId, { label: string; matches: (row:
     'settled-paid': { label: 'Settled Amount', matches: (row) => row.statusTone === 'settled' && row.totalPaid > 0 },
     'settled-paid-this-month': { label: 'Settled Paid this month', matches: (row) => row.statusTone === 'settled' && row.paidThisMonth > 0 },
     'settled-paid-last-month': { label: 'Settled Paid last month', matches: (row) => row.statusTone === 'settled' && row.paidLastMonth > 0 },
-    'in-progress': { label: 'In progress', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' },
-    'in-progress-this-month': { label: 'In progress this month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' && isInCalendarMonth(row.createdAt, 0) },
-    'in-progress-last-month': { label: 'In progress last month', matches: (row) => row.statusTone !== 'settled' && row.statusTone !== 'completed' && row.statusTone !== 'lost' && isInCalendarMonth(row.createdAt, 1) },
     'completed-outstanding': { label: 'Outstanding Balance (Completed files)', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 },
     'completed-outstanding-this-month': { label: 'Outstanding Balance (Completed files) this month', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 0) },
     'completed-outstanding-last-month': { label: 'Outstanding Balance (Completed files) last month', matches: (row) => row.statusTone === 'completed' && (row.quoteTotal ?? 0) - row.totalPaid > 0 && isInCalendarMonth(row.completedAt, 1) },
@@ -992,35 +1001,51 @@ export default function ReferrerPortalPage() {
                 ],
             },
             {
+                title: 'Settled',
+                caption: 'Paid upfront — work still ongoing',
+                accentText: 'text-teal-300',
+                accentBar: 'bg-teal-400',
+                stats: [
+                    { id: 'settled-not-completed', label: 'All time', value: discountSummary.totalSettledNotCompleted },
+                    {
+                        id: 'settled-not-completed-this-month',
+                        label: calendarMonthName(0),
+                        value: discountSummary.settledNotCompletedThisMonth,
+                        delta: discountSummary.settledNotCompletedThisMonth - discountSummary.settledNotCompletedLastMonth,
+                    },
+                    { id: 'settled-not-completed-last-month', label: calendarMonthName(1), value: discountSummary.settledNotCompletedLastMonth },
+                ],
+            },
+            {
                 title: 'Completed',
                 caption: 'Job done — payment still outstanding',
                 accentText: 'text-yellow-300',
                 accentBar: 'bg-yellow-400',
                 stats: [
-                    { id: 'completed', label: 'All time', value: discountSummary.totalCompleted },
+                    { id: 'completed-not-settled', label: 'All time', value: discountSummary.totalCompletedNotSettled },
                     {
-                        id: 'completed-this-month',
+                        id: 'completed-not-settled-this-month',
                         label: calendarMonthName(0),
-                        value: discountSummary.completedThisMonth,
-                        delta: discountSummary.completedThisMonth - discountSummary.completedLastMonth,
+                        value: discountSummary.completedNotSettledThisMonth,
+                        delta: discountSummary.completedNotSettledThisMonth - discountSummary.completedNotSettledLastMonth,
                     },
-                    { id: 'completed-last-month', label: calendarMonthName(1), value: discountSummary.completedLastMonth },
+                    { id: 'completed-not-settled-last-month', label: calendarMonthName(1), value: discountSummary.completedNotSettledLastMonth },
                 ],
             },
             {
-                title: 'Settled',
+                title: 'Both Settled & Completed',
                 caption: 'Done, dusted, and fully paid',
                 accentText: 'text-emerald-300',
                 accentBar: 'bg-emerald-400',
                 stats: [
-                    { id: 'settled', label: 'All time', value: discountSummary.totalSettled },
+                    { id: 'both-settled-and-completed', label: 'All time', value: discountSummary.totalBothSettledAndCompleted },
                     {
-                        id: 'settled-this-month',
+                        id: 'both-settled-and-completed-this-month',
                         label: calendarMonthName(0),
-                        value: discountSummary.settledThisMonth,
-                        delta: discountSummary.settledThisMonth - discountSummary.settledLastMonth,
+                        value: discountSummary.bothSettledAndCompletedThisMonth,
+                        delta: discountSummary.bothSettledAndCompletedThisMonth - discountSummary.bothSettledAndCompletedLastMonth,
                     },
-                    { id: 'settled-last-month', label: calendarMonthName(1), value: discountSummary.settledLastMonth },
+                    { id: 'both-settled-and-completed-last-month', label: calendarMonthName(1), value: discountSummary.bothSettledAndCompletedLastMonth },
                 ],
             },
             {
