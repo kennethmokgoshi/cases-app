@@ -94,7 +94,7 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN cd packages/database && npx prisma generate
 
 # Build the target app
-RUN cd apps/${APP} && pnpm run build
+RUN cd apps/${APP} && pnpm run build && ls -la .next/ && find .next -name "server.js" -o -type d -name standalone
 
 # ── runner stage ──────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS runner
