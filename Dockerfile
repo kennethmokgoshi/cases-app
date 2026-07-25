@@ -182,4 +182,10 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && node .next/standalone/server.js"]
+# Copy pnpm to runner to run start script
+RUN npm install -g pnpm@10.30.1
+
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
+COPY --from=builder /app/node_modules ./node_modules
+
+CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && pnpm start"]
