@@ -189,7 +189,22 @@ describe('POST /check-updates', () => {
         expect(json.updates).toHaveLength(0); // Scanned, but skipped msg-1
     });
 
-    it('gracefully handles irrelevant emails', async () => {
+    it('takes no action on an irrelevant email that carries no attachments', async () => {
+        mockedScan.mockImplementation(async ({ onFoldersResolved }: any) => {
+            onFoldersResolved?.(['INBOX', 'Sent']);
+            return [
+                {
+                    messageId: 'msg-2',
+                    from: 'newsletter@spam.co.za',
+                    to: 'ops@zenowethu.co.za',
+                    subject: 'Weekly deals',
+                    date: '2026-07-23T10:00:00Z',
+                    body: 'Buy now!',
+                    folder: 'INBOX',
+                    attachments: [],
+                },
+            ];
+        });
         mockedAnalyze.mockResolvedValue({
             isRelevant: false,
             hasUpdate: false,
@@ -201,11 +216,17 @@ describe('POST /check-updates', () => {
         const json = await res.json();
 
         expect(res.status).toBe(200);
-        expect(json.updates).toHaveLength(0); // No updates logged
-        // No per-email update comment...
+        expect(json.updates).toHaveLength(0);
+        expect(db.document.create).not.toHaveBeenCalled();
+        // No per-email comment (neither update nor documents)...
         expect(db.caseComment.create).not.toHaveBeenCalledWith(
             expect.objectContaining({
                 data: expect.objectContaining({ activityType: 'CASE_EMAIL_UPDATE_PROCESSED' }),
+            }),
+        );
+        expect(db.caseComment.create).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ activityType: 'CASE_DOCUMENTS_HARVESTED' }),
             }),
         );
         // ...but the scan run itself is still logged.
@@ -214,6 +235,58 @@ describe('POST /check-updates', () => {
                 data: expect.objectContaining({ activityType: 'CASE_UPDATE_SCAN_RUN' }),
             }),
         );
+    });
+
+    it('harvests attachments from a client-matched email even when the AI finds no textual update', async () => {
+        // "please find attached" delivery — matched the client, has documents,
+        // but the body carries no status update.
+        mockedAnalyze.mockResolvedValue({
+            isRelevant: true,
+            hasUpdate: false,
+            updateSummary: 'Document delivery, no textual update.',
+            consumerNotificationMsg: null,
+        });
+
+        const res = await POST(request({ lookbackDays: 90 }), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        // Attachment saved despite hasUpdate=false
+        expect(db.document.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ type: 'FORM_17W', fileName: 'form_17w.pdf' }),
+        }));
+        // Logged as a documents-harvest (not an AI update) and NOT notified
+        expect(db.caseComment.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ activityType: 'CASE_DOCUMENTS_HARVESTED' }),
+            }),
+        );
+        expect(mockedSend).not.toHaveBeenCalled();
+        expect(json.updates).toHaveLength(1);
+        expect(json.updates[0].documentsOnly).toBe(true);
+        expect(json.updates[0].attachments).toHaveLength(1);
+        expect(json.scanRun.documentsHarvested).toBe(1);
+        expect(json.scanRun.updatesFound).toBe(0);
+        expect(json.scanRun.candidatesFound).toBe(1);
+    });
+
+    it('flags AI-analysis failures in the scan run while still harvesting documents', async () => {
+        // analyzeEmailForCaseUpdate fell back to its error result
+        mockedAnalyze.mockResolvedValue({
+            isRelevant: false,
+            hasUpdate: false,
+            updateSummary: 'Failed to analyze due to fallback/error.',
+            consumerNotificationMsg: null,
+        });
+
+        const res = await POST(request(), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.scanRun.aiFailures).toBe(1);
+        // Attachment still harvested despite the AI failure
+        expect(db.document.create).toHaveBeenCalled();
+        expect(json.scanRun.documentsHarvested).toBe(1);
     });
 
     it('always logs a scan-run entry with who/when/mailboxes/folders, even with no updates', async () => {

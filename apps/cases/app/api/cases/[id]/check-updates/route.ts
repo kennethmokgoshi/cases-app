@@ -8,7 +8,6 @@ import { getSearchableMailboxesWithPasswords } from '@/lib/mailbox-search';
 import { z } from 'zod';
 import { join } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
-import crypto from 'crypto';
 
 const logger = createLogger('api/cases/[id]/check-updates');
 
@@ -17,6 +16,11 @@ const BodySchema = z.object({
 });
 
 const ACTIVITY_TYPE = 'CASE_EMAIL_UPDATE_PROCESSED';
+/** Activity logged when a client-matched email's attachments are saved to the
+ *  case but the email carried no textual status update (e.g. "please find
+ *  attached"). Kept distinct from CASE_EMAIL_UPDATE_PROCESSED so it doesn't
+ *  imply an AI-extracted update, while still feeding the already-seen skip set. */
+const DOCS_ACTIVITY_TYPE = 'CASE_DOCUMENTS_HARVESTED';
 /** Activity logged for every scan run (whether or not any updates were found). */
 const SCAN_RUN_ACTIVITY_TYPE = 'CASE_UPDATE_SCAN_RUN';
 
@@ -29,10 +33,86 @@ function isSentFolder(path: string): boolean {
     return /sent/i.test(path);
 }
 
+interface EmailVerdict {
+    from: string;
+    subject: string;
+    isRelevant: boolean;
+    hasUpdate: boolean;
+    summary: string;
+    docsSaved: number;
+    outcome: 'update' | 'documents-only' | 'no-action';
+}
+
 interface MailboxScan {
     email: string;
     folders: string[];
+    /** Client-matched emails returned by the IMAP search for this mailbox. */
+    candidates: number;
+    verdicts: EmailVerdict[];
     error?: string;
+}
+
+interface SavedDoc {
+    fileName: string;
+    fileUrl: string;
+    type: string;
+}
+
+/**
+ * Persist a client-matched email's attachments to the case document vault,
+ * skipping any that already exist (same file name + size). Shared by the
+ * "update" and "documents-only" paths so harvesting isn't tied to whether the
+ * AI detected a textual update in the body.
+ */
+async function saveEmailAttachments(
+    attachments: { fileName: string; mimeType: string; buffer: Buffer; detectedType: string }[],
+    caseId: string,
+    uploadDir: string,
+    uploadedById: string
+): Promise<SavedDoc[]> {
+    const savedDocs: SavedDoc[] = [];
+    if (!attachments || attachments.length === 0) return savedDocs;
+
+    try {
+        await mkdir(uploadDir, { recursive: true });
+    } catch {
+        // ignore — writeFile will surface a real failure below
+    }
+
+    for (const att of attachments) {
+        const existingDoc = await prisma.document.findFirst({
+            where: { caseId, fileSize: att.buffer.length, fileName: att.fileName },
+        });
+        if (existingDoc) {
+            continue; // Skip duplicate attachments already on the case
+        }
+
+        const safeName = att.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const uniqueFileName = `${Date.now()}-${safeName}`;
+
+        try {
+            await writeFile(join(uploadDir, uniqueFileName), att.buffer);
+            const fileUrl = `/uploads/${caseId}/${uniqueFileName}`;
+
+            await prisma.document.create({
+                data: {
+                    caseId,
+                    type: att.detectedType || 'OTHER',
+                    fileName: att.fileName,
+                    fileUrl,
+                    fileSize: att.buffer.length,
+                    mimeType: att.mimeType,
+                    uploadedById,
+                },
+            });
+
+            savedDocs.push({ fileName: att.fileName, fileUrl, type: att.detectedType || 'OTHER' });
+        } catch (wErr) {
+            logger.warn(`Could not save email attachment ${uniqueFileName}:`, wErr);
+        }
+    }
+
+    return savedDocs;
 }
 
 /** Human-readable list of the folder categories scanned across all mailboxes. */
@@ -108,7 +188,7 @@ export async function POST(
         const processedComments = await prisma.caseComment.findMany({
             where: {
                 caseId,
-                activityType: ACTIVITY_TYPE,
+                activityType: { in: [ACTIVITY_TYPE, DOCS_ACTIVITY_TYPE] },
             },
             select: {
                 activityData: true,
@@ -145,7 +225,7 @@ export async function POST(
         const uploadDir = join(process.cwd(), 'storage', 'uploads', caseId);
 
         for (const mailbox of readableMailboxes) {
-            const scanEntry: MailboxScan = { email: mailbox.emailAddress, folders: [] };
+            const scanEntry: MailboxScan = { email: mailbox.emailAddress, folders: [], candidates: 0, verdicts: [] };
             mailboxScans.push(scanEntry);
             try {
                 const emails = await scanMailboxForCaseUpdates({
@@ -167,11 +247,26 @@ export async function POST(
                     },
                 });
 
+                scanEntry.candidates = emails.length;
+
                 for (const email of emails) {
                     if (email.messageId && skipMessageIds.includes(email.messageId)) {
                         continue;
                     }
-                    // Analyze email using AI
+
+                    // The email already matched this client by ID number / full
+                    // name, so its attachments belong on the case regardless of
+                    // whether the AI finds a textual update in the body. Harvest
+                    // documents first, then use AI only for the update summary +
+                    // consumer notification.
+                    const savedDocs = await saveEmailAttachments(
+                        email.attachments,
+                        caseId,
+                        uploadDir,
+                        session.user.id
+                    );
+
+                    // Analyze email using AI (for the update summary / notification)
                     const analysis = await analyzeEmailForCaseUpdate({
                         from: email.from,
                         to: email.to,
@@ -180,165 +275,135 @@ export async function POST(
                         body: email.body,
                     });
 
-                    if (analysis.isRelevant && analysis.hasUpdate) {
-                        const savedDocs: { fileName: string; fileUrl: string; type: string }[] = [];
+                    const hasUpdate = analysis.isRelevant && analysis.hasUpdate;
+                    const verdict: EmailVerdict = {
+                        from: email.from,
+                        subject: email.subject,
+                        isRelevant: analysis.isRelevant,
+                        hasUpdate: analysis.hasUpdate,
+                        summary: analysis.updateSummary,
+                        docsSaved: savedDocs.length,
+                        outcome: hasUpdate ? 'update' : savedDocs.length > 0 ? 'documents-only' : 'no-action',
+                    };
+                    scanEntry.verdicts.push(verdict);
 
-                        // If email has attachments, upload them
-                        if (email.attachments && email.attachments.length > 0) {
-                            try {
-                                await mkdir(uploadDir, { recursive: true });
-                            } catch {
-                                // ignore
-                            }
-
-                            for (const att of email.attachments) {
-                                const hash = crypto.createHash('sha256').update(att.buffer).digest('hex');
-
-                                const existingDoc = await prisma.document.findFirst({
-                                    where: {
-                                        caseId,
-                                        fileSize: att.buffer.length,
-                                        fileName: att.fileName,
-                                    },
-                                });
-
-                                if (existingDoc) {
-                                    continue; // Skip duplicate attachments
-                                }
-
-                                const safeName = att.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-                                const uniqueFileName = `${Date.now()}-${safeName}`;
-                                
-                                try {
-                                    await writeFile(join(uploadDir, uniqueFileName), att.buffer);
-                                    const fileUrl = `/uploads/${caseId}/${uniqueFileName}`;
-                                    
-                                    await prisma.document.create({
-                                        data: {
-                                            caseId,
-                                            type: att.detectedType || 'OTHER',
-                                            fileName: att.fileName,
-                                            fileUrl,
-                                            fileSize: att.buffer.length,
-                                            mimeType: att.mimeType,
-                                            uploadedById: session.user.id,
-                                        },
-                                    });
-
-                                    savedDocs.push({
-                                        fileName: att.fileName,
-                                        fileUrl,
-                                        type: att.detectedType || 'OTHER',
-                                    });
-                                } catch (wErr) {
-                                    logger.warn(`Could not save update attachment ${uniqueFileName}:`, wErr);
-                                }
-                            }
-                        }
-
-                        // Send consumer notification if generated by AI
-                        let notificationSent = false;
-                        const notificationErrors: string[] = [];
-
-                        if (analysis.consumerNotificationMsg) {
-                            const messageText = analysis.consumerNotificationMsg;
-                            
-                            if (caseData.client.email) {
-                                const emailRes = await sendManualMessage(
-                                    caseId,
-                                    'EMAIL',
-                                    caseData.client.email,
-                                    messageText,
-                                    `Case Update - File #${caseData.fileNumber}`,
-                                    { senderId: session.user.id }
-                                );
-                                if (emailRes.emailSuccess) {
-                                    notificationSent = true;
-                                } else if (emailRes.errors?.length) {
-                                    notificationErrors.push(...emailRes.errors);
-                                }
-                            }
-
-                            if (caseData.client.phone) {
-                                const smsRes = await sendManualMessage(
-                                    caseId,
-                                    'SMS',
-                                    caseData.client.phone,
-                                    messageText,
-                                    undefined,
-                                    { senderId: session.user.id }
-                                );
-                                if (smsRes.smsSuccess) {
-                                    notificationSent = true;
-                                } else if (smsRes.errors?.length) {
-                                    notificationErrors.push(...smsRes.errors);
-                                }
-                            }
-                        }
-
-                        // Log CaseComment
-                        const content = [
-                            `📧 Email Update extracted from message by AI.`,
-                            `From: ${email.from}`,
-                            `Subject: ${email.subject}`,
-                            `Date: ${email.date ? new Date(email.date).toLocaleString('en-ZA') : 'Unknown'}`,
-                            `\nUpdate Detail:\n${analysis.updateSummary}`,
-                            savedDocs.length > 0
-                                ? `\nAttached Files Uploaded:\n${savedDocs.map((d) => `• ${d.fileName} (${d.type})`).join('\n')}`
-                                : null,
-                            analysis.consumerNotificationMsg
-                                ? `\nClient Notified:\n"${analysis.consumerNotificationMsg}" (${notificationSent ? 'Sent ✓' : 'Failed ✗'})`
-                                : null,
-                        ]
-                            .filter((line): line is string => Boolean(line))
-                            .join('\n');
-
-                        const activityData = {
-                            messageId: email.messageId,
-                            from: email.from,
-                            subject: email.subject,
-                            date: email.date,
-                            updateSummary: analysis.updateSummary,
-                            consumerNotificationMsg: analysis.consumerNotificationMsg,
-                            notificationSent,
-                            notificationErrors,
-                            uploadedDocuments: savedDocs,
-                        };
-
-                        await Promise.all([
-                            prisma.caseComment.create({
-                                data: {
-                                    caseId,
-                                    userId: session.user.id,
-                                    content,
-                                    type: 'NOTE',
-                                    isInternal: true,
-                                    activityType: ACTIVITY_TYPE,
-                                    activityData: JSON.stringify(activityData),
-                                },
-                            }),
-                            prisma.workflowLog.create({
-                                data: {
-                                    caseId,
-                                    fromStatus: caseData.status,
-                                    toStatus: caseData.status,
-                                    action: ACTIVITY_TYPE,
-                                    userId: session.user.id,
-                                    notes: content,
-                                },
-                            }),
-                        ]);
-
-                        processedUpdates.push({
-                            subject: email.subject,
-                            from: email.from,
-                            date: email.date,
-                            summary: analysis.updateSummary,
-                            attachments: savedDocs,
-                            notificationSent,
-                            notificationMsg: analysis.consumerNotificationMsg,
-                        });
+                    // Nothing actionable: no textual update and no new documents.
+                    if (!hasUpdate && savedDocs.length === 0) {
+                        continue;
                     }
+
+                    // Send consumer notification only when the AI produced one
+                    // for a genuine update (never for silent document deliveries).
+                    let notificationSent = false;
+                    const notificationErrors: string[] = [];
+
+                    if (hasUpdate && analysis.consumerNotificationMsg) {
+                        const messageText = analysis.consumerNotificationMsg;
+
+                        if (caseData.client.email) {
+                            const emailRes = await sendManualMessage(
+                                caseId,
+                                'EMAIL',
+                                caseData.client.email,
+                                messageText,
+                                `Case Update - File #${caseData.fileNumber}`,
+                                { senderId: session.user.id }
+                            );
+                            if (emailRes.emailSuccess) {
+                                notificationSent = true;
+                            } else if (emailRes.errors?.length) {
+                                notificationErrors.push(...emailRes.errors);
+                            }
+                        }
+
+                        if (caseData.client.phone) {
+                            const smsRes = await sendManualMessage(
+                                caseId,
+                                'SMS',
+                                caseData.client.phone,
+                                messageText,
+                                undefined,
+                                { senderId: session.user.id }
+                            );
+                            if (smsRes.smsSuccess) {
+                                notificationSent = true;
+                            } else if (smsRes.errors?.length) {
+                                notificationErrors.push(...smsRes.errors);
+                            }
+                        }
+                    }
+
+                    const displaySummary = hasUpdate
+                        ? analysis.updateSummary
+                        : '📎 Documents received and saved to the case (no textual status update in the email).';
+
+                    // Log CaseComment — as an AI-extracted update, or as a plain
+                    // document-harvest note when the body carried no update.
+                    const content = [
+                        hasUpdate
+                            ? `📧 Email Update extracted from message by AI.`
+                            : `📎 Documents harvested from client-matched email.`,
+                        `From: ${email.from}`,
+                        `Subject: ${email.subject}`,
+                        `Date: ${email.date ? new Date(email.date).toLocaleString('en-ZA') : 'Unknown'}`,
+                        hasUpdate ? `\nUpdate Detail:\n${analysis.updateSummary}` : null,
+                        savedDocs.length > 0
+                            ? `\nAttached Files Uploaded:\n${savedDocs.map((d) => `• ${d.fileName} (${d.type})`).join('\n')}`
+                            : null,
+                        hasUpdate && analysis.consumerNotificationMsg
+                            ? `\nClient Notified:\n"${analysis.consumerNotificationMsg}" (${notificationSent ? 'Sent ✓' : 'Failed ✗'})`
+                            : null,
+                    ]
+                        .filter((line): line is string => Boolean(line))
+                        .join('\n');
+
+                    const activityType = hasUpdate ? ACTIVITY_TYPE : DOCS_ACTIVITY_TYPE;
+                    const activityData = {
+                        messageId: email.messageId,
+                        from: email.from,
+                        subject: email.subject,
+                        date: email.date,
+                        updateSummary: displaySummary,
+                        consumerNotificationMsg: hasUpdate ? analysis.consumerNotificationMsg : null,
+                        notificationSent,
+                        notificationErrors,
+                        uploadedDocuments: savedDocs,
+                    };
+
+                    await Promise.all([
+                        prisma.caseComment.create({
+                            data: {
+                                caseId,
+                                userId: session.user.id,
+                                content,
+                                type: 'NOTE',
+                                isInternal: true,
+                                activityType,
+                                activityData: JSON.stringify(activityData),
+                            },
+                        }),
+                        prisma.workflowLog.create({
+                            data: {
+                                caseId,
+                                fromStatus: caseData.status,
+                                toStatus: caseData.status,
+                                action: activityType,
+                                userId: session.user.id,
+                                notes: content,
+                            },
+                        }),
+                    ]);
+
+                    processedUpdates.push({
+                        subject: email.subject,
+                        from: email.from,
+                        date: email.date,
+                        summary: displaySummary,
+                        attachments: savedDocs,
+                        notificationSent,
+                        notificationMsg: hasUpdate ? analysis.consumerNotificationMsg : null,
+                        documentsOnly: !hasUpdate,
+                    });
                 }
             } catch (err: any) {
                 scanEntry.error = err?.message ? String(err.message) : String(err);
@@ -364,12 +429,38 @@ export async function POST(
                 ? `last ${lookbackDays / 365} year(s)`
                 : `last ${lookbackDays} days`;
 
+        // Diagnostics: how many client-matched emails were found and what
+        // happened to each, so a "nothing harvested" result is explainable.
+        const allVerdicts = mailboxScans.flatMap((m) => m.verdicts);
+        const totalCandidates = mailboxScans.reduce((n, m) => n + m.candidates, 0);
+        const documentsHarvested = processedUpdates.filter((u) => u.documentsOnly).length;
+        const realUpdates = processedUpdates.length - documentsHarvested;
+        const docsSavedCount = allVerdicts.reduce((n, v) => n + v.docsSaved, 0);
+        const aiFailures = allVerdicts.filter((v) =>
+            v.summary?.startsWith('Failed to analyze')
+        ).length;
+
+        const candidateLines = allVerdicts.slice(0, 10).map((v) => {
+            const label =
+                v.outcome === 'update'
+                    ? 'update logged'
+                    : v.outcome === 'documents-only'
+                        ? `${v.docsSaved} doc(s) saved, no textual update`
+                        : v.isRelevant
+                            ? 'relevant, no update, no new docs'
+                            : 'AI marked not relevant';
+            return `• ${v.subject || '(no subject)'} — ${label}`;
+        });
+
         const scanContent = [
             `🔄 Case update check run by ${session.user.name || 'staff'}.`,
             `Range: ${rangeLabel} (since ${since.toLocaleDateString('en-ZA')}).`,
             `Mailboxes scanned (${mailboxScans.length}): ${mailboxScans.map((m) => m.email).join(', ') || 'none'}.`,
             `Folders scanned: ${describeFolders(scannedInbox, scannedSent, allFolders)}.`,
-            `Result: ${processedUpdates.length} new update(s) found.`,
+            `Client-matched emails found: ${totalCandidates}.`,
+            `Result: ${realUpdates} new update(s), ${documentsHarvested} email(s) with documents harvested (${docsSavedCount} file(s) saved).`,
+            aiFailures > 0 ? `⚠️ AI analysis failed on ${aiFailures} email(s) — documents were still harvested; check AI provider config.` : null,
+            candidateLines.length > 0 ? `Emails analysed:\n${candidateLines.join('\n')}` : null,
             scanErrors.length > 0 ? `Errors:\n${scanErrors.map((e) => `• ${e}`).join('\n')}` : null,
         ]
             .filter((line): line is string => Boolean(line))
@@ -384,11 +475,17 @@ export async function POST(
             mailboxes: mailboxScans.map((m) => ({
                 email: m.email,
                 folders: m.folders,
+                candidates: m.candidates,
+                verdicts: m.verdicts,
                 error: m.error ?? null,
             })),
             scannedInbox,
             scannedSent,
-            updatesFound: processedUpdates.length,
+            candidatesFound: totalCandidates,
+            updatesFound: realUpdates,
+            documentsHarvested,
+            docsSavedCount,
+            aiFailures,
             updates: processedUpdates,
             errors: scanErrors,
         };
@@ -417,7 +514,7 @@ export async function POST(
 
         return NextResponse.json({
             success: true,
-            message: `Check completed. Scanned ${readableMailboxes.length} mailbox(es). Found ${processedUpdates.length} update(s).`,
+            message: `Check completed. Scanned ${readableMailboxes.length} mailbox(es), found ${totalCandidates} client-matched email(s). ${realUpdates} update(s), ${documentsHarvested} document delivery(ies) harvested.`,
             updates: processedUpdates,
             mailboxesScanned: readableMailboxes.length,
             scanRun: {
@@ -427,7 +524,11 @@ export async function POST(
                 mailboxes: mailboxScans.map((m) => m.email),
                 scannedInbox,
                 scannedSent,
-                updatesFound: processedUpdates.length,
+                candidatesFound: totalCandidates,
+                updatesFound: realUpdates,
+                documentsHarvested,
+                docsSavedCount,
+                aiFailures,
                 errors: scanErrors,
             },
         });
@@ -492,7 +593,10 @@ export async function GET(
                     : [],
                 scannedInbox: Boolean(data.scannedInbox),
                 scannedSent: Boolean(data.scannedSent),
+                candidatesFound: data.candidatesFound ?? 0,
                 updatesFound: data.updatesFound ?? 0,
+                documentsHarvested: data.documentsHarvested ?? 0,
+                aiFailures: data.aiFailures ?? 0,
                 updates: Array.isArray(data.updates) ? data.updates : [],
                 errors: Array.isArray(data.errors) ? data.errors : [],
             },

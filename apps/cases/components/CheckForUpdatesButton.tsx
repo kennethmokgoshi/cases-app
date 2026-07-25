@@ -11,6 +11,8 @@ interface CaseUpdateResult {
     attachments: { fileName: string; fileUrl: string; type: string }[];
     notificationSent: boolean;
     notificationMsg: string | null;
+    /** True when documents were harvested but the email had no textual update. */
+    documentsOnly?: boolean;
 }
 
 interface ScanRunMeta {
@@ -20,7 +22,10 @@ interface ScanRunMeta {
     mailboxes: string[];
     scannedInbox: boolean;
     scannedSent: boolean;
+    candidatesFound?: number;
     updatesFound: number;
+    documentsHarvested?: number;
+    aiFailures?: number;
     errors?: string[];
 }
 
@@ -122,8 +127,15 @@ export default function CheckForUpdatesButton({
             } else {
                 setResult(data);
                 const count = data.updates?.length ?? 0;
+                const docsOnly = data.updates?.filter((u) => u.documentsOnly).length ?? 0;
+                const realUpdates = count - docsOnly;
                 if (count > 0) {
-                    toast.success(`Scan complete! Found and logged ${count} new update(s).`);
+                    const parts: string[] = [];
+                    if (realUpdates > 0) parts.push(`${realUpdates} update(s)`);
+                    if (docsOnly > 0) parts.push(`${docsOnly} document delivery(ies)`);
+                    toast.success(`Scan complete! Logged ${parts.join(' and ')}.`);
+                } else if (data.scanRun?.candidatesFound && data.scanRun.candidatesFound > 0) {
+                    toast.success('Scan complete. Matching emails found but no new updates or documents.');
                 } else {
                     toast.success('Scan complete. No new updates found.');
                 }
@@ -320,16 +332,26 @@ export default function CheckForUpdatesButton({
                                 </p>
                             )}
 
+                            {result?.scanRun?.aiFailures ? (
+                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-[11px] text-amber-200 leading-relaxed">
+                                    ⚠️ AI analysis failed on {result.scanRun.aiFailures} email(s), so no update summaries were generated — but any attachments were still harvested. Check the AI provider configuration in Admin settings.
+                                </div>
+                            ) : null}
+
                             {updates.length === 0 ? (
                                 <div className="text-center py-8 bg-white/5 border border-white/5 rounded-xl space-y-2">
                                     <div className="text-3xl">📭</div>
-                                    <div className="text-sm text-gray-300 font-medium">No new updates found.</div>
-                                    <div className="text-xs text-gray-500">All matching emails were either already processed or contained no new case updates.</div>
+                                    <div className="text-sm text-gray-300 font-medium">No new updates or documents found.</div>
+                                    <div className="text-xs text-gray-500">
+                                        {result?.scanRun?.candidatesFound && result.scanRun.candidatesFound > 0
+                                            ? `${result.scanRun.candidatesFound} matching email(s) were found, but they were already processed, had no new attachments, and contained no new case updates.`
+                                            : 'No emails matching this client were found in the scanned mailboxes for the selected range.'}
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
                                     <div className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">
-                                        New Updates Processed ({updates.length})
+                                        New Items Processed ({updates.length})
                                     </div>
                                     <div className="space-y-3">
                                         {updates.map((up, idx) => (
@@ -339,10 +361,13 @@ export default function CheckForUpdatesButton({
                                                         <h4 className="text-xs font-bold text-white leading-snug">{up.subject}</h4>
                                                         <p className="text-[10px] text-gray-400 mt-1">From: {up.from} • {formatDateTime(up.date)}</p>
                                                     </div>
+                                                    <span className={`shrink-0 text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase ${up.documentsOnly ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'}`}>
+                                                        {up.documentsOnly ? '📎 Documents' : '✨ Update'}
+                                                    </span>
                                                 </div>
 
                                                 <div className="bg-indigo-950/20 border border-indigo-500/10 rounded p-2.5">
-                                                    <span className="text-[10px] uppercase font-bold text-indigo-400 block mb-1">AI Update Summary:</span>
+                                                    <span className="text-[10px] uppercase font-bold text-indigo-400 block mb-1">{up.documentsOnly ? 'Summary:' : 'AI Update Summary:'}</span>
                                                     <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{up.summary}</p>
                                                 </div>
 
