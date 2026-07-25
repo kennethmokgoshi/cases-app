@@ -51,7 +51,7 @@ RUN pnpm install --frozen-lockfile
 # ── builder stage ─────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS builder
 
-ARG CACHE_BUST=20260220000000
+ARG CACHE_BUST=20260725042600
 ARG APP=cases
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
