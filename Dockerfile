@@ -164,16 +164,18 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/packages/database/prisma ./prisma
 
-# Leverage output traces — standalone preserves monorepo directory structure
-COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/.next/standalone ./
+# Copy the built app and all dependencies
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP} ./apps/${APP}
+COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/turbo.json ./
 
-# Copy public and static assets into the app-specific path (where server.js expects them)
-COPY --from=builder /app/apps/${APP}/public ./apps/${APP}/public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/.next/static ./apps/${APP}/.next/static
+# Install pnpm in runner stage
+RUN npm install -g pnpm@10.30.1
 
 # Set correct permissions
-RUN mkdir -p apps/${APP}/.next storage/uploads
-RUN chown -R nextjs:nodejs apps/${APP}/.next storage/uploads
+RUN mkdir -p storage/uploads
+RUN chown -R nextjs:nodejs apps/${APP} storage/uploads
 
 USER nextjs
 
@@ -182,4 +184,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
+CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && cd apps/${APP} && pnpm start"]
