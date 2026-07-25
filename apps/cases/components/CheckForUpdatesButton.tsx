@@ -19,6 +19,7 @@ interface ScanRunMeta {
     ranByName: string;
     ranAt: string;
     lookbackDays: number;
+    forceRescan?: boolean;
     mailboxes: string[];
     scannedInbox: boolean;
     scannedSent: boolean;
@@ -108,17 +109,17 @@ export default function CheckForUpdatesButton({
         setShowResultModal(true);
     };
 
-    const runCheck = async (lookback: number) => {
+    const runCheck = async (lookback: number, forceRescan = false) => {
         setShowMenu(false);
         setShowPreRunModal(false);
         setIsChecking(true);
         setResult(null);
-        
+
         try {
             const res = await fetch(`/api/cases/${caseId}/check-updates`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lookbackDays: lookback }),
+                body: JSON.stringify({ lookbackDays: lookback, forceRescan }),
             });
 
             const data: ScanResponse = await res.json();
@@ -266,6 +267,18 @@ export default function CheckForUpdatesButton({
                             <p className="text-xs text-gray-400">
                                 Would you like to run the check again, or view the results of the most recent scan?
                             </p>
+
+                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                                <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                                    Documents missing even though the emails exist? A <span className="font-semibold">Force re-scan</span> re-examines emails already checked before and re-pulls their attachments (duplicates are skipped automatically; no messages are sent to the consumer).
+                                </p>
+                                <button
+                                    onClick={() => runCheck(selectedLookbackDays, true)}
+                                    className="mt-2 text-[11px] text-amber-100 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 px-3 py-1.5 rounded font-semibold transition-all"
+                                >
+                                    ⟳ Force re-scan (ignore already-checked)
+                                </button>
+                            </div>
                         </div>
 
                         <div className="px-6 py-4 border-t border-white/10 bg-white/5 flex flex-wrap justify-end gap-2">

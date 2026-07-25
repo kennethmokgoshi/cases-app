@@ -361,6 +361,28 @@ describe('POST /check-updates', () => {
         expect(scanRunCall![0].data.content).toContain('already processed');
     });
 
+    it('forceRescan ignores the already-processed skip list and suppresses notifications', async () => {
+        // msg-1 was processed before, so a normal run would skip it.
+        db.caseComment.findMany.mockResolvedValue([
+            { activityData: JSON.stringify({ messageId: 'msg-1' }) },
+        ]);
+
+        const res = await POST(request({ lookbackDays: 90, forceRescan: true }), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        // Re-examined despite being on the skip list → attachment re-harvested
+        expect(db.document.create).toHaveBeenCalled();
+        expect(json.updates).toHaveLength(1);
+        // Force re-scan never notifies the consumer, even on a real update
+        expect(mockedSend).not.toHaveBeenCalled();
+        expect(json.scanRun.forceRescan).toBe(true);
+
+        // scanMailboxForCaseUpdates received an empty skip list
+        const scanArgs = mockedScan.mock.calls[0][0];
+        expect(scanArgs.skipMessageIds).toEqual([]);
+    });
+
     it('records a per-mailbox error when a mailbox scan throws', async () => {
         mockedScan.mockRejectedValue(new Error('IMAP auth failed'));
 

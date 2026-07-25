@@ -13,6 +13,10 @@ const logger = createLogger('api/cases/[id]/check-updates');
 
 const BodySchema = z.object({
     lookbackDays: z.coerce.number().int().min(1).max(1095).default(180),
+    /** Re-examine emails already processed on a previous run. Documents are
+     *  still deduped by file (name + size), so this recovers missing files
+     *  without creating duplicates, and suppresses consumer notifications. */
+    forceRescan: z.coerce.boolean().default(false),
 });
 
 const ACTIVITY_TYPE = 'CASE_EMAIL_UPDATE_PROCESSED';
@@ -151,7 +155,7 @@ export async function POST(
             );
         }
 
-        const { lookbackDays } = parsed.data;
+        const { lookbackDays, forceRescan } = parsed.data;
 
         const caseData = await prisma.case.findUnique({
             where: { id: caseId },
@@ -197,16 +201,21 @@ export async function POST(
             },
         });
 
-        const skipMessageIds = processedComments
-            .map((c) => {
-                try {
-                    const data = JSON.parse(c.activityData ?? '{}');
-                    return data.messageId;
-                } catch {
-                    return null;
-                }
-            })
-            .filter((id): id is string => Boolean(id));
+        // A forced re-scan deliberately ignores the already-processed set so
+        // staff can recover documents that never landed in the vault. The
+        // file-level dedup in saveEmailAttachments still prevents duplicates.
+        const skipMessageIds = forceRescan
+            ? []
+            : processedComments
+                .map((c) => {
+                    try {
+                        const data = JSON.parse(c.activityData ?? '{}');
+                        return data.messageId;
+                    } catch {
+                        return null;
+                    }
+                })
+                .filter((id): id is string => Boolean(id));
 
         // Get mailbox accounts with decrypted passwords
         const mailboxes = await getSearchableMailboxesWithPasswords(session.user.id);
@@ -302,7 +311,7 @@ export async function POST(
                     let notificationSent = false;
                     const notificationErrors: string[] = [];
 
-                    if (hasUpdate && analysis.consumerNotificationMsg) {
+                    if (hasUpdate && !forceRescan && analysis.consumerNotificationMsg) {
                         const messageText = analysis.consumerNotificationMsg;
 
                         if (caseData.client.email) {
@@ -459,13 +468,13 @@ export async function POST(
         });
 
         const scanContent = [
-            `🔄 Case update check run by ${session.user.name || 'staff'}.`,
+            `🔄 Case update check run by ${session.user.name || 'staff'}${forceRescan ? ' (forced re-scan — already-processed emails re-examined, no consumer notifications sent)' : ''}.`,
             `Range: ${rangeLabel} (since ${since.toLocaleDateString('en-ZA')}).`,
             `Mailboxes scanned (${mailboxScans.length}): ${mailboxScans.map((m) => m.email).join(', ') || 'none'}.`,
             `Folders scanned: ${describeFolders(scannedInbox, scannedSent, allFolders)}.`,
             `Server search matched: ${totalRawMatches} message(s) by ID number / name (Subject + body). Client-matched emails to process: ${totalCandidates}.`,
-            totalRawMatches > 0 && totalCandidates === 0
-                ? `ℹ️ All server matches were already processed on a previous run.`
+            !forceRescan && totalRawMatches > 0 && totalCandidates === 0
+                ? `ℹ️ All server matches were already processed on a previous run. Use "Force re-scan" to re-pull their documents.`
                 : null,
             `Result: ${realUpdates} new update(s), ${documentsHarvested} email(s) with documents harvested (${docsSavedCount} file(s) saved).`,
             aiFailures > 0 ? `⚠️ AI analysis failed on ${aiFailures} email(s) — documents were still harvested; check AI provider config.` : null,
@@ -480,6 +489,7 @@ export async function POST(
             ranByUserId: session.user.id,
             ranByName,
             lookbackDays,
+            forceRescan,
             since: since.toISOString(),
             mailboxes: mailboxScans.map((m) => ({
                 email: m.email,
@@ -532,6 +542,7 @@ export async function POST(
                 ranByName,
                 ranAt: scanRunComment.createdAt,
                 lookbackDays,
+                forceRescan,
                 mailboxes: mailboxScans.map((m) => m.email),
                 scannedInbox,
                 scannedSent,
