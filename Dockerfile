@@ -44,7 +44,6 @@ COPY apps/forensic-audit/package.json ./apps/forensic-audit/
 COPY apps/finance/package.json ./apps/finance/
 COPY apps/crediva/package.json ./apps/crediva/
 COPY apps/website/package.json ./apps/website/
-COPY apps/reporting/package.json ./apps/reporting/
 
 # pnpm v10 onlyBuiltDependencies is declared in package.json — no CLI override needed
 RUN pnpm install --frozen-lockfile
