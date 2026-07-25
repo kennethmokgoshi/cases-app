@@ -182,4 +182,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP_NAME}/server.js
+CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
