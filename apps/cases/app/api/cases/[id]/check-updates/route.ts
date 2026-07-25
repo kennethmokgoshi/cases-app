@@ -46,6 +46,8 @@ interface EmailVerdict {
 interface MailboxScan {
     email: string;
     folders: string[];
+    /** Raw messages the server SEARCH matched, before dedup/skip/limit. */
+    rawMatches: number;
     /** Client-matched emails returned by the IMAP search for this mailbox. */
     candidates: number;
     verdicts: EmailVerdict[];
@@ -225,7 +227,7 @@ export async function POST(
         const uploadDir = join(process.cwd(), 'storage', 'uploads', caseId);
 
         for (const mailbox of readableMailboxes) {
-            const scanEntry: MailboxScan = { email: mailbox.emailAddress, folders: [], candidates: 0, verdicts: [] };
+            const scanEntry: MailboxScan = { email: mailbox.emailAddress, folders: [], rawMatches: 0, candidates: 0, verdicts: [] };
             mailboxScans.push(scanEntry);
             try {
                 const emails = await scanMailboxForCaseUpdates({
@@ -244,6 +246,9 @@ export async function POST(
                     skipMessageIds,
                     onFoldersResolved: (folders) => {
                         scanEntry.folders = folders;
+                    },
+                    onRawMatches: (count) => {
+                        scanEntry.rawMatches = count;
                     },
                 });
 
@@ -432,6 +437,7 @@ export async function POST(
         // Diagnostics: how many client-matched emails were found and what
         // happened to each, so a "nothing harvested" result is explainable.
         const allVerdicts = mailboxScans.flatMap((m) => m.verdicts);
+        const totalRawMatches = mailboxScans.reduce((n, m) => n + m.rawMatches, 0);
         const totalCandidates = mailboxScans.reduce((n, m) => n + m.candidates, 0);
         const documentsHarvested = processedUpdates.filter((u) => u.documentsOnly).length;
         const realUpdates = processedUpdates.length - documentsHarvested;
@@ -457,7 +463,10 @@ export async function POST(
             `Range: ${rangeLabel} (since ${since.toLocaleDateString('en-ZA')}).`,
             `Mailboxes scanned (${mailboxScans.length}): ${mailboxScans.map((m) => m.email).join(', ') || 'none'}.`,
             `Folders scanned: ${describeFolders(scannedInbox, scannedSent, allFolders)}.`,
-            `Client-matched emails found: ${totalCandidates}.`,
+            `Server search matched: ${totalRawMatches} message(s) by ID number / name (Subject + body). Client-matched emails to process: ${totalCandidates}.`,
+            totalRawMatches > 0 && totalCandidates === 0
+                ? `ℹ️ All server matches were already processed on a previous run.`
+                : null,
             `Result: ${realUpdates} new update(s), ${documentsHarvested} email(s) with documents harvested (${docsSavedCount} file(s) saved).`,
             aiFailures > 0 ? `⚠️ AI analysis failed on ${aiFailures} email(s) — documents were still harvested; check AI provider config.` : null,
             candidateLines.length > 0 ? `Emails analysed:\n${candidateLines.join('\n')}` : null,
@@ -475,12 +484,14 @@ export async function POST(
             mailboxes: mailboxScans.map((m) => ({
                 email: m.email,
                 folders: m.folders,
+                rawMatches: m.rawMatches,
                 candidates: m.candidates,
                 verdicts: m.verdicts,
                 error: m.error ?? null,
             })),
             scannedInbox,
             scannedSent,
+            rawMatches: totalRawMatches,
             candidatesFound: totalCandidates,
             updatesFound: realUpdates,
             documentsHarvested,
@@ -524,6 +535,7 @@ export async function POST(
                 mailboxes: mailboxScans.map((m) => m.email),
                 scannedInbox,
                 scannedSent,
+                rawMatches: totalRawMatches,
                 candidatesFound: totalCandidates,
                 updatesFound: realUpdates,
                 documentsHarvested,
@@ -593,6 +605,7 @@ export async function GET(
                     : [],
                 scannedInbox: Boolean(data.scannedInbox),
                 scannedSent: Boolean(data.scannedSent),
+                rawMatches: data.rawMatches ?? 0,
                 candidatesFound: data.candidatesFound ?? 0,
                 updatesFound: data.updatesFound ?? 0,
                 documentsHarvested: data.documentsHarvested ?? 0,

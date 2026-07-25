@@ -94,8 +94,9 @@ beforeEach(() => {
         },
     ]);
 
-    mockedScan.mockImplementation(async ({ onFoldersResolved }: any) => {
+    mockedScan.mockImplementation(async ({ onFoldersResolved, onRawMatches }: any) => {
         onFoldersResolved?.(['INBOX', 'Sent']);
+        onRawMatches?.(1);
         return [
             {
                 messageId: 'msg-1',
@@ -319,6 +320,45 @@ describe('POST /check-updates', () => {
                 data: expect.objectContaining({ action: 'CASE_UPDATE_SCAN_RUN' }),
             }),
         );
+    });
+
+    it('reports raw server-search matches for diagnostics', async () => {
+        const res = await POST(request({ lookbackDays: 90 }), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.scanRun.rawMatches).toBe(1);
+
+        const scanRunCall = db.caseComment.create.mock.calls.find(
+            (c: any[]) => c[0]?.data?.activityType === 'CASE_UPDATE_SCAN_RUN',
+        );
+        const activityData = JSON.parse(scanRunCall![0].data.activityData);
+        expect(activityData.rawMatches).toBe(1);
+    });
+
+    it('notes when server matches exist but were all already processed', async () => {
+        // Server matched msg-1, but it was processed on a previous run.
+        db.caseComment.findMany.mockResolvedValue([
+            { activityData: JSON.stringify({ messageId: 'msg-1' }) },
+        ]);
+        // Scanner still reports the raw match count even though it excludes the
+        // already-seen message from its returned list.
+        mockedScan.mockImplementation(async ({ onFoldersResolved, onRawMatches }: any) => {
+            onFoldersResolved?.(['INBOX', 'Sent']);
+            onRawMatches?.(1);
+            return []; // msg-1 excluded via skipMessageIds
+        });
+
+        const res = await POST(request(), ctx);
+        const json = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(json.scanRun.rawMatches).toBe(1);
+        expect(json.scanRun.candidatesFound).toBe(0);
+        const scanRunCall = db.caseComment.create.mock.calls.find(
+            (c: any[]) => c[0]?.data?.activityType === 'CASE_UPDATE_SCAN_RUN',
+        );
+        expect(scanRunCall![0].data.content).toContain('already processed');
     });
 
     it('records a per-mailbox error when a mailbox scan throws', async () => {

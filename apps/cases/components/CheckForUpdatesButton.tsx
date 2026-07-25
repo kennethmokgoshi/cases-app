@@ -22,6 +22,7 @@ interface ScanRunMeta {
     mailboxes: string[];
     scannedInbox: boolean;
     scannedSent: boolean;
+    rawMatches?: number;
     candidatesFound?: number;
     updatesFound: number;
     documentsHarvested?: number;
@@ -345,7 +346,9 @@ export default function CheckForUpdatesButton({
                                     <div className="text-xs text-gray-500">
                                         {result?.scanRun?.candidatesFound && result.scanRun.candidatesFound > 0
                                             ? `${result.scanRun.candidatesFound} matching email(s) were found, but they were already processed, had no new attachments, and contained no new case updates.`
-                                            : 'No emails matching this client were found in the scanned mailboxes for the selected range.'}
+                                            : result?.scanRun?.rawMatches && result.scanRun.rawMatches > 0
+                                                ? `The mail server matched ${result.scanRun.rawMatches} message(s) by ID number / name, but they were all already processed on a previous run.`
+                                                : 'The mail server returned no emails matching this client’s ID number or name in the scanned mailboxes for the selected range.'}
                                     </div>
                                 </div>
                             ) : (

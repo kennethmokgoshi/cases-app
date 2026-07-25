@@ -691,6 +691,7 @@ export async function scanMailboxForCaseUpdates({
     limit = 10,
     skipMessageIds = [],
     onFoldersResolved,
+    onRawMatches,
 }: {
     config: ImapConnectionConfig;
     idNumber?: string | null;
@@ -702,6 +703,9 @@ export async function scanMailboxForCaseUpdates({
     /** Called once the folders for this mailbox are resolved (e.g. INBOX, Sent),
      *  so callers can record which folders were actually scanned. */
     onFoldersResolved?: (folders: string[]) => void;
+    /** Called with the raw number of unique messages the server SEARCH matched
+     *  across all folders, before dedup/skip/limit — for scan diagnostics. */
+    onRawMatches?: (count: number) => void;
 }): Promise<CaseEmailUpdate[]> {
     const trimmedId = asString(idNumber);
     const trimmedFirst = asString(firstName);
@@ -730,6 +734,20 @@ export async function scanMailboxForCaseUpdates({
         onFoldersResolved?.(folders);
         const updates: CaseEmailUpdate[] = [];
         const processedMessageIds = new Set<string>(skipMessageIds);
+        let rawMatchCount = 0;
+
+        // Run one IMAP SEARCH criterion, tolerating servers that reject or
+        // mishandle a particular key (e.g. weak TEXT/body search) so a single
+        // failing criterion never loses the whole folder or the other criteria.
+        const safeSearch = async (criteria: Record<string, unknown>): Promise<number[]> => {
+            try {
+                const uids = await client.search(criteria, { uid: true });
+                return Array.isArray(uids) ? (uids as number[]) : [];
+            } catch (searchErr) {
+                logger.warn(`[IMAP] SEARCH ${JSON.stringify(criteria)} failed:`, searchErr);
+                return [];
+            }
+        };
 
         for (const folder of folders) {
             let lock;
@@ -746,13 +764,20 @@ export async function scanMailboxForCaseUpdates({
                     }
                 };
 
+                // Match on both the whole message (TEXT) and the Subject line.
+                // The ID number and full name are reliably in the subject of DC
+                // emails, and many servers' TEXT search misses subjects/bodies —
+                // so SUBJECT is the dependable hit for "please find attached".
                 if (trimmedId) {
-                    addUids(await client.search({ text: trimmedId, since }, { uid: true }), 'ID_NUMBER');
+                    addUids(await safeSearch({ text: trimmedId, since }), 'ID_NUMBER');
+                    addUids(await safeSearch({ subject: trimmedId, since }), 'ID_NUMBER');
                 }
                 if (fullName) {
-                    addUids(await client.search({ text: fullName, since }, { uid: true }), 'NAME');
+                    addUids(await safeSearch({ text: fullName, since }), 'NAME');
+                    addUids(await safeSearch({ subject: fullName, since }), 'NAME');
                 }
 
+                rawMatchCount += matchedOnByUid.size;
                 const allUids = [...matchedOnByUid.keys()];
                 const uidsToFetch = allUids.sort((a, b) => b - a).slice(0, limit);
 
@@ -858,6 +883,7 @@ export async function scanMailboxForCaseUpdates({
             }
         }
 
+        onRawMatches?.(rawMatchCount);
         updates.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
         return updates.slice(0, limit);
     } finally {
