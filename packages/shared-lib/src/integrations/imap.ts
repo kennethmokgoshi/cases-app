@@ -736,6 +736,23 @@ export async function scanMailboxForCaseUpdates({
         const processedMessageIds = new Set<string>(skipMessageIds);
         let rawMatchCount = 0;
 
+        // Collected during the fetch loop, downloaded AFTER it. imapflow cannot
+        // run client.download() while a client.fetch() stream is still active on
+        // the same connection — doing so silently yields no body/attachments — so
+        // all downloads are deferred to a second pass.
+        type PendingMsg = {
+            folder: string;
+            uid: number;
+            messageId: string;
+            from: string;
+            to: string;
+            subject: string;
+            date: string | null;
+            bodyStructure: unknown;
+            attachmentParts: { part: string; fileName: string; mimeType: string; detectedType: string }[];
+        };
+        const pending: PendingMsg[] = [];
+
         // Run one IMAP SEARCH criterion, tolerating servers that reject or
         // mishandle a particular key (e.g. weak TEXT/body search) so a single
         // failing criterion never loses the whole folder or the other criteria.
@@ -791,12 +808,10 @@ export async function scanMailboxForCaseUpdates({
                             processedMessageIds.add(messageId);
                         }
 
-                        // Download the body text
-                        const body = await getEmailBodyText(client, msg.uid, msg.bodyStructure);
-
-                        // Find and download attachments (PDFs, images, docs)
-                        const attachments: CaseEmailUpdate['attachments'] = [];
-                        const checkAndDownloadParts = async (part: any) => {
+                        // Collect attachment part references ONLY — do not
+                        // download here (see PendingMsg note above).
+                        const attachmentParts: PendingMsg['attachmentParts'] = [];
+                        const collectParts = (part: any) => {
                             if (!part) return;
 
                             const filename =
@@ -817,43 +832,33 @@ export async function scanMailboxForCaseUpdates({
                                 Boolean(filename) ||
                                 isPdf;
 
-                            if ((isAttachment || Boolean(filename)) && isDoc) {
-                                try {
-                                    const { content } = await client.download(msg.uid, part.part, { uid: true });
-                                    const chunks: Buffer[] = [];
-                                    for await (const chunk of content) {
-                                        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-                                    }
-                                    const buffer = Buffer.concat(chunks);
-                                    const lowerName = filename.toLowerCase();
-                                    const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill');
-                                    const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement');
-                                    const detectedType = classifyDocumentByFilename({
-                                        filename,
-                                        subject: msg.envelope?.subject || '',
-                                        isInvoice,
-                                        isPoP,
-                                    });
+                            if ((isAttachment || Boolean(filename)) && isDoc && part.part) {
+                                const lowerName = filename.toLowerCase();
+                                const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill');
+                                const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement');
+                                const detectedType = classifyDocumentByFilename({
+                                    filename,
+                                    subject: msg.envelope?.subject || '',
+                                    isInvoice,
+                                    isPoP,
+                                });
 
-                                    attachments.push({
-                                        fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
-                                        mimeType: part.contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
-                                        buffer,
-                                        detectedType,
-                                    });
-                                } catch (downloadErr) {
-                                    logger.error(`Failed to download attachment ${filename} for message UID ${msg.uid} in folder ${folder}:`, downloadErr);
-                                }
+                                attachmentParts.push({
+                                    part: part.part,
+                                    fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
+                                    mimeType: part.contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
+                                    detectedType,
+                                });
                             }
 
                             if (Array.isArray(part.childNodes)) {
                                 for (const child of part.childNodes) {
-                                    await checkAndDownloadParts(child);
+                                    collectParts(child);
                                 }
                             }
                         };
 
-                        await checkAndDownloadParts(msg.bodyStructure);
+                        collectParts(msg.bodyStructure);
 
                         let dateStr: string | null = null;
                         if (msg.envelope?.date) {
@@ -861,16 +866,16 @@ export async function scanMailboxForCaseUpdates({
                             dateStr = Number.isNaN(d.getTime()) ? null : d.toISOString();
                         }
 
-                        updates.push({
+                        pending.push({
+                            folder,
+                            uid: msg.uid,
                             messageId,
                             from: formatAddressList(msg.envelope?.from),
                             to: formatAddressList(msg.envelope?.to),
                             subject: msg.envelope?.subject || '(no subject)',
                             date: dateStr,
-                            body,
-                            folder,
-                            uid: msg.uid,
-                            attachments,
+                            bodyStructure: msg.bodyStructure,
+                            attachmentParts,
                         });
                     }
                 }
@@ -884,6 +889,53 @@ export async function scanMailboxForCaseUpdates({
         }
 
         onRawMatches?.(rawMatchCount);
+
+        // Second pass: with no fetch stream active, download each message's body
+        // text and attachments (re-locking the folder per message). This is the
+        // same deferred-download approach scanMailboxForClient uses.
+        for (const pm of pending) {
+            let lock;
+            try {
+                lock = await client.getMailboxLock(pm.folder);
+                const body = await getEmailBodyText(client, pm.uid, pm.bodyStructure);
+                const attachments: CaseEmailUpdate['attachments'] = [];
+                for (const ap of pm.attachmentParts) {
+                    try {
+                        const { content } = await client.download(pm.uid, ap.part, { uid: true });
+                        const chunks: Buffer[] = [];
+                        for await (const chunk of content) {
+                            chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+                        }
+                        attachments.push({
+                            fileName: ap.fileName,
+                            mimeType: ap.mimeType,
+                            buffer: Buffer.concat(chunks),
+                            detectedType: ap.detectedType,
+                        });
+                    } catch (downloadErr) {
+                        logger.error(`Failed to download attachment ${ap.fileName} for UID ${pm.uid} in ${pm.folder}:`, downloadErr);
+                    }
+                }
+                updates.push({
+                    messageId: pm.messageId,
+                    from: pm.from,
+                    to: pm.to,
+                    subject: pm.subject,
+                    date: pm.date,
+                    body,
+                    folder: pm.folder,
+                    uid: pm.uid,
+                    attachments,
+                });
+            } catch (msgErr) {
+                logger.warn(`Failed to download message UID ${pm.uid} in ${pm.folder}:`, msgErr);
+            } finally {
+                if (lock) {
+                    try { lock.release(); } catch { /* ignore */ }
+                }
+            }
+        }
+
         updates.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
         return updates.slice(0, limit);
     } finally {

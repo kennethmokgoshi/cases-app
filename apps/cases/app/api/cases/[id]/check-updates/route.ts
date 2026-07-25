@@ -43,6 +43,8 @@ interface EmailVerdict {
     isRelevant: boolean;
     hasUpdate: boolean;
     summary: string;
+    /** Attachments the scanner downloaded from the email. */
+    attachmentsOnEmail: number;
     docsSaved: number;
     outcome: 'update' | 'documents-only' | 'no-action';
 }
@@ -296,6 +298,7 @@ export async function POST(
                         isRelevant: analysis.isRelevant,
                         hasUpdate: analysis.hasUpdate,
                         summary: analysis.updateSummary,
+                        attachmentsOnEmail: email.attachments?.length ?? 0,
                         docsSaved: savedDocs.length,
                         outcome: hasUpdate ? 'update' : savedDocs.length > 0 ? 'documents-only' : 'no-action',
                     };
@@ -455,16 +458,20 @@ export async function POST(
             v.summary?.startsWith('Failed to analyze')
         ).length;
 
+        const totalAttachmentsOnEmails = allVerdicts.reduce((n, v) => n + v.attachmentsOnEmail, 0);
         const candidateLines = allVerdicts.slice(0, 10).map((v) => {
+            const att = `${v.attachmentsOnEmail} attachment(s) on email`;
             const label =
                 v.outcome === 'update'
-                    ? 'update logged'
+                    ? `update logged, ${v.docsSaved} doc(s) saved`
                     : v.outcome === 'documents-only'
                         ? `${v.docsSaved} doc(s) saved, no textual update`
-                        : v.isRelevant
-                            ? 'relevant, no update, no new docs'
-                            : 'AI marked not relevant';
-            return `• ${v.subject || '(no subject)'} — ${label}`;
+                        : v.attachmentsOnEmail > 0
+                            ? `${att} but 0 saved (already on case or save failed)`
+                            : v.isRelevant
+                                ? 'no attachments, no update'
+                                : 'AI marked not relevant, no attachments';
+            return `• ${v.subject || '(no subject)'} — ${att}; ${label}`;
         });
 
         const scanContent = [
