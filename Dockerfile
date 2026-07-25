@@ -94,7 +94,7 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN cd packages/database && npx prisma generate
 
 # Build the target app
-RUN cd apps/${APP} && pnpm run build && ls -la .next/ && find .next -name "server.js" -o -type d -name standalone
+RUN cd apps/${APP} && pnpm run build
 
 # ── runner stage ──────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS runner
@@ -182,4 +182,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
+CMD prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP_NAME}/server.js
