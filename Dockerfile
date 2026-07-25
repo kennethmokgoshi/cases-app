@@ -100,6 +100,11 @@ RUN cd apps/${APP} && pnpm run build
 FROM node:20-bullseye AS runner
 
 ARG APP=cases
+# Promote the build ARG to a runtime ENV — the CMD below runs at container
+# start where build ARGs no longer exist, so without this `${APP}` would
+# expand to empty and `cd apps/ && pnpm start` fails with
+# ERR_PNPM_NO_SCRIPT_OR_SERVER (no package.json/start script in apps/).
+ENV APP=${APP}
 
 WORKDIR /app
 
