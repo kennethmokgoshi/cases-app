@@ -637,6 +637,24 @@ model User {
   verifiedWorkLogs           WorkLog[]                      @relation("WorkLogVerifier")
   creditTransfersCreated     CreditTransfer[]               @relation("CreditTransferCreator")
   creditTransfersReversed    CreditTransfer[]               @relation("CreditTransferReverser")
+  employeeSessions           EmployeeSession[]              @relation("UserSessions")
+  employeePresence           EmployeePresence?
+}
+
+model EmployeePresence {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String    @default("OFFLINE") // ONLINE | IDLE | OFFLINE
+  lastActivityAt DateTime?
+  checkedInAt    DateTime?
+  checkedOutAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([lastActivityAt])
 }
 
 // Debit order mandate lifecycle — capture, send, sign-back, NuPay registration
@@ -2228,4 +2246,18 @@ model CreditTransfer {
   @@index([status])
   @@index([createdAt])
 }
+
+model EmployeeSession {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+  loginAt   DateTime  @default(now())
+  logoutAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([loginAt])
+}
+
 

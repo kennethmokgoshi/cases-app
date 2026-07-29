@@ -1,0 +1,16 @@
+﻿# Next.js
+.next
+out
+node_modules
+*.pem
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+.DS_Store
+.env.local
+.env.*.local
+*.log
+.vscode

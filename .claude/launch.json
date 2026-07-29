@@ -40,9 +40,9 @@
       "port": 3004
     },
     {
-      "name": "credo",
+      "name": "crediva",
       "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
-      "runtimeArgs": ["--filter", "credo", "dev"],
+      "runtimeArgs": ["--filter", "crediva", "dev"],
       "port": 3005
     },
     {
@@ -50,6 +50,12 @@
       "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
       "runtimeArgs": ["--filter", "website", "dev"],
       "port": 3006
+    },
+    {
+      "name": "reporting",
+      "runtimeExecutable": "C:/visual studio code/06 March 2026/.claude/pnpm-wrapper.cmd",
+      "runtimeArgs": ["--filter", "reporting", "dev"],
+      "port": 3008
     }
   ]
 }

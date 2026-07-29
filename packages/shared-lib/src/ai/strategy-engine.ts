@@ -113,7 +113,7 @@ Output your recommendation in the following JSON format ONLY:
         const result = JSON.parse(response.choices[0].message.content || '{}');
         return result as CaseStrategyResponse;
     } catch (error) {
-        logger.error(error, 'Error generating case strategy');
+        logger.error({ err: error }, 'Error generating case strategy');
         throw new Error('Failed to generate AI strategy. Please check logs.');
     }
 }

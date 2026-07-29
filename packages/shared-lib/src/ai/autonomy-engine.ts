@@ -46,7 +46,7 @@ export async function getAutonomyDecision(caseId: string, actionType: string): P
             level
         };
     } catch (error) {
-        logger.error(error, `Error getting autonomy decision for case ${caseId}`);
+        logger.error({ err: error }, `Error getting autonomy decision for case ${caseId}`);
         return {
             shouldExecute: false,
             reason: 'Error checking autonomy level. Defaulting to safe review mode.',

@@ -17,12 +17,15 @@ const logger = createLogger('api/cases/[id]/poa');
  * {
  *   type: 'STANDARD' | 'WESBANK'
  *   channel: 'EMAIL' | 'WHATSAPP'
+ *   includeJointClient?: boolean
  * }
  *
  * - STANDARD: pre-fills all client details from the case record.
  * - WESBANK:  also requires the requesting staff member to have idNumber
  *             and address set in their profile. Returns 422 + missingFields
  *             if they do not.
+ * - includeJointClient: if true and joint client exists with valid contact info for
+ *   the channel, send separate POAs to both primary and joint client.
  */
 export async function POST(
     request: NextRequest,
@@ -35,7 +38,11 @@ export async function POST(
         }
 
         const { id: caseId } = await params;
-        const { type, channel } = await request.json() as { type: string; channel: string };
+        const { type, channel, includeJointClient } = await request.json() as {
+            type: string;
+            channel: string;
+            includeJointClient?: boolean;
+        };
 
         if (!['STANDARD', 'WESBANK'].includes(type)) {
             return NextResponse.json({ error: 'Invalid POA type. Must be STANDARD or WESBANK.' }, { status: 400 });
@@ -49,7 +56,7 @@ export async function POST(
         // ---------------------------------------------------------------
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
-            include: { client: true },
+            include: { client: true, jointClient: true },
         });
 
         if (!caseRecord) {
@@ -166,44 +173,152 @@ export async function POST(
         const downloadUrl = `${baseUrl}/api/poa/download/${fileName}`;
 
         // ---------------------------------------------------------------
-        // Send PDF
+        // Determine recipients
         // ---------------------------------------------------------------
-        if (channel === 'EMAIL') {
-            const emailResult = await sendEmailWithAttachments({
-                to: client.email!,
-                fromName:    session.user.name || undefined,
-                subject: type === 'WESBANK'
-                    ? `Wesbank Power of Attorney — Please Sign Online | ${clientFullName}`
-                    : `Power of Attorney — Sign Online | Zenowethu Debt Management`,
-                html: buildEmailHtml(clientFullName, type, downloadUrl, signUrl),
-                attachments: [{
-                    filename:    fileName,
-                    content:     pdfBuffer,
-                    contentType: 'application/pdf',
-                }],
-            });
+        interface Recipient {
+            name: string;
+            email?: string;
+            phone?: string;
+            idNumber: string;
+            clientObj: typeof client;
+        }
 
-            if (!emailResult.success) {
-                logger.error('[POA] Email send failed', emailResult.error);
-                return NextResponse.json({ error: 'Failed to send email: ' + emailResult.error }, { status: 500 });
+        const recipients: Recipient[] = [{
+            name: clientFullName,
+            email: client.email ?? undefined,
+            phone: client.whatsappNumber ?? client.phone ?? undefined,
+            idNumber: cleanIdNumber,
+            clientObj: client,
+        }];
+
+        let jointClientFullName = '';
+        if (includeJointClient && caseRecord.jointClient) {
+            const jointClientEmail = caseRecord.jointClient.email ?? undefined;
+            const jointClientPhone = caseRecord.jointClient.whatsappNumber ?? caseRecord.jointClient.phone ?? undefined;
+
+            // Only add joint client if they have contact info for the channel
+            if ((channel === 'EMAIL' && jointClientEmail) || (channel === 'WHATSAPP' && jointClientPhone)) {
+                jointClientFullName = `${caseRecord.jointClient.firstName} ${caseRecord.jointClient.lastName}`;
+                recipients.push({
+                    name: jointClientFullName,
+                    email: jointClientEmail,
+                    phone: jointClientPhone,
+                    idNumber: caseRecord.jointClient.idNumber.replace(/\D/g, ''),
+                    clientObj: caseRecord.jointClient,
+                });
             }
-
-            await logActivity(caseId, session.user.id, type, 'EMAIL', client.email!);
-            return NextResponse.json({ success: true, channel: 'EMAIL', messageId: emailResult.messageId, downloadUrl, signUrl });
         }
 
-        const waMessage = buildWhatsAppMessage(clientFullName, downloadUrl, signUrl, type);
+        const sentTo: string[] = [];
+        const skippedClients: string[] = [];
 
-        try {
-            await GhlService.sendMessage(caseId, 'WHATSAPP', waMessage);
-        } catch (ghlErr) {
-            // Try SMS fallback if WhatsApp fails
-            logger.warn('[POA] WhatsApp send failed, attempting SMS', ghlErr);
-            await GhlService.sendMessage(caseId, 'SMS', waMessage);
+        // ---------------------------------------------------------------
+        // Send PDF to each recipient
+        // ---------------------------------------------------------------
+        for (const recipient of recipients) {
+            if (channel === 'EMAIL') {
+                if (!recipient.email) {
+                    skippedClients.push(recipient.name);
+                    continue;
+                }
+
+                const recipientPdfBuffer = await generateStandardPoa({
+                    fullName:    recipient.name,
+                    idNumber:    recipient.idNumber,
+                    dateOfBirth: recipient.idNumber ? idToDateOfBirth(recipient.idNumber) : '',
+                    address:     recipient.clientObj.address ?? '',
+                    phone:       recipient.clientObj.phone ?? '',
+                    email:       recipient.clientObj.email ?? '',
+                    signedCity:  'Pretoria',
+                    signedDate:  today,
+                    dcName,
+                    dcNcrdcNo,
+                    dcPhone,
+                });
+
+                const emailResult = await sendEmailWithAttachments({
+                    to: recipient.email,
+                    fromName:    session.user.name || undefined,
+                    subject: type === 'WESBANK'
+                        ? `Wesbank Power of Attorney — Please Sign Online | ${recipient.name}`
+                        : `Power of Attorney — Sign Online | Zenowethu Debt Management`,
+                    html: buildEmailHtml(recipient.name, type, downloadUrl, signUrl),
+                    attachments: [{
+                        filename:    fileName,
+                        content:     recipientPdfBuffer,
+                        contentType: 'application/pdf',
+                    }],
+                });
+
+                if (!emailResult.success) {
+                    logger.error('[POA] Email send failed for recipient', { recipient: recipient.name, error: emailResult.error });
+                    skippedClients.push(recipient.name);
+                    continue;
+                }
+
+                sentTo.push(recipient.name);
+                await logActivity(caseId, session.user.id, type, 'EMAIL', recipient.email, recipient.clientObj.id !== client.id);
+            } else if (channel === 'WHATSAPP') {
+                if (!recipient.phone) {
+                    skippedClients.push(recipient.name);
+                    continue;
+                }
+
+                const recipientPdfBuffer = type === 'STANDARD'
+                    ? await generateStandardPoa({
+                        fullName:    recipient.name,
+                        idNumber:    recipient.idNumber,
+                        dateOfBirth: recipient.idNumber ? idToDateOfBirth(recipient.idNumber) : '',
+                        address:     recipient.clientObj.address ?? '',
+                        phone:       recipient.clientObj.phone ?? '',
+                        email:       recipient.clientObj.email ?? '',
+                        signedCity:  'Pretoria',
+                        signedDate:  today,
+                        dcName,
+                        dcNcrdcNo,
+                        dcPhone,
+                    })
+                    : await generateWesbankPoa({
+                        clientFullName: recipient.name,
+                        clientIdNumber: recipient.idNumber,
+                        clientAddress:  recipient.clientObj.address ?? '',
+                        agentFullName:  `${staffUser!.firstName} ${staffUser!.lastName}`,
+                        agentIdNumber:  staffUser!.idNumber!,
+                        agentAddress:   staffUser!.address!,
+                        signedAtCity:   'Pretoria',
+                        signedDate:     today,
+                    });
+
+                const waMessage = buildWhatsAppMessage(recipient.name, downloadUrl, signUrl, type);
+
+                try {
+                    await GhlService.sendMessage(caseId, 'WHATSAPP', waMessage);
+                    sentTo.push(recipient.name);
+                } catch (ghlErr) {
+                    // Try SMS fallback if WhatsApp fails
+                    logger.warn('[POA] WhatsApp send failed for recipient, attempting SMS', { recipient: recipient.name, error: ghlErr });
+                    try {
+                        await GhlService.sendMessage(caseId, 'SMS', waMessage);
+                        sentTo.push(recipient.name);
+                    } catch (smsErr) {
+                        logger.error('[POA] SMS fallback also failed for recipient', { recipient: recipient.name, error: smsErr });
+                        skippedClients.push(recipient.name);
+                        continue;
+                    }
+                }
+
+                await logActivity(caseId, session.user.id, type, 'WHATSAPP', recipient.phone, recipient.clientObj.id !== client.id);
+            }
         }
 
-        await logActivity(caseId, session.user.id, type, 'WHATSAPP', client.whatsappNumber ?? client.phone ?? '');
-        return NextResponse.json({ success: true, channel: 'WHATSAPP', downloadUrl, signUrl });
+        return NextResponse.json({
+            success: sentTo.length > 0,
+            channel,
+            downloadUrl,
+            signUrl,
+            sentTo: sentTo.length > 0 ? sentTo : undefined,
+            skippedClients: skippedClients.length > 0 ? skippedClients : undefined,
+        });
 
     } catch (error) {
         logger.error('[POA] Unexpected error', error);
@@ -225,13 +340,14 @@ function idToDateOfBirth(idNumber: string): string {
     return `${dd}/${mm}/${year}`;
 }
 
-async function logActivity(caseId: string, userId: string, type: string, channel: string, recipient: string) {
+async function logActivity(caseId: string, userId: string, type: string, channel: string, recipient: string, isJointClient?: boolean) {
     const label = type === 'WESBANK' ? 'Wesbank POA' : 'Standard POA';
+    const clientNote = isJointClient ? ' (joint client)' : '';
     await prisma.caseComment.create({
         data: {
             caseId,
             userId,
-            content: `Sent ${label} to client via ${channel} (${recipient}) for signature.`,
+            content: `Sent ${label} to client${clientNote} via ${channel} (${recipient}) for signature.`,
             type: 'SYSTEM',
             isInternal: true,
         },

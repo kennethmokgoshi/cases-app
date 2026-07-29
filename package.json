@@ -27,5 +27,8 @@
       "@sentry/nextjs",
       "unrs-resolver"
     ]
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3"
   }
 }

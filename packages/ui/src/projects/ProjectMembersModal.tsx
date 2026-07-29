@@ -356,7 +356,7 @@ export function ProjectMembersModal({
                         )}
                     </div>
 
-                    {canManage && project.type !== 'ACQUISITION_SOURCE' && (
+                    {canManage && (
                         <div className="mb-4 flex items-center gap-2 p-3 bg-zeno-blue/10 border border-white/5 rounded-lg hover:border-white/10 transition-colors">
                             <input
                                 type="checkbox"

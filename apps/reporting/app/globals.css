@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+html {
+  font-size: 14px;
+}
+
+:root {
+  color-scheme: light;
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overscroll-behavior-y: contain;
+  padding-top: var(--safe-area-inset-top);
+  padding-bottom: var(--safe-area-inset-bottom);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Touch-friendly tap targets */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Safe area utilities */
+.safe-top {
+  padding-top: calc(var(--safe-area-inset-top) + 1rem);
+}
+
+.safe-bottom {
+  padding-bottom: calc(var(--safe-area-inset-bottom) + 1rem);
+}
+
+.safe-left {
+  padding-left: calc(var(--safe-area-inset-left) + 1rem);
+}
+
+.safe-right {
+  padding-right: calc(var(--safe-area-inset-right) + 1rem);
+}
+
+.safe-all {
+  padding: calc(var(--safe-area-inset-top) + 1rem) calc(var(--safe-area-inset-right) + 1rem) calc(var(--safe-area-inset-bottom) + 1rem) calc(var(--safe-area-inset-left) + 1rem);
+}
+
+/* Mobile-first responsive containers */
+.container-mobile {
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 640px) {
+  .container-mobile {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-mobile {
+    padding-left: 2rem;
+    padding-right: 2rem;
+    max-width: 80rem;
+  }
+}
+
+/* Loading skeleton for mobile */
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 0.25rem;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Fix oversized icons in sidebar */
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Constrain sidebar icon sizes */
+[role="navigation"] svg,
+.sidebar svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Fix mobile bottom nav icons */
+[class*="bottom-nav"] svg {
+  width: 24px;
+  height: 24px;
+}

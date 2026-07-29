@@ -202,7 +202,7 @@ export async function draftLegalDocument(request: DraftingRequest): Promise<Draf
 
         return result as DraftResponse;
     } catch (error) {
-        logger.error(error, 'Error drafting legal document');
+        logger.error({ err: error }, 'Error drafting legal document');
         throw new Error('Failed to draft document via AI');
     }
 }

@@ -268,8 +268,7 @@ export async function PATCH(
 
             // 4. Handle Removal from Descendants
             // Propagate removal ONLY if syncDown is explicitly true
-            // EXCEPTION: Partners (ACQUISITION_SOURCE) never propagate removals
-            if (syncDown && removedUserIds.length > 0 && updated.type !== 'ACQUISITION_SOURCE') {
+            if (syncDown && removedUserIds.length > 0) {
                 await removeMembersFromDescendants(tx, id, removedUserIds);
             }
 
@@ -294,20 +293,15 @@ export async function PATCH(
                     data: createData
                 });
 
-                // 6. Hierarchy Sync
-                // EXCEPTION: Partners (ACQUISITION_SOURCE) are isolated containers.
-                if (finalType !== 'ACQUISITION_SOURCE') {
-                    // A) Sync UP: If adding to a sub-project, ensure ancestors have them too
-                    // We keep this automatic as it's usually required for navigation context
-                    if (updated.parentId) {
-                        await addMembersToAncestors(tx, updated.parentId, newMembersPayload);
-                    }
-
-                    // B) Sync DOWN: If syncDown is enabled, ensure descendants have them too (with role matching)
-                    if (syncDown) {
-                        await syncMembersToDescendants(tx, id, newMembersPayload);
-                    }
+                // 6a. Hierarchy Sync UP: If adding to a sub-project, ensure ancestors have them too
+                // EXCEPTION: Partners (ACQUISITION_SOURCE) don't auto-sync UP to avoid polluting root
+                if (finalType !== 'ACQUISITION_SOURCE' && updated.parentId) {
+                    await addMembersToAncestors(tx, updated.parentId, newMembersPayload);
                 }
+
+                // Store newMembersPayload for post-transaction syncDown
+                // (returned in the update object)
+                (updated as any)._syncDownMembers = newMembersPayload;
             }
 
             // Return fresh data
@@ -320,6 +314,16 @@ export async function PATCH(
                 }
             });
         });
+
+        // Handle syncDown AFTER transaction completes (avoids nested transaction issues with recursion)
+        if (syncDown && members !== undefined && members.length > 0) {
+            const newMembersPayload = members.map((m: any) => ({
+                userId: m.userId,
+                role: m.role || 'MEMBER'
+            }));
+            // Call with regular prisma client, not transaction object
+            await syncMembersToDescendants(prisma as any, id, newMembersPayload);
+        }
 
         return NextResponse.json(project);
     } catch (error) {
