@@ -8,7 +8,7 @@
 #   OPENAI_API_KEY
 #   NEXTAUTH_SECRET
 
-ARG APP=cases
+ARG APP=reporting
 
 # ── deps stage ───────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS deps
@@ -53,7 +53,7 @@ RUN pnpm install --frozen-lockfile
 FROM node:20-bullseye AS builder
 
 ARG CACHE_BUST=20260725042600
-ARG APP=cases
+ARG APP=reporting
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
@@ -100,7 +100,7 @@ RUN cd apps/${APP} && pnpm run build
 # ── runner stage ──────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS runner
 
-ARG APP=cases
+ARG APP=reporting
 # Promote the build ARG to a runtime ENV — the CMD below runs at container
 # start where build ARGs no longer exist, so without this `${APP}` would
 # expand to empty and `cd apps/ && pnpm start` fails with
