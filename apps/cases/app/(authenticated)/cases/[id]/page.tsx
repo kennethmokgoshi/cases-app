@@ -226,6 +226,7 @@ type CaseDetail = {
         idNumber: string;
         email: string | null;
         phone: string | null;
+        whatsappNumber: string | null;
     } | null;
     referrer?: {
         id: string;
@@ -5454,12 +5455,12 @@ export default function CaseDetailPage() {
                     isOpen={isPoaModalOpen}
                     onClose={() => setIsPoaModalOpen(false)}
                     caseId={caseData.id}
-                    clientName={caseData.jointClient 
-                        ? `${caseData.client.firstName} ${caseData.client.lastName} & ${caseData.jointClient.firstName} ${caseData.jointClient.lastName}`
-                        : `${caseData.client?.firstName ?? ''} ${caseData.client?.lastName ?? ''}`.trim()
-                    }
+                    clientName={`${caseData.client?.firstName ?? ''} ${caseData.client?.lastName ?? ''}`.trim()}
                     clientEmail={caseData.client?.email}
                     clientPhone={caseData.client?.whatsappNumber ?? caseData.client?.phone}
+                    jointClientName={caseData.jointClient ? `${caseData.jointClient.firstName} ${caseData.jointClient.lastName}` : null}
+                    jointClientEmail={caseData.jointClient?.email}
+                    jointClientPhone={caseData.jointClient?.whatsappNumber ?? caseData.jointClient?.phone}
                     services={caseData.services}
                     dcName={caseData.debtCounsellorName}
                     dcNcrdcNo={caseData.ncrdcNo}

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { DeleteConfirmationModal, Pagination } from '@zenowethu/ui';
 import { MoveProjectModal } from '@zenowethu/ui';
 import { DestinationPathSelector } from '@zenowethu/ui';
+import { ProjectMembersModal } from '@zenowethu/ui';
 
 // Client-side logger
 const logger = {
@@ -961,6 +962,10 @@ export default function ProjectsManagement() {
                                                             >
                                                                 <option value="MEMBER">Member</option>
                                                                 <option value="MANAGER">Manager</option>
+                                                                <option value="SENIOR_MANAGER">Senior Manager</option>
+                                                                <option value="FINANCE">Finance</option>
+                                                                <option value="EXECUTIVE">Executive</option>
+                                                                <option value="ADMIN">Admin</option>
                                                             </select>
                                                             <button
                                                                 type="button"
@@ -1056,174 +1061,18 @@ export default function ProjectsManagement() {
                 />
             )}
 
+            {/* Members Modal - Use Reusable Component */}
             {viewingMembersProject && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-zeno-navy border border-zeno-blue rounded-xl w-full max-w-md">
-                        <div className="p-6 border-b border-zeno-blue flex justify-between items-center">
-                            <h2 className="text-xl font-semibold text-white">
-                                Members: {viewingMembersProject.name}
-                            </h2>
-                            <button onClick={() => setViewingMembersProject(null)} className="text-gray-400 hover:text-white">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="p-6">
-                            {/* Check permissions: Admin OR Manager of this project */}
-                            {(() => {
-                                const canManage = session?.user?.isAdmin || viewingMembersProject.members?.some(m => m.userId === session?.user?.id && m.role === 'MANAGER');
-
-                                return (
-                                    <>
-                                        {canManage && (
-                                            <div className="mb-4">
-                                                <select
-                                                    className="w-full px-4 py-2 bg-zeno-blue/50 border border-zeno-blue rounded-lg text-white mb-2"
-                                                    onChange={(e) => {
-                                                        const value = e.target.value;
-                                                        if (!value) return;
-
-                                                        if (value.startsWith('GROUP:')) {
-                                                            const groupId = value.replace('GROUP:', '');
-                                                            const group = allGroups.find(g => g.id === groupId);
-                                                            if (group) {
-                                                                const newMembers = [...modalMembers];
-                                                                group.members.forEach(gm => {
-                                                                    if (!newMembers.some(m => m.userId === gm.user.id)) {
-                                                                        newMembers.push({ userId: gm.user.id, role: 'MEMBER' });
-                                                                    }
-                                                                });
-                                                                setModalMembers(newMembers);
-                                                            }
-                                                        } else {
-                                                            setModalMembers([...modalMembers, { userId: value, role: 'MEMBER' }]);
-                                                        }
-                                                        e.target.value = '';
-                                                    }}
-                                                >
-                                                    <option value="">+ Add Member...</option>
-                                                    <optgroup label="Groups">
-                                                        {allGroups.map(g => (
-                                                            <option key={g.id} value={`GROUP:${g.id}`}>
-                                                                {g.name} ({g._count.members} members)
-                                                            </option>
-                                                        ))}
-                                                    </optgroup>
-                                                    <optgroup label="Users">
-                                                        {allUsers
-                                                            .filter(u => u.userType === 'STAFF' || !u.userType)
-                                                            .filter(u => !modalMembers.some(m => m.userId === u.id))
-                                                            .map(u => (
-                                                                <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>
-                                                            ))}
-                                                    </optgroup>
-                                                </select>
-                                            </div>
-                                        )}
-
-                                        {canManage && viewingMembersProject.type !== 'ACQUISITION_SOURCE' && (
-                                            <div className="mb-4 flex items-center gap-2 p-3 bg-zeno-blue/10 border border-white/5 rounded-lg">
-                                                <input
-                                                    type="checkbox"
-                                                    id="modalSyncDown"
-                                                    checked={syncDown}
-                                                    onChange={(e) => setSyncDown(e.target.checked)}
-                                                    className="w-4 h-4 rounded border-zeno-blue bg-zeno-blue/50 text-zeno-cyan focus:ring-zeno-cyan"
-                                                />
-                                                <label htmlFor="modalSyncDown" className="text-xs text-gray-300 font-medium cursor-pointer select-none">
-                                                    Apply member changes to all sub-projects
-                                                </label>
-                                            </div>
-                                        )}
-
-                                        {modalMembers.length > 0 ? (
-                                            <div className="space-y-3 max-h-[50vh] overflow-y-auto">
-                                                {modalMembers.map((member) => {
-                                                    const user = allUsers.find(u => u.id === member.userId);
-                                                    // Fallback if user not in allUsers yet (though should be if fetched)
-                                                    const displayName = user ? `${user.firstName} ${user.lastName}` : 'Unknown User';
-                                                    const displayEmail = user?.email || member.userId;
-                                                    const initials = user ? `${user.firstName[0]}${user.lastName[0]}` : '??';
-
-                                                    return (
-                                                        <div key={member.userId} className="flex items-center justify-between p-3 bg-zeno-blue/30 rounded-lg">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-8 h-8 rounded-full bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold">
-                                                                    {initials}
-                                                                </div>
-                                                                <div>
-                                                                    <div className="text-white font-medium">{displayName}</div>
-                                                                    <div className="text-xs text-gray-400">{displayEmail}</div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="flex items-center gap-2">
-                                                                {canManage ? (
-                                                                    <>
-                                                                        <select
-                                                                            value={member.role}
-                                                                            onChange={(e) => {
-                                                                                const newMebs = modalMembers.map(m => m.userId === member.userId ? { ...m, role: e.target.value } : m);
-                                                                                setModalMembers(newMebs);
-                                                                            }}
-                                                                            className="px-2 py-1 text-xs bg-zeno-navy border border-zeno-blue rounded text-white"
-                                                                        >
-                                                                            <option value="MEMBER">Member</option>
-                                                                            <option value="MANAGER">Manager</option>
-                                                                        </select>
-                                                                        <button
-                                                                            onClick={() => setModalMembers(modalMembers.filter(m => m.userId !== member.userId))}
-                                                                            className="text-red-400 hover:text-white"
-                                                                        >
-                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                                            </svg>
-                                                                        </button>
-                                                                    </>
-                                                                ) : (
-                                                                    <span className={`px-2 py-1 text-xs font-medium rounded ${member.role === 'MANAGER'
-                                                                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                                                        : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                                                                        }`}>
-                                                                        {member.role}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <div className="text-center text-gray-400 py-8">
-                                                No members assigned to this project.
-                                            </div>
-                                        )}
-
-                                        <div className="p-6 border-t border-zeno-blue bg-zeno-blue/10 rounded-b-xl flex justify-end gap-3 -mx-6 -mb-6 mt-6">
-                                            <button
-                                                onClick={() => setViewingMembersProject(null)}
-                                                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors"
-                                            >
-                                                Close
-                                            </button>
-                                            {canManage && (
-                                                <button
-                                                    onClick={handleSaveMembers}
-                                                    disabled={saving}
-                                                    className="px-4 py-2 bg-zeno-cyan text-zeno-navy font-semibold rounded-lg hover:bg-cyan-400 transition-colors disabled:opacity-50"
-                                                >
-                                                    {saving ? 'Saving...' : 'Save Changes'}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </div>
+                <ProjectMembersModal
+                    project={viewingMembersProject}
+                    isOpen={!!viewingMembersProject}
+                    onClose={() => setViewingMembersProject(null)}
+                    onUpdate={fetchProjects}
+                    currentUserId={session?.user?.id}
+                    isAdmin={session?.user?.isAdmin}
+                />
             )}
+
             {/* Move Project Modal (the cases way) */}
             <MoveProjectModal
                 isOpen={showMoveModal}

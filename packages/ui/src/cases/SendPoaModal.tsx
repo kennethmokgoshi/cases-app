@@ -16,6 +16,10 @@ interface SendPoaModalProps {
     clientName: string;
     clientEmail?:    string | null;
     clientPhone?:    string | null;
+    // Joint client support
+    jointClientName?:  string | null;
+    jointClientEmail?: string | null;
+    jointClientPhone?: string | null;
     // DRR awareness — passed from case record
     services?:   string | null;   // JSON array string, e.g. '["Debt Review Flag Removal"]'
     dcName?:     string | null;
@@ -33,6 +37,9 @@ export function SendPoaModal({
     clientName,
     clientEmail,
     clientPhone,
+    jointClientName,
+    jointClientEmail,
+    jointClientPhone,
     services,
     dcName,
     dcNcrdcNo,
@@ -43,6 +50,7 @@ export function SendPoaModal({
     const [error,      setError]      = useState('');
     const [success,    setSuccess]    = useState('');
     const [missingFields, setMissingFields] = useState<string[]>([]);
+    const [successDetails, setSuccessDetails] = useState<{ sent: string[]; skipped: string[] }>({ sent: [], skipped: [] });
 
     if (!isOpen) return null;
 
@@ -59,13 +67,21 @@ export function SendPoaModal({
         setError('');
         setSuccess('');
         setMissingFields([]);
+        setSuccessDetails({ sent: [], skipped: [] });
         setLoading(true);
 
         try {
             const res = await fetch(`/api/cases/${caseId}/poa`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ type: poaType, channel }),
+                body:    JSON.stringify({
+                    type: poaType,
+                    channel,
+                    includeJointClient: !!jointClientName && (
+                        (channel === 'EMAIL' && jointClientEmail) ||
+                        (channel === 'WHATSAPP' && jointClientPhone)
+                    ),
+                }),
             });
 
             const data = await res.json();
@@ -81,7 +97,17 @@ export function SendPoaModal({
             }
 
             const channelLabel = channel === 'EMAIL' ? 'email' : 'WhatsApp';
-            setSuccess(`POA sent successfully via ${channelLabel} to ${clientName}.`);
+            const sent = data.sentTo ?? [clientName];
+            const skipped = data.skippedClients ?? [];
+
+            setSuccessDetails({ sent, skipped });
+            let message = `POA sent successfully via ${channelLabel}`;
+            if (sent.length > 1) {
+                message += ` to ${sent.join(' & ')}.`;
+            } else {
+                message += ` to ${sent[0]}.`;
+            }
+            setSuccess(message);
         } catch {
             setError('Network error. Please check your connection and try again.');
         } finally {
@@ -93,6 +119,7 @@ export function SendPoaModal({
         setError('');
         setSuccess('');
         setMissingFields([]);
+        setSuccessDetails({ sent: [], skipped: [] });
         setPoaType('STANDARD');
         setChannel('EMAIL');
         onClose();
@@ -242,15 +269,51 @@ export function SendPoaModal({
                         </div>
                     </div>
 
-                    {/* What the client will receive */}
+                    {/* Recipients */}
                     <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
-                        <p className="text-xs font-semibold text-gray-300 mb-1">What the client receives:</p>
-                        <ul className="text-xs text-gray-400 space-y-1">
-                            <li>• A personalised PDF with all their details pre-filled</li>
-                            <li>• Clear instructions — they only need to sign and send it back</li>
-                            {channel === 'EMAIL' && <li>• PDF attached directly to the email</li>}
-                            {channel === 'WHATSAPP' && <li>• A download link via WhatsApp message</li>}
-                        </ul>
+                        <p className="text-xs font-semibold text-gray-300 mb-3">Will be sent via {channel === 'EMAIL' ? 'Email' : 'WhatsApp'}:</p>
+                        <div className="space-y-2">
+                            {/* Primary Client */}
+                            <div className="flex items-start gap-2">
+                                <span className="text-green-400 text-sm mt-0.5">✓</span>
+                                <div>
+                                    <p className="text-xs font-medium text-white">{clientName}</p>
+                                    <p className="text-xs text-gray-400">
+                                        {channel === 'EMAIL' ? clientEmail || '(no email on file)' : clientPhone || '(no phone on file)'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Joint Client */}
+                            {jointClientName && (
+                                <div className="flex items-start gap-2">
+                                    {(channel === 'EMAIL' ? jointClientEmail : jointClientPhone) ? (
+                                        <>
+                                            <span className="text-green-400 text-sm mt-0.5">✓</span>
+                                            <div>
+                                                <p className="text-xs font-medium text-white">{jointClientName}</p>
+                                                <p className="text-xs text-gray-400">
+                                                    {channel === 'EMAIL' ? jointClientEmail : jointClientPhone}
+                                                </p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="text-amber-400 text-sm mt-0.5">⚠</span>
+                                            <div>
+                                                <p className="text-xs font-medium text-amber-300">{jointClientName}</p>
+                                                <p className="text-xs text-amber-200">
+                                                    No {channel === 'EMAIL' ? 'email' : 'phone'} on file — update client record to send
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-white/10">
+                            <p className="text-xs text-gray-400">Each recipient gets a personalised PDF with their details pre-filled. They can sign online or manually.</p>
+                        </div>
                     </div>
 
                     {/* Error / incomplete profile warning */}
@@ -278,8 +341,13 @@ export function SendPoaModal({
                     {success && (
                         <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
                             <p className="text-sm text-green-400 font-medium">{success}</p>
+                            {successDetails.skipped.length > 0 && (
+                                <p className="text-xs text-amber-300 mt-2">
+                                    Note: {successDetails.skipped.join(', ')} {successDetails.skipped.length === 1 ? 'was' : 'were'} skipped (no contact info for this channel).
+                                </p>
+                            )}
                             <p className="text-xs text-green-300 mt-1">
-                                The client will sign and return the document. Once received, upload it under Documents.
+                                Each recipient will sign and return their document. Once received, upload it under Documents.
                             </p>
                         </div>
                     )}

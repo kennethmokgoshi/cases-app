@@ -49,6 +49,13 @@ type StaffUser = {
     isLocked: boolean;
 };
 
+type UserGroup = {
+    id: string;
+    name: string;
+    members: { userId: string; user: { firstName: string; lastName: string; email: string } }[];
+    _count?: { members: number };
+};
+
 const EMPLOYMENT_TYPES = ['EMPLOYED', 'SELF_EMPLOYED', 'CONTRACT', 'UNEMPLOYED', 'RETIRED'];
 const ACCOUNT_TYPES = ['CHEQUE', 'SAVINGS', 'CURRENT'];
 
@@ -80,6 +87,7 @@ const emptyForm = {
     fixedCommissionAmount: '',
     parentReferrerId: '',
     memberUserIds: [] as string[],
+    selectedGroupIds: [] as string[],
 };
 
 type FormState = typeof emptyForm;
@@ -108,6 +116,7 @@ export default function ReferrersPage() {
 
     const [detailTarget, setDetailTarget] = useState<Referrer | null>(null);
     const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+    const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
     const [allReferrers, setAllReferrers] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
     const [unregisteredFolders, setUnregisteredFolders] = useState<{ id: string; name: string; type: string; parent: { id: string; name: string } | null; _count: { cases: number } }[]>([]);
     const [loadingFolders, setLoadingFolders] = useState(false);
@@ -147,7 +156,7 @@ export default function ReferrersPage() {
         setEditTarget(null);
         setForm(emptyForm);
         setFormError('');
-        await Promise.all([loadAllReferrers(), loadStaffUsers()]);
+        await Promise.all([loadAllReferrers(), loadStaffUsers(), loadUserGroups()]);
         setModalOpen(true);
     }
 
@@ -160,6 +169,18 @@ export default function ReferrersPage() {
             setStaffUsers(users.filter((u) => u.userType === 'STAFF' && !u.isLocked));
         } catch {
             // non-critical — picker just stays empty
+        }
+    }
+
+    // User groups for bulk member selection
+    async function loadUserGroups() {
+        try {
+            const res = await fetch('/api/groups');
+            if (!res.ok) return;
+            const groups: UserGroup[] = await res.json();
+            setUserGroups(groups);
+        } catch {
+            // non-critical — group picker just stays empty
         }
     }
 
@@ -186,6 +207,7 @@ export default function ReferrersPage() {
             isActive: r.isActive,
             referrerType: r.referrerType === 'DISCOUNT' ? 'DISCOUNT' : 'COMMISSION',
             clientDiscountPercent: r.clientDiscountPercent != null ? String(r.clientDiscountPercent) : '',
+            selectedGroupIds: [],
             commissionType: (r.commissionType as 'FIXED' | 'VOLUME_BASED') ?? 'FIXED',
             fixedCommissionAmount: r.fixedCommissionAmount != null ? String(r.fixedCommissionAmount) : '',
             parentReferrerId: r.parentReferrer?.id ?? '',
@@ -257,6 +279,20 @@ export default function ReferrersPage() {
                 return;
             }
 
+            // Expand selected groups into member user IDs, filtering to only STAFF users
+            let expandedMemberIds = new Set(form.memberUserIds);
+            if (form.selectedGroupIds.length > 0) {
+                const selectedGroups = userGroups.filter(g => form.selectedGroupIds.includes(g.id));
+                selectedGroups.forEach(group => {
+                    group.members.forEach(member => {
+                        // Only add staff members (must exist in staffUsers list)
+                        if (staffUsers.some(su => su.id === member.userId)) {
+                            expandedMemberIds.add(member.userId);
+                        }
+                    });
+                });
+            }
+
             const payload: Record<string, unknown> = {
                 firstName: form.firstName.trim(),
                 lastName: form.lastName.trim(),
@@ -287,7 +323,7 @@ export default function ReferrersPage() {
                 parentReferrerId: form.parentReferrerId || null,
             };
             if (!editTarget) {
-                payload.memberUserIds = form.memberUserIds;
+                payload.memberUserIds = Array.from(expandedMemberIds);
             }
 
             const url = editTarget ? `/api/admin/referrers/${editTarget.id}` : '/api/admin/referrers';
@@ -554,7 +590,14 @@ export default function ReferrersPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
                     <div className="bg-zeno-dark border border-zeno-blue/50 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <div className="sticky top-0 bg-zeno-dark border-b border-zeno-blue/40 px-6 py-4 flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-white">{editTarget ? 'Edit Referrer' : 'Add Referrer'}</h2>
+                            <div>
+                                <h2 className="text-lg font-bold text-white">{editTarget ? 'Edit Referrer' : 'Add Referrer'}</h2>
+                                {!editTarget && userGroups.length === 0 && (
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        <Link href="/admin/groups" className="text-zeno-cyan hover:underline">Create groups</Link> to bulk-add members (recommended)
+                                    </p>
+                                )}
+                            </div>
                             <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
                         </div>
 
@@ -771,38 +814,104 @@ export default function ReferrersPage() {
                                     </p>
                                 ) : (
                                     <>
-                                        <p className="text-xs text-gray-500 mb-2">
+                                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-3 mb-4 text-blue-300 text-xs space-y-1">
+                                            <p className="font-semibold">Who can be added:</p>
+                                            <ul className="list-disc list-inside space-y-0.5 ml-1">
+                                                <li>Staff employees (internal team members)</li>
+                                                <li>Groups of staff employees</li>
+                                            </ul>
+                                            <p className="font-semibold mt-2">Who cannot:</p>
+                                            <ul className="list-disc list-inside space-y-0.5 ml-1">
+                                                <li>B2B partners (they access only their own branches)</li>
+                                                <li>Other referrers (referrers access only their own sub-projects)</li>
+                                            </ul>
+                                        </div>
+
+                                        <p className="text-xs text-gray-500 mb-3">
                                             Only members of the referrer&apos;s sub-project can see this referrer and its cases.
-                                            You will be added automatically as manager; select any other staff who need access.
+                                            You will be added automatically as manager.
                                         </p>
-                                        {staffUsers.length === 0 ? (
-                                            <p className="text-xs text-gray-500 bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg px-4 py-3">No staff users available.</p>
-                                        ) : (
-                                            <div className="bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
-                                                {staffUsers
-                                                    .filter((u) => u.id !== session?.user?.id)
-                                                    .map((u) => (
-                                                        <label key={u.id} className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-zeno-blue/30 transition-colors">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={form.memberUserIds.includes(u.id)}
-                                                                onChange={(e) => setForm((f) => ({
-                                                                    ...f,
-                                                                    memberUserIds: e.target.checked
-                                                                        ? [...f.memberUserIds, u.id]
-                                                                        : f.memberUserIds.filter((id) => id !== u.id),
-                                                                }))}
-                                                                className="w-4 h-4 accent-zeno-cyan"
-                                                            />
-                                                            <span className="text-sm text-gray-300">{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.email}</span>
-                                                            <span className="text-xs text-gray-500 ml-auto">{u.email}</span>
-                                                        </label>
-                                                    ))}
+
+                                        {/* Group Selection */}
+                                        {userGroups.length > 0 && (
+                                            <div className="mb-4 pb-4 border-b border-zeno-blue/30">
+                                                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Add entire groups (faster bulk add)</label>
+                                                <div className="space-y-2">
+                                                    {userGroups.map((group) => {
+                                                        const staffMembersInGroup = group.members.filter(m => staffUsers.some(su => su.id === m.userId)).length;
+                                                        const nonStaffCount = (group._count?.members || group.members.length) - staffMembersInGroup;
+                                                        const hasNonStaff = nonStaffCount > 0;
+
+                                                        return (
+                                                            <div key={group.id}>
+                                                                <label className="flex items-center gap-3 cursor-pointer rounded-lg px-3 py-2 hover:bg-zeno-blue/30 transition-colors">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={form.selectedGroupIds.includes(group.id)}
+                                                                        onChange={(e) => setForm((f) => ({
+                                                                            ...f,
+                                                                            selectedGroupIds: e.target.checked
+                                                                                ? [...f.selectedGroupIds, group.id]
+                                                                                : f.selectedGroupIds.filter((id) => id !== group.id),
+                                                                        }))}
+                                                                        className="w-4 h-4 accent-emerald-400"
+                                                                    />
+                                                                    <span className="text-sm text-gray-300 flex-1">{group.name}</span>
+                                                                    <span className="text-xs text-gray-500">
+                                                                        {staffMembersInGroup} staff{hasNonStaff ? ` (+${nonStaffCount} excluded)` : ''}
+                                                                    </span>
+                                                                </label>
+                                                                {hasNonStaff && (
+                                                                    <p className="text-xs text-amber-400 ml-7 mt-1">
+                                                                        ⚠️ This group contains {nonStaffCount} non-staff member{nonStaffCount !== 1 ? 's' : ''} (B2B, referrers, etc.) — only {staffMembersInGroup} staff will be added
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                {form.selectedGroupIds.length > 0 && (
+                                                    <p className="text-xs text-emerald-400 mt-2">
+                                                        {userGroups
+                                                            .filter(g => form.selectedGroupIds.includes(g.id))
+                                                            .reduce((total, g) => total + (g._count?.members || g.members.length), 0)} members from selected group{form.selectedGroupIds.length !== 1 ? 's' : ''}
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
-                                        {form.memberUserIds.length > 0 && (
-                                            <p className="text-xs text-zeno-cyan mt-2">{form.memberUserIds.length} member{form.memberUserIds.length !== 1 ? 's' : ''} selected (plus you as manager)</p>
-                                        )}
+
+                                        {/* Individual Member Selection */}
+                                        <div>
+                                            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">Or select individual members</label>
+                                            {staffUsers.length === 0 ? (
+                                                <p className="text-xs text-gray-500 bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg px-4 py-3">No staff users available.</p>
+                                            ) : (
+                                                <div className="bg-zeno-blue/20 border border-zeno-blue/30 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
+                                                    {staffUsers
+                                                        .filter((u) => u.id !== session?.user?.id)
+                                                        .map((u) => (
+                                                            <label key={u.id} className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-zeno-blue/30 transition-colors">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={form.memberUserIds.includes(u.id)}
+                                                                    onChange={(e) => setForm((f) => ({
+                                                                        ...f,
+                                                                        memberUserIds: e.target.checked
+                                                                            ? [...f.memberUserIds, u.id]
+                                                                            : f.memberUserIds.filter((id) => id !== u.id),
+                                                                    }))}
+                                                                    className="w-4 h-4 accent-zeno-cyan"
+                                                                />
+                                                                <span className="text-sm text-gray-300">{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.email}</span>
+                                                                <span className="text-xs text-gray-500 ml-auto">{u.email}</span>
+                                                            </label>
+                                                        ))}
+                                                </div>
+                                            )}
+                                            {form.memberUserIds.length > 0 && (
+                                                <p className="text-xs text-zeno-cyan mt-2">{form.memberUserIds.length} individual member{form.memberUserIds.length !== 1 ? 's' : ''} selected (plus you as manager)</p>
+                                            )}
+                                        </div>
                                     </>
                                 )}
                             </section>
