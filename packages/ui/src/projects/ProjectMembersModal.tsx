@@ -383,7 +383,14 @@ export function ProjectMembersModal({
                                 return (
                                     <div key={member.userId} className="flex items-center justify-between p-3 bg-zeno-blue/20 border border-white/5 rounded-lg group hover:border-white/10 transition-colors">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${member.role === 'MANAGER' ? 'bg-amber-500/20 text-amber-300' : 'bg-purple-500/20 text-purple-300'}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                                                member.role === 'MANAGER' ? 'bg-amber-500/20 text-amber-300' :
+                                                member.role === 'SENIOR_MANAGER' ? 'bg-orange-500/20 text-orange-300' :
+                                                member.role === 'EXECUTIVE' ? 'bg-red-500/20 text-red-300' :
+                                                member.role === 'FINANCE' ? 'bg-green-500/20 text-green-300' :
+                                                member.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-300' :
+                                                'bg-blue-500/20 text-blue-300'
+                                            }`}>
                                                 {initials}
                                             </div>
                                             <div>
@@ -401,10 +408,21 @@ export function ProjectMembersModal({
                                                             const newMebs = modalMembers.map(m => m.userId === member.userId ? { ...m, role: e.target.value } : m);
                                                             setModalMembers(newMebs);
                                                         }}
-                                                        className={`px-2 py-1 text-xs border rounded focus:outline-none ${member.role === 'MANAGER' ? 'bg-amber-900/30 border-amber-500/30 text-amber-300' : 'bg-zeno-navy border-zeno-blue text-gray-300'}`}
+                                                        className={`px-2 py-1 text-xs border rounded focus:outline-none ${
+                                                            member.role === 'MANAGER' ? 'bg-amber-900/30 border-amber-500/30 text-amber-300' :
+                                                            member.role === 'SENIOR_MANAGER' ? 'bg-orange-900/30 border-orange-500/30 text-orange-300' :
+                                                            member.role === 'EXECUTIVE' ? 'bg-red-900/30 border-red-500/30 text-red-300' :
+                                                            member.role === 'FINANCE' ? 'bg-green-900/30 border-green-500/30 text-green-300' :
+                                                            member.role === 'ADMIN' ? 'bg-purple-900/30 border-purple-500/30 text-purple-300' :
+                                                            'bg-zeno-navy border-zeno-blue text-gray-300'
+                                                        }`}
                                                     >
                                                         <option value="MEMBER">Member</option>
                                                         <option value="MANAGER">Manager</option>
+                                                        <option value="SENIOR_MANAGER">Senior Manager</option>
+                                                        <option value="EXECUTIVE">Executive</option>
+                                                        <option value="FINANCE">Finance</option>
+                                                        <option value="ADMIN">Admin</option>
                                                     </select>
                                                     <button
                                                         onClick={() => setModalMembers(modalMembers.filter(m => m.userId !== member.userId))}
@@ -415,10 +433,14 @@ export function ProjectMembersModal({
                                                     </button>
                                                 </>
                                             ) : (
-                                                <span className={`px-2 py-1 text-xs font-medium rounded ${member.role === 'MANAGER'
-                                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                                    : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                                                    }`}>
+                                                <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                                    member.role === 'MANAGER' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                                                    member.role === 'SENIOR_MANAGER' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' :
+                                                    member.role === 'EXECUTIVE' ? 'bg-red-500/20 text-red-300 border border-red-500/30' :
+                                                    member.role === 'FINANCE' ? 'bg-green-500/20 text-green-300 border border-green-500/30' :
+                                                    member.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                                                    'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                                }`}>
                                                     {member.role}
                                                 </span>
                                             )}
