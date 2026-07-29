@@ -109,6 +109,7 @@ The system uses a single root `Dockerfile` with a build argument `APP` to determ
 | **Legal App** | `legal` | 3000 | `legal.zenowethu.co.za` | `legal-app` |
 | **Forensic Audit** | `forensic-audit` | 3000 | `forensic.zenowethu.co.za` | `forensic-app` |
 | **Finance App** | `finance` | 3000 | `finance.zenowethu.co.za` | `finance-app` |
+| **Reporting App** | `reporting` | 3000 | `reporting.zenowethu.co.za` | `reporting-app` |
 
 > [!NOTE]
 > All containers expose port 3000 internally. Dokploy + Traefik route traffic by domain name, so each app needs its own domain, not a unique port.
@@ -156,6 +157,7 @@ NEXTAUTH_URL=https://cases.zenowethu.co.za      # cases-app-vtwo
 # NEXTAUTH_URL=https://legal.zenowethu.co.za       # legal-app
 # NEXTAUTH_URL=https://forensic.zenowethu.co.za    # forensic-app
 # NEXTAUTH_URL=https://finance.zenowethu.co.za    # finance-app
+# NEXTAUTH_URL=https://reporting.zenowethu.co.za  # reporting-app
 
 # ── AI ────────────────────────────────────────────────────────────────────
 OPENAI_API_KEY=sk-...
