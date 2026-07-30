@@ -95,6 +95,19 @@ describe('GET /api/projects memberOnly', () => {
         expect(finalProjectQuery.where?.id?.in).not.toContain('ruphas-referrer');
         expect(finalProjectQuery.where?.id?.in).not.toContain('ruphas-year');
     });
+
+    it('includes branch subprojects in children select query when memberOnly is set', async () => {
+        const res = await GET(new Request('http://localhost/api/projects?memberOnly=true&t=subproject-test') as never);
+        expect(res.status).toBe(200);
+
+        const finalProjectQuery = vi.mocked(prisma.project.findMany).mock.calls.at(-1)?.[0] as {
+            select?: { children?: { where?: { id?: { in?: string[] } } } };
+        };
+
+        // Ensure children.where.id.in contains all allowed project IDs (including branches), not just explicit member IDs
+        expect(finalProjectQuery.select?.children?.where?.id?.in).toBeDefined();
+        expect(finalProjectQuery.select?.children?.where?.id?.in).toContain('kenneth-referrer');
+    });
 });
 
 describe('GET /api/projects?flat=true&all=true (admin list)', () => {

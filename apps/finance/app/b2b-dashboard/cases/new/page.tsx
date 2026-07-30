@@ -2,7 +2,7 @@
 import { toast } from '@zenowethu/ui';
 
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
@@ -70,6 +70,7 @@ function PartnerNewCaseComponent() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [parentProjects, setParentProjects] = useState<Project[]>([]);
+    const [allRawProjects, setAllRawProjects] = useState<Project[]>([]);
 
     // Step 1: Project Selection
     const currentYearVal = new Date().getFullYear();
@@ -94,9 +95,36 @@ function PartnerNewCaseComponent() {
         id?: File;
         poa?: File;
         creditReport?: File;
+        bankStatement?: File;
+        payslip?: File;
+        proofOfResidence?: File;
+        form16?: File;
+        form171?: File;
+        form172?: File;
+        form177?: File;
+        clearance?: File;
         allCombined?: File;
         optional: File[];
     }>({ optional: [] });
+
+    // Category & Legal Fees Status
+    const [category, setCategory] = useState<'Payroll Single' | 'Non-Payroll Single' | ''>('');
+    const [legalFeesStatus, setLegalFeesStatus] = useState('');
+
+    // Joint Application State
+    const [isJointApplication, setIsJointApplication] = useState(false);
+    const [jointSurname, setJointSurname] = useState('');
+    const [jointFullNames, setJointFullNames] = useState('');
+    const [jointIdNumber, setJointIdNumber] = useState('');
+    const [jointCellNumber, setJointCellNumber] = useState('');
+    const [jointEmail, setJointEmail] = useState('');
+
+    // Duplicate alert state
+    const [duplicateAlert, setDuplicateAlert] = useState<{
+        existingClientName: string;
+        existingFileNumber: string;
+        existingProjectName: string;
+    } | null>(null);
 
     // Duplicate Check State
     const [duplicateError, setDuplicateError] = useState<any | null>(null);
@@ -124,9 +152,25 @@ function PartnerNewCaseComponent() {
     });
 
     const selectedParent = parentProjects.find(p => p.id === selectedParentId);
-    const subprojects = selectedParent?.children?.filter(c =>
-        c.type === 'BRANCH' || c.type === 'FOLDER' || c.type === 'REFERRER'
-    ) || [];
+
+    const subprojects = useMemo(() => {
+        if (!selectedParent) return [];
+
+        const directChildren = selectedParent.children?.filter(c =>
+            c.type === 'BRANCH' || c.type === 'FOLDER' || c.type === 'REFERRER'
+        ) || [];
+
+        const flatChildren = allRawProjects.filter(p =>
+            p.parentId === selectedParent.id &&
+            (p.type === 'BRANCH' || p.type === 'FOLDER' || p.type === 'REFERRER')
+        );
+
+        const map = new Map<string, Project>();
+        directChildren.forEach(c => map.set(c.id, c));
+        flatChildren.forEach(c => map.set(c.id, c));
+
+        return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }, [selectedParent, allRawProjects]);
 
     const getPartnerNameFromProject = (): string | null => {
         if (!selectedParent) return null;
@@ -149,21 +193,27 @@ function PartnerNewCaseComponent() {
         async function fetchProjects() {
             setLoading(true);
             try {
-                const res = await fetch(`/api/projects?type=ACQUISITION_SOURCE&flat=true&t=${new Date().getTime()}`, {
+                const res = await fetch(`/api/projects?memberOnly=true&t=${new Date().getTime()}`, {
                     cache: 'no-store',
                     headers: { 'Pragma': 'no-cache' }
                 });
                 const data = await res.json();
 
-                let uniqueProjects: Project[] = [];
+                let rawProjects: Project[] = [];
 
                 if (Array.isArray(data)) {
-                    uniqueProjects = data;
+                    rawProjects = data;
                 } else {
                     logger.info('API did not return an array, checking for hierarchy:', data);
-                    if (data.independent) uniqueProjects = data.independent;
-                    else if (data.hierarchy) uniqueProjects = [data.hierarchy];
+                    if (data.hierarchy?.children) rawProjects.push(...data.hierarchy.children);
+                    if (data.independent) rawProjects.push(...data.independent);
                 }
+
+                setAllRawProjects(rawProjects);
+
+                const uniqueProjects = Array.from(
+                    new Map(rawProjects.map(p => [p.id, p])).values()
+                ).filter(p => p.type === 'ACQUISITION_SOURCE' || !p.type);
 
                 logger.info('Fetched ACQUISITION_SOURCE projects:', uniqueProjects.length);
 

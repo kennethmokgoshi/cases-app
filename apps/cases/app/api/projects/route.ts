@@ -247,6 +247,7 @@ export async function GET(request: NextRequest) {
 
             // Copy so we don't mutate the memoized membership list.
             const memberProjectIds = [...(await loadMembershipIds())];
+            const allowedIds = (whereClause.id?.in as string[] | undefined) || memberProjectIds;
 
             // Slim projection — the New Case dropdown (the only memberOnly consumer)
             // reads just these fields. Dropping the members→user joins, _count and the
@@ -264,9 +265,9 @@ export async function GET(request: NextRequest) {
                     parentId: true,
                     // Linked referrer so case creation can auto-detect referrerId
                     referrer: { select: { id: true, firstName: true, lastName: true } },
-                    // Only include children that the user is also a member of
+                    // Include children that are allowed for the user (explicit members or allowed descendants)
                     children: {
-                        where: { id: { in: memberProjectIds } },
+                        where: { id: { in: allowedIds } },
                         select: {
                             id: true,
                             name: true,
