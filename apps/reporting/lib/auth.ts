@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@zenowethu/database'
 import { detectUserRole } from './role-detector'
+import { type UserRole } from './roles'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -87,7 +88,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.isAdmin = user.isAdmin
         token.userType = user.userType
         token.reportingRole = (user as any).reportingRole || 'staff'
+        return token
       }
+
+      // Re-resolve the role on every request so stale/older tokens (issued
+      // before role-based routing existed, or before a role change) always
+      // reflect the user's current DB role instead of silently sticking to
+      // whatever was cached at original sign-in.
+      if (token.id) {
+        try {
+          const currentRole: UserRole = await detectUserRole(token.id as string)
+          token.reportingRole = currentRole
+        } catch (roleError) {
+          console.error('[Auth] Role re-detection error:', roleError)
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
