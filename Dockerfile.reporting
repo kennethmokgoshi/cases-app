@@ -1,12 +1,5 @@
 # Monorepo Dockerfile - builds a single app
-# Usage: docker build --build-arg APP=cases -t zenowethu-cases .
-#        docker build --build-arg APP=insurance -t zenowethu-insurance .
-#
-# Build args:
-#   APP           - which app to build (cases | insurance | legal | forensic-audit | finance | reporting)
-#   DATABASE_URL  - postgres connection string
-#   OPENAI_API_KEY
-#   NEXTAUTH_SECRET
+# Usage: docker build --build-arg APP=reporting -t zenowethu-reporting .
 
 ARG APP=reporting
 
@@ -80,21 +73,16 @@ COPY apps/${APP}/ ./apps/${APP}/
 COPY package.json pnpm-workspace.yaml turbo.json ./
 
 # Environment variables required at build time
-# NOTE: DATABASE_URL is intentionally NOT passed here — it is only needed at
-# runtime. Passing it as a build ARG would cause Next.js to attempt a DB
-# connection during `next build`, which fails because the DB is only reachable
-# on the Docker runtime network, not from the builder container.
+ARG DATABASE_URL
 ARG OPENAI_API_KEY
 ARG NEXTAUTH_SECRET
 
+ENV DATABASE_URL=$DATABASE_URL
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-# Dummy placeholder so Prisma client generates without a real DB URL.
-# The real URL is injected by Dokploy at container start.
-ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 
 # Generate Prisma client from shared schema
 RUN cd packages/database && npx prisma generate
@@ -142,15 +130,18 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/packages/database/prisma ./prisma
 
-# Copy standalone Next.js output (self-contained, no pnpm needed)
-COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/.next/static ./apps/${APP}/.next/static
-# Copy public folder if it exists
-COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP}/public ./apps/${APP}/public
+# Copy the built app and all dependencies
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder --chown=nextjs:nodejs /app/apps/${APP} ./apps/${APP}
+COPY --from=builder /app/package.json /app/pnpm-workspace.yaml /app/turbo.json ./
+
+# Install pnpm in runner stage
+RUN npm install -g pnpm@10.30.1
 
 # Set correct permissions
 RUN mkdir -p storage/uploads
-RUN chown -R nextjs:nodejs storage/uploads
+RUN chown -R nextjs:nodejs apps/${APP} storage/uploads
 
 USER nextjs
 
@@ -159,4 +150,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && node apps/${APP}/server.js"]
+CMD ["sh", "-c", "prisma migrate deploy --schema=./prisma/schema.prisma && cd apps/${APP} && pnpm start"]
