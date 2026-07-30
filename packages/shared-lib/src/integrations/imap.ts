@@ -295,7 +295,7 @@ export function isDocTypeInGroup(detectedType: string, docGroup?: string): boole
         case 'CREDIT_REPORT':
             return ['CREDIT_REPORT', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE'].includes(detectedType);
         case 'DC_INVOICE':
-            return ['FEE_INVOICE', 'DC_FEE_INVOICE'].includes(detectedType);
+            return ['FEE_INVOICE', 'DC_FEE_INVOICE', 'PROOF_OF_PAYMENT', 'STATEMENT', 'OTHER'].includes(detectedType);
         case 'POP':
             return ['PROOF_OF_PAYMENT'].includes(detectedType);
         case 'PAID_UP':
@@ -528,10 +528,19 @@ export async function scanMailboxForClient({
                 if (trimmedId) {
                     (await safeSearch({ text: trimmedId, since })).forEach(uid => matchedUids.add(uid));
                     (await safeSearch({ subject: trimmedId, since })).forEach(uid => matchedUids.add(uid));
+                    // Fallback without `since` in case IMAP server (e.g. Gmail) drops combined SINCE + TEXT queries
+                    (await safeSearch({ text: trimmedId })).forEach(uid => matchedUids.add(uid));
+                    (await safeSearch({ subject: trimmedId })).forEach(uid => matchedUids.add(uid));
+                    // Gmail IMAP extension search (X-GM-RAW) for 100% precision on Gmail accounts
+                    (await safeSearch({ gmailRaw: trimmedId } as any)).forEach(uid => matchedUids.add(uid));
                 }
                 if (trimmedName) {
                     (await safeSearch({ text: trimmedName, since })).forEach(uid => matchedUids.add(uid));
                     (await safeSearch({ subject: trimmedName, since })).forEach(uid => matchedUids.add(uid));
+                    (await safeSearch({ text: trimmedName })).forEach(uid => matchedUids.add(uid));
+                    (await safeSearch({ subject: trimmedName })).forEach(uid => matchedUids.add(uid));
+                    // Gmail IMAP extension search (X-GM-RAW) for 100% precision on Gmail accounts
+                    (await safeSearch({ gmailRaw: trimmedName } as any)).forEach(uid => matchedUids.add(uid));
                 }
 
                 const messageUids = Array.from(matchedUids);
@@ -575,14 +584,16 @@ export async function scanMailboxForClient({
                             const isAttachment =
                                 part.disposition?.toLowerCase() === 'attachment' ||
                                 part.disposition?.toLowerCase() === 'inline' ||
-                                Boolean(filename) ||
-                                isPdf;
+                                Boolean(filename);
 
                             if ((isAttachment || Boolean(filename)) && isDoc) {
                                 const lowerName = filename.toLowerCase();
+                                const isSignatureImage = isImage && (lowerName.startsWith('rsimage') || lowerName.startsWith('image0') || lowerName.startsWith('icon') || lowerName.includes('logo') || lowerName.includes('signature') || lowerName.includes('banner'));
+                                if (isSignatureImage) return;
+
                                 const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill') || subjectLower.includes('invoice') || subjectLower.includes('fee');
                                 const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement') || subjectLower.includes('proof') || subjectLower.includes('payment') || subjectLower.includes('pop');
-                                const isCandidateDoc = isInvoice || isPoP || isPdf || Boolean(filename);
+                                const isCandidateDoc = isInvoice || isPoP || isPdf || (Boolean(filename) && !isImage);
 
                                 if (isCandidateDoc) {
                                     const detectedType = classifyDocumentByFilename({
