@@ -22,7 +22,7 @@ describe('POST /api/reporting/check-in', () => {
   })
 
   it('should return 401 if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null)
+    vi.mocked(auth as any).mockResolvedValue(null)
 
     const response = await POST(new Request('http://localhost/api/reporting/check-in', { method: 'POST' }))
     expect(response.status).toBe(401)

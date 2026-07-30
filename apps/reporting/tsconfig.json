@@ -49,6 +49,12 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts",
+    "public",
+    "storage",
+    ".next",
+    "dist",
+    "out"
   ]
 }

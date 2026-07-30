@@ -19,7 +19,7 @@ describe('GET /api/reporting/presence/sessions', () => {
   })
 
   it('should return 401 if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null)
+    vi.mocked(auth as any).mockResolvedValue(null)
 
     const response = await GET(new Request('http://localhost/api/reporting/presence/sessions'))
     expect(response.status).toBe(401)
