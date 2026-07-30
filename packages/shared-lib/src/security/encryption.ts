@@ -6,13 +6,15 @@ const AUTH_TAG_BYTES = 16
 const KEY_BYTES = 32
 
 function getEncryptionSecret(): string | null {
-  return (
+  const secret =
     process.env.DCCP_CREDENTIAL_ENCRYPTION_KEY ||
     process.env.CREDENTIAL_ENCRYPTION_KEY ||
     process.env.AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    'iBawGtUUh_M5p5LQwMn2-K0aSz977s0SQdXZOUHjPrs'
-  )
+    process.env.NEXTAUTH_SECRET
+
+  if (secret) return secret
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) return null
+  return 'iBawGtUUh_M5p5LQwMn2-K0aSz977s0SQdXZOUHjPrs'
 }
 
 function getEncryptionKey(): Buffer {

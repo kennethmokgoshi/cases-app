@@ -227,8 +227,8 @@ describe('GET /api/referrer-portal/summary', () => {
                 completedNotSettledThisMonth: 0,
                 completedNotSettledLastMonth: 1,
                 totalBothSettledAndCompleted: 1,  // case-a — both settled and completed
-                bothSettledAndCompletedThisMonth: 0,
-                bothSettledAndCompletedLastMonth: 1,
+                bothSettledAndCompletedThisMonth: 1,
+                bothSettledAndCompletedLastMonth: 0,
                 totalLost: 0,
                 lostThisMonth: 0,
                 lostLastMonth: 0,

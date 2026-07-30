@@ -40,12 +40,16 @@ export async function POST(request: Request) {
 
         // Fetch both cases with referrer check
         const [fromCase, toCase] = await Promise.all([
-            prisma.case.findUnique({ where: { id: fromCaseId }, select: { id: true, referrerId: true, fileNumber: true } }),
+            prisma.case.findUnique({ where: { id: fromCaseId }, select: { id: true, referrerId: true, fileNumber: true, totalPaid: true } as never }),
             prisma.case.findUnique({ where: { id: toCaseId }, select: { id: true, referrerId: true, fileNumber: true } }),
         ]);
 
         if (!fromCase || !toCase) {
             return NextResponse.json({ error: 'One or both cases not found' }, { status: 404 });
+        }
+
+        if (typeof (fromCase as any).totalPaid === 'number' && (fromCase as any).totalPaid < amount) {
+            return NextResponse.json({ error: 'Insufficient credit available' }, { status: 400 });
         }
 
         // Verify both cases belong to the same referrer and match session referrer

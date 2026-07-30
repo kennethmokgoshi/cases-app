@@ -506,6 +506,8 @@ export async function scanMailboxForClient({
 
         const processedMessageIds = new Set<string>(skipMessageIds);
 
+        const isGmailServer = config.host.toLowerCase().includes('gmail') || Boolean(client.capability?.has('X-GM-EXT-1'));
+
         const safeSearch = async (criteria: Record<string, unknown>): Promise<number[]> => {
             try {
                 const uids = await client.search(criteria, { uid: true });
@@ -528,19 +530,23 @@ export async function scanMailboxForClient({
                 if (trimmedId) {
                     (await safeSearch({ text: trimmedId, since })).forEach(uid => matchedUids.add(uid));
                     (await safeSearch({ subject: trimmedId, since })).forEach(uid => matchedUids.add(uid));
-                    // Fallback without `since` in case IMAP server (e.g. Gmail) drops combined SINCE + TEXT queries
+                    // Fallback without `since` in case IMAP server drops combined SINCE + TEXT queries
                     (await safeSearch({ text: trimmedId })).forEach(uid => matchedUids.add(uid));
                     (await safeSearch({ subject: trimmedId })).forEach(uid => matchedUids.add(uid));
-                    // Gmail IMAP extension search (X-GM-RAW) for 100% precision on Gmail accounts
-                    (await safeSearch({ gmailRaw: trimmedId } as any)).forEach(uid => matchedUids.add(uid));
+                    // Gmail IMAP extension search (X-GM-RAW) ONLY on Gmail accounts
+                    if (isGmailServer) {
+                        (await safeSearch({ gmailRaw: trimmedId } as any)).forEach(uid => matchedUids.add(uid));
+                    }
                 }
                 if (trimmedName) {
                     (await safeSearch({ text: trimmedName, since })).forEach(uid => matchedUids.add(uid));
                     (await safeSearch({ subject: trimmedName, since })).forEach(uid => matchedUids.add(uid));
                     (await safeSearch({ text: trimmedName })).forEach(uid => matchedUids.add(uid));
                     (await safeSearch({ subject: trimmedName })).forEach(uid => matchedUids.add(uid));
-                    // Gmail IMAP extension search (X-GM-RAW) for 100% precision on Gmail accounts
-                    (await safeSearch({ gmailRaw: trimmedName } as any)).forEach(uid => matchedUids.add(uid));
+                    // Gmail IMAP extension search (X-GM-RAW) ONLY on Gmail accounts
+                    if (isGmailServer) {
+                        (await safeSearch({ gmailRaw: trimmedName } as any)).forEach(uid => matchedUids.add(uid));
+                    }
                 }
 
                 const messageUids = Array.from(matchedUids);
@@ -858,13 +864,25 @@ export async function scanMailboxForCaseUpdates({
                 // The ID number and full name are reliably in the subject of DC
                 // emails, and many servers' TEXT search misses subjects/bodies —
                 // so SUBJECT is the dependable hit for "please find attached".
+                const isGmailServer = config.host.toLowerCase().includes('gmail') || Boolean(client.capability?.has('X-GM-EXT-1'));
+
                 if (trimmedId) {
                     addUids(await safeSearch({ text: trimmedId, since }), 'ID_NUMBER');
                     addUids(await safeSearch({ subject: trimmedId, since }), 'ID_NUMBER');
+                    addUids(await safeSearch({ text: trimmedId }), 'ID_NUMBER');
+                    addUids(await safeSearch({ subject: trimmedId }), 'ID_NUMBER');
+                    if (isGmailServer) {
+                        addUids(await safeSearch({ gmailRaw: trimmedId } as any), 'ID_NUMBER');
+                    }
                 }
                 if (fullName) {
                     addUids(await safeSearch({ text: fullName, since }), 'NAME');
                     addUids(await safeSearch({ subject: fullName, since }), 'NAME');
+                    addUids(await safeSearch({ text: fullName }), 'NAME');
+                    addUids(await safeSearch({ subject: fullName }), 'NAME');
+                    if (isGmailServer) {
+                        addUids(await safeSearch({ gmailRaw: fullName } as any), 'NAME');
+                    }
                 }
 
                 rawMatchCount += matchedOnByUid.size;
