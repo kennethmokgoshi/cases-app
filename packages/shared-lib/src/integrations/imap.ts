@@ -221,10 +221,48 @@ export function classifyDocumentByFilename({
         if (lowerName.includes('lightstone')) return 'CREDIT_REPORT_LIGHTSTONE';
         return 'CREDIT_REPORT';
     }
-    if (lowerName.includes('id doc') || lowerName.includes('identity') || lowerName.includes('passport') || (lowerName.includes('id') && (lowerName.startsWith('id') || lowerName.endsWith('id') || lowerName.includes('_id') || lowerName.includes('-id')))) {
+    // SA ID documents — broadened to cover common real-world file naming patterns:
+    // "Copy of ID", "SA ID", "Green ID", "ID Copy", "Smart Card", "National ID", "RSA ID" etc.
+    if (
+        lowerName.includes('id doc') ||
+        lowerName.includes('identity') ||
+        lowerName.includes('passport') ||
+        lowerName.includes('smart card') ||
+        lowerName.includes('national id') ||
+        lowerName.includes('rsa id') ||
+        lowerName.includes('sa id') ||
+        lowerName.includes('green id') ||
+        lowerName.includes('green book') ||
+        lowerName.includes('id copy') ||
+        lowerName.includes('copy of id') ||
+        lowerName.includes('id number') ||
+        subjectLower.includes('id document') ||
+        subjectLower.includes('identity') ||
+        subjectLower.includes('passport') ||
+        (lowerName.includes('id') && (
+            lowerName.startsWith('id') ||
+            lowerName.endsWith('id') ||
+            lowerName.includes('_id') ||
+            lowerName.includes('-id') ||
+            lowerName.includes(' id ')
+        ))
+    ) {
         return 'ID';
     }
-    if (lowerName.includes('poa') || lowerName.includes('power of attorney') || lowerName.includes('power_of_attorney') || lowerName.includes('consent')) {
+    // POA / Proof of address — includes SA "consent form" and proof of residence variants
+    if (
+        lowerName.includes('poa') ||
+        lowerName.includes('power of attorney') ||
+        lowerName.includes('power_of_attorney') ||
+        lowerName.includes('consent') ||
+        lowerName.includes('proof of address') ||
+        lowerName.includes('proof_of_address') ||
+        lowerName.includes('address proof') ||
+        subjectLower.includes('poa') ||
+        subjectLower.includes('power of attorney') ||
+        subjectLower.includes('consent form') ||
+        subjectLower.includes('proof of address')
+    ) {
         return 'ZENOWETHU_POA';
     }
     if (lowerName.includes('payslip') || lowerName.includes('salary') || lowerName.includes('advice')) {
@@ -252,7 +290,8 @@ export function isDocTypeInGroup(detectedType: string, docGroup?: string): boole
     if (!docGroup || docGroup === 'ALL') return true;
     switch (docGroup) {
         case 'ID_POA':
-            return ['ID', 'ZENOWETHU_POA', 'POA', 'CONSENT_FORM'].includes(detectedType);
+            // Include proof-of-residence/address as valid POA evidence in SA debt review context
+            return ['ID', 'ZENOWETHU_POA', 'POA', 'CONSENT_FORM', 'PROOF_OF_RESIDENCE', 'PROOF_OF_ADDRESS'].includes(detectedType);
         case 'CREDIT_REPORT':
             return ['CREDIT_REPORT', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE'].includes(detectedType);
         case 'DC_INVOICE':
@@ -415,6 +454,7 @@ export async function searchMailboxForConsumer({
 export async function scanMailboxForClient({
     config,
     idNumber,
+    clientName,
     since,
     onProgress,
     onFoldersResolved,
@@ -423,6 +463,7 @@ export async function scanMailboxForClient({
 }: {
     config: ImapConnectionConfig;
     idNumber: string;
+    clientName?: string | null;
     since: Date;
     onProgress?: (stats: { processed: number; total: number; newEmailsFound: number; invoiceCandidatesFound: number }) => void;
     /** Called once the folders for this mailbox are resolved (e.g. INBOX, Sent),
@@ -465,14 +506,35 @@ export async function scanMailboxForClient({
 
         const processedMessageIds = new Set<string>(skipMessageIds);
 
+        const safeSearch = async (criteria: Record<string, unknown>): Promise<number[]> => {
+            try {
+                const uids = await client.search(criteria, { uid: true });
+                return Array.isArray(uids) ? (uids as number[]) : [];
+            } catch (searchErr) {
+                logger.warn(`[IMAP] SEARCH ${JSON.stringify(criteria)} failed:`, searchErr);
+                return [];
+            }
+        };
+
+        const trimmedId = idNumber?.trim();
+        const trimmedName = clientName?.trim();
+
         for (const folder of folders) {
             let lock;
             try {
                 lock = await client.getMailboxLock(folder);
-                const messageUids = await client.search({
-                    text: idNumber,
-                    since: since,
-                }, { uid: true });
+                const matchedUids = new Set<number>();
+
+                if (trimmedId) {
+                    (await safeSearch({ text: trimmedId, since })).forEach(uid => matchedUids.add(uid));
+                    (await safeSearch({ subject: trimmedId, since })).forEach(uid => matchedUids.add(uid));
+                }
+                if (trimmedName) {
+                    (await safeSearch({ text: trimmedName, since })).forEach(uid => matchedUids.add(uid));
+                    (await safeSearch({ subject: trimmedName, since })).forEach(uid => matchedUids.add(uid));
+                }
+
+                const messageUids = Array.from(matchedUids);
 
                 if (Array.isArray(messageUids) && messageUids.length > 0) {
                     emailsScanned += messageUids.length;
@@ -518,7 +580,7 @@ export async function scanMailboxForClient({
 
                             if ((isAttachment || Boolean(filename)) && isDoc) {
                                 const lowerName = filename.toLowerCase();
-                                const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill') || subjectLower.includes('invoice') || subjectLower.includes('fee') || subjectLower.includes('consumer');
+                                const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill') || subjectLower.includes('invoice') || subjectLower.includes('fee');
                                 const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement') || subjectLower.includes('proof') || subjectLower.includes('payment') || subjectLower.includes('pop');
                                 const isCandidateDoc = isInvoice || isPoP || isPdf || Boolean(filename);
 
@@ -539,7 +601,7 @@ export async function scanMailboxForClient({
                                             fileName: filename || (isInvoice ? 'invoice.pdf' : isPoP ? 'proof_of_payment.pdf' : 'document.pdf'),
                                             mimeType: part.contentType || (isPdf ? 'application/pdf' : 'application/octet-stream'),
                                             isPoP,
-                                            isInvoice: isInvoice || !isPoP,
+                                            isInvoice,
                                             messageId,
                                             detectedType,
                                         });

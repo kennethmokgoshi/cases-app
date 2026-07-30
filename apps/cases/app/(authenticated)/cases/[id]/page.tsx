@@ -3385,12 +3385,12 @@ export default function CaseDetailPage() {
                                 <div className="p-4 bg-zeno-navy rounded-lg border border-white/10">
                                     <p className="text-white font-semibold text-lg">{currentStatus?.name || caseData.status}</p>
                                     <p className="text-xs text-gray-400 mt-1">{currentStatus?.description}</p>
-                                    {/* Deadline removed as requested */}
-                                    {isInvoiceRequestedFromDcStatus(caseData.status) && (
-                                        <div className="mt-3 pt-3 border-t border-white/10">
-                                            <p className="text-xs text-gray-400 mb-2">
-                                                Waiting on the DC&apos;s invoice — search the mailboxes for their reply so it can be uploaded to this case.
-                                            </p>
+                                    <div className="mt-4 pt-3 border-t border-white/10 space-y-2">
+                                        <div>
+                                            <p className="text-xs text-gray-300 font-semibold">Check Emails for Invoices</p>
+                                            <p className="text-[11px] text-gray-400 leading-normal">Search mailboxes for DC invoices & PoPs to auto-upload to this case.</p>
+                                        </div>
+                                        <div className="pt-1">
                                             <CheckInvoiceEmailsButton
                                                 caseId={caseData.id}
                                                 reason={caseData.declineReason || null}
@@ -3398,7 +3398,7 @@ export default function CaseDetailPage() {
                                                 menuAlign="left"
                                             />
                                         </div>
-                                    )}
+                                    </div>
                                 </div>
                             </div>
 

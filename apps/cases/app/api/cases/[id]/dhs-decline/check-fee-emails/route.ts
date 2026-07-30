@@ -418,6 +418,7 @@ export async function POST(
                                         password,
                                     },
                                     idNumber,
+                                    clientName,
                                     since: searchFrom,
                                     skipMessageIds,
                                     docGroup,
@@ -449,16 +450,23 @@ export async function POST(
                                     for (const att of scanResult.attachments) {
                                         // Compute SHA-256 hash of attachment
                                         const hash = crypto.createHash('sha256').update(att.buffer).digest('hex');
-
-                                        // Verify if the document already exists in this case to avoid duplicates
-                                        const existingDoc = await prisma.document.findFirst({
-                                            where: {
-                                                caseId,
-                                                fileSize: att.buffer.length,
-                                                fileName: att.fileName,
-                                            }
-                                        });
-                                        if (existingDoc) {
+                                        const [existingDoc, existingMessage] = await Promise.all([
+                                            prisma.document.findFirst({
+                                                where: {
+                                                    caseId,
+                                                    fileSize: att.buffer.length,
+                                                    fileName: att.fileName,
+                                                }
+                                            }),
+                                            att.messageId ? prisma.processedMailboxMessage.findFirst({
+                                                where: {
+                                                    mailboxAccountId: mailbox.id,
+                                                    messageId: att.messageId,
+                                                    attachmentHash: hash,
+                                                }
+                                            }) : null,
+                                        ]);
+                                        if (existingDoc || existingMessage) {
                                             continue; // Skip already downloaded document
                                         }
 

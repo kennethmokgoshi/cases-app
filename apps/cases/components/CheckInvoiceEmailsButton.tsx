@@ -244,7 +244,7 @@ export default function CheckInvoiceEmailsButton({
                             Harvesting {GROUP_TITLES[currentGroup]}...
                         </>
                     ) : (
-                        <>📧 Harvest from Email ▾</>
+                        <>🧾 Check for Invoices ▾</>
                     )}
                 </button>
                 
