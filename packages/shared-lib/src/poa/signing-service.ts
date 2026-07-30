@@ -15,7 +15,7 @@ import { prisma } from '@zenowethu/database';
 import { generateStandardPoa } from './poa-generator';
 import { createLogger } from '../logger';
 import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
 
 const logger = createLogger('poa/signing-service');
 
@@ -232,7 +232,7 @@ export async function completePoaSigning(
 
   // ── Save signed PDF ──────────────────────────────────────────────────────
   const fileName    = `Signed_POA_${cleanId || record.id}_${Date.now()}.pdf`;
-  const uploadBase  = process.env.UPLOAD_DIR || join(process.cwd(), 'public', 'uploads');
+  const uploadBase  = process.env.UPLOAD_DIR || process.env.STORAGE_DIR || '/app/storage/uploads';
   const subDir      = record.caseId ?? record.consumerId ?? 'poa';
   const uploadDir   = join(uploadBase, subDir);
 

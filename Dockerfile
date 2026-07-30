@@ -12,7 +12,7 @@ ARG APP=cases
 
 # ── deps stage ───────────────────────────────────────────────────────────────
 FROM node:20-bullseye AS deps
-RUN apt-get update && apt-get install -y openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y openssl libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm — pin to exact version matching packageManager in package.json
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
@@ -55,7 +55,7 @@ FROM node:20-bullseye AS builder
 ARG CACHE_BUST=20260725042600
 ARG APP=cases
 
-RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl1.1 libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -117,46 +117,13 @@ ENV AUTH_TRUST_HOST=true
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install Chromium and all necessary dependencies for Puppeteer on Bullseye
+# Install Chromium and necessary dependencies for Puppeteer on Bullseye
 RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     chromium \
     fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libc6 \
-    libcairo2 \
-    libcups2 \
-    libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgbm1 \
-    libgcc1 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libstdc++6 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxi6 \
-    libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    lsb-release \
-    wget \
     ca-certificates \
     openssl \
-    libssl1.1 \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install the Prisma CLI globally (pinned to match @prisma/client) so the

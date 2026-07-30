@@ -20,6 +20,7 @@ type Project = {
     name: string;
     type: string;
     clientType?: string | null;
+    parentId?: string | null;
     parent_id?: string | null;
     children?: Project[];
 };
@@ -162,7 +163,7 @@ function PartnerNewCaseComponent() {
         ) || [];
 
         const flatChildren = allRawProjects.filter(p =>
-            p.parentId === selectedParent.id &&
+            (p.parentId || p.parent_id) === selectedParent.id &&
             (p.type === 'BRANCH' || p.type === 'FOLDER' || p.type === 'REFERRER')
         );
 

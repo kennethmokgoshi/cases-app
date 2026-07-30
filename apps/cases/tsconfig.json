@@ -41,6 +41,11 @@
   ],
   "exclude": [
     "node_modules",
-    "scripts"
+    "scripts",
+    "public",
+    "storage",
+    ".next",
+    "dist",
+    "out"
   ]
 }
