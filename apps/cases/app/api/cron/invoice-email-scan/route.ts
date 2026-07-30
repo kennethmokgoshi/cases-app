@@ -164,7 +164,7 @@ export async function POST(request: Request) {
                     try {
                         password = decryptSecret(mailbox.password);
                     } catch {
-                        password = null;
+                        password = mailbox.password;
                     }
                 }
                 if (!password) {

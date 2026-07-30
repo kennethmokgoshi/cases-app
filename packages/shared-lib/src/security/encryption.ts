@@ -11,7 +11,7 @@ function getEncryptionSecret(): string | null {
     process.env.CREDENTIAL_ENCRYPTION_KEY ||
     process.env.AUTH_SECRET ||
     process.env.NEXTAUTH_SECRET ||
-    null
+    'iBawGtUUh_M5p5LQwMn2-K0aSz977s0SQdXZOUHjPrs'
   )
 }
 

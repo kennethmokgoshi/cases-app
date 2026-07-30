@@ -382,7 +382,7 @@ export async function POST(
                                     password = decryptSecret(mailbox.password);
                                 } catch (err: any) {
                                     logger.warn(`Failed to decrypt password for mailbox ${mailbox.emailAddress}:`, err);
-                                    password = null;
+                                    password = mailbox.password;
                                 }
                             }
                             if (!password) {
