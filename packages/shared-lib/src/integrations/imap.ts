@@ -295,7 +295,7 @@ export function isDocTypeInGroup(detectedType: string, docGroup?: string): boole
         case 'CREDIT_REPORT':
             return ['CREDIT_REPORT', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_EXPERIAN', 'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE'].includes(detectedType);
         case 'DC_INVOICE':
-            return ['FEE_INVOICE', 'DC_FEE_INVOICE', 'PROOF_OF_PAYMENT', 'STATEMENT', 'OTHER'].includes(detectedType);
+            return ['FEE_INVOICE', 'DC_FEE_INVOICE', 'PROOF_OF_PAYMENT'].includes(detectedType);
         case 'POP':
             return ['PROOF_OF_PAYMENT'].includes(detectedType);
         case 'PAID_UP':
@@ -593,7 +593,7 @@ export async function scanMailboxForClient({
 
                                 const isInvoice = lowerName.includes('invoice') || lowerName.includes('fee') || lowerName.includes('statement') || lowerName.includes('bill') || subjectLower.includes('invoice') || subjectLower.includes('fee');
                                 const isPoP = lowerName.includes('pop') || lowerName.includes('proof') || lowerName.includes('payment') || lowerName.includes('receipt') || lowerName.includes('payement') || subjectLower.includes('proof') || subjectLower.includes('payment') || subjectLower.includes('pop');
-                                const isCandidateDoc = isInvoice || isPoP || isPdf || (Boolean(filename) && !isImage);
+                                const isCandidateDoc = true; // Harvest all files that pass isDoc and are not signatures
 
                                 if (isCandidateDoc) {
                                     const detectedType = classifyDocumentByFilename({
