@@ -80,16 +80,21 @@ COPY apps/${APP}/ ./apps/${APP}/
 COPY package.json pnpm-workspace.yaml turbo.json ./
 
 # Environment variables required at build time
-ARG DATABASE_URL
+# NOTE: DATABASE_URL is intentionally NOT passed here — it is only needed at
+# runtime. Passing it as a build ARG would cause Next.js to attempt a DB
+# connection during `next build`, which fails because the DB is only reachable
+# on the Docker runtime network, not from the builder container.
 ARG OPENAI_API_KEY
 ARG NEXTAUTH_SECRET
 
-ENV DATABASE_URL=$DATABASE_URL
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=4096"
+# Dummy placeholder so Prisma client generates without a real DB URL.
+# The real URL is injected by Dokploy at container start.
+ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 
 # Generate Prisma client from shared schema
 RUN cd packages/database && npx prisma generate
