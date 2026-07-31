@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         }
 
         // Verify both cases belong to the same referrer and match session referrer
-        if (fromCase.referrerId !== access.referrer.id || toCase.referrerId !== access.referrer.id) {
+        if ((fromCase as any).referrerId !== access.referrer.id || (toCase as any).referrerId !== access.referrer.id) {
             return NextResponse.json({ error: 'Cases must belong to your referral network' }, { status: 403 });
         }
 

@@ -122,6 +122,8 @@ type CaseDetail = {
     ncrSysRef: string | null;
     dhsStatus: string | null;
     manuallyAcceptedViaDhs: boolean;
+    requestedDhsStatus?: string | null;
+    uploadedDocTypes?: string[];
     dhsDaysCounter: string | null;
     debtCounsellorName: string | null;
     dcTradingName: string | null;
@@ -4179,7 +4181,7 @@ export default function CaseDetailPage() {
                                                         manuallyAcceptedViaDhs={Boolean(caseData.manuallyAcceptedViaDhs)}
                                                         uploadedDocTypes={caseData.uploadedDocTypes}
                                                         documents={caseData.documents}
-                                                        onDocumentGenerated={loadCaseDetails}
+                                                        onDocumentGenerated={fetchCase}
                                                         variant="header"
                                                     />
                                                 </div>

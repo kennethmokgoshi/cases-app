@@ -96,7 +96,7 @@ export async function GET(
                 creditorName: a.creditorName,
                 accountNumber: a.accountNumber,
                 accountType: a.accountType,
-                balance: a.balance ?? 0,
+                balance: (a as any).outstandingBalance ?? (a as any).balance ?? 0,
                 isMortgage,
                 isPrescribedCandidate,
                 lastPaymentDate: a.lastPaymentDate ? new Date(a.lastPaymentDate).toISOString() : null,

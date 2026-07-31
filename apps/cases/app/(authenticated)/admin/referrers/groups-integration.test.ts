@@ -237,7 +237,7 @@ describe('Referrer Groups Integration', () => {
 
       const totalMembers = userGroups
         .filter((g) => selectedGroupIds.includes(g.id))
-        .reduce((total, g) => total + (g._count?.members || g.members.length), 0);
+        .reduce((total, g) => total + ((g as any)._count?.members || g.members.length), 0);
 
       expect(totalMembers).toBe(2);
     });
