@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { canAccessDashboard } from '../../lib/role-check';
-import { roleDashboardMap, UserRole } from '../../lib/roles';
+import { canAccessDashboard } from '@/lib/role-check';
+import { roleDashboardMap, UserRole } from '@/lib/roles';
+import { isStaffUser } from '@/lib/staff-guard';
+import NotAuthorized from '@/components/NotAuthorized';
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -21,6 +23,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
   }, [pathname]);
 
   const role = ((session?.user as any)?.reportingRole || 'staff') as UserRole;
+  const isStaff = isStaffUser(session?.user);
 
   useEffect(() => {
     if (mounted && status === 'unauthenticated') {
@@ -29,7 +32,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
   }, [mounted, status, router]);
 
   useEffect(() => {
-    if (mounted && status === 'authenticated') {
+    if (mounted && status === 'authenticated' && isStaff && role !== 'unauthorized') {
       // Role-based route protection
       if (pathname.startsWith('/admin') && !canAccessDashboard(role, 'admin')) {
         router.push(roleDashboardMap[role] || '/staff');
@@ -41,7 +44,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
         router.push(roleDashboardMap[role] || '/staff');
       }
     }
-  }, [mounted, status, role, pathname, router]);
+  }, [mounted, status, role, isStaff, pathname, router]);
 
   if (!mounted || status === 'loading') {
     return (
@@ -53,6 +56,15 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
 
   if (status === 'unauthenticated') {
     return null;
+  }
+
+  // Display 403 Not Authorized error screen if user is not a Zenowethu staff member
+  if (!isStaff || role === 'unauthorized') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-center">
+        <NotAuthorized userEmail={session?.user?.email} />
+      </div>
+    );
   }
 
   // Determine which dashboards this user is allowed to access

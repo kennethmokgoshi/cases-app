@@ -1,5 +1,6 @@
 import { prisma } from '@zenowethu/database'
-import { UserRole, roleDashboardMap } from './roles'
+import { UserRole } from './roles'
+import { isStaffUser } from './staff-guard'
 
 export async function detectUserRole(userId: string): Promise<UserRole> {
   const user = await prisma.user.findUnique({
@@ -8,30 +9,43 @@ export async function detectUserRole(userId: string): Promise<UserRole> {
       isAdmin: true,
       role: true,
       userType: true,
+      email: true,
     },
   })
 
-  if (!user) return 'staff'
+  if (!user || !isStaffUser(user)) return 'unauthorized'
 
-  // Role hierarchy: admin > finance > manager > executive > staff
-  // Based on actual database fields: isAdmin (boolean) and role (string)
+  // Level 5: Admin
   if (user.isAdmin) return 'admin'
 
-  // Check role field for manager, executive, or finance roles
   const roleUpper = user.role?.toUpperCase() || ''
 
-  if (roleUpper.includes('MANAGER') || roleUpper.includes('SENIOR')) {
-    return 'manager'
-  }
-
+  // Level 4: Executive
   if (roleUpper.includes('EXECUTIVE') || roleUpper.includes('EXEC')) {
     return 'executive'
   }
 
+  // Level 3: Senior Manager
+  if (
+    roleUpper.includes('SENIOR_MANAGER') ||
+    roleUpper.includes('SENIOR MANAGER') ||
+    (roleUpper.includes('SENIOR') && roleUpper.includes('MANAGER'))
+  ) {
+    return 'senior_manager'
+  }
+
+  // Level 2: Manager
+  if (roleUpper.includes('MANAGER')) {
+    return 'manager'
+  }
+
+  // Level 1: Finance
   if (roleUpper.includes('FINANCE')) {
     return 'finance'
   }
 
+  // Level 1: Staff
   return 'staff'
 }
+
 

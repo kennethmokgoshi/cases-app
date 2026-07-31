@@ -1,22 +1,21 @@
-import { auth } from '../../../../../lib/auth'
+import { auth } from '@/lib/auth'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
-import { canAccessDashboard } from '../../../../../lib/role-check'
+import { canAccessDashboard } from '@/lib/role-check'
+import { verifyStaffApiAccess } from '@/lib/api-guard'
 
 export async function GET(request: Request) {
   const session = await auth()
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = verifyStaffApiAccess(session)
+  if (authError) return authError
 
   try {
     const url = new URL(request.url)
     const targetUserId = url.searchParams.get('userId')
-    const role = (session.user as any)?.reportingRole || 'staff'
+    const role = (session!.user as any)?.reportingRole || 'staff'
 
-    let queryUserId = session.user.id
-    if (targetUserId && targetUserId !== session.user.id) {
+    let queryUserId = session!.user.id
+    if (targetUserId && targetUserId !== session!.user.id) {
       if (!canAccessDashboard(role, 'manager')) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }

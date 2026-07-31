@@ -1,7 +1,8 @@
-import { auth } from '../../../../../lib/auth'
+import { auth } from '@/lib/auth'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { verifyStaffApiAccess } from '@/lib/api-guard'
 
 const bulkVerifySchema = z.object({
   logIds: z.array(z.string()),
@@ -10,14 +11,12 @@ const bulkVerifySchema = z.object({
 
 export async function POST(request: Request) {
   const session = await auth()
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = verifyStaffApiAccess(session)
+  if (authError) return authError
 
   try {
     // Check permissions
-    if (!session.user.isAdmin && session.user.role !== 'MANAGER') {
+    if (!session!.user.isAdmin && session!.user.role !== 'MANAGER') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
       where: { id: { in: logIds } },
       data: {
         isVerified,
-        verifiedById: isVerified ? session.user.id : null,
+        verifiedById: isVerified ? session!.user.id : null,
         verifiedAt: isVerified ? new Date() : null,
       },
     })

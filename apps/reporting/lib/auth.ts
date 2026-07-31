@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@zenowethu/database'
 import { detectUserRole } from './role-detector'
 import { type UserRole } from './roles'
+import { isStaffUser } from './staff-guard'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -43,6 +44,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (!passwordMatch) {
             console.error('[Auth] Password mismatch for user:', user.id)
             return null
+          }
+
+          if (!isStaffUser(user)) {
+            console.error('[Auth] Non-staff user attempted login:', user.email, 'userType:', user.userType)
+            throw new Error('NotAuthorized: Access restricted to @zenowethu staff members only.')
           }
 
           let reportingRole = 'staff'

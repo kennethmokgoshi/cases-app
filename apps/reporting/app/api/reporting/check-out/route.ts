@@ -1,26 +1,25 @@
-import { auth } from '../../../../lib/auth'
+import { auth } from '@/lib/auth'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
+import { verifyStaffApiAccess } from '@/lib/api-guard'
 
 export async function POST(request: Request) {
   const session = await auth()
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = verifyStaffApiAccess(session)
+  if (authError) return authError
 
   try {
     const now = new Date()
 
     // Upsert employee presence
     const presence = await prisma.employeePresence.upsert({
-      where: { userId: session.user.id },
+      where: { userId: session!.user.id },
       update: {
         status: 'OFFLINE',
         checkedOutAt: now,
       },
       create: {
-        userId: session.user.id,
+        userId: session!.user.id,
         status: 'OFFLINE',
         checkedOutAt: now,
       },
@@ -31,7 +30,7 @@ export async function POST(request: Request) {
     await prisma.$executeRawUnsafe(`
       UPDATE "EmployeeSession"
       SET "logoutAt" = NOW(), "updatedAt" = NOW()
-      WHERE "userId" = '${session.user.id}' AND "logoutAt" IS NULL
+      WHERE "userId" = '${session!.user.id}' AND "logoutAt" IS NULL
     `)
 
     return NextResponse.json({ success: true, presence })

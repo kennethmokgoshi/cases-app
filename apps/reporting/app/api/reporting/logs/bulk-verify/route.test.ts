@@ -32,7 +32,7 @@ describe('POST /api/reporting/logs/bulk-verify', () => {
   })
 
   it('should return 403 if user is not a manager or admin', async () => {
-    const mockSession = { user: { id: 'user-123', isAdmin: false, role: 'MEMBER' } }
+    const mockSession = { user: { id: 'user-123', email: 'user@zenowethu.co.za', userType: 'STAFF', isAdmin: false, role: 'MEMBER' } }
     vi.mocked(auth).mockResolvedValue(mockSession as any)
 
     const response = await POST(
@@ -45,7 +45,7 @@ describe('POST /api/reporting/logs/bulk-verify', () => {
   })
 
   it('should bulk verify logs for managers', async () => {
-    const mockSession = { user: { id: 'manager-1', isAdmin: false, role: 'MANAGER' } }
+    const mockSession = { user: { id: 'manager-1', email: 'manager@zenowethu.co.za', userType: 'STAFF', isAdmin: false, role: 'MANAGER' } }
     vi.mocked(auth).mockResolvedValue(mockSession as any)
 
     vi.mocked(prisma.workLog.updateMany).mockResolvedValue({ count: 3 })
@@ -64,7 +64,7 @@ describe('POST /api/reporting/logs/bulk-verify', () => {
   })
 
   it('should require at least one log ID', async () => {
-    const mockSession = { user: { id: 'manager-1', isAdmin: true, role: 'MANAGER' } }
+    const mockSession = { user: { id: 'manager-1', email: 'manager@zenowethu.co.za', userType: 'STAFF', isAdmin: true, role: 'MANAGER' } }
     vi.mocked(auth).mockResolvedValue(mockSession as any)
 
     const response = await POST(

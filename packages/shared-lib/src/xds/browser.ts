@@ -98,66 +98,49 @@ export async function loginToXds(
         }
 
         // --- Fill credentials ---
-        await usernameField.click({ clickCount: 3 });
-        await usernameField.type(credentials.username, { delay: 30 });
-        await passwordField.click({ clickCount: 3 });
-        await passwordField.type(credentials.password, { delay: 30 });
+        await page.evaluate((usr, pwd) => {
+            const userInput = (document.querySelector('input[name="UserName"]') ||
+                document.querySelector('input[name="username"]') ||
+                document.querySelector('input[type="text"]')) as HTMLInputElement;
+            const passInput = (document.querySelector('input[name="Password"]') ||
+                document.querySelector('input[name="password"]') ||
+                document.querySelector('input[type="password"]')) as HTMLInputElement;
 
-        // --- Submit button ---
-        const buttonSelectors = [
-            'button[type="submit"]',
-            'input[type="submit"]',
-            'button:has-text("Login")',
-            'button:has-text("Log In")',
-            'button:has-text("Sign In")',
-            '[data-testid="login-button"]',
-            '.login-btn',
-            '.btn-login',
-        ];
-        let loginButton = null;
-        for (const sel of buttonSelectors) {
-            try {
-                loginButton = await page.$(sel);
-                if (loginButton) {
-                    logger.info(`[XDS] Login button found: ${sel}`);
-                    break;
-                }
-            } catch {
-                // continue
+            if (userInput) {
+                userInput.value = usr;
+                userInput.dispatchEvent(new Event('input', { bubbles: true }));
+                userInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
-        }
-        if (!loginButton) {
-            // Last resort: find any button containing "login" text
-            loginButton = await page.evaluateHandle(() => {
-                const buttons = Array.from(document.querySelectorAll('button, input[type=submit]'));
-                return buttons.find(b =>
-                    b.textContent?.toLowerCase().includes('login') ||
-                    b.textContent?.toLowerCase().includes('sign in') ||
-                    (b as HTMLInputElement).value?.toLowerCase().includes('login')
-                ) || null;
-            }) as any;
-        }
+            if (passInput) {
+                passInput.value = pwd;
+                passInput.dispatchEvent(new Event('input', { bubbles: true }));
+                passInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }, credentials.username, credentials.password);
 
-        if (!loginButton) {
-            logger.error('[XDS] Login button not found');
-            return false;
-        }
-
+        // --- Submit form ---
         await Promise.all([
-            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60_000 }),
-            loginButton.click(),
+            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => null),
+            page.evaluate(() => {
+                const btn = document.querySelector('button[type="submit"], input[type="submit"], .btn-login, button');
+                if (btn) {
+                    (btn as HTMLElement).click();
+                } else {
+                    const form = document.querySelector('form');
+                    if (form) form.submit();
+                }
+            }),
         ]);
+        await delay(3000);
 
         const currentUrl = page.url();
         logger.info(`[XDS] Post-login URL: ${currentUrl}`);
 
-        // Check for failed login indicators
         const pageText = await page.evaluate(() => document.body.innerText);
         if (
-            currentUrl.toLowerCase().includes('login') ||
-            pageText.toLowerCase().includes('invalid') ||
-            pageText.toLowerCase().includes('incorrect') ||
-            pageText.toLowerCase().includes('failed')
+            (currentUrl.toLowerCase().includes('account/login') && pageText.toLowerCase().includes('log in')) ||
+            pageText.toLowerCase().includes('invalid credentials') ||
+            pageText.toLowerCase().includes('incorrect username')
         ) {
             logger.error('[XDS] Login appears to have failed');
             return false;

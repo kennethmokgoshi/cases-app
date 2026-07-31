@@ -1,7 +1,12 @@
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { verifyStaffApiAccess } from '@/lib/api-guard'
 
 export async function GET(request: Request) {
+  const session = await auth()
+  const authError = verifyStaffApiAccess(session)
+  if (authError) return authError
   try {
     // Get all online and idle staff
     const onlineStaff = await prisma.employeePresence.findMany({

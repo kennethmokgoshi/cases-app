@@ -32,7 +32,7 @@ describe('GET/POST /api/reporting/logs', () => {
     })
 
     it('should return work logs for authenticated user', async () => {
-      const mockSession = { user: { id: 'user-123' } }
+      const mockSession = { user: { id: 'user-123', email: 'staff@zenowethu.co.za', userType: 'STAFF' } }
       vi.mocked(auth).mockResolvedValue(mockSession as any)
 
       const mockLogs = [
@@ -70,7 +70,7 @@ describe('GET/POST /api/reporting/logs', () => {
     })
 
     it('should create a work log with valid data', async () => {
-      const mockSession = { user: { id: 'user-123' } }
+      const mockSession = { user: { id: 'user-123', email: 'staff@zenowethu.co.za', userType: 'STAFF' } }
       vi.mocked(auth).mockResolvedValue(mockSession as any)
 
       const mockLog = {
@@ -102,7 +102,7 @@ describe('GET/POST /api/reporting/logs', () => {
     })
 
     it('should validate case number if provided', async () => {
-      const mockSession = { user: { id: 'user-123' } }
+      const mockSession = { user: { id: 'user-123', email: 'staff@zenowethu.co.za', userType: 'STAFF' } }
       vi.mocked(auth).mockResolvedValue(mockSession as any)
       vi.mocked(prisma.case.findUnique).mockResolvedValue(null)
 

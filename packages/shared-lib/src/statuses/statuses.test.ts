@@ -21,6 +21,15 @@ describe('Workflow Statuses', () => {
         expect(status?.category).toBe('BEGINNING');
     });
 
+    it('should retrieve TAT_ELAPSED_DC_PENDING status with correct properties', () => {
+        const status = getStatusByCode('TAT_ELAPSED_DC_PENDING');
+        expect(status).toBeDefined();
+        expect(status?.name).toBe('TAT Elapsed - DC Pending');
+        expect(status?.category).toBe('DETOUR');
+        expect(status?.slaEnabled).toBe(true);
+        expect(status?.slaDays).toBe(3);
+    });
+
     it('should return undefined for invalid code', () => {
         const status = getStatusByCode('INVALID_CODE');
         expect(status).toBeUndefined();

@@ -62,24 +62,30 @@ export async function PATCH(
         }
 
         // Update the case
+        const updatePayload: any = {
+            status: newStatus,
+            statusEntryDate: new Date(),
+            nextUpdate: nextUpdateDate,
+            isOverdue: false, // Reset overdue state on status change
+            daysInStatus: 0, // Reset days counter
+            updatedBy: { connect: { id: session.user.id } },
+            workflowLogs: {
+                create: {
+                    fromStatus: currentCase.status,
+                    toStatus: newStatus,
+                    timestamp: new Date(),
+                    userId: session.user.id
+                }
+            }
+        };
+
+        if (newStatus === 'NOT_REQUESTED_VIA_DHS') {
+            updatePayload.dhsStatus = 'Not Requested via DHS';
+        }
+
         const updatedCase = await prisma.case.update({
             where: { id },
-            data: {
-                status: newStatus,
-                statusEntryDate: new Date(),
-                nextUpdate: nextUpdateDate,
-                isOverdue: false, // Reset overdue state on status change
-                daysInStatus: 0, // Reset days counter
-                updatedBy: { connect: { id: session.user.id } },
-                workflowLogs: {
-                    create: {
-                        fromStatus: currentCase.status,
-                        toStatus: newStatus,
-                        timestamp: new Date(),
-                        userId: session.user.id
-                    }
-                }
-            },
+            data: updatePayload,
             include: {
                 client: true,
                 documents: true,

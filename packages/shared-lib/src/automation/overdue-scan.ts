@@ -51,6 +51,7 @@ const DC_FOLLOWUP_STATUSES = new Set([
     'FORM_177_SENT',
     'ACCEPTED_VIA_DHS',
     'ACCEPTED_FORM_177',
+    'TAT_ELAPSED_DC_PENDING',
     'IRFDC_1M',
     'IRFDC_2M',
     'IRFDC_3M',
@@ -322,9 +323,17 @@ export async function runOverdueScan(filters?: OverdueScanFilters): Promise<Over
                  actionType === 'STAFF_ALERT' ? COOLDOWN_DAYS.STAFF : 7)
             );
 
+            // Auto-transition cases stuck in DHS transfer wait states past SLA to TAT_ELAPSED_DC_PENDING
+            const autoTransitionStatuses = ['REQUESTED_VIA_DHS', 'DECLINED_VIA_DHS', 'DOCUMENTS_EMAILED', 'FORM_177_SENT', 'REJECTED_EMAIL_DOCS'];
+            let effectiveStatus = statusCode;
+            if (autoTransitionStatuses.includes(statusCode)) {
+                effectiveStatus = 'TAT_ELAPSED_DC_PENDING';
+            }
+
             await prisma.case.update({
                 where: { id: caseData.id },
                 data: {
+                    status: effectiveStatus,
                     isOverdue: true,
                     daysInStatus,
                     nextUpdate: nextUpdateDate,

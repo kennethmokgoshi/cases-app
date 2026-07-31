@@ -27,7 +27,7 @@ describe('GET /api/reporting/presence/sessions', () => {
 
   it('should return empty stats and default predictions if no sessions exist for executive', async () => {
     vi.mocked(auth).mockResolvedValue({
-      user: { id: 'user-123', reportingRole: 'executive' },
+      user: { id: 'user-123', email: 'exec@zenowethu.co.za', userType: 'STAFF', reportingRole: 'executive' },
     } as any)
 
     vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([])
@@ -43,7 +43,7 @@ describe('GET /api/reporting/presence/sessions', () => {
 
   it('should calculate statistics and predictions correctly for executive based on mock sessions', async () => {
     vi.mocked(auth).mockResolvedValue({
-      user: { id: 'user-123', reportingRole: 'executive' },
+      user: { id: 'user-123', email: 'exec@zenowethu.co.za', userType: 'STAFF', reportingRole: 'executive' },
     } as any)
 
     const loginTime = new Date()
@@ -70,7 +70,7 @@ describe('GET /api/reporting/presence/sessions', () => {
 
   it('should return null predictions for manager/staff roles', async () => {
     vi.mocked(auth).mockResolvedValue({
-      user: { id: 'user-123', reportingRole: 'manager' },
+      user: { id: 'user-123', email: 'manager@zenowethu.co.za', userType: 'STAFF', reportingRole: 'manager' },
     } as any)
 
     const loginTime = new Date()

@@ -1,7 +1,8 @@
-import { auth } from '../../../../lib/auth'
+import { auth } from '@/lib/auth'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { verifyStaffApiAccess } from '@/lib/api-guard'
 
 const createLogSchema = z.object({
   date: z.string().datetime(),
@@ -13,10 +14,8 @@ const createLogSchema = z.object({
 
 export async function GET(request: Request) {
   const session = await auth()
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = verifyStaffApiAccess(session)
+  if (authError) return authError
 
   try {
     const url = new URL(request.url)
@@ -25,12 +24,15 @@ export async function GET(request: Request) {
     const isVerified = url.searchParams.get('isVerified')
 
     const targetUserId = url.searchParams.get('userId')
-    let queryUserId = session.user.id
+    let queryUserId = session!.user.id
 
-    if (targetUserId && targetUserId !== session.user.id) {
-      const { canAccessDashboard } = await import('../../../../lib/role-check')
-      const role = (session.user as any)?.reportingRole || 'staff'
-      if (canAccessDashboard(role, 'manager')) {
+    if (targetUserId && targetUserId !== session!.user.id) {
+      const { canViewUser } = await import('@/lib/role-check')
+      const { detectUserRole } = await import('@/lib/role-detector')
+      const viewerRole = (session!.user as any)?.reportingRole || 'staff'
+      const targetRole = await detectUserRole(targetUserId)
+
+      if (canViewUser(viewerRole, targetRole)) {
         queryUserId = targetUserId
       } else {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -66,10 +68,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth()
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = verifyStaffApiAccess(session)
+  if (authError) return authError
 
   try {
     const body = await request.json()
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
     const log = await prisma.workLog.create({
       data: {
-        userId: session.user.id,
+        userId: session!.user.id,
         date: new Date(validated.date),
         category: validated.category,
         description: validated.description,

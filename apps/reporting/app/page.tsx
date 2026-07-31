@@ -3,6 +3,7 @@
 import { signIn, useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { roleDashboardMap, type UserRole } from '@/lib/roles'
 
 export default function RootPage() {
   const [loading, setLoading] = useState(false)
@@ -15,26 +16,8 @@ export default function RootPage() {
 
   useEffect(() => {
     if (status === 'authenticated' && session) {
-      const role = (session.user as any)?.reportingRole || 'staff'
-      switch (role) {
-        case 'admin':
-          router.push('/admin')
-          break
-        case 'executive':
-        case 'senior-manager':
-          router.push('/executive')
-          break
-        case 'manager':
-          router.push('/manager')
-          break
-        case 'finance':
-          router.push('/finance')
-          break
-        case 'staff':
-        default:
-          router.push('/staff')
-          break
-      }
+      const role = ((session.user as any)?.reportingRole || 'staff') as UserRole
+      router.push(roleDashboardMap[role] || '/staff')
     }
   }, [session, status, router])
 
@@ -52,7 +35,9 @@ export default function RootPage() {
 
       if (result?.error) {
         // Parse error message for more specific feedback
-        if (result.error.includes('CredentialsSignin')) {
+        if (result.error.includes('NotAuthorized') || result.error.includes('@zenowethu')) {
+          setError('Not Authorized: Access to reporting is restricted to internal @zenowethu staff members only.')
+        } else if (result.error.includes('CredentialsSignin')) {
           setError('Email or password is incorrect. Please try again.')
         } else if (result.error.includes('AccessDenied')) {
           setError('Access denied. Your account may be inactive.')

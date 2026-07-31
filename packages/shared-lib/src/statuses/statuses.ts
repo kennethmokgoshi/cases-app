@@ -229,6 +229,15 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         slaEnabled: true,
         slaDays: 3,
         isOverdueState: false },
+    {
+        code: 'TAT_ELAPSED_DC_PENDING',
+        name: 'TAT Elapsed - DC Pending',
+        category: 'DETOUR',
+        description: 'Previous Debt Counsellor turnaround time (3-7 days) elapsed without sending transfer file',
+        slaEnabled: true,
+        slaDays: 3,
+        isOverdueState: false },
+
 
     // 5. ADVANCED STAGE
     {

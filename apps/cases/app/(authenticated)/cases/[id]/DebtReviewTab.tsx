@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { GenerateClearanceButton } from '@/components/GenerateClearanceButton';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -645,6 +646,13 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
                                     >
                                         {generatingD4F2 ? 'Generating pack...' : 'Generate D4 to F2 Pack'}
                                     </button>
+                                    <GenerateClearanceButton
+                                        caseId={caseId}
+                                        dhsStatus={affordability?.dhsStatus}
+                                        documents={data?.documents}
+                                        onDocumentGenerated={fetchData}
+                                        variant="tab"
+                                    />
                                 </div>
                                 <p className="text-[11px] text-sky-400/70 mt-3">
                                     F1 generated PDFs: Certified Form 19, Form 17.2(c), restructuring proposal and

@@ -506,7 +506,7 @@ export async function scanMailboxForClient({
 
         const processedMessageIds = new Set<string>(skipMessageIds);
 
-        const isGmailServer = config.host.toLowerCase().includes('gmail') || Boolean(client.capability?.has('X-GM-EXT-1'));
+        const isGmailServer = config.host.toLowerCase().includes('gmail') || Boolean(client.capabilities?.has('X-GM-EXT-1'));
 
         const safeSearch = async (criteria: Record<string, unknown>): Promise<number[]> => {
             try {
@@ -864,7 +864,7 @@ export async function scanMailboxForCaseUpdates({
                 // The ID number and full name are reliably in the subject of DC
                 // emails, and many servers' TEXT search misses subjects/bodies —
                 // so SUBJECT is the dependable hit for "please find attached".
-                const isGmailServer = config.host.toLowerCase().includes('gmail') || Boolean(client.capability?.has('X-GM-EXT-1'));
+                const isGmailServer = config.host.toLowerCase().includes('gmail') || Boolean(client.capabilities?.has('X-GM-EXT-1'));
 
                 if (trimmedId) {
                     addUids(await safeSearch({ text: trimmedId, since }), 'ID_NUMBER');

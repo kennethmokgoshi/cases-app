@@ -29,7 +29,7 @@ describe('POST /api/reporting/check-in', () => {
   })
 
   it('should mark user as ONLINE and return presence data', async () => {
-    const mockSession = { user: { id: 'user-123' } }
+    const mockSession = { user: { id: 'user-123', email: 'john@zenowethu.co.za', userType: 'STAFF' } }
     vi.mocked(auth).mockResolvedValue(mockSession as any)
 
     const mockPresence = {
@@ -50,7 +50,7 @@ describe('POST /api/reporting/check-in', () => {
   })
 
   it('should handle errors gracefully', async () => {
-    const mockSession = { user: { id: 'user-123' } }
+    const mockSession = { user: { id: 'user-123', email: 'john@zenowethu.co.za', userType: 'STAFF' } }
     vi.mocked(auth).mockResolvedValue(mockSession as any)
     vi.mocked(prisma.employeePresence.upsert).mockRejectedValue(new Error('DB error'))
 

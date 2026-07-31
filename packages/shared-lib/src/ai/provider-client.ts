@@ -31,14 +31,14 @@ export function invalidateAiProviderCache(): void {
 // ─── Default model assignments ────────────────────────────────────────────────
 const DEFAULT_MODELS: Record<AiTask, string> = {
     document_identification:  'gpt-4o-mini',      // High TPM (200k) — used for scanning 100-page docs
-    document_analysis:        'gpt-4.1',           // Precise extraction of names, IDs, amounts
-    document_reanalysis:      'google/gemini-pro-1.5',
-    legal_drafting:           'anthropic/claude-3.5-sonnet',
-    case_strategy:            'gpt-4.1',
-    plan_generation:          'gpt-4.1',
-    contract_analysis:        'google/gemini-pro-1.5',
-    dhs_parsing:              'gpt-4.1',
-    ai_coach:                 'gpt-4.1',
+    document_analysis:        'gpt-4o',           // Precise extraction of names, IDs, amounts
+    document_reanalysis:      'gpt-4o',
+    legal_drafting:           'gpt-4o',
+    case_strategy:            'gpt-4o',
+    plan_generation:          'gpt-4o',
+    contract_analysis:        'gpt-4o',
+    dhs_parsing:              'gpt-4o',
+    ai_coach:                 'gpt-4o',
 };
 
 // ─── Direct build of OpenAI client from environment variables ─────────────────
@@ -151,20 +151,21 @@ export async function getAiClientForTask(task: AiTask, customModelId?: string): 
 export async function getAiClientChainForTask(task: AiTask): Promise<AiClientConfig[]> {
     const primary = await getAiClientForTask(task);
     const chain: AiClientConfig[] = [primary];
-    const seen = new Set<string>([primary.providerName]);
+    const seen = new Set<string>([`${primary.providerName}:${primary.model}`]);
 
     const candidates: Array<{ enabled: boolean; model: string }> = [
+        { enabled: !!process.env.OPENAI_API_KEY,     model: 'gpt-4o' },
         { enabled: !!process.env.OPENAI_API_KEY,     model: 'gpt-4o-mini' },
         { enabled: !!process.env.OPENROUTER_API_KEY, model: 'openai/gpt-4o-mini' },
-        { enabled: !!process.env.GOOGLE_AI_API_KEY,  model: 'google/gemini-1.5-flash' },
-        { enabled: !!process.env.ANTHROPIC_API_KEY,  model: 'anthropic/claude-3.5-sonnet' },
+        { enabled: !!process.env.GOOGLE_AI_API_KEY,  model: 'gemini-1.5-flash' },
     ];
 
     for (const c of candidates) {
         if (!c.enabled) continue;
         const { client, name } = buildClientFromEnv(c.model);
-        if (seen.has(name)) continue;
-        seen.add(name);
+        const key = `${name}:${c.model}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         chain.push({ client, model: c.model, providerName: name });
     }
 
@@ -186,7 +187,10 @@ export function describeAiError(err: unknown): string {
     if (status === 401 || status === 403) {
         return 'The AI provider rejected the API key (authentication failed). Check the configured key.';
     }
-    const msg = e?.error?.message ?? e?.message;
+    let msg = e?.error?.message ?? e?.message;
+    if (msg?.includes('400 status code (no body)')) {
+        msg = 'HTTP 400 Bad Request from AI provider (invalid model name or unsupported request payload).';
+    }
     return msg ? `AI provider error: ${msg}` : 'AI generation failed.';
 }
 

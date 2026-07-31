@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
+import { getDateRange, DateRangeType } from '@/lib/date-utils'
+
 
 interface TeamMember {
   id: string
@@ -21,7 +23,7 @@ export default function ExecutiveDashboard() {
   const [team, setTeam] = useState<TeamMember[]>([])
   const filteredTeam = team.filter((member) => member.id !== session?.user?.id)
   const [isLoading, setIsLoading] = useState(true)
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('week')
+  const [dateRange, setDateRange] = useState<DateRangeType>('week')
 
   useEffect(() => {
     loadTeamData()
@@ -30,22 +32,11 @@ export default function ExecutiveDashboard() {
   async function loadTeamData() {
     setIsLoading(true)
     try {
-      const now = new Date()
-      let startDate = new Date()
-
-      if (dateRange === 'today') {
-        startDate.setHours(0, 0, 0, 0)
-      } else if (dateRange === 'week') {
-        startDate.setDate(now.getDate() - now.getDay())
-        startDate.setHours(0, 0, 0, 0)
-      } else {
-        startDate.setDate(1)
-        startDate.setHours(0, 0, 0, 0)
-      }
+      const { start, end } = getDateRange(dateRange)
 
       // Fetch all staff members activity
       const res = await fetch(
-        `/api/reporting/team?startDate=${startDate.toISOString()}&endDate=${now.toISOString()}`
+        `/api/reporting/team?startDate=${start.toISOString()}&endDate=${end.toISOString()}`
       )
       if (res.ok) {
         const data = await res.json()
@@ -88,12 +79,12 @@ export default function ExecutiveDashboard() {
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Executive Dashboard</h1>
           <p className="text-slate-600 mt-1">High-level team productivity overview and metrics</p>
         </div>
-        <div className="flex gap-2">
-          {(['today', 'week', 'month'] as const).map((range) => (
+        <div className="flex flex-wrap gap-2">
+          {(['today', 'week', 'month', 'quarter', 'biannual', 'annual'] as const).map((range) => (
             <button
               key={range}
               onClick={() => setDateRange(range)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition ${
                 dateRange === range
                   ? 'bg-cyan-500 text-slate-950 shadow-sm shadow-cyan-500/20'
                   : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -102,6 +93,9 @@ export default function ExecutiveDashboard() {
               {range === 'today' && 'Today'}
               {range === 'week' && 'This Week'}
               {range === 'month' && 'This Month'}
+              {range === 'quarter' && 'Quarter (90d)'}
+              {range === 'biannual' && 'Bi-Annual (180d)'}
+              {range === 'annual' && 'Annual (365d)'}
             </button>
           ))}
         </div>

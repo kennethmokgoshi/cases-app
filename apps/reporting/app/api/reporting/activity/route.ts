@@ -1,14 +1,13 @@
-import { auth } from '../../../../lib/auth'
+import { auth } from '@/lib/auth'
 import { getUserActivitySignature } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
+import { verifyStaffApiAccess } from '@/lib/api-guard'
 
 export async function GET(request: Request) {
   const session = await auth()
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = verifyStaffApiAccess(session)
+  if (authError) return authError
 
   try {
     const url = new URL(request.url)
@@ -21,7 +20,7 @@ export async function GET(request: Request) {
     const date = new Date(dateStr)
 
     // Get auto-detected activity from database
-    const signature = await getUserActivitySignature(session.user.id, date)
+    const signature = await getUserActivitySignature(session!.user.id, date)
 
     // Get manual work logs for the day
     const dayStart = new Date(date)
@@ -31,7 +30,7 @@ export async function GET(request: Request) {
 
     const workLogs = await prisma.workLog.findMany({
       where: {
-        userId: session.user.id,
+        userId: session!.user.id,
         date: {
           gte: dayStart,
           lte: dayEnd,

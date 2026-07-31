@@ -2,6 +2,8 @@
 
 import { useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
+import { getDateRange } from '@/lib/date-utils'
+
 
 type ActivityCategory = 'CASE_WORK' | 'CLIENT_CALLS' | 'CLIENT_EMAILS' | 'OTHER'
 
@@ -91,9 +93,9 @@ export default function StaffDashboard() {
   async function loadData() {
     setIsLoadingLogs(true)
     try {
-      // Load 180 days of logs for periodic rollups
+      // Load 365 days of logs for periodic rollups (including Annual 12-month)
       const startDate = new Date()
-      startDate.setDate(startDate.getDate() - 180)
+      startDate.setDate(startDate.getDate() - 365)
       const res = await fetch(`/api/reporting/logs?startDate=${startDate.toISOString()}`)
       if (res.ok) {
         const data = await res.json()
@@ -220,48 +222,36 @@ export default function StaffDashboard() {
     })
   }
 
-  // Define period boundaries
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+  // Define period boundaries using standard date range utility
+  const selectedDateObj = selectedDateStr ? new Date(selectedDateStr) : new Date()
 
-  const thisWeekStart = new Date(now.setDate(now.getDate() - now.getDay()))
-  thisWeekStart.setHours(0, 0, 0, 0)
-  const thisWeekEnd = new Date()
-
-  // Reset now for month calculations
-  const monthNow = new Date()
-  const thisMonthStart = new Date(monthNow.getFullYear(), monthNow.getMonth(), 1, 0, 0, 0)
-  const thisMonthEnd = new Date()
-
-  const ninetyDaysAgo = new Date()
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
-
-  const oneEightyDaysAgo = new Date()
-  oneEightyDaysAgo.setDate(oneEightyDaysAgo.getDate() - 180)
+  const todayRange = getDateRange('today', selectedDateObj)
+  const weekRange = getDateRange('week', new Date())
+  const monthRange = getDateRange('month', new Date())
+  const quarterRange = getDateRange('quarter', new Date())
+  const biannualRange = getDateRange('biannual', new Date())
+  const annualRange = getDateRange('annual', new Date())
 
   // Calculate metrics for rollups
-  const selectedDateStart = new Date(selectedDateStr)
-  selectedDateStart.setHours(0, 0, 0, 0)
-  const selectedDateEnd = new Date(selectedDateStr)
-  selectedDateEnd.setHours(23, 59, 59, 999)
-
-  const selectedLogs = getLogsInDateRange(selectedDateStart, selectedDateEnd)
+  const selectedLogs = getLogsInDateRange(todayRange.start, todayRange.end)
   const selectedManualMinutes = selectedLogs.reduce((sum, log) => sum + log.durationMinutes, 0)
   const selectedAutoMinutes = autoMetrics.estimatedMinutes || 0
   const selectedTotalMinutes = selectedManualMinutes + selectedAutoMinutes
 
-  const weeklyLogs = getLogsInDateRange(thisWeekStart, thisWeekEnd)
+  const weeklyLogs = getLogsInDateRange(weekRange.start, weekRange.end)
   const weeklyMinutes = weeklyLogs.reduce((sum, log) => sum + log.durationMinutes, 0)
 
-  const monthlyLogs = getLogsInDateRange(thisMonthStart, thisMonthEnd)
+  const monthlyLogs = getLogsInDateRange(monthRange.start, monthRange.end)
   const monthlyMinutes = monthlyLogs.reduce((sum, log) => sum + log.durationMinutes, 0)
 
-  const quarterlyLogs = getLogsInDateRange(ninetyDaysAgo, new Date())
+  const quarterlyLogs = getLogsInDateRange(quarterRange.start, quarterRange.end)
   const quarterlyMinutes = quarterlyLogs.reduce((sum, log) => sum + log.durationMinutes, 0)
 
-  const biannualLogs = getLogsInDateRange(oneEightyDaysAgo, new Date())
+  const biannualLogs = getLogsInDateRange(biannualRange.start, biannualRange.end)
   const biannualMinutes = biannualLogs.reduce((sum, log) => sum + log.durationMinutes, 0)
+
+  const annualLogs = getLogsInDateRange(annualRange.start, annualRange.end)
+  const annualMinutes = annualLogs.reduce((sum, log) => sum + log.durationMinutes, 0)
 
   const otherOnlineStaff = onlineStaff.filter((s) => s.userId !== session?.user?.id)
 
@@ -423,7 +413,7 @@ export default function StaffDashboard() {
           </div>
 
           {/* Dynamic Period Rollups Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 rounded-xl shadow-sm">
               <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider block">Today</span>
               <span className="text-2xl font-extrabold block mt-2">{(selectedTotalMinutes / 60).toFixed(1)}h</span>
@@ -452,6 +442,12 @@ export default function StaffDashboard() {
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Bi-Annual (180d)</span>
               <span className="text-2xl font-bold text-slate-900 block mt-2">{(biannualMinutes / 60).toFixed(1)}h</span>
               <span className="text-xs text-slate-500 mt-1 block">{biannualLogs.length} tasks</span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Annual (365d)</span>
+              <span className="text-2xl font-bold text-slate-900 block mt-2">{(annualMinutes / 60).toFixed(1)}h</span>
+              <span className="text-xs text-slate-500 mt-1 block">{annualLogs.length} tasks</span>
             </div>
           </div>
         </div>
