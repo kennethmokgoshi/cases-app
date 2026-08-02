@@ -19,8 +19,8 @@ const consumer = {
 };
 
 const settledAccounts = [
-    { creditorName: 'ABSA Bank', accountNumber: '123456', accountType: 'PERSONAL_LOAN', status: 'CLOSED', outstandingBalance: 0 },
-    { creditorName: 'Truworths', accountNumber: '654321', accountType: 'RETAIL',        status: 'CLOSED', outstandingBalance: 0 },
+    { creditorName: 'ABSA Bank', accountNumber: '123456', accountType: 'PERSONAL_LOAN', status: 'CLOSED', outstandingBalance: 0, lastPaymentDate: null },
+    { creditorName: 'Truworths', accountNumber: '654321', accountType: 'RETAIL',        status: 'CLOSED', outstandingBalance: 0, lastPaymentDate: null },
 ];
 
 function isPdf(bytes: Uint8Array): boolean {

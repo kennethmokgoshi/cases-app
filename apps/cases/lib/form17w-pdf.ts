@@ -82,6 +82,7 @@ export async function generateForm17W(data: Form17WData): Promise<Uint8Array> {
     const PAGE_W = 595;
     const PAGE_H = 842;
     const MARGIN = 50;
+    const CONTENT_W = PAGE_W - MARGIN * 2;
 
     // Try embedding real Zenowethu Debt Management letterhead
     const lhBytes = await tryLoadLetterhead();

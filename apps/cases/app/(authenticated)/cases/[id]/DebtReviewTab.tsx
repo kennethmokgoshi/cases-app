@@ -364,6 +364,23 @@ export function DebtReviewTab({ caseId, canApprove, onDocumentGenerated }: DebtR
         }
     };
 
+    const handleSendReferrer = async (doc: DebtReviewDoc) => {
+        setSendingReferrer(prev => ({ ...prev, [doc.id]: true }));
+        try {
+            const res = await fetch(`/api/cases/${caseId}/debt-review/${doc.id}/send-referrer`, {
+                method: 'POST',
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error ?? 'Send failed');
+            showToast(`${DOC_LABELS[doc.documentType]} sent to referrer`);
+            await fetchData();
+        } catch (e) {
+            showToast(e instanceof Error ? e.message : 'Send failed', 'error');
+        } finally {
+            setSendingReferrer(prev => ({ ...prev, [doc.id]: false }));
+        }
+    };
+
     const handleSendCreditors = async () => {
         setSendingCreditors(true);
         try {
