@@ -18,6 +18,11 @@ vi.mock('@zenowethu/database', () => ({
             create: vi.fn(),
             update: vi.fn(),
         },
+        document: {
+            findFirst: vi.fn(),
+            create: vi.fn(),
+            update: vi.fn(),
+        },
     },
 }));
 
@@ -183,5 +188,37 @@ describe('POST /api/cases/[id]/debt-review/generate D4 documents', () => {
             mortgageEvidenceSource: 'Credit report on file: xds-credit-report.pdf',
             settledAccounts: [expect.objectContaining({ creditorName: 'ABSA Bank' })],
         }));
+    });
+
+    it('upserts a Document vault record with isAdminOnly: false for B2C cases', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({ ...caseRecord, acquisitionType: 'B2C' } as never);
+
+        const res = await POST(req('CERTIFIED_FORM_19', { targetStatus: 'F2' }), ctx('case-1'));
+        expect(res.status).toBe(201);
+
+        expect(prisma.document.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({
+                caseId: 'case-1',
+                type: 'CERTIFIED_FORM_19',
+                isAdminOnly: false,
+                mimeType: 'application/pdf',
+            }),
+        });
+    });
+
+    it('upserts a Document vault record with isAdminOnly: false for B2B cases', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({ ...caseRecord, acquisitionType: 'B2B' } as never);
+
+        const res = await POST(req('CERTIFIED_FORM_19', { targetStatus: 'F2' }), ctx('case-1'));
+        expect(res.status).toBe(201);
+
+        expect(prisma.document.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({
+                caseId: 'case-1',
+                type: 'CERTIFIED_FORM_19',
+                isAdminOnly: false,
+                mimeType: 'application/pdf',
+            }),
+        });
     });
 });

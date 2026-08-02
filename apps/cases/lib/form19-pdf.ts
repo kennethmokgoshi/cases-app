@@ -1,12 +1,36 @@
-import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage, PDFEmbeddedPage } from 'pdf-lib';
+import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
-// ── Colours (match Form 16/17 branding) ────────────────────────────────────────
-const DARK_GRAY  = rgb(0.2,  0.2,  0.2);
-const MID_GRAY   = rgb(0.5,  0.5,  0.5);
-const LIGHT_GRAY = rgb(0.93, 0.93, 0.93);
-const WHITE      = rgb(1,    1,    1);
-const TEAL       = rgb(0,    0.47, 0.47);
-const GREEN      = rgb(0.05, 0.5,  0.25);
+// ── Colours (match POA branding — navy / dark / clean) ─────────────────────────
+const PRIMARY_NAVY = rgb(0.05, 0.1,  0.25);   // Dark navy for section headers
+const DARK_TEXT    = rgb(0.1,  0.1,  0.1);
+const GRAY_LABEL   = rgb(0.35, 0.35, 0.35);   // Gray for labels
+const MID_GRAY     = rgb(0.5,  0.5,  0.5);
+const LIGHT_GRAY   = rgb(0.88, 0.88, 0.88);
+const WHITE        = rgb(1,    1,    1);
+const ACCENT_GOLD  = rgb(0.85, 0.55, 0.08);   // Gold underline accent (matches POA)
+const GREEN_TEXT   = rgb(0.05, 0.45, 0.22);    // Certification highlight
+
+// ── Letterhead loader ─────────────────────────────────────────────────────────
+async function tryLoadLetterhead(): Promise<Uint8Array | null> {
+    const candidates = [
+        ...(process.env.LETTERHEAD_PATH ? [process.env.LETTERHEAD_PATH] : []),
+        join(process.cwd(), '..', '..', 'letterhead', 'Letter head Clean.pdf'),
+        join(process.cwd(), 'public', 'templates', 'poa', 'Letterhead.pdf'),
+        join(process.cwd(), 'apps', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
+        join(process.cwd(), 'public', 'templates', 'letterhead', 'Letter head Clean.pdf'),
+        'C:\\Visual Studio Code\\06 March 2026\\letterhead\\Letter head Clean.pdf',
+        '/app/apps/cases/public/templates/poa/Letterhead.pdf',
+    ];
+    for (const p of candidates) {
+        if (existsSync(p)) {
+            try { return await readFile(p); } catch {}
+        }
+    }
+    return null;
+}
 
 export interface Form19Account {
     creditorName:       string;
@@ -14,6 +38,7 @@ export interface Form19Account {
     accountType:        string;
     status:             string;
     outstandingBalance: number;
+    lastPaymentDate:    Date | null;
 }
 
 export interface Form19Data {
@@ -49,23 +74,70 @@ function fmt(val: string | null | undefined, fallback = '_______________'): stri
     return val?.trim() || fallback;
 }
 
-function drawHR(page: PDFPage, y: number, x1 = 50, x2 = 545, color = LIGHT_GRAY, thickness = 0.5) {
-    page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness, color });
+/** Draw a dark navy section header bar matching the POA style */
+function drawSectionHeader(page: PDFPage, num: string, text: string, y: number, bold: PDFFont, contentW: number, margin: number) {
+    const barH = 22;
+    page.drawRectangle({ x: margin, y: y - 6, width: contentW, height: barH, color: PRIMARY_NAVY });
+    // Number circle
+    const circleX = margin + 14;
+    const circleY = y + 3;
+    page.drawCircle({ x: circleX, y: circleY, size: 8, color: ACCENT_GOLD });
+    page.drawText(num, { x: circleX - (num.length > 1 ? 4.5 : 3), y: circleY - 3.5, size: 8, font: bold, color: WHITE });
+    // Section title
+    page.drawText(text, { x: margin + 28, y: y, size: 10, font: bold, color: WHITE });
+    return y - barH - 4;
 }
 
-function drawSectionHeader(page: PDFPage, text: string, y: number, boldFont: PDFFont, width = 545, margin = 50) {
-    page.drawRectangle({ x: margin, y: y - 4, width: width - margin, height: 18, color: TEAL });
-    page.drawText(text, { x: margin + 8, y: y + 1, size: 9, font: boldFont, color: WHITE });
-    return y - 22;
+/** Draw a bordered table row like the POA (label | value) */
+function drawTableRow(
+    page: PDFPage, label: string, value: string, y: number,
+    font: PDFFont, bold: PDFFont, margin: number, contentW: number, splitAt = 150
+): number {
+    const rowH = 32;
+    const boxY = y - rowH + 4;            // bottom of the rectangle
+    // Outer border
+    page.drawRectangle({ x: margin, y: boxY, width: contentW, height: rowH, borderWidth: 0.5, borderColor: LIGHT_GRAY });
+    // Divider
+    page.drawLine({ start: { x: margin + splitAt, y: boxY }, end: { x: margin + splitAt, y: boxY + rowH }, thickness: 0.5, color: LIGHT_GRAY });
+    // Label (gray, uppercase) — sits near top of box
+    page.drawText(label.toUpperCase(), { x: margin + 6, y: boxY + rowH - 11, size: 7, font, color: GRAY_LABEL });
+    // Value (bold, dark) — sits in lower half of box
+    page.drawText(value, { x: margin + splitAt + 8, y: boxY + rowH - 11, size: 9, font: bold, color: DARK_TEXT });
+    return y - rowH;
 }
 
-function labelValue(
-    page: PDFPage, label: string, value: string,
-    x: number, y: number, font: PDFFont, boldFont: PDFFont, colWidth = 230
-) {
-    page.drawText(label, { x, y, size: 7.5, font, color: MID_GRAY });
-    page.drawText(value, { x, y: y - 12, size: 8.5, font: boldFont, color: DARK_GRAY });
-    drawHR(page, y - 14, x, x + colWidth, LIGHT_GRAY, 0.5);
+/** Draw a two-column bordered row (like POA: label above value in each cell) */
+function drawTwoColRow(
+    page: PDFPage,
+    label1: string, value1: string,
+    label2: string, value2: string,
+    y: number, font: PDFFont, bold: PDFFont, margin: number, contentW: number,
+): number {
+    const rowH = 36;
+    const boxY = y - rowH + 4;
+    const halfW = contentW / 2;
+    // Left cell
+    page.drawRectangle({ x: margin, y: boxY, width: halfW, height: rowH, borderWidth: 0.5, borderColor: LIGHT_GRAY });
+    page.drawText(label1.toUpperCase(), { x: margin + 6, y: boxY + rowH - 12, size: 7, font, color: GRAY_LABEL });
+    page.drawText(value1, { x: margin + 6, y: boxY + 6, size: 9, font: bold, color: DARK_TEXT });
+    // Right cell
+    page.drawRectangle({ x: margin + halfW, y: boxY, width: halfW, height: rowH, borderWidth: 0.5, borderColor: LIGHT_GRAY });
+    page.drawText(label2.toUpperCase(), { x: margin + halfW + 6, y: boxY + rowH - 12, size: 7, font, color: GRAY_LABEL });
+    page.drawText(value2, { x: margin + halfW + 6, y: boxY + 6, size: 9, font: bold, color: DARK_TEXT });
+    return y - rowH;
+}
+
+/** Draw a full-width bordered row with label above value */
+function drawFullRow(
+    page: PDFPage, label: string, value: string, y: number,
+    font: PDFFont, bold: PDFFont, margin: number, contentW: number,
+): number {
+    const rowH = 36;
+    const boxY = y - rowH + 4;
+    page.drawRectangle({ x: margin, y: boxY, width: contentW, height: rowH, borderWidth: 0.5, borderColor: LIGHT_GRAY });
+    page.drawText(label.toUpperCase(), { x: margin + 6, y: boxY + rowH - 12, size: 7, font, color: GRAY_LABEL });
+    page.drawText(value, { x: margin + 6, y: boxY + 6, size: 9, font: bold, color: DARK_TEXT });
+    return y - rowH;
 }
 
 // ── Main generator ────────────────────────────────────────────────────────────
@@ -77,202 +149,335 @@ export async function generateForm19(data: Form19Data): Promise<Uint8Array> {
     const PAGE_W = 595;
     const PAGE_H = 842;
     const MARGIN = 50;
-    const CONTENT_W = PAGE_W - MARGIN * 2;
+    const CONTENT_W = PAGE_W - 2 * MARGIN;
 
-    let page = doc.addPage([PAGE_W, PAGE_H]);
-    let y = PAGE_H - 40;
+    // Try embedding real Zenowethu Debt Management letterhead
+    const lhBytes = await tryLoadLetterhead();
+    let letterhead: PDFEmbeddedPage | null = null;
+    if (lhBytes) {
+        try {
+            const [embedded] = await doc.embedPdf(lhBytes, [0]);
+            letterhead = embedded;
+        } catch {}
+    }
+
+    const createNewPage = () => {
+        const p = doc.addPage([PAGE_W, PAGE_H]);
+        if (letterhead) {
+            p.drawPage(letterhead, { x: 0, y: 0, width: PAGE_W, height: PAGE_H });
+        }
+        return p;
+    };
+
+    let page = createNewPage();
+    let y = PAGE_H - 130; // Start below the letterhead logo area
 
     const ensureSpace = (needed: number) => {
-        if (y - needed < 60) {
-            page = doc.addPage([PAGE_W, PAGE_H]);
-            y = PAGE_H - 50;
+        if (y - needed < 70) {
+            page = createNewPage();
+            y = PAGE_H - 130; // Reset to below the letterhead logo area for the new page
         }
     };
 
-    // ── HEADER ────────────────────────────────────────────────────────────────
-    page.drawRectangle({ x: 0, y: PAGE_H - 80, width: PAGE_W, height: 80, color: TEAL });
+    // ── TITLE (centered, like POA) ───────────────────────────────────────────
+    const title = 'CLEARANCE CERTIFICATE';
+    const titleW = bold.widthOfTextAtSize(title, 16);
+    page.drawText(title, {
+        x: (PAGE_W - titleW) / 2, y, size: 16, font: bold, color: PRIMARY_NAVY
+    });
+    y -= 10;
+    // Gold underline accent (like POA)
+    const accentW = 40;
+    page.drawRectangle({
+        x: (PAGE_W - accentW) / 2, y, width: accentW, height: 3, color: ACCENT_GOLD
+    });
+    y -= 10; // Extra space before subtitle
 
-    page.drawText('NATIONAL CREDIT ACT 34 OF 2005', {
-        x: MARGIN, y: PAGE_H - 28, size: 9, font: bold, color: WHITE
-    });
-    page.drawText('CLEARANCE CERTIFICATE — SECTION 71(1)', {
-        x: MARGIN, y: PAGE_H - 42, size: 10, font: bold, color: WHITE
-    });
-    page.drawText('FORM 19', {
-        x: PAGE_W - 110, y: PAGE_H - 28, size: 16, font: bold, color: WHITE
-    });
+    const subtitle = 'Form 19 — Section 71(1) of the National Credit Act 34 of 2005';
+    const subtitleW = font.widthOfTextAtSize(subtitle, 8.5);
+    page.drawText(subtitle, { x: (PAGE_W - subtitleW) / 2, y, size: 8.5, font, color: MID_GRAY });
+    y -= 18;
 
-    const issueDate = data.issueDate.toLocaleDateString('en-ZA', {
-        day: '2-digit', month: 'long', year: 'numeric'
-    });
-    page.drawText(`File No: ${data.fileNumber}`, {
-        x: PAGE_W - 180, y: PAGE_H - 52, size: 8, font: bold, color: WHITE
-    });
-    page.drawText(`Date of Issue: ${issueDate}`, {
-        x: PAGE_W - 180, y: PAGE_H - 64, size: 8, font, color: WHITE
-    });
+    // File number & date
+    const issueDate = data.issueDate.toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' });
+    const fileNoStr = `File No: ${data.fileNumber}`;
+    const dateStr = `Date of Issue: ${issueDate}`;
+    
+    // Left align File No
+    page.drawText(fileNoStr, { x: MARGIN, y, size: 8, font, color: MID_GRAY });
+    
+    // Right align Date of Issue
+    const dateW = font.widthOfTextAtSize(dateStr, 8);
+    page.drawText(dateStr, { x: PAGE_W - MARGIN - dateW, y, size: 8, font, color: MID_GRAY });
+    y -= 14;
 
-    y = PAGE_H - 95;
+    // ── INTRO TEXT ────────────────────────────────────────────────────────────
+    const introText = data.allObligationsSettled
+        ? 'This Clearance Certificate is issued in terms of Section 71(1) of the National Credit Act 34 of 2005. The debt counsellor certifies that the consumer named below has fully satisfied all of the consumer\'s obligations under every credit agreement that was subject to the debt re-arrangement.'
+        : 'This Clearance Certificate is issued in terms of Section 71(1)(b) of the National Credit Act 34 of 2005. The debt counsellor certifies that the consumer named below has satisfied all obligations under every credit agreement that was subject to the debt re-arrangement, OTHER THAN a credit agreement secured by a mortgage bond, in respect of which the consumer is maintaining payments.';
 
-    // ── INTRO ─────────────────────────────────────────────────────────────────
-    const intro = data.allObligationsSettled
-        ? [
-            'This Clearance Certificate is issued in terms of Section 71(1) of the National Credit Act 34 of',
-            '2005. The debt counsellor certifies that the consumer named below has fully satisfied all of the',
-            'consumer\'s obligations under every credit agreement that was subject to the debt re-arrangement.',
-          ]
-        : [
-            'This Clearance Certificate is issued in terms of Section 71(1)(b) of the National Credit Act 34 of',
-            '2005. The debt counsellor certifies that the consumer named below has satisfied all obligations',
-            'under every credit agreement that was subject to the debt re-arrangement, OTHER THAN a credit',
-            'agreement secured by a mortgage bond, in respect of which the consumer is maintaining payments.',
-          ];
-    for (const line of intro) {
-        page.drawText(line, { x: MARGIN, y, size: 8, font, color: DARK_GRAY });
-        y -= 13;
+    // Wrap text manually
+    const words = introText.split(' ');
+    let line = '';
+    for (const word of words) {
+        const testLine = line ? `${line} ${word}` : word;
+        if (font.widthOfTextAtSize(testLine, 8) > CONTENT_W) {
+            page.drawText(line, { x: MARGIN, y, size: 8, font, color: DARK_TEXT });
+            y -= 12;
+            line = word;
+        } else {
+            line = testLine;
+        }
     }
-    y -= 8;
+    if (line) {
+        page.drawText(line, { x: MARGIN, y, size: 8, font, color: DARK_TEXT });
+        y -= 16;
+    }
 
-    // ── SECTION 1 — DC DETAILS ────────────────────────────────────────────────
-    y = drawSectionHeader(page, '1. DEBT COUNSELLOR DETAILS', y, bold, PAGE_W, MARGIN);
+    y -= 12; // Extra space before Section 1
+
+    // ── SECTION 1 — PRINCIPAL DETAILS (Consumer) ─────────────────────────────
+    y = drawSectionHeader(page, '1', 'PRINCIPAL DETAILS', y, bold, CONTENT_W, MARGIN);
+    y -= 4;
+
+    y = drawFullRow(page, 'Full Name & Surname', `${data.firstName} ${data.lastName}`, y, font, bold, MARGIN, CONTENT_W);
+    y = drawTwoColRow(page, 'Identity Number', fmt(data.idNumber), 'Date of Birth', extractDOB(data.idNumber), y, font, bold, MARGIN, CONTENT_W);
+    y = drawFullRow(page, 'Residential Address', fmt(data.address, '—'), y, font, bold, MARGIN, CONTENT_W);
     y -= 10;
 
-    const dcLeft  = [['NCRDC Number', data.dcNcrdcNo], ['Debt Counsellor Name', data.dcName], ['Practice Name', 'Zenowethu (Pty) Ltd']];
-    const dcRight = [['Physical Address', data.dcAddress], ['Telephone / Cell', data.dcPhone], ['Email Address', data.dcEmail]];
-    for (let i = 0; i < dcLeft.length; i++) {
-        labelValue(page, dcLeft[i][0],  fmt(dcLeft[i][1]),  MARGIN,       y, font, bold);
-        labelValue(page, dcRight[i][0], fmt(dcRight[i][1]), MARGIN + 260, y, font, bold);
-        y -= 32;
-    }
-    y -= 6;
+    // ── SECTION 2 — DEBT COUNSELLOR DETAILS ──────────────────────────────────
+    ensureSpace(100);
+    y = drawSectionHeader(page, '2', 'DEBT COUNSELLOR DETAILS', y, bold, CONTENT_W, MARGIN);
+    y -= 4;
 
-    // ── SECTION 2 — CONSUMER DETAILS ─────────────────────────────────────────
-    y = drawSectionHeader(page, '2. CONSUMER DETAILS', y, bold, PAGE_W, MARGIN);
+    y = drawFullRow(page, 'Trading Name', 'Zenowethu Debt Management (Pty) Ltd', y, font, bold, MARGIN, CONTENT_W);
+    y = drawTwoColRow(page, 'NCRDC Number', fmt(data.dcNcrdcNo), 'Debt Counsellor Name', fmt(data.dcName), y, font, bold, MARGIN, CONTENT_W);
+    y = drawTwoColRow(page, 'Contact Number', fmt(data.dcPhone), 'Email Address', fmt(data.dcEmail), y, font, bold, MARGIN, CONTENT_W);
+    y = drawFullRow(page, 'Physical Address', fmt(data.dcAddress), y, font, bold, MARGIN, CONTENT_W);
     y -= 10;
 
-    labelValue(page, 'Full Name', fmt(`${data.firstName} ${data.lastName}`), MARGIN, y, font, bold);
-    labelValue(page, 'SA Identity Number', fmt(data.idNumber), MARGIN + 260, y, font, bold);
-    y -= 32;
-    labelValue(page, 'Address', fmt(data.address), MARGIN, y, font, bold, 460);
-    y -= 36;
+    y -= 12; // Extra space before Section 3
 
     // ── SECTION 3 — CREDIT AGREEMENTS ────────────────────────────────────────
-    ensureSpace(60);
-    y = drawSectionHeader(page, '3. CREDIT AGREEMENTS SUBJECT TO THE RE-ARRANGEMENT', y, bold, PAGE_W, MARGIN);
-    y -= 8;
+    ensureSpace(80);
+    y = drawSectionHeader(page, '3', 'THE DEBTS SET OUT HEREUNDER HAVE BEEN SETTLED IN FULL', y, bold, CONTENT_W, MARGIN);
+    y -= 4;
 
-    const cols = {
-        no:       { x: MARGIN       },
-        creditor: { x: MARGIN + 26  },
-        accNo:    { x: MARGIN + 190 },
-        type:     { x: MARGIN + 290 },
-        status:   { x: MARGIN + 375 },
-        balance:  { x: MARGIN + 440 },
+    // Table header row
+    const colPositions = {
+        creditor: MARGIN + 4,
+        date:     MARGIN + 220,
+        amount:   MARGIN + 380,
     };
 
-    page.drawRectangle({ x: MARGIN, y: y - 4, width: CONTENT_W, height: 15, color: LIGHT_GRAY });
-    const headers: [string, number][] = [
-        ['#', cols.no.x], ['Credit Provider', cols.creditor.x],
-        ['Account Number', cols.accNo.x], ['Type', cols.type.x],
-        ['Status', cols.status.x], ['Balance', cols.balance.x],
+    page.drawRectangle({ x: MARGIN, y: y - 4, width: CONTENT_W, height: 16, color: rgb(0.92, 0.92, 0.92) });
+    const tableHeaders: [string, number][] = [
+        ['Name of Credit Provider', colPositions.creditor],
+        ['Date of last payment', colPositions.date],
+        ['Full amount settled', colPositions.amount],
     ];
-    for (const [h, hx] of headers) {
-        page.drawText(h, { x: hx, y: y - 2, size: 7, font: bold, color: DARK_GRAY });
+    for (const [h, hx] of tableHeaders) {
+        page.drawText(h, { x: hx, y: y, size: 7.5, font: bold, color: PRIMARY_NAVY });
     }
     y -= 18;
 
+    // Table data rows
     for (let i = 0; i < data.accounts.length; i++) {
         ensureSpace(18);
         const acc = data.accounts[i];
         const rowColor = i % 2 === 0 ? WHITE : rgb(0.97, 0.97, 0.97);
-        page.drawRectangle({ x: MARGIN, y: y - 3, width: CONTENT_W, height: 14, color: rowColor });
+        page.drawRectangle({ x: MARGIN, y: y - 3, width: CONTENT_W, height: 15, color: rowColor });
+        // Border
+        page.drawRectangle({ x: MARGIN, y: y - 3, width: CONTENT_W, height: 15, borderWidth: 0.3, borderColor: LIGHT_GRAY });
 
-        const row: [string, number][] = [
-            [`${i + 1}`, cols.no.x],
-            [acc.creditorName.substring(0, 28), cols.creditor.x],
-            [fmt(acc.accountNumber, '—').substring(0, 18), cols.accNo.x],
-            [acc.accountType.replace('_', ' ').substring(0, 14), cols.type.x],
-            [acc.status.substring(0, 10), cols.status.x],
-            [zar(acc.outstandingBalance), cols.balance.x],
+        const formattedDate = acc.lastPaymentDate
+            ? acc.lastPaymentDate.toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' })
+            : '—';
+
+        const rowData: [string, number][] = [
+            [acc.creditorName.substring(0, 35), colPositions.creditor],
+            [formattedDate, colPositions.date],
+            [zar(acc.outstandingBalance), colPositions.amount],
         ];
-        for (const [val, vx] of row) {
-            page.drawText(val, { x: vx, y, size: 7.5, font, color: DARK_GRAY });
+        for (const [val, vx] of rowData) {
+            page.drawText(val, { x: vx, y: y + 1, size: 7.5, font, color: DARK_TEXT });
         }
+        y -= 16;
+    }
+
+    if (data.accounts.length === 0) {
+        page.drawRectangle({ x: MARGIN, y: y - 3, width: CONTENT_W, height: 15, borderWidth: 0.3, borderColor: LIGHT_GRAY });
+        const noAccText = 'No credit accounts listed — all obligations have been fully satisfied.';
+        page.drawText(noAccText, { x: MARGIN + 6, y: y + 1, size: 7.5, font, color: MID_GRAY });
         y -= 16;
     }
     y -= 10;
 
     // ── SECTION 4 — CERTIFICATION ────────────────────────────────────────────
-    ensureSpace(160);
-    y = drawSectionHeader(page, '4. CERTIFICATION', y, bold, PAGE_W, MARGIN);
-    y -= 14;
+    ensureSpace(180);
+    y = drawSectionHeader(page, '4', 'CERTIFICATION', y, bold, CONTENT_W, MARGIN);
+    y -= 8;
 
-    page.drawText(
-        data.allObligationsSettled
-            ? 'ALL OBLIGATIONS UNDER THE RE-ARRANGED CREDIT AGREEMENTS HAVE BEEN SATISFIED'
-            : 'ALL OBLIGATIONS SATISFIED EXCEPT THE MORTGAGE AGREEMENT — SECTION 71(1)(b)',
-        { x: MARGIN, y, size: 9, font: bold, color: GREEN }
-    );
-    y -= 18;
+    // Green highlight certification line
+    const certHighlight = data.allObligationsSettled
+        ? 'ALL OBLIGATIONS UNDER THE RE-ARRANGED CREDIT AGREEMENTS HAVE BEEN SATISFIED'
+        : 'ALL OBLIGATIONS SATISFIED EXCEPT THE MORTGAGE AGREEMENT — SECTION 71(1)(b)';
+    page.drawText(certHighlight, { x: MARGIN, y, size: 9, font: bold, color: GREEN_TEXT });
+    y -= 20;
 
-    const certLines = [
-        `I, ${data.dcName} (Registration No. ${data.dcNcrdcNo}), a debt counsellor registered in terms of`,
-        'Section 44 of the National Credit Act, hereby certify that the information contained in this',
-        'certificate is true and correct, and that this certificate is issued in terms of Section 71(1) of the',
-        'Act read with Regulation 27.',
-    ];
-    if (!data.allObligationsSettled && data.mortgageCreditor) {
-        certLines.push('', `The remaining credit agreement secured by a mortgage bond is held with ${data.mortgageCreditor},`,
-            'in respect of which the consumer is maintaining the required payments.');
+    // Certification text with requested line breaking to fix whitespace
+    // Certification text with auto-wrapping to fix whitespace
+    const certText = `I, ${data.dcName} (Registration No. ${data.dcNcrdcNo}), a debt counsellor registered in terms of Section 44 of the National Credit Act, hereby certify that the information contained in this certificate is true and correct, and that this certificate is issued in terms of Section 71(1) of the Act read with Regulation 27.`;
+    
+    const certWords = certText.split(' ');
+    let certLine = '';
+    for (const word of certWords) {
+        const testLine = certLine ? `${certLine} ${word}` : word;
+        if (font.widthOfTextAtSize(testLine, 8) > CONTENT_W) {
+            ensureSpace(14);
+            page.drawText(certLine, { x: MARGIN, y, size: 8, font, color: DARK_TEXT });
+            y -= 13;
+            certLine = word;
+        } else {
+            certLine = testLine;
+        }
     }
-    for (const line of certLines) {
+    if (certLine) {
         ensureSpace(14);
-        page.drawText(line, { x: MARGIN, y, size: 8, font, color: DARK_GRAY });
+        page.drawText(certLine, { x: MARGIN, y, size: 8, font, color: DARK_TEXT });
+        y -= 13;
+    }
+
+    if (!data.allObligationsSettled && data.mortgageCreditor) {
+        y -= 6;
+        const mortgageLine = `The remaining credit agreement secured by a mortgage bond is held with ${data.mortgageCreditor}, in respect of which the consumer is maintaining the required payments.`;
+        ensureSpace(14);
+        page.drawText(mortgageLine, { x: MARGIN, y, size: 8, font, color: DARK_TEXT });
         y -= 13;
     }
     y -= 20;
 
-    // Signature + certification blocks
-    ensureSpace(110);
-    page.drawText('Signed by Debt Counsellor:', { x: MARGIN, y, size: 8, font: bold, color: DARK_GRAY });
-    page.drawLine({ start: { x: MARGIN + 150, y }, end: { x: MARGIN + 330, y }, thickness: 0.8, color: DARK_GRAY });
-    page.drawText('Date:', { x: MARGIN + 350, y, size: 8, font: bold, color: DARK_GRAY });
-    page.drawLine({ start: { x: MARGIN + 380, y }, end: { x: CONTENT_W + MARGIN, y }, thickness: 0.8, color: DARK_GRAY });
-    y -= 10;
-    page.drawText(`${data.dcName}  |  NCRDC: ${data.dcNcrdcNo}`, { x: MARGIN + 150, y, size: 7.5, font, color: MID_GRAY });
-    y -= 30;
+    // ── SIGNATURE BLOCK ──────────────────────────────────────────────────────
+    ensureSpace(130);
 
-    page.drawText('CERTIFICATION (Commissioner of Oaths / Certifying Officer):', {
-        x: MARGIN, y, size: 8, font: bold, color: DARK_GRAY
-    });
-    y -= 16;
-    page.drawText('I certify that this is a true copy of the original Form 19 Clearance Certificate.', {
-        x: MARGIN, y, size: 8, font, color: DARK_GRAY
-    });
-    y -= 24;
-    page.drawText('Full Name:', { x: MARGIN, y, size: 8, font: bold, color: DARK_GRAY });
-    page.drawLine({ start: { x: MARGIN + 60, y }, end: { x: MARGIN + 240, y }, thickness: 0.8, color: DARK_GRAY });
-    page.drawText('Signature:', { x: MARGIN + 260, y, size: 8, font: bold, color: DARK_GRAY });
-    page.drawLine({ start: { x: MARGIN + 320, y }, end: { x: CONTENT_W + MARGIN, y }, thickness: 0.8, color: DARK_GRAY });
+    // DC Signature
+    page.drawText('Signature:', { x: MARGIN, y, size: 8, font: bold, color: DARK_TEXT });
+    y -= 6;
+    
+    // Save the Y coordinate where the line is drawn so we can stamp the images right on top of it
+    const signatureLineY = y;
+    
+    page.drawLine({ start: { x: MARGIN, y }, end: { x: MARGIN + 200, y }, thickness: 0.8, color: DARK_TEXT });
+    page.drawLine({ start: { x: MARGIN + 260, y }, end: { x: MARGIN + CONTENT_W, y }, thickness: 0.8, color: DARK_TEXT });
+    
+    // Attempt to inject the automated Signature & Stamp
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Next.js sets cwd to apps/cases, but our test script sets it to the root
+        let baseDir = process.cwd();
+        if (!baseDir.endsWith('cases')) {
+            baseDir = path.join(baseDir, 'apps', 'cases');
+        }
+        
+        const sigPath = path.join(baseDir, 'public', 'assets', 'images', 'Aaron Nzotho Signature.png');
+        const stampPath = path.join(baseDir, 'public', 'assets', 'images', 'Zenowethu Debt Management stamp.png');
+        
+        if (fs.existsSync(sigPath)) {
+            const sigBytes = fs.readFileSync(sigPath);
+            const sigImage = await doc.embedPng(sigBytes);
+            const sigDims = sigImage.scale(0.35); // Scale down
+            page.drawImage(sigImage, {
+                x: MARGIN + 20,
+                y: signatureLineY - 40, // Dropped down significantly
+                width: sigDims.width,
+                height: sigDims.height,
+            });
+        }
+        
+        if (fs.existsSync(stampPath)) {
+            const stampBytes = fs.readFileSync(stampPath);
+            const stampImage = await doc.embedPng(stampBytes);
+            const stampDims = stampImage.scale(0.4); // Scale down
+            page.drawImage(stampImage, {
+                x: MARGIN + 270,
+                y: signatureLineY - 80, // Dropped down significantly
+                width: stampDims.width,
+                height: stampDims.height,
+            });
+        }
+    } catch (e) {
+        // Silently ignore if images are missing or there's an issue embedding them
+        console.warn('Could not embed signature/stamp images:', e);
+    }
+    
+    y -= 12;
+    page.drawText(`${data.dcName}  |  ${data.dcNcrdcNo}`, { x: MARGIN, y, size: 7.5, font, color: MID_GRAY });
+    page.drawText(`Date: ${issueDate}`, { x: MARGIN + 260, y, size: 7.5, font, color: MID_GRAY });
+    y -= 28;
+
+    // Commissioner of Oaths
+    page.drawText('CERTIFICATION (Commissioner of Oaths / Certifying Officer):', { x: MARGIN, y, size: 8, font: bold, color: DARK_TEXT });
+    y -= 14;
+    page.drawText('I certify that this is a true copy of the original Form 19 Clearance Certificate.', { x: MARGIN, y, size: 8, font, color: DARK_TEXT });
     y -= 20;
-    page.drawText('Capacity:', { x: MARGIN, y, size: 8, font: bold, color: DARK_GRAY });
-    page.drawLine({ start: { x: MARGIN + 60, y }, end: { x: MARGIN + 240, y }, thickness: 0.8, color: DARK_GRAY });
-    page.drawText('Date:', { x: MARGIN + 260, y, size: 8, font: bold, color: DARK_GRAY });
-    page.drawLine({ start: { x: MARGIN + 320, y }, end: { x: CONTENT_W + MARGIN, y }, thickness: 0.8, color: DARK_GRAY });
 
+    // Signature lines
+    page.drawText('Full Name:', { x: MARGIN, y, size: 8, font: bold, color: DARK_TEXT });
+    page.drawLine({ start: { x: MARGIN + 60, y }, end: { x: MARGIN + 230, y }, thickness: 0.8, color: DARK_TEXT });
+    page.drawText('Signature:', { x: MARGIN + 260, y, size: 8, font: bold, color: DARK_TEXT });
+    page.drawLine({ start: { x: MARGIN + 320, y }, end: { x: MARGIN + CONTENT_W, y }, thickness: 0.8, color: DARK_TEXT });
+    y -= 20;
+    page.drawText('Capacity:', { x: MARGIN, y, size: 8, font: bold, color: DARK_TEXT });
+    page.drawLine({ start: { x: MARGIN + 60, y }, end: { x: MARGIN + 230, y }, thickness: 0.8, color: DARK_TEXT });
+    page.drawText('Date:', { x: MARGIN + 260, y, size: 8, font: bold, color: DARK_TEXT });
+    page.drawLine({ start: { x: MARGIN + 320, y }, end: { x: MARGIN + CONTENT_W, y }, thickness: 0.8, color: DARK_TEXT });
+
+    const issuedStr = `${data.issueDate.getFullYear()}/${String(data.issueDate.getMonth() + 1).padStart(2, '0')}/${String(data.issueDate.getDate()).padStart(2, '0')}`;
+    
     // ── FOOTER ────────────────────────────────────────────────────────────────
     const pages = doc.getPages();
     for (let p = 0; p < pages.length; p++) {
         const pg = pages[p];
-        pg.drawLine({ start: { x: MARGIN, y: 40 }, end: { x: PAGE_W - MARGIN, y: 40 }, thickness: 0.5, color: LIGHT_GRAY });
-        pg.drawText(
-            `Form 19 — Clearance Certificate  |  File: ${data.fileNumber}  |  Generated: ${new Date().toLocaleDateString('en-ZA')}`,
-            { x: MARGIN, y: 28, size: 6.5, font, color: MID_GRAY }
-        );
-        pg.drawText(`Page ${p + 1} of ${pages.length}`, {
-            x: PAGE_W - MARGIN - 50, y: 28, size: 6.5, font, color: MID_GRAY
-        });
+        const footerY = 12; // Move down slightly more to ensure it fits perfectly below the letterhead
+        pg.drawLine({ start: { x: MARGIN, y: footerY + 8 }, end: { x: PAGE_W - MARGIN, y: footerY + 8 }, thickness: 0.5, color: LIGHT_GRAY });
+        
+        // Calculate widths for equal spacing
+        const fileStr = `File: ${data.fileNumber}`;
+        const formStr = `Form 19 — Clearance Certificate`;
+        const issuedLabelStr = `Issued: ${issuedStr}`;
+        const pageStr = `Page ${p + 1} of ${pages.length}`;
+        
+        const fileW = font.widthOfTextAtSize(fileStr, 6.5);
+        const formW = font.widthOfTextAtSize(formStr, 6.5);
+        const issuedW = font.widthOfTextAtSize(issuedLabelStr, 6.5);
+        const pageW = font.widthOfTextAtSize(pageStr, 6.5);
+        
+        const totalTextW = fileW + formW + issuedW + pageW;
+        const availableW = PAGE_W - (2 * MARGIN);
+        const gap = (availableW - totalTextW) / 3;
+        
+        const xFile = MARGIN;
+        const xForm = xFile + fileW + gap;
+        const xIssued = xForm + formW + gap;
+        const xPage = xIssued + issuedW + gap;
+        
+        pg.drawText(fileStr, { x: xFile, y: footerY, size: 6.5, font, color: MID_GRAY });
+        pg.drawText(formStr, { x: xForm, y: footerY, size: 6.5, font, color: MID_GRAY });
+        pg.drawText(issuedLabelStr, { x: xIssued, y: footerY, size: 6.5, font, color: MID_GRAY });
+        pg.drawText(pageStr, { x: xPage, y: footerY, size: 6.5, font, color: MID_GRAY });
     }
 
     return doc.save();
+}
+
+/** Extract date of birth from SA ID number (YYMMDD...) */
+function extractDOB(idNumber: string): string {
+    if (!idNumber || idNumber.length < 6) return '—';
+    const yy = parseInt(idNumber.substring(0, 2), 10);
+    const mm = idNumber.substring(2, 4);
+    const dd = idNumber.substring(4, 6);
+    const century = yy >= 0 && yy <= 30 ? '20' : '19';
+    return `${dd}/${mm}/${century}${idNumber.substring(0, 2)}`;
 }

@@ -40,6 +40,8 @@ import { isInvoiceRequestedFromDcStatus } from '@/lib/mailboxes';
 import { canShowDhsManageConsumers } from '@/lib/dhs-manage-consumers-eligibility';
 import { shouldShowRequestViaDhs, getRequestViaDhsButtonLabel } from '@/lib/dhs-request-eligibility';
 import { GenerateClearanceButton } from '@/components/GenerateClearanceButton';
+import { AnalyseCreditReportsButton } from '@/components/AnalyseCreditReportsButton';
+import { SyncCreditAccountsButton } from '@/components/SyncCreditAccountsButton';
 import { checkCaseFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag';
 
 
@@ -388,6 +390,7 @@ export default function CaseDetailPage() {
     const [caseData, setCaseData] = useState<CaseDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
+    const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0);
     const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
     const [sendingNotification, setSendingNotification] = useState(false);
     const [sendingDCNotification, setSendingDCNotification] = useState<'FILE' | 'INVOICE' | null>(null);
@@ -670,6 +673,7 @@ export default function CaseDetailPage() {
             }
             const data = await response.json();
             setCaseData(data);
+            setDocumentsRefreshKey(prev => prev + 1);
             setFetchError(null);
         } catch (error) {
             log.error({ err: error }, 'Error fetching case:', error);
@@ -4184,6 +4188,16 @@ export default function CaseDetailPage() {
                                                         onDocumentGenerated={fetchCase}
                                                         variant="header"
                                                     />
+                                                    <AnalyseCreditReportsButton
+                                                        caseId={caseData.id}
+                                                        onAnalyzed={fetchCase}
+                                                        variant="header"
+                                                    />
+                                                    <SyncCreditAccountsButton
+                                                        caseId={caseData.id}
+                                                        onSynced={fetchCase}
+                                                        variant="header"
+                                                    />
                                                 </div>
 
                                                 {/* Debt-review-removal CONSENT status — staff must see at a glance
@@ -5140,7 +5154,7 @@ export default function CaseDetailPage() {
                             )}
                             {activeDetailTab === 'DOCUMENTS' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <DocumentsTab caseId={caseData.id} />
+                                    <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} />
                                     <ConsumerPortalPanel caseId={caseData.id} />
                                 </div>
                             )}
@@ -5168,6 +5182,7 @@ export default function CaseDetailPage() {
                                     <DebtReviewTab
                                         caseId={caseData.id}
                                         canApprove={!!(session?.user?.isAdmin || session?.user?.isExecutive || (session?.user as any)?.isSeniorManager || (session?.user as any)?.role === 'MANAGER')}
+                                        onDocumentGenerated={fetchCase}
                                     />
                                 </div>
                             )}

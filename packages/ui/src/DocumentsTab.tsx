@@ -70,7 +70,11 @@ const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: stri
     'PROOF_OF_RESIDENCE': { label: 'Proof of Residence', color: 'bg-teal-500/20 text-teal-300', icon: '🏠' },
     'COMBINED': { label: 'Combined File', color: 'bg-orange-500/20 text-orange-300', icon: '📦' },
     'PAID_UP_LETTER': { label: 'Paid Up Letter', color: 'bg-green-500/20 text-green-300', icon: '✅' },
-    'FORM_17W': { label: 'Form 17.W', color: 'bg-violet-500/20 text-violet-300', icon: '📜' },
+    'CERTIFIED_FORM_19': { label: 'Clearance Certificate (Form 19)', color: 'bg-emerald-500/20 text-emerald-300', icon: '📜' },
+    'FORM_19': { label: 'Clearance Certificate (Form 19)', color: 'bg-emerald-500/20 text-emerald-300', icon: '📜' },
+    'CLEARANCE_CERTIFICATE': { label: 'Clearance Certificate', color: 'bg-emerald-500/20 text-emerald-300', icon: '📜' },
+    'FORM_17W': { label: 'Form 17.W Withdrawal Notice', color: 'bg-violet-500/20 text-violet-300', icon: '📜' },
+    'FORM_17_W': { label: 'Form 17.W Withdrawal Notice', color: 'bg-violet-500/20 text-violet-300', icon: '📜' },
     'FORM_16': { label: 'Form 16', color: 'bg-violet-400/20 text-violet-200', icon: '📜' },
     'FORM_17_1': { label: 'Form 17.1', color: 'bg-violet-600/20 text-violet-400', icon: '📜' },
     'FORM_17_2': { label: 'Form 17.2', color: 'bg-violet-600/25 text-violet-300', icon: '📜' },
@@ -91,7 +95,7 @@ const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: strin
     { type: 'CREDIT_REPORT_LIGHTSTONE',name: 'Lightstone', color: 'border-pink-500/30 bg-pink-500/5', accent: 'text-pink-400' },
 ];
 
-export function DocumentsTab({ caseId }: { caseId: string }) {
+export function DocumentsTab({ caseId, refreshTrigger }: { caseId: string; refreshTrigger?: number }) {
     const { data: session } = useSession();
     const isAdmin = (session?.user as any)?.isAdmin === true;
     const [documents, setDocuments] = useState<Document[]>([]);
@@ -137,7 +141,7 @@ export function DocumentsTab({ caseId }: { caseId: string }) {
 
     useEffect(() => {
         fetchDocuments();
-    }, [caseId]);
+    }, [caseId, refreshTrigger]);
 
     const fetchDocuments = async () => {
         try {

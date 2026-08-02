@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
 import { getDateRange } from '@/lib/date-utils'
+import { getPresenceMetadata } from '@/lib/presence-status'
 
 
 type ActivityCategory = 'CASE_WORK' | 'CLIENT_CALLS' | 'CLIENT_EMAILS' | 'OTHER'
@@ -76,12 +77,11 @@ export default function StaffDashboard() {
         const data = await response.json()
         const onlineList = data.online as PresenceStaff[]
         setOnlineStaff(onlineList)
-        
-        // Find if current user is online
+
+        // Presence GET only returns staff in a non-OFFLINE status, so appearing in the
+        // list at all (regardless of which of the 6 statuses) means the user is online.
         if (session?.user?.id) {
-          const isUserOnline = onlineList.some(
-            (p) => p.userId === session.user.id && p.status === 'ONLINE'
-          )
+          const isUserOnline = onlineList.some((p) => p.userId === session.user.id)
           setIsOnline(isUserOnline)
         }
       }
@@ -263,7 +263,9 @@ export default function StaffDashboard() {
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-900 mb-4">Availability Control</h2>
           <p className="text-sm text-slate-500 mb-6">
-            Check-in to mark yourself as **ONLINE** and available to assist. Check-out when offline.
+            Check-in to mark yourself online and available to assist. Use the status selector in the
+            header to switch between Available, Collaborating, Deep Focus, On Break, or In Meeting.
+            Check-out when you're done for the day.
           </p>
 
           <div className="flex items-center justify-between mb-6">
@@ -379,17 +381,23 @@ export default function StaffDashboard() {
             {otherOnlineStaff.length === 0 ? (
               <p className="text-sm text-slate-400 text-center py-4">No other team members online right now</p>
             ) : (
-              otherOnlineStaff.map((staff) => (
-                <div key={staff.userId} className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">
-                      {staff.user.firstName} {staff.user.lastName}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate">{staff.user.email}</p>
+              otherOnlineStaff.map((staff) => {
+                const meta = getPresenceMetadata(staff.status)
+                return (
+                  <div key={staff.userId} className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${meta.dotColorClass}`} title={meta.label} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">
+                        {staff.user.firstName} {staff.user.lastName}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">{staff.user.email}</p>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
+                      {meta.label}
+                    </span>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>

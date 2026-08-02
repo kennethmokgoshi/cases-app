@@ -1,4 +1,7 @@
-import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage, PDFEmbeddedPage } from 'pdf-lib';
+import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 // ── Colours (match Form 16/17 branding) ────────────────────────────────────────
 const BLACK      = rgb(0,    0,    0);
@@ -7,6 +10,25 @@ const MID_GRAY   = rgb(0.5,  0.5,  0.5);
 const LIGHT_GRAY = rgb(0.93, 0.93, 0.93);
 const WHITE      = rgb(1,    1,    1);
 const TEAL       = rgb(0,    0.47, 0.47);
+
+// ── Letterhead loader ─────────────────────────────────────────────────────────
+async function tryLoadLetterhead(): Promise<Uint8Array | null> {
+    const candidates = [
+        ...(process.env.LETTERHEAD_PATH ? [process.env.LETTERHEAD_PATH] : []),
+        join(process.cwd(), '..', '..', 'letterhead', 'Letter head Clean.pdf'),
+        join(process.cwd(), 'public', 'templates', 'poa', 'Letterhead.pdf'),
+        join(process.cwd(), 'apps', 'cases', 'public', 'templates', 'poa', 'Letterhead.pdf'),
+        join(process.cwd(), 'public', 'templates', 'letterhead', 'Letter head Clean.pdf'),
+        'C:\\Visual Studio Code\\06 March 2026\\letterhead\\Letter head Clean.pdf',
+        '/app/apps/cases/public/templates/poa/Letterhead.pdf',
+    ];
+    for (const p of candidates) {
+        if (existsSync(p)) {
+            try { return await readFile(p); } catch {}
+        }
+    }
+    return null;
+}
 
 export interface Form17WData {
     fileNumber:             string;
@@ -60,14 +82,31 @@ export async function generateForm17W(data: Form17WData): Promise<Uint8Array> {
     const PAGE_W = 595;
     const PAGE_H = 842;
     const MARGIN = 50;
-    const CONTENT_W = PAGE_W - MARGIN * 2;
 
-    let page = doc.addPage([PAGE_W, PAGE_H]);
+    // Try embedding real Zenowethu Debt Management letterhead
+    const lhBytes = await tryLoadLetterhead();
+    let letterhead: PDFEmbeddedPage | null = null;
+    if (lhBytes) {
+        try {
+            const [embedded] = await doc.embedPdf(lhBytes, [0]);
+            letterhead = embedded;
+        } catch {}
+    }
+
+    const createNewPage = () => {
+        const p = doc.addPage([PAGE_W, PAGE_H]);
+        if (letterhead) {
+            p.drawPage(letterhead, { x: 0, y: 0, width: PAGE_W, height: PAGE_H });
+        }
+        return p;
+    };
+
+    let page = createNewPage();
     let y = PAGE_H - 40;
 
     const ensureSpace = (needed: number) => {
         if (y - needed < 60) {
-            page = doc.addPage([PAGE_W, PAGE_H]);
+            page = createNewPage();
             y = PAGE_H - 50;
         }
     };

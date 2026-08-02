@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
         const caseRecord = await prisma.case.findUnique({
             where: { id },
-            select: { id: true, fileNumber: true }
+            select: { id: true, fileNumber: true, acquisitionType: true }
         });
         if (!caseRecord) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
@@ -80,12 +80,13 @@ export async function GET(_req: Request, { params }: RouteContext) {
         }
 
         return NextResponse.json({
-            caseId:         id,
-            fileNumber:     caseRecord.fileNumber,
+            caseId:          id,
+            fileNumber:      caseRecord.fileNumber,
+            acquisitionType: caseRecord.acquisitionType ?? 'B2C',
             documents,
             docsByType,
-            documentTypes:  DOCUMENT_TYPES,
-            letterheadUrl:  letterheadSetting?.value ?? null,
+            documentTypes:   DOCUMENT_TYPES,
+            letterheadUrl:   letterheadSetting?.value ?? null,
             missingEmails,
         });
     } catch (error) {

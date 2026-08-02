@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { getDateRange, DateRangeType } from '@/lib/date-utils'
 import ProjectList from '@/components/ProjectList'
+import { getPresenceMetadata } from '@/lib/presence-status'
 
 
 interface TeamMember {
@@ -273,7 +274,7 @@ export default function ManagerDashboard() {
                   <h2 className="font-bold text-base">Team Roster ({filteredTeam.length})</h2>
                   <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                     <span className="text-xs font-extrabold text-emerald-400">
-                      {filteredTeam.filter((m) => m.status === 'ONLINE').length}
+                      {filteredTeam.filter((m) => getPresenceMetadata(m.status).status !== 'OFFLINE').length}
                     </span>
                     <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">Online</span>
                   </div>
@@ -301,14 +302,8 @@ export default function ManagerDashboard() {
                       
                       {/* Availability status */}
                       <span
-                        className={`w-3 h-3 rounded-full shrink-0 ml-3 ${
-                          member.status === 'ONLINE'
-                            ? 'bg-emerald-500 shadow-md shadow-emerald-500/30'
-                            : member.status === 'IDLE'
-                            ? 'bg-amber-400'
-                            : 'bg-slate-300'
-                        }`}
-                        title={member.status}
+                        className={`w-3 h-3 rounded-full shrink-0 ml-3 ${getPresenceMetadata(member.status).dotColorClass}`}
+                        title={getPresenceMetadata(member.status).label}
                       />
                     </button>
                   )

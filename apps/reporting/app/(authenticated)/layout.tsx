@@ -7,6 +7,7 @@ import { canAccessDashboard } from '@/lib/role-check';
 import { roleDashboardMap, UserRole } from '@/lib/roles';
 import { isStaffUser } from '@/lib/staff-guard';
 import NotAuthorized from '@/components/NotAuthorized';
+import PresenceStatusSelector from '@/components/PresenceStatusSelector';
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -117,6 +118,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
 
             {/* User Profile and Sign Out */}
             <div className="flex items-center gap-4">
+              <PresenceStatusSelector />
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-medium text-white">{session?.user?.firstName || 'User'}</p>
                 <p className="text-xs text-slate-400 font-mono capitalize">{role}</p>

@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest';
+import { accountsMatch, inferAccountType, mapExtractedAccountToCandidate, parseAiDate } from './credit-account-sync';
+
+describe('inferAccountType', () => {
+    it('detects a mortgage/bond creditor', () => {
+        expect(inferAccountType('SA Home Loans')).toBe('Mortgage');
+    });
+
+    it('falls back to Other for unrecognised creditors', () => {
+        expect(inferAccountType('Some Random Creditor')).toBe('Other');
+    });
+});
+
+describe('parseAiDate', () => {
+    it('parses a valid ISO date string', () => {
+        const d = parseAiDate('2024-01-15');
+        expect(d).not.toBeNull();
+        expect(d?.getUTCFullYear()).toBe(2024);
+    });
+
+    it('treats the literal "NA" as no date', () => {
+        expect(parseAiDate('NA')).toBeNull();
+        expect(parseAiDate(null)).toBeNull();
+        expect(parseAiDate(undefined)).toBeNull();
+    });
+});
+
+describe('accountsMatch', () => {
+    it('matches by account number when both present', () => {
+        expect(
+            accountsMatch(
+                { creditorName: 'Edgars', accountNumber: '12345' },
+                { creditorName: 'EDGARS STORES', accountNumber: '12345' }
+            )
+        ).toBe(true);
+    });
+
+    it('falls back to creditor name when account numbers are missing', () => {
+        expect(
+            accountsMatch(
+                { creditorName: 'Truworths', accountNumber: null },
+                { creditorName: 'truworths', accountNumber: null }
+            )
+        ).toBe(true);
+    });
+
+    it('does not match different creditors with no account numbers', () => {
+        expect(
+            accountsMatch(
+                { creditorName: 'Truworths', accountNumber: null },
+                { creditorName: 'Edgars', accountNumber: null }
+            )
+        ).toBe(false);
+    });
+});
+
+describe('mapExtractedAccountToCandidate', () => {
+    it('maps a raw AI-extracted account into a NEW candidate when no existing match', () => {
+        const candidate = mapExtractedAccountToCandidate(
+            {
+                creditor: 'African Bank',
+                accountNumber: '999888',
+                balance: 8467,
+                installment: 450,
+                status: 'Current',
+                lastPaymentDate: '2026-06-01',
+            },
+            { id: 'doc-1', type: 'CREDIT_REPORT_EXPERIAN' },
+            []
+        );
+
+        expect(candidate.matchStatus).toBe('NEW');
+        expect(candidate.existingAccountId).toBeNull();
+        expect(candidate.creditorName).toBe('African Bank');
+        expect(candidate.outstandingBalance).toBe(8467);
+        expect(candidate.accountType).toBe('Other');
+    });
+
+    it('flags a candidate as DUPLICATE when it matches an existing CreditAccount', () => {
+        const candidate = mapExtractedAccountToCandidate(
+            { creditor: 'Edgars', accountNumber: '12345', balance: 1840, status: 'Prescribed' },
+            { id: 'doc-1', type: 'CREDIT_REPORT_EXPERIAN' },
+            [{ id: 'existing-1', creditorName: 'Edgars', accountNumber: '12345' }]
+        );
+
+        expect(candidate.matchStatus).toBe('DUPLICATE');
+        expect(candidate.existingAccountId).toBe('existing-1');
+    });
+
+    it('defaults status to ACTIVE when the AI returns no status', () => {
+        const candidate = mapExtractedAccountToCandidate(
+            { creditor: 'Capfin', balance: 500 },
+            { id: 'doc-1', type: 'CREDIT_REPORT' },
+            []
+        );
+        expect(candidate.status).toBe('ACTIVE');
+    });
+});

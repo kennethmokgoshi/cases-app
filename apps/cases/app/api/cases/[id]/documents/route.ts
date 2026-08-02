@@ -211,6 +211,30 @@ export async function POST(
             }
         });
 
+        // If uploading a Clearance Document, keep DebtReviewDocument table in sync
+        const isClearanceUpload = docType === 'CERTIFIED_FORM_19' || docType === 'FORM_17_W' || docType === 'CLEARANCE_CERTIFICATE';
+        if (isClearanceUpload) {
+            const clearanceType = docType === 'CLEARANCE_CERTIFICATE' ? 'CERTIFIED_FORM_19' : docType;
+            const existingDRD = await prisma.debtReviewDocument.findFirst({
+                where: { caseId, documentType: clearanceType },
+            });
+            if (existingDRD) {
+                await prisma.debtReviewDocument.update({
+                    where: { id: existingDRD.id },
+                    data: { fileUrl, status: 'APPROVED', updatedAt: new Date() },
+                });
+            } else {
+                await prisma.debtReviewDocument.create({
+                    data: {
+                        caseId,
+                        documentType: clearanceType,
+                        fileUrl,
+                        status: 'APPROVED',
+                    },
+                });
+            }
+        }
+
         await touchCaseAction(caseId, 'DOCUMENT_UPLOAD', { userId: session.user.id });
 
         logger.info(`[UPLOAD_TRACE] ✅ SUCCESS in ${Date.now() - startTime}ms`);
@@ -277,6 +301,27 @@ export async function DELETE(
         await prisma.document.delete({
             where: { id: documentId }
         });
+
+        // Clean up corresponding DebtReviewDocument & CredoDocument if this was a clearance document,
+        // so staff can generate and upload the clearance document again after deletion.
+        if (document.type) {
+            const targetType = document.type === 'CLEARANCE_CERTIFICATE' ? 'CERTIFIED_FORM_19' : document.type;
+            await prisma.debtReviewDocument.deleteMany({
+                where: { caseId: document.caseId, documentType: targetType }
+            }).catch(() => null);
+
+            if (['CERTIFIED_FORM_19', 'FORM_17_W', 'CLEARANCE_CERTIFICATE', 'FORM_19'].includes(document.type)) {
+                const c = await prisma.case.findUnique({
+                    where: { id: document.caseId },
+                    select: { client: { select: { consumerAccount: { select: { id: true } } } } },
+                });
+                if (c?.client?.consumerAccount?.id) {
+                    await prisma.credoDocument.deleteMany({
+                        where: { consumerId: c.client.consumerAccount.id, category: 'CLEARANCE' },
+                    }).catch(() => null);
+                }
+            }
+        }
 
         await touchCaseAction(document.caseId, 'DOCUMENT_DELETE', { userId: session.user.id });
 

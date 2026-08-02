@@ -4,7 +4,7 @@ import { useSession } from '@zenowethu/ui';
 import { useEffect, useState, useCallback, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ProjectMembersModal } from '@zenowethu/ui';
+import { ProjectMembersModal, OrgSearchWithSuggestions } from '@zenowethu/ui';
 import { findProjectById, getProjectAncestorIds } from '@/lib/project-directory';
 
 // Client-side logger
@@ -217,7 +217,7 @@ function ProjectsDirectoryComponent() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-2">Projects Directory</h1>
-                    <p className="text-gray-400">Browse projects and view team members.</p>
+                    <p className="text-gray-400">Browse projects, main sources, branches, referrers, and sub-projects.</p>
                 </div>
                 {/* Admin Link shortcut if Admin */}
                 {session?.user?.isAdmin && (
@@ -225,6 +225,25 @@ function ProjectsDirectoryComponent() {
                         Manage Hierarchy (Admin)
                     </Link>
                 )}
+            </div>
+
+            {/* Dedicated Projects, Referrers, Branches & Main Sources Search Box */}
+            <div className="bg-gradient-to-r from-[#0B1D35] to-[#0D2444] p-4 rounded-xl border border-emerald-500/20 shadow-lg">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-2">
+                    🔍 Search Projects, Referrers (e.g. William), Branches (e.g. Paul Kruger 1), Main Sources & Sub-Projects
+                </label>
+                <OrgSearchWithSuggestions
+                    placeholder="Type to search William, Paul Kruger 1, Letsatsi, Shosholoza, B2B..."
+                    onSelectResult={(item) => {
+                        if (item.entityType === 'REFERRER') {
+                            window.location.href = item.href;
+                        } else {
+                            const ancestorIds = getProjectAncestorIds(projects, item.id);
+                            setExpandedProjects((prev) => new Set([...prev, ...ancestorIds, item.id]));
+                            setViewingMembersProject(findProjectById(projects, item.id) || null);
+                        }
+                    }}
+                />
             </div>
 
             {/* Tree */}

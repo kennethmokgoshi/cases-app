@@ -2,16 +2,25 @@ import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { verifyStaffApiAccess } from '@/lib/api-guard'
+import { decaysOnShortIdle, normalizePresenceStatus, SELECTABLE_PRESENCE_STATUSES } from '@/lib/presence-status'
+
+// AVAILABLE/COLLABORATING (and legacy ONLINE/IDLE) decay to OFFLINE after 1hr of inactivity —
+// same threshold the presence system used before the 6-status model.
+const SHORT_IDLE_MS = 60 * 60 * 1000
+// DND-style statuses (DEEP_FOCUS/ON_BREAK/IN_MEETING) are exempt from the short timeout since
+// they were chosen deliberately, but still decay after a longer ceiling so a forgotten
+// "In Meeting" doesn't stick forever.
+const LONG_IDLE_MS = 12 * 60 * 60 * 1000
 
 export async function GET(request: Request) {
   const session = await auth()
   const authError = verifyStaffApiAccess(session)
   if (authError) return authError
   try {
-    // Get all online and idle staff
+    // Get all staff currently in any online status, including legacy values pending normalization.
     const onlineStaff = await prisma.employeePresence.findMany({
       where: {
-        status: { in: ['ONLINE', 'IDLE'] },
+        status: { in: ['ONLINE', 'IDLE', ...SELECTABLE_PRESENCE_STATUSES] },
       },
       include: {
         user: {
@@ -27,27 +36,36 @@ export async function GET(request: Request) {
       orderBy: { lastActivityAt: 'desc' },
     })
 
-    // Check for idle timeouts (30 min since last activity)
     const now = new Date()
-    const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000)
+    const shortIdleCutoff = new Date(now.getTime() - SHORT_IDLE_MS)
+    const longIdleCutoff = new Date(now.getTime() - LONG_IDLE_MS)
 
-    // Update idle staff to offline if last activity > 1 hour
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+    // Decay AVAILABLE/COLLABORATING (+ legacy ONLINE/IDLE) after the short timeout.
     await prisma.employeePresence.updateMany({
       where: {
-        status: 'IDLE',
-        lastActivityAt: { lt: oneHourAgo },
+        status: { in: ['ONLINE', 'IDLE', 'AVAILABLE', 'COLLABORATING'] },
+        lastActivityAt: { lt: shortIdleCutoff },
       },
       data: { status: 'OFFLINE' },
     })
 
-    // Return online/idle staff
+    // Decay DND statuses after the longer ceiling.
+    await prisma.employeePresence.updateMany({
+      where: {
+        status: { in: ['DEEP_FOCUS', 'ON_BREAK', 'IN_MEETING'] },
+        lastActivityAt: { lt: longIdleCutoff },
+      },
+      data: { status: 'OFFLINE' },
+    })
+
+    // Filter + normalize in memory against the same cutoffs (avoids a second DB round-trip).
     const activeStaff = onlineStaff
-      .filter((s) => s.lastActivityAt === null || s.lastActivityAt > thirtyMinutesAgo)
-      .map((s) => ({
-        ...s,
-        status: s.lastActivityAt && s.lastActivityAt < thirtyMinutesAgo ? 'IDLE' : s.status,
-      }))
+      .map((s) => ({ ...s, status: normalizePresenceStatus(s.status) }))
+      .filter((s) => {
+        if (!s.lastActivityAt) return true
+        const cutoff = decaysOnShortIdle(s.status) ? shortIdleCutoff : longIdleCutoff
+        return s.lastActivityAt >= cutoff
+      })
 
     return NextResponse.json({ online: activeStaff, total: activeStaff.length })
   } catch (error) {

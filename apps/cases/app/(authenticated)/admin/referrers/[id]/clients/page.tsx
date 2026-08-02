@@ -143,6 +143,7 @@ type ReferredClient = {
 };
 
 type DashboardData = {
+    canViewFinancials?: boolean;
     referrer: {
         id: string;
         firstName: string;
@@ -212,10 +213,11 @@ export default function ReferrerClientsDashboardPage() {
     const [filterId, setFilterId] = useState<ReferralFilterId>('');
 
     const isManager = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'MANAGER';
+    const canViewFinancials = Boolean(data?.canViewFinancials ?? isManager);
 
     useEffect(() => {
-        if (status === 'authenticated' && !isManager) router.push('/');
-    }, [session, status, isManager, router]);
+        if (status === 'unauthenticated') router.push('/login');
+    }, [status, router]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -270,8 +272,6 @@ export default function ReferrerClientsDashboardPage() {
         );
     }
 
-    if (!isManager) return null;
-
     if (loadError) {
         return (
             <div className="max-w-7xl mx-auto">
@@ -320,7 +320,7 @@ export default function ReferrerClientsDashboardPage() {
                             ? `Discount referrer${referrer.clientDiscountPercent != null ? ` · ${referrer.clientDiscountPercent}% for clients` : ''}`
                             : 'Commission referrer'}
                     </span>
-                    {!isDiscountReferrer && (
+                    {!isDiscountReferrer && canViewFinancials && (
                         <>
                             <Link href={`/admin/referrers/${referrer.id}`} className="bg-white/5 border border-white/10 text-white font-medium px-4 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm">
                                 Commission Tracker
@@ -401,14 +401,40 @@ export default function ReferrerClientsDashboardPage() {
 
             {/* Stat cards — money & follow-up row */}
             <div className="space-y-4 mb-6">
-                {(isDiscountReferrer || referrer.referrerType === 'HYBRID') ? (
-                    <>
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Client Finance Metrics</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {canViewFinancials && (
+                    (isDiscountReferrer || referrer.referrerType === 'HYBRID') ? (
+                        <>
+                            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Client Finance Metrics</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                                {[
+                                    { id: 'quoted' as ReferralFilterId, label: 'Total Quoted', value: summary.totalQuoted > 0 ? formatZAR(summary.totalQuoted) : '—', color: 'text-white', border: 'border-l-4 border-l-violet-400' },
+                                    { id: 'expected-revenue' as ReferralFilterId, label: 'Expected Revenue', value: summary.totalExpectedRevenue > 0 ? formatZAR(summary.totalExpectedRevenue) : '—', color: 'text-indigo-300', border: 'border-l-4 border-l-indigo-400' },
+                                    { id: 'completed-outstanding' as ReferralFilterId, label: 'Out Standing Balance', value: summary.totalCompletedOutstanding > 0 ? formatZAR(summary.totalCompletedOutstanding) : '—', color: 'text-yellow-300', border: 'border-l-4 border-l-yellow-400' },
+                                    { id: 'paid' as ReferralFilterId, label: 'Total Paid', value: summary.totalCollected > 0 ? formatZAR(summary.totalCollected) : '—', color: 'text-emerald-400', border: 'border-l-4 border-l-emerald-400' },
+                                    { id: 'settled-paid' as ReferralFilterId, label: 'Settled', value: summary.totalSettledPaid > 0 ? formatZAR(summary.totalSettledPaid) : '—', color: 'text-teal-300', border: 'border-l-4 border-l-teal-400' },
+                                ].map((s) => {
+                                    const active = filterId === s.id;
+                                    return (
+                                        <button
+                                            key={s.label}
+                                            onClick={() => setFilterId(active ? '' : s.id)}
+                                            className={`text-left bg-zeno-blue/30 border rounded-xl p-5 transition-all ${
+                                                active
+                                                    ? 'border-zeno-cyan/50 ring-2 ring-zeno-cyan/35 bg-zeno-cyan/5'
+                                                    : 'border-zeno-blue/50 hover:bg-zeno-blue/40'
+                                            } ${s.border}`}
+                                        >
+                                            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1 font-semibold">{s.label}</p>
+                                            <p className={`text-2xl font-extrabold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {[
                                 { id: 'quoted' as ReferralFilterId, label: 'Total Quoted', value: summary.totalQuoted > 0 ? formatZAR(summary.totalQuoted) : '—', color: 'text-white', border: 'border-l-4 border-l-violet-400' },
-                                { id: 'expected-revenue' as ReferralFilterId, label: 'Expected Revenue', value: summary.totalExpectedRevenue > 0 ? formatZAR(summary.totalExpectedRevenue) : '—', color: 'text-indigo-300', border: 'border-l-4 border-l-indigo-400' },
-                                { id: 'completed-outstanding' as ReferralFilterId, label: 'Out Standing Balance', value: summary.totalCompletedOutstanding > 0 ? formatZAR(summary.totalCompletedOutstanding) : '—', color: 'text-yellow-300', border: 'border-l-4 border-l-yellow-400' },
                                 { id: 'paid' as ReferralFilterId, label: 'Total Paid', value: summary.totalCollected > 0 ? formatZAR(summary.totalCollected) : '—', color: 'text-emerald-400', border: 'border-l-4 border-l-emerald-400' },
                                 { id: 'settled-paid' as ReferralFilterId, label: 'Settled', value: summary.totalSettledPaid > 0 ? formatZAR(summary.totalSettledPaid) : '—', color: 'text-teal-300', border: 'border-l-4 border-l-teal-400' },
                             ].map((s) => {
@@ -429,31 +455,7 @@ export default function ReferrerClientsDashboardPage() {
                                 );
                             })}
                         </div>
-                    </>
-                ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {[
-                            { id: 'quoted' as ReferralFilterId, label: 'Total Quoted', value: summary.totalQuoted > 0 ? formatZAR(summary.totalQuoted) : '—', color: 'text-white', border: 'border-l-4 border-l-violet-400' },
-                            { id: 'paid' as ReferralFilterId, label: 'Total Paid', value: summary.totalCollected > 0 ? formatZAR(summary.totalCollected) : '—', color: 'text-emerald-400', border: 'border-l-4 border-l-emerald-400' },
-                            { id: 'settled-paid' as ReferralFilterId, label: 'Settled', value: summary.totalSettledPaid > 0 ? formatZAR(summary.totalSettledPaid) : '—', color: 'text-teal-300', border: 'border-l-4 border-l-teal-400' },
-                        ].map((s) => {
-                            const active = filterId === s.id;
-                            return (
-                                <button
-                                    key={s.label}
-                                    onClick={() => setFilterId(active ? '' : s.id)}
-                                    className={`text-left bg-zeno-blue/30 border rounded-xl p-5 transition-all ${
-                                        active
-                                            ? 'border-zeno-cyan/50 ring-2 ring-zeno-cyan/35 bg-zeno-cyan/5'
-                                            : 'border-zeno-blue/50 hover:bg-zeno-blue/40'
-                                    } ${s.border}`}
-                                >
-                                    <p className="text-xs text-gray-400 uppercase tracking-wider mb-1 font-semibold">{s.label}</p>
-                                    <p className={`text-2xl font-extrabold ${s.color} truncate`} title={String(s.value)}>{s.value}</p>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    )
                 )}
 
                 {/* Configuration / Alerts Row */}
@@ -464,18 +466,22 @@ export default function ReferrerClientsDashboardPage() {
                         ...(referrer.referrerType === 'HYBRID'
                             ? [
                                 { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
-                                { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
-                                { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
+                                ...(canViewFinancials ? [
+                                    { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
+                                    { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
+                                ] : []),
                             ]
                             : isDiscountReferrer
                             ? [
                                 { label: 'Client Discount', value: referrer.clientDiscountPercent != null ? `${referrer.clientDiscountPercent}%` : 'Not set', color: 'text-purple-400' },
                                 { label: 'Commission', value: 'None (discount)', color: 'text-gray-400' },
                             ]
-                            : [
+                            : canViewFinancials
+                            ? [
                                 { label: 'Commission Owed', value: summary.totalOwed > 0 ? formatZAR(summary.totalOwed) : '—', color: 'text-amber-400' },
                                 { label: 'Commission Paid', value: summary.totalPaid > 0 ? formatZAR(summary.totalPaid) : '—', color: 'text-emerald-400' },
-                            ]),
+                            ]
+                            : []),
                     ].map((s) => (
                         <div key={s.label} className={`bg-zeno-blue/15 border rounded-xl p-4 ${'border' in s ? s.border : 'border-zeno-blue/30'}`}>
                             <p className="text-xs text-gray-400 uppercase tracking-wider mb-0.5">{s.label}</p>
@@ -493,10 +499,10 @@ export default function ReferrerClientsDashboardPage() {
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         {[
                             { id: 'not-quoted' as ReferralFilterId, label: 'Not Quoted', value: `${data.quoteStats.notQuotedCount} Clients`, accent: 'text-gray-300', caption: 'No quotation created yet' },
-                            { id: 'total-quotes' as ReferralFilterId, label: 'Total Quotes', value: `${data.quoteStats.totalCount} Quotes`, accent: 'text-purple-300', caption: `Total value: ${formatZAR(data.quoteStats.totalAmount)}` },
-                            { id: 'accepted-quotes' as ReferralFilterId, label: 'Accepted Quotes', value: `${data.quoteStats.acceptedCount} Accepted`, accent: 'text-emerald-400', caption: `Value: ${formatZAR(data.quoteStats.acceptedAmount)}` },
-                            { id: 'pending-quotes' as ReferralFilterId, label: 'Pending Quotes', value: `${data.quoteStats.pendingCount} Pending`, accent: 'text-amber-400', caption: `Value: ${formatZAR(data.quoteStats.pendingAmount)}` },
-                            { id: 'declined-quotes' as ReferralFilterId, label: 'Declined Quotes', value: `${data.quoteStats.rejectedCount} Declined`, accent: 'text-rose-300', caption: `Value: ${formatZAR(data.quoteStats.rejectedAmount)}` },
+                            { id: 'total-quotes' as ReferralFilterId, label: 'Total Quotes', value: `${data.quoteStats.totalCount} Quotes`, accent: 'text-purple-300', caption: canViewFinancials ? `Total value: ${formatZAR(data.quoteStats.totalAmount)}` : undefined },
+                            { id: 'accepted-quotes' as ReferralFilterId, label: 'Accepted Quotes', value: `${data.quoteStats.acceptedCount} Accepted`, accent: 'text-emerald-400', caption: canViewFinancials ? `Value: ${formatZAR(data.quoteStats.acceptedAmount)}` : undefined },
+                            { id: 'pending-quotes' as ReferralFilterId, label: 'Pending Quotes', value: `${data.quoteStats.pendingCount} Pending`, accent: 'text-amber-400', caption: canViewFinancials ? `Value: ${formatZAR(data.quoteStats.pendingAmount)}` : undefined },
+                            { id: 'declined-quotes' as ReferralFilterId, label: 'Declined Quotes', value: `${data.quoteStats.rejectedCount} Declined`, accent: 'text-rose-300', caption: canViewFinancials ? `Value: ${formatZAR(data.quoteStats.rejectedAmount)}` : undefined },
                         ].map((q) => {
                             const active = filterId === q.id;
                             return (
@@ -611,16 +617,16 @@ export default function ReferrerClientsDashboardPage() {
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Referred</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Last Updated</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Next Update</th>
-                            <th className="text-right py-3 px-4 text-gray-400 font-medium">Quote</th>
-                            <th className="text-right py-3 px-4 text-gray-400 font-medium">Paid</th>
-                            <th className="text-right py-3 px-4 text-gray-400 font-medium">Balance</th>
-                            <th className="text-right py-3 px-4 text-gray-400 font-medium">{isDiscountReferrer ? 'Stage' : 'Stage & Commission'}</th>
+                            {canViewFinancials && <th className="text-right py-3 px-4 text-gray-400 font-medium">Quote</th>}
+                            {canViewFinancials && <th className="text-right py-3 px-4 text-gray-400 font-medium">Paid</th>}
+                            {canViewFinancials && <th className="text-right py-3 px-4 text-gray-400 font-medium">Balance</th>}
+                            <th className="text-right py-3 px-4 text-gray-400 font-medium">{!canViewFinancials || isDiscountReferrer ? 'Stage' : 'Stage & Commission'}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {filteredClients.length === 0 ? (
                             <tr>
-                                <td colSpan={9} className="py-12 text-center text-gray-400">
+                                <td colSpan={canViewFinancials ? 9 : 6} className="py-12 text-center text-gray-400">
                                     {data.clients.length === 0
                                         ? 'No clients referred yet. Cases created under this referrer’s sub-project will appear here.'
                                         : 'No clients match the current filters.'}
@@ -675,63 +681,71 @@ export default function ReferrerClientsDashboardPage() {
                                             <span className="text-gray-600 text-xs">—</span>
                                         )}
                                     </td>
-                                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                                        {c.financials.quoteTotal != null ? (
-                                            <div>
-                                                <span className="text-gray-200 text-xs font-medium">{formatZAR(c.financials.quoteTotal)}</span>
-                                                <div className="text-gray-600 text-xs">
-                                                    {c.financials.quoteSource === 'ACCEPTED_QUOTE' ? 'accepted quote' : 'service fee'}
+                                    {canViewFinancials && (
+                                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                                            {c.financials.quoteTotal != null ? (
+                                                <div>
+                                                    <span className="text-gray-200 text-xs font-medium">{formatZAR(c.financials.quoteTotal)}</span>
+                                                    <div className="text-gray-600 text-xs">
+                                                        {c.financials.quoteSource === 'ACCEPTED_QUOTE' ? 'accepted quote' : 'service fee'}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            <span className="text-gray-600 text-xs">No quote</span>
-                                        )}
-                                    </td>
-                                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                                        {c.financials.totalPaid > 0 ? (
-                                            <div>
-                                                <span className="text-emerald-400 text-xs font-medium">{formatZAR(c.financials.totalPaid)}</span>
-                                                {c.financials.percentCollected != null && (
-                                                    <div className="text-gray-600 text-xs">{c.financials.percentCollected}% collected</div>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <span className="text-gray-600 text-xs">—</span>
-                                        )}
-                                    </td>
-                                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                                        {c.financials.overpaid > 0 ? (
-                                            <span className="text-emerald-400 text-xs font-semibold">Overpaid {formatZAR(c.financials.overpaid)}</span>
-                                        ) : c.financials.balance != null && c.financials.balance > 0 ? (
-                                            <span className="text-amber-400 text-xs font-semibold">{formatZAR(c.financials.balance)}</span>
-                                        ) : c.financials.balance === 0 ? (
-                                            <span className="text-emerald-400 text-xs font-semibold">Settled</span>
-                                        ) : (
-                                            <span className="text-gray-600 text-xs">—</span>
-                                        )}
-                                    </td>
+                                            ) : (
+                                                <span className="text-gray-600 text-xs">No quote</span>
+                                            )}
+                                        </td>
+                                    )}
+                                    {canViewFinancials && (
+                                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                                            {c.financials.totalPaid > 0 ? (
+                                                <div>
+                                                    <span className="text-emerald-400 text-xs font-medium">{formatZAR(c.financials.totalPaid)}</span>
+                                                    {c.financials.percentCollected != null && (
+                                                        <div className="text-gray-600 text-xs">{c.financials.percentCollected}% collected</div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-600 text-xs">—</span>
+                                            )}
+                                        </td>
+                                    )}
+                                    {canViewFinancials && (
+                                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                                            {c.financials.overpaid > 0 ? (
+                                                <span className="text-emerald-400 text-xs font-semibold">Overpaid {formatZAR(c.financials.overpaid)}</span>
+                                            ) : c.financials.balance != null && c.financials.balance > 0 ? (
+                                                <span className="text-amber-400 text-xs font-semibold">{formatZAR(c.financials.balance)}</span>
+                                            ) : c.financials.balance === 0 ? (
+                                                <span className="text-emerald-400 text-xs font-semibold">Settled</span>
+                                            ) : (
+                                                <span className="text-gray-600 text-xs">—</span>
+                                            )}
+                                        </td>
+                                    )}
                                     <td className="py-3 px-4 text-right">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${stageChipColor(stage)}`}>
                                             {STAGE_LABELS[stage] ?? stage}
                                         </span>
-                                        <div className="mt-1">
-                                            {isDiscountReferrer ? (
-                                                <span className="text-purple-400/80 text-xs">Discount client</span>
-                                            ) : c.commission?.isPaid ? (
-                                                <span className="text-emerald-400 text-xs font-semibold">
-                                                    Paid {c.commission.commissionAmount != null ? formatZAR(c.commission.commissionAmount) : ''}
-                                                    {c.commission.paidAt && (
-                                                        <span className="block text-gray-500 font-normal">{new Date(c.commission.paidAt).toLocaleDateString('en-ZA')}</span>
-                                                    )}
-                                                </span>
-                                            ) : c.commission?.isEligible ? (
-                                                <span className="text-amber-400 text-xs font-semibold">
-                                                    Due {c.commission.commissionAmount != null ? formatZAR(c.commission.commissionAmount) : ''}
-                                                </span>
-                                            ) : (
-                                                <span className="text-gray-600 text-xs">Not yet due</span>
-                                            )}
-                                        </div>
+                                        {canViewFinancials && (
+                                            <div className="mt-1">
+                                                {isDiscountReferrer ? (
+                                                    <span className="text-purple-400/80 text-xs">Discount client</span>
+                                                ) : c.commission?.isPaid ? (
+                                                    <span className="text-emerald-400 text-xs font-semibold">
+                                                        Paid {c.commission.commissionAmount != null ? formatZAR(c.commission.commissionAmount) : ''}
+                                                        {c.commission.paidAt && (
+                                                            <span className="block text-gray-500 font-normal">{new Date(c.commission.paidAt).toLocaleDateString('en-ZA')}</span>
+                                                        )}
+                                                    </span>
+                                                ) : c.commission?.isEligible ? (
+                                                    <span className="text-amber-400 text-xs font-semibold">
+                                                        Due {c.commission.commissionAmount != null ? formatZAR(c.commission.commissionAmount) : ''}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-600 text-xs">Not yet due</span>
+                                                )}
+                                            </div>
+                                        )}
                                     </td>
                                 </tr>
                             );

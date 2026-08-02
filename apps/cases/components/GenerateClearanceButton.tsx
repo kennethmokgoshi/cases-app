@@ -121,16 +121,19 @@ export function GenerateClearanceButton({
                 }),
             });
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error || 'Failed to generate clearance certificate');
+            const genResult = await res.json();
+            const isB2B = genResult.isB2B;
+
+            if (isB2B) {
+                setSuccessMsg(`Successfully generated ${formChoice?.label || docType}! Uploaded to Consumer Profile Vault (🔒 B2B Restricted: Crediva download disabled & mailing blocked).`);
+            } else {
+                setSuccessMsg(`Successfully generated ${formChoice?.label || docType}! Uploaded to Consumer Profile Vault (✓ Accessible on Crediva).`);
             }
 
-            setSuccessMsg(`Successfully generated ${formChoice?.label || docType}! Saved to Case Documents.`);
             onDocumentGenerated?.();
             setTimeout(() => {
                 setModalOpen(false);
-            }, 1800);
+            }, 2500);
         } catch (err: any) {
             setError(err.message || 'Error generating clearance certificate.');
         } finally {
@@ -193,16 +196,18 @@ export function GenerateClearanceButton({
                                     <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-700/50 text-amber-200 flex items-start gap-3">
                                         <span className="text-xl">⚠️</span>
                                         <div>
-                                            <div className="font-semibold text-amber-300">Credit Report Missing</div>
+                                            <div className="font-semibold text-amber-300">Credit Report Required</div>
                                             <p className="text-xs text-amber-200/80 mt-0.5">
-                                                No Credit Report document was found in the case vault. The assessment below is based on currently recorded credit accounts. Upload or scrape a credit report for 100% precision.
+                                                No Credit Report document was found in the case vault. A credit report is strictly required to evaluate and generate clearance documents. Please upload one of the 4 credit reports (Experian, TransUnion, XDS, Lightstone) to proceed.
                                             </p>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Recommendation Banner */}
-                                <div className="p-4 rounded-xl bg-teal-950/40 border border-teal-700/60 space-y-2">
+                                {assessment.hasCreditReport && (
+                                    <>
+                                        {/* Recommendation Banner */}
+                                        <div className="p-4 rounded-xl bg-teal-950/40 border border-teal-700/60 space-y-2">
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs font-semibold text-teal-400 uppercase tracking-wider">
                                             AI / Rules Recommendation
@@ -314,6 +319,8 @@ export function GenerateClearanceButton({
                                         <span>{successMsg}</span>
                                     </div>
                                 )}
+                                </>
+                                )}
                             </div>
                         ) : null}
 
@@ -325,7 +332,7 @@ export function GenerateClearanceButton({
                             >
                                 Cancel
                             </button>
-                            {assessment && (
+                            {assessment && assessment.hasCreditReport && (
                                 <button
                                     type="button"
                                     onClick={handleGenerate}

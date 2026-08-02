@@ -130,6 +130,14 @@ export function SidebarNav({ session, casesUrl = '', insuranceUrl = '', financeU
                     </SmartLink>
                 </li>
                 <li>
+                    <SmartLink href="/admin/referrers" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${pathname.startsWith('/admin/referrers') ? 'bg-zeno-cyan/10 text-zeno-cyan' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        Referrers
+                    </SmartLink>
+                </li>
+                <li>
                     <SmartLink href="/resources" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${pathname.startsWith('/resources') ? 'bg-zeno-cyan/10 text-zeno-cyan' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.141.021l6.267 6.366a1 1 0 01.021.141V19a2 2 0 01-2 2z" />
@@ -230,14 +238,6 @@ export function SidebarNav({ session, casesUrl = '', insuranceUrl = '', financeU
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                 </svg>
                                 Credit Providers
-                            </SmartLink>
-                        </li>
-                        <li>
-                            <SmartLink href="/admin/referrers" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${pathname.startsWith('/admin/referrers') ? 'bg-zeno-orange/10 text-zeno-orange' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                                Referrers
                             </SmartLink>
                         </li>
                         {(session?.user?.isAdmin || session?.user?.isExecutive) && (

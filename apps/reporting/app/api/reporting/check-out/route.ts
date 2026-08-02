@@ -26,11 +26,19 @@ export async function POST(request: Request) {
       include: { user: { select: { firstName: true, lastName: true, email: true } } },
     })
 
-    // Update active session record
+    // Close only the single most recently opened session. A user should never have more than
+    // one open session, but this guards against historical drift — closing every open row at
+    // once previously stamped multi-day-old stale sessions with today's logout time, inflating
+    // session-duration analytics. Any older dangling rows are cleaned up on the next check-in.
     await prisma.$executeRawUnsafe(`
       UPDATE "EmployeeSession"
       SET "logoutAt" = NOW(), "updatedAt" = NOW()
-      WHERE "userId" = '${session!.user.id}' AND "logoutAt" IS NULL
+      WHERE id = (
+        SELECT id FROM "EmployeeSession"
+        WHERE "userId" = '${session!.user.id}' AND "logoutAt" IS NULL
+        ORDER BY "loginAt" DESC
+        LIMIT 1
+      )
     `)
 
     return NextResponse.json({ success: true, presence })

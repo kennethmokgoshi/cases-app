@@ -31,7 +31,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         const { id } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        if (!isAdminLevel(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
         const referrer = await prisma.referrer.findUnique({
             where: { id },
@@ -52,10 +51,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         });
         if (!referrer) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
 
-        // Non-admins may only view referrers whose sub-project they belong to
+        // Scoped access check: Admins/Managers or members of the referrer's sub-project
         if (!(await canAccessReferrer(session.user, referrer.projectId))) {
             return NextResponse.json({ error: 'Forbidden — you are not a member of this referrer' }, { status: 403 });
         }
+
+        const canViewFinancials = isAdminLevel(session);
 
         const cases = await prisma.case.findMany({
             where: { referrerId: id, deletedAt: null },
@@ -205,13 +206,67 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             });
         }
 
+        const finalClients = canViewFinancials
+            ? clients
+            : clients.map((c) => ({
+                ...c,
+                financials: {
+                    quoteTotal: null,
+                    quoteSource: null,
+                    totalPaid: 0,
+                    balance: null,
+                    overpaid: 0,
+                    percentCollected: null,
+                    acceptedQuotesTotal: 0,
+                },
+                commission: c.commission
+                    ? {
+                        ...c.commission,
+                        commissionAmount: null,
+                        isEligible: false,
+                        isPaid: false,
+                    }
+                    : null,
+            }));
+
+        const finalSummary = canViewFinancials
+            ? summary
+            : {
+                ...summary,
+                eligible: 0,
+                paid: 0,
+                unpaidEligible: 0,
+                totalOwed: 0,
+                totalPaid: 0,
+                totalQuoted: 0,
+                totalCollected: 0,
+                totalSettledPaid: 0,
+                totalCompletedOutstanding: 0,
+                totalExpectedRevenue: 0,
+            };
+
+        const finalQuoteStats = canViewFinancials
+            ? quoteStats
+            : {
+                ...quoteStats,
+                totalAmount: 0,
+                acceptedAmount: 0,
+                pendingAmount: 0,
+                rejectedAmount: 0,
+            };
+
         return NextResponse.json({
+            canViewFinancials,
             referrer: {
                 ...referrer,
                 clientDiscountPercent: referrer.clientDiscountPercent != null ? Number(referrer.clientDiscountPercent) : null,
-                fixedCommissionAmount: referrer.fixedCommissionAmount != null ? Number(referrer.fixedCommissionAmount) : null,
+                fixedCommissionAmount: canViewFinancials && referrer.fixedCommissionAmount != null ? Number(referrer.fixedCommissionAmount) : null,
             },
-            clients, summary, stageBreakdown, monthlyTrend, quoteStats,
+            clients: finalClients,
+            summary: finalSummary,
+            stageBreakdown,
+            monthlyTrend,
+            quoteStats: finalQuoteStats,
         });
     } catch (error) {
         logger.error('Error fetching referrer clients dashboard:', error);

@@ -6,7 +6,7 @@ import { useSession } from '@zenowethu/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Pagination } from '@zenowethu/ui';
+import { Pagination, OrgSearchWithSuggestions } from '@zenowethu/ui';
 
 type Referrer = {
     id: string;
@@ -123,12 +123,13 @@ export default function ReferrersPage() {
     const [registeringFolderId, setRegisteringFolderId] = useState<string | null>(null);
 
     const isManager = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.role === 'MANAGER';
+    const canViewFinancials = isManager;
     // Managers can view and add referrers; only Admin/Executive can edit or delete
     const canManage = session?.user?.isAdmin || session?.user?.isExecutive;
 
     useEffect(() => {
-        if (status === 'authenticated' && !isManager) router.push('/');
-    }, [session, status, isManager, router]);
+        if (status === 'unauthenticated') router.push('/login');
+    }, [status, router]);
 
     const fetchReferrers = useCallback(async () => {
         setLoading(true);
@@ -367,8 +368,6 @@ export default function ReferrersPage() {
         );
     }
 
-    if (!isManager) return null;
-
     return (
         <div className="max-w-7xl mx-auto">
             {/* Header */}
@@ -381,23 +380,29 @@ export default function ReferrersPage() {
                     <p className="text-gray-400 text-sm mt-1">Capture referrers and manage their sub-projects</p>
                 </div>
                 <div className="flex gap-3">
-                    <Link href="/admin/referrers/payouts" className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold px-4 py-2 rounded-lg hover:bg-emerald-500/20 transition-colors text-sm">
-                        Commission Payouts
-                    </Link>
-                    <button onClick={openAdd} className="bg-zeno-cyan text-zeno-dark font-semibold px-4 py-2 rounded-lg hover:bg-zeno-cyan/90 transition-colors text-sm">
-                        + Add Referrer
-                    </button>
+                    {canViewFinancials && (
+                        <Link href="/admin/referrers/payouts" className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold px-4 py-2 rounded-lg hover:bg-emerald-500/20 transition-colors text-sm">
+                            Commission Payouts
+                        </Link>
+                    )}
+                    {isManager && (
+                        <button onClick={openAdd} className="bg-zeno-cyan text-zeno-dark font-semibold px-4 py-2 rounded-lg hover:bg-zeno-cyan/90 transition-colors text-sm">
+                            + Add Referrer
+                        </button>
+                    )}
                 </div>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-5 gap-4 mb-6">
+            <div className={`grid ${canViewFinancials ? 'grid-cols-5' : 'grid-cols-3'} gap-4 mb-6`}>
                 {[
                     { label: 'Total Referrers', value: meta.total, color: 'text-white' },
                     { label: 'Active', value: meta.active, color: 'text-emerald-400' },
                     { label: 'Inactive', value: meta.inactive, color: 'text-gray-400' },
-                    { label: 'Outstanding Pay', value: `R ${meta.totalOutstanding.toLocaleString()}`, color: 'text-amber-400' },
-                    { label: 'Total Paid', value: `R ${meta.totalPaid.toLocaleString()}`, color: 'text-emerald-400' },
+                    ...(canViewFinancials ? [
+                        { label: 'Outstanding Pay', value: `R ${meta.totalOutstanding.toLocaleString()}`, color: 'text-amber-400' },
+                        { label: 'Total Paid', value: `R ${meta.totalPaid.toLocaleString()}`, color: 'text-emerald-400' },
+                    ] : []),
                 ].map((s) => (
                     <div key={s.label} className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-4">
                         <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
@@ -446,14 +451,21 @@ export default function ReferrersPage() {
             )}
 
             {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-5">
-                <input
-                    type="text"
-                    placeholder="Search name, ID, email, cell..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-zeno-cyan/50 w-72"
-                />
+            <div className="flex flex-wrap items-center gap-3 mb-5">
+                <div className="w-80">
+                    <OrgSearchWithSuggestions
+                        placeholder="Search William (referrer), Paul Kruger 1 (branch), Letsatsi..."
+                        onQueryChange={(q) => { setSearch(q); setPage(1); }}
+                        onSelectResult={(item) => {
+                            if (item.entityType === 'REFERRER') {
+                                setSearch(item.name);
+                            } else {
+                                window.location.href = item.href;
+                            }
+                            setPage(1);
+                        }}
+                    />
+                </div>
                 <select
                     value={isActiveFilter}
                     onChange={(e) => { setIsActiveFilter(e.target.value); setPage(1); }}
@@ -477,16 +489,16 @@ export default function ReferrersPage() {
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Sub-Project</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Referred By</th>
                             <th className="text-left py-3 px-4 text-gray-400 font-medium">Cases</th>
-                            <th className="text-right py-3 px-4 text-gray-400 font-medium">Outstanding</th>
+                            {canViewFinancials && <th className="text-right py-3 px-4 text-gray-400 font-medium">Outstanding</th>}
                             <th className="text-left py-3 px-4 text-gray-400 font-medium pl-6">Status</th>
                             <th className="py-3 px-4"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={9} className="py-12 text-center text-gray-400">Loading...</td></tr>
+                            <tr><td colSpan={canViewFinancials ? 10 : 9} className="py-12 text-center text-gray-400">Loading...</td></tr>
                         ) : referrers.length === 0 ? (
-                            <tr><td colSpan={9} className="py-12 text-center text-gray-400">No referrers found</td></tr>
+                            <tr><td colSpan={canViewFinancials ? 10 : 9} className="py-12 text-center text-gray-400">No referrers found</td></tr>
                         ) : referrers.map((r) => (
                             <tr key={r.id} className="border-b border-zeno-blue/20 hover:bg-zeno-blue/20 transition-colors">
                                 <td className="py-3 px-4">
@@ -529,28 +541,30 @@ export default function ReferrersPage() {
                                 <td className="py-3 px-4">
                                     <span className="text-white font-medium">{r._count.cases}</span>
                                 </td>
-                                <td className="py-3 px-4 text-right">
-                                    {r.referrerType === 'DISCOUNT' ? (
-                                        <>
-                                            <div className="text-purple-400 font-medium text-xs whitespace-nowrap">
-                                                {r.clientDiscountPercent != null ? `${Number(r.clientDiscountPercent)}% client discount` : 'Client discount'}
-                                            </div>
-                                            <div className="text-gray-500 text-xs whitespace-nowrap mt-1">No commission</div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="text-amber-400 font-medium text-xs whitespace-nowrap">
-                                                R {r.outstandingCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
-                                            </div>
-                                            <div className="text-gray-500 text-xs whitespace-nowrap mt-1 flex flex-col items-end">
-                                                <span>Paid: R {r.paidCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</span>
-                                                {r.referrerType === 'HYBRID' && r.clientDiscountPercent != null && (
-                                                    <span className="text-purple-400 mt-0.5">({Number(r.clientDiscountPercent)}% discount)</span>
-                                                )}
-                                            </div>
-                                        </>
-                                    )}
-                                </td>
+                                {canViewFinancials && (
+                                    <td className="py-3 px-4 text-right">
+                                        {r.referrerType === 'DISCOUNT' ? (
+                                            <>
+                                                <div className="text-purple-400 font-medium text-xs whitespace-nowrap">
+                                                    {r.clientDiscountPercent != null ? `${Number(r.clientDiscountPercent)}% client discount` : 'Client discount'}
+                                                </div>
+                                                <div className="text-gray-500 text-xs whitespace-nowrap mt-1">No commission</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="text-amber-400 font-medium text-xs whitespace-nowrap">
+                                                    R {r.outstandingCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                                                </div>
+                                                <div className="text-gray-500 text-xs whitespace-nowrap mt-1 flex flex-col items-end">
+                                                    <span>Paid: R {r.paidCommission.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</span>
+                                                    {r.referrerType === 'HYBRID' && r.clientDiscountPercent != null && (
+                                                        <span className="text-purple-400 mt-0.5">({Number(r.clientDiscountPercent)}% discount)</span>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </td>
+                                )}
                                 <td className="py-3 px-4 pl-6">
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${r.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
                                         {r.isActive ? 'Active' : 'Inactive'}
@@ -558,9 +572,11 @@ export default function ReferrersPage() {
                                 </td>
                                 <td className="py-3 px-4">
                                     <div className="flex items-center gap-2 justify-end">
-                                        <Link href={`/admin/referrers/${r.id}`} className="text-zeno-cyan hover:text-zeno-cyan/80 text-xs px-2 py-1 rounded hover:bg-zeno-cyan/10 transition-colors">
-                                            Commission
-                                        </Link>
+                                        {canViewFinancials && (
+                                            <Link href={`/admin/referrers/${r.id}`} className="text-zeno-cyan hover:text-zeno-cyan/80 text-xs px-2 py-1 rounded hover:bg-zeno-cyan/10 transition-colors">
+                                                Commission
+                                            </Link>
+                                        )}
                                         {canManage && (
                                             <button onClick={() => openEdit(r)} className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-white/5">
                                                 Edit

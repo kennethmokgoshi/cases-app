@@ -58,14 +58,12 @@ export async function GET(request: Request) {
         if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        if (!session.user.isAdmin && !session.user.isExecutive && !session.user.isSeniorManager && session.user.role !== 'MANAGER') {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
         const { searchParams } = new URL(request.url);
         const page = Math.max(1, Number(searchParams.get('page') ?? 1));
         const search = searchParams.get('search') ?? '';
         const isActiveParam = searchParams.get('isActive') ?? '';
+
+        const canViewFinancials = session.user.isAdmin || session.user.isExecutive || session.user.isSeniorManager || session.user.role === 'MANAGER';
 
         // Membership scoping: admins see every referrer; everyone else only
         // sees referrers whose sub-project they are a member of.
@@ -137,15 +135,16 @@ export async function GET(request: Request) {
         ]);
 
         const enrichedReferrers = referrers.map(r => {
-            const outstanding = pageCommissions.find(c => c.referrerId === r.id && !c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
-            const paid = pageCommissions.find(c => c.referrerId === r.id && c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
+            const outstanding = canViewFinancials ? (pageCommissions.find(c => c.referrerId === r.id && !c.isPaid)?._sum.commissionAmount?.toNumber() || 0) : 0;
+            const paid = canViewFinancials ? (pageCommissions.find(c => c.referrerId === r.id && c.isPaid)?._sum.commissionAmount?.toNumber() || 0) : 0;
             return { ...r, outstandingCommission: outstanding, paidCommission: paid };
         });
 
-        const totalOutstanding = globalCommissions.find(c => !c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
-        const totalPaid = globalCommissions.find(c => c.isPaid)?._sum.commissionAmount?.toNumber() || 0;
+        const totalOutstanding = canViewFinancials ? (globalCommissions.find(c => !c.isPaid)?._sum.commissionAmount?.toNumber() || 0) : 0;
+        const totalPaid = canViewFinancials ? (globalCommissions.find(c => c.isPaid)?._sum.commissionAmount?.toNumber() || 0) : 0;
 
         return NextResponse.json({
+            canViewFinancials,
             referrers: enrichedReferrers,
             total,
             page,

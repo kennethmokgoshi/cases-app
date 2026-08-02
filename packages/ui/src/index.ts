@@ -31,6 +31,7 @@ export * from './ui/Pagination'
 export * from './ui/SignaturePad';
 export * from './ui/RichTextEditor'
 export * from './ui/SearchWithSuggestions'
+export * from './ui/OrgSearchWithSuggestions'
 export * from './providers/layout-context'
 export * from './providers/project-context'
 export * from './providers/theme-context'

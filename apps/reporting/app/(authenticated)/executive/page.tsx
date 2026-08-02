@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { getDateRange, DateRangeType } from '@/lib/date-utils'
+import { getPresenceMetadata, isDndStatus, normalizePresenceStatus } from '@/lib/presence-status'
 
 
 interface TeamMember {
@@ -52,8 +53,8 @@ export default function ExecutiveDashboard() {
   // Calculate Rollup Metrics
   const totalHoursLogged = filteredTeam.reduce((sum, m) => sum + parseFloat(m.totalHours), 0)
   const totalHoursVerified = filteredTeam.reduce((sum, m) => sum + parseFloat(m.verifiedHours), 0)
-  const onlineStaffCount = filteredTeam.filter((m) => m.status === 'ONLINE').length
-  const idleStaffCount = filteredTeam.filter((m) => m.status === 'IDLE').length
+  const onlineStaffCount = filteredTeam.filter((m) => normalizePresenceStatus(m.status) !== 'OFFLINE').length
+  const dndStaffCount = filteredTeam.filter((m) => isDndStatus(normalizePresenceStatus(m.status))).length
   const totalTasksCount = filteredTeam.reduce((sum, m) => sum + m.logCount, 0)
   
   const verificationRatio = totalHoursLogged > 0 
@@ -128,7 +129,7 @@ export default function ExecutiveDashboard() {
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Staff Online</span>
               <span className="text-3xl font-extrabold text-cyan-600 mt-2 block">{onlineStaffCount}</span>
-              <span className="text-xs text-slate-500 mt-1 block">{idleStaffCount} idle staff</span>
+              <span className="text-xs text-slate-500 mt-1 block">{dndStaffCount} focused/away</span>
             </div>
           </div>
 
@@ -215,7 +216,7 @@ export default function ExecutiveDashboard() {
                     <h2 className="text-xl font-bold text-slate-900">Availability Roster</h2>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-sm font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100/50 shadow-sm">
-                        {filteredTeam.filter((m) => m.status === 'ONLINE').length}
+                        {onlineStaffCount}
                       </span>
                       <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
                         available to assist
@@ -228,25 +229,20 @@ export default function ExecutiveDashboard() {
                   {filteredTeam.length === 0 ? (
                     <p className="text-sm text-slate-400 text-center py-4">No team members online</p>
                   ) : (
-                    filteredTeam.map((member) => (
-                      <div key={member.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                            member.status === 'ONLINE'
-                              ? 'bg-emerald-500'
-                              : member.status === 'IDLE'
-                              ? 'bg-amber-400'
-                              : 'bg-slate-300'
-                          }`}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-800 truncate">
-                            {member.firstName} {member.lastName}
-                          </p>
-                          <p className="text-xs text-slate-500 truncate capitalize">{member.status.toLowerCase()}</p>
+                    filteredTeam.map((member) => {
+                      const meta = getPresenceMetadata(member.status)
+                      return (
+                        <div key={member.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${meta.dotColorClass}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">
+                              {member.firstName} {member.lastName}
+                            </p>
+                            <p className="text-xs text-slate-500 truncate">{meta.label}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      )
+                    })
                   )}
                 </div>
               </div>

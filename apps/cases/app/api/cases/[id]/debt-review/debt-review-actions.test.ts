@@ -37,6 +37,7 @@ import { sendEmailWithAttachments }  from '@/lib/email-with-attachments';
 
 import { PATCH }  from './[docId]/approve/route';
 import { POST as POST_CONSUMER }   from './[docId]/send-consumer/route';
+import { POST as POST_REFERRER }   from './[docId]/send-referrer/route';
 import { POST as POST_CREDITORS }  from './send-creditors/route';
 
 // ── Session fixtures ──────────────────────────────────────────────────────────
@@ -273,6 +274,24 @@ describe('POST /debt-review/[docId]/send-consumer', () => {
         const res = await POST_CONSUMER(makeReq('POST'), ctx('case-1', 'doc-1') as any);
         expect(res.status).toBe(502);
     });
+
+    it('returns 403 when trying to email a clearance certificate for a B2B case', async () => {
+        vi.mocked(auth).mockResolvedValue(memberSession as any);
+        vi.mocked(prisma.debtReviewDocument.findFirst).mockResolvedValue({
+            ...sampleDoc,
+            documentType: 'CERTIFIED_FORM_19',
+        } as any);
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            fileNumber: 'ZW-001',
+            acquisitionType: 'B2B',
+            client: { firstName: 'John', lastName: 'Doe', email: 'john@example.com' },
+        } as any);
+
+        const res = await POST_CONSUMER(makeReq('POST'), ctx('case-1', 'doc-1') as any);
+        expect(res.status).toBe(403);
+        const json = await res.json();
+        expect(json.error).toContain('cannot be emailed directly to B2B clients');
+    });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -359,7 +378,51 @@ describe('POST /debt-review/send-creditors', () => {
         vi.mocked(readFile).mockResolvedValue(Buffer.from('pdf') as any);
         vi.mocked(sendEmailWithAttachments).mockResolvedValue({ success: false, error: 'SMTP down' });
 
-        const res = await POST_CREDITORS(makeReq('POST', {}), ctx('case-1') as any);
+        const res = await POST_CREDITORS(makeReq('POST', {}) , ctx('case-1') as any);
         expect(res.status).toBe(502);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POST /api/cases/[id]/debt-review/[docId]/send-referrer
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('POST /debt-review/[docId]/send-referrer', () => {
+    it('returns 401 when unauthenticated', async () => {
+        vi.mocked(auth).mockResolvedValue(unauthenticated as any);
+        const res = await POST_REFERRER(makeReq('POST'), ctx('case-1', 'doc-1') as any);
+        expect(res.status).toBe(401);
+    });
+
+    it('returns 422 when case has no referrer or referrer email', async () => {
+        vi.mocked(auth).mockResolvedValue(memberSession as any);
+        vi.mocked(prisma.debtReviewDocument.findFirst).mockResolvedValue(sampleDoc as any);
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            fileNumber: 'ZW-001',
+            client: { firstName: 'John', lastName: 'Doe' },
+            referrer: null,
+        } as any);
+
+        const res = await POST_REFERRER(makeReq('POST'), ctx('case-1', 'doc-1') as any);
+        expect(res.status).toBe(422);
+    });
+
+    it('sends document email to referrer successfully', async () => {
+        vi.mocked(auth).mockResolvedValue(memberSession as any);
+        vi.mocked(prisma.debtReviewDocument.findFirst).mockResolvedValue(sampleDoc as any);
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            fileNumber: 'ZW-001',
+            client: { firstName: 'John', lastName: 'Doe' },
+            referrer: { id: 'ref-1', firstName: 'Ralph', lastName: 'Partner', email: 'ralph@partner.com' },
+        } as any);
+        vi.mocked(existsSync).mockReturnValue(true);
+        vi.mocked(readFile).mockResolvedValue(Buffer.from('pdf') as any);
+        vi.mocked(sendEmailWithAttachments).mockResolvedValue({ success: true, messageId: 'msg-ref-1' });
+
+        const res = await POST_REFERRER(makeReq('POST'), ctx('case-1', 'doc-1') as any);
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(json.success).toBe(true);
+        expect(json.sentTo).toBe('ralph@partner.com');
     });
 });

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { verifyStaffApiAccess } from '@/lib/api-guard'
 import { canViewUser } from '@/lib/role-check'
 import { UserRole } from '@/lib/roles'
+import { normalizePresenceStatus } from '@/lib/presence-status'
 
 export async function GET(request: Request) {
   const session = await auth()
@@ -91,7 +92,7 @@ export async function GET(request: Request) {
 
         return {
           ...member,
-          status: presence?.status || 'OFFLINE',
+          status: normalizePresenceStatus(presence?.status),
           lastActivityAt: presence?.lastActivityAt,
           totalMinutes,
           totalHours: (totalMinutes / 60).toFixed(1),

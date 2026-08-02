@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth, createLogger } from '@zenowethu/shared-lib';
+import { auth, createLogger, provisionConsumerForClient } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -94,6 +94,7 @@ type DebtReviewAccount = {
     outstandingBalance: unknown;
     monthlyInstalment:  unknown;
     status:             string;
+    lastPaymentDate:    Date | null;
 };
 
 function isMortgageAccount(account: DebtReviewAccount): boolean {
@@ -111,6 +112,7 @@ function toD4Account(account: DebtReviewAccount) {
         accountType:        account.accountType,
         status:             account.status,
         outstandingBalance: Number(account.outstandingBalance),
+        lastPaymentDate:    account.lastPaymentDate,
     };
 }
 
@@ -176,11 +178,11 @@ export async function POST(request: Request, { params }: RouteContext) {
         for (const s of dcSettings) dcMap[s.key] = s.value;
 
         const dc = {
-            ncrdc:   dcMap['dc_ncrdc_no']  || process.env.DHS_USERNAME || 'NCRDC____',
-            name:    dcMap['dc_name']       || 'Zenowethu Debt Counsellor',
-            address: dcMap['dc_address']    || '—',
-            phone:   dcMap['dc_phone']      || '—',
-            email:   dcMap['dc_email']      || '—',
+            ncrdc:   dcMap['dc_ncrdc_no']  || process.env.DHS_USERNAME || 'NCRDC3693',
+            name:    dcMap['dc_name']       || 'Zenowethu Debt Management',
+            address: dcMap['dc_address']    || 'Suite 2 Second floor Central House 17 Central Road, Mabopane, 0199, South Africa',
+            phone:   dcMap['dc_phone']      || '+27817477616 / +27813109585',
+            email:   dcMap['dc_email']      || 'debtreview@zenowethu.co.za',
         };
 
         const client = caseRecord.client;
@@ -494,17 +496,21 @@ export async function POST(request: Request, { params }: RouteContext) {
         }
 
         // ── Save to disk ──────────────────────────────────────────────────────
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'debt-review', id);
-        if (!existsSync(uploadDir)) {
-            await mkdir(uploadDir, { recursive: true });
+        const publicUploadDir = path.join(process.cwd(), 'public', 'uploads', 'debt-review', id);
+        const storageUploadDir = path.join(process.cwd(), 'storage', 'uploads', 'debt-review', id);
+        if (!existsSync(publicUploadDir)) {
+            await mkdir(publicUploadDir, { recursive: true });
+        }
+        if (!existsSync(storageUploadDir)) {
+            await mkdir(storageUploadDir, { recursive: true });
         }
 
         const dateStr  = now.toISOString().slice(0, 10);
         const baseName = DOC_FILENAMES[documentType];
         const fileName = `${baseName}_${caseRecord.fileNumber}_${dateStr}.pdf`;
-        const filePath = path.join(uploadDir, fileName);
 
-        await writeFile(filePath, pdfBytes);
+        await writeFile(path.join(publicUploadDir, fileName), pdfBytes);
+        await writeFile(path.join(storageUploadDir, fileName), pdfBytes).catch(() => null);
         const publicUrl = `/uploads/debt-review/${id}/${fileName}`;
 
         // ── Upsert DebtReviewDocument record ──────────────────────────────────
@@ -526,9 +532,92 @@ export async function POST(request: Request, { params }: RouteContext) {
                 },
               });
 
-        logger.info(`Generated ${documentType} for case ${id} by user ${session.user.id}: ${publicUrl}`);
+        // ── Sync to Consumer Profile Vault (Document table - Quote-style Upload) ──
+        // Save clearance PDF to vault with isAdminOnly: false so all staff can view and manage it.
+        const isB2B = caseRecord.acquisitionType === 'B2B';
+        const existingVaultDoc = await prisma.document.findFirst({
+            where: { caseId: id, type: documentType },
+        });
 
-        return NextResponse.json({ success: true, document: docRecord, url: publicUrl }, { status: 201 });
+        if (existingVaultDoc) {
+            await prisma.document.update({
+                where: { id: existingVaultDoc.id },
+                data: {
+                    fileName,
+                    fileUrl: publicUrl,
+                    fileSize: pdfBytes.length,
+                    uploadedAt: now,
+                    isAdminOnly: false,
+                },
+            });
+        } else {
+            await prisma.document.create({
+                data: {
+                    caseId: id,
+                    type: documentType,
+                    fileName,
+                    fileUrl: publicUrl,
+                    fileSize: pdfBytes.length,
+                    mimeType: 'application/pdf',
+                    uploadedById: session.user.id,
+                    isAdminOnly: false,
+                },
+            });
+        }
+
+        // ── Sync to Crediva Consumer Profile (CredoDocument table) ────────────────
+        // For B2C consumers, also sync to CredoDocument so the clearance certificate
+        // loads on the consumer's profile in the Crediva portal.
+        if (!isB2B && caseRecord.clientId) {
+            try {
+                const provision = await provisionConsumerForClient(caseRecord.clientId).catch(() => null);
+                const consumerId = provision?.consumerId || (await prisma.case.findUnique({
+                    where: { id },
+                    select: { client: { select: { consumerAccount: { select: { id: true } } } } },
+                }))?.client?.consumerAccount?.id;
+
+                if (consumerId) {
+                    const storagePath = path.join(publicUploadDir, fileName);
+                    const existingCredoDoc = await prisma.credoDocument.findFirst({
+                        where: { consumerId, originalName: fileName },
+                    });
+
+                    if (existingCredoDoc) {
+                        await prisma.credoDocument.update({
+                            where: { id: existingCredoDoc.id },
+                            data: {
+                                fileName,
+                                originalName: fileName,
+                                mimeType: 'application/pdf',
+                                size: pdfBytes.length,
+                                storagePath,
+                                category: 'CLEARANCE',
+                                createdAt: now,
+                            },
+                        });
+                    } else {
+                        await prisma.credoDocument.create({
+                            data: {
+                                consumerId,
+                                fileName,
+                                originalName: fileName,
+                                mimeType: 'application/pdf',
+                                size: pdfBytes.length,
+                                storagePath,
+                                category: 'CLEARANCE',
+                                createdAt: now,
+                            },
+                        });
+                    }
+                }
+            } catch (credoErr) {
+                logger.warn('Failed to sync clearance to Crediva Consumer Profile:', credoErr);
+            }
+        }
+
+        logger.info(`Generated ${documentType} for case ${id} by user ${session.user.id}: ${publicUrl} (isB2B=${isB2B})`);
+
+        return NextResponse.json({ success: true, document: docRecord, url: publicUrl, isB2B }, { status: 201 });
     } catch (error) {
         logger.error('Error generating debt review document:', error);
         return NextResponse.json({ error: 'Failed to generate document' }, { status: 500 });

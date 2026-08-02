@@ -99,10 +99,37 @@ describe('GET /api/admin/referrers/[id]/clients', () => {
         expect(res.status).toBe(401);
     });
 
-    it('returns 403 for a plain member role', async () => {
+    it('returns 403 for a non-member staff user', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        vi.mocked(prisma.projectMember.findMany).mockResolvedValueOnce([] as never);
         const res = await GET(makeReq(), routeParams);
         expect(res.status).toBe(403);
+    });
+
+    it('allows a staff user who is a member of the sub-project and sanitizes finance metrics', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        vi.mocked(prisma.projectMember.findMany).mockResolvedValueOnce([{ projectId: 'proj-1' }] as never);
+        vi.mocked(prisma.project.findMany).mockResolvedValueOnce([{ id: 'proj-1', parentId: null }] as never);
+        vi.mocked(prisma.case.findMany).mockResolvedValueOnce(sampleCases as never);
+
+        const res = await GET(makeReq(), routeParams);
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(json.canViewFinancials).toBe(false);
+        expect(json.summary.totalClients).toBe(2);
+        expect(json.summary.totalCases).toBe(3);
+        // Financial summary fields are sanitized
+        expect(json.summary.totalQuoted).toBe(0);
+        expect(json.summary.totalCollected).toBe(0);
+        expect(json.summary.totalOwed).toBe(0);
+        expect(json.summary.totalPaid).toBe(0);
+        // Client financials are sanitized
+        expect(json.clients[0].financials.quoteTotal).toBeNull();
+        expect(json.clients[0].financials.totalPaid).toBe(0);
+        expect(json.clients[0].financials.balance).toBeNull();
+        expect(json.clients[0].commission.commissionAmount).toBeNull();
     });
 
     it('returns 404 when referrer not found', async () => {
@@ -134,6 +161,7 @@ describe('GET /api/admin/referrers/[id]/clients', () => {
 
         const json = await res.json();
 
+        expect(json.canViewFinancials).toBe(true);
         expect(json.referrer.id).toBe('ref-1');
         expect(json.clients).toHaveLength(3);
 
@@ -207,6 +235,7 @@ describe('GET /api/admin/referrers/[id]/clients', () => {
         const res = await GET(makeReq(), routeParams);
         expect(res.status).toBe(200);
         const json = await res.json();
+        expect(json.canViewFinancials).toBe(true);
         expect(json.summary.totalClients).toBe(0);
         expect(json.summary.conversionRate).toBe(0);
     });

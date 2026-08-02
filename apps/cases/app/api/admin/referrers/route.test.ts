@@ -101,10 +101,22 @@ describe('GET /api/admin/referrers', () => {
         expect(res.status).toBe(401);
     });
 
-    it('returns 403 for non-manager role', async () => {
+    it('allows non-manager staff role with sanitized financial metrics', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.projectMember.findMany).mockResolvedValueOnce([{ projectId: 'proj-1' }] as never);
+        vi.mocked(prisma.project.findMany).mockResolvedValueOnce([{ id: 'proj-1', parentId: null }] as never);
+        vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([sampleReferrer] as never);
+        vi.mocked(prisma.referrer.count).mockResolvedValueOnce(1).mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma.referrerCommission.groupBy as any).mockResolvedValue([]);
         const res = await GET(makeReq('http://localhost/api/admin/referrers'));
-        expect(res.status).toBe(403);
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(json.canViewFinancials).toBe(false);
+        expect(json.referrers[0].outstandingCommission).toBe(0);
+        expect(json.referrers[0].paidCommission).toBe(0);
+        expect(json.meta.totalOutstanding).toBe(0);
+        expect(json.meta.totalPaid).toBe(0);
     });
 
     it('returns paginated list for admin', async () => {

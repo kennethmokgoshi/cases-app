@@ -44,13 +44,14 @@ interface OpenAccountRow {
 }
 
 interface DebtReviewData {
-    caseId:        string;
-    fileNumber:    string;
-    documents:     DebtReviewDoc[];
-    docsByType:    Record<string, DebtReviewDoc>;
-    documentTypes: string[];
-    letterheadUrl: string | null;
-    missingEmails: MissingEmail[];
+    caseId:          string;
+    fileNumber:      string;
+    acquisitionType?: string;
+    documents:       DebtReviewDoc[];
+    docsByType:      Record<string, DebtReviewDoc>;
+    documentTypes:   string[];
+    letterheadUrl:   string | null;
+    missingEmails:   MissingEmail[];
 }
 
 interface AffordabilityCheck {
@@ -87,6 +88,7 @@ interface AffordabilityCheck {
 interface DebtReviewTabProps {
     caseId: string;
     canApprove: boolean; // isAdmin || isExecutive || isSeniorManager || isManager
+    onDocumentGenerated?: () => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -169,7 +171,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
+export function DebtReviewTab({ caseId, canApprove, onDocumentGenerated }: DebtReviewTabProps) {
     const [data,    setData]    = useState<DebtReviewData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error,   setError]   = useState<string | null>(null);
@@ -193,6 +195,7 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
     const [generating,     setGenerating]     = useState<Record<string, boolean>>({});
     const [approving,      setApproving]      = useState<Record<string, boolean>>({});
     const [sendingConsumer,setSendingConsumer] = useState<Record<string, boolean>>({});
+    const [sendingReferrer,setSendingReferrer] = useState<Record<string, boolean>>({});
     const [sendingCreditors, setSendingCreditors] = useState(false);
 
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -791,13 +794,36 @@ export function DebtReviewTab({ caseId, canApprove }: DebtReviewTabProps) {
                                     </button>
 
                                     {/* Send to Consumer */}
-                                    {doc?.fileUrl && doc.status !== 'SENT_TO_CREDITORS' && (
+                                    {doc?.fileUrl && doc.status !== 'SENT_TO_CREDITORS' && (() => {
+                                        const isClearance = docType === 'CERTIFIED_FORM_19' || docType === 'FORM_17_W';
+                                        const isB2B = data?.acquisitionType === 'B2B';
+                                        const blockB2BMail = isClearance && isB2B;
+
+                                        return (
+                                            <button
+                                                onClick={() => !blockB2BMail && handleSendConsumer(doc)}
+                                                disabled={isSending || blockB2BMail}
+                                                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                                                    blockB2BMail
+                                                        ? 'bg-zinc-800 text-zinc-500 border-zinc-700 cursor-not-allowed'
+                                                        : 'bg-blue-600/20 text-blue-300 hover:bg-blue-600/30 border-blue-600/30'
+                                                }`}
+                                                title={blockB2BMail ? 'Mailing clearance certificates disabled for B2B clients' : 'Email document to consumer'}
+                                            >
+                                                {isSending ? 'Sending…' : blockB2BMail ? 'B2B (No Email)' : 'Email Consumer'}
+                                            </button>
+                                        );
+                                    })()}
+
+                                    {/* Send to Referrer */}
+                                    {doc?.fileUrl && (
                                         <button
-                                            onClick={() => handleSendConsumer(doc)}
-                                            disabled={isSending}
-                                            className="text-xs px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-300 hover:bg-blue-600/30 border border-blue-600/30 transition-colors disabled:opacity-50"
+                                            onClick={() => handleSendReferrer(doc)}
+                                            disabled={sendingReferrer[doc.id]}
+                                            className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-600/30 transition-colors disabled:opacity-50"
+                                            title="Email document to registered Referrer"
                                         >
-                                            {isSending ? 'Sending…' : 'Email Consumer'}
+                                            {sendingReferrer[doc.id] ? 'Sending…' : 'Email Referrer'}
                                         </button>
                                     )}
 

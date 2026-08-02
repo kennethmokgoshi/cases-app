@@ -49,12 +49,22 @@ export async function POST(_req: Request, { params }: RouteContext) {
             where: { id: caseId },
             select: {
                 fileNumber: true,
+                acquisitionType: true,
                 client: { select: { firstName: true, lastName: true, email: true } },
             },
         });
 
         if (!caseRecord) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+        }
+
+        // B2B clients must NOT be emailed clearance certificates directly
+        const isClearanceDoc = doc.documentType === 'CERTIFIED_FORM_19' || doc.documentType === 'FORM_17_W';
+        if (isClearanceDoc && caseRecord.acquisitionType === 'B2B') {
+            return NextResponse.json(
+                { error: 'Clearance certificates cannot be emailed directly to B2B clients' },
+                { status: 403 }
+            );
         }
 
         const consumerEmail = caseRecord.client.email;
