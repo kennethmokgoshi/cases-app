@@ -125,16 +125,21 @@ export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'head
                                             </div>
                                             <div className="border border-zinc-800 rounded-xl overflow-hidden text-xs divide-y divide-zinc-800">
                                                 {results.map(r => (
-                                                    <div key={r.documentId} className="p-2.5 flex items-center justify-between">
-                                                        <span className="text-zinc-300">{r.fileName}</span>
-                                                        {r.success ? (
-                                                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px]">
-                                                                ✓ {r.accountsFound ?? 0} account(s) found
-                                                            </span>
-                                                        ) : (
-                                                            <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px]" title={r.error}>
-                                                                ✗ Failed
-                                                            </span>
+                                                    <div key={r.documentId} className="p-2.5">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-zinc-300">{r.fileName}</span>
+                                                            {r.success ? (
+                                                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px]">
+                                                                    ✓ {r.accountsFound ?? 0} account(s) found
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px]">
+                                                                    ✗ Failed
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {!r.success && r.error && (
+                                                            <p className="mt-1 text-[10px] text-red-300/80 break-all">{r.error}</p>
                                                         )}
                                                     </div>
                                                 ))}
