@@ -85,7 +85,13 @@ export async function POST(
             try {
                 const filePath = resolveFilePath(doc.fileUrl);
                 if (!existsSync(filePath)) {
-                    results.push({ documentId: doc.id, fileName: doc.fileName, success: false, error: 'File not found on disk' });
+                    logger.error(`Credit report file not found — fileUrl=${doc.fileUrl} resolvedPath=${filePath} cwd=${process.cwd()}`);
+                    results.push({
+                        documentId: doc.id,
+                        fileName: doc.fileName,
+                        success: false,
+                        error: `File not found on disk (looked at: ${filePath})`,
+                    });
                     continue;
                 }
 
