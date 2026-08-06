@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { accountsMatch, inferAccountType, mapExtractedAccountToCandidate, parseAiDate } from './credit-account-sync';
+import {
+    accountsMatch,
+    inferAccountType,
+    mapExtractedAccountToCandidate,
+    mapExtractedAdverseListingToCandidate,
+    parseAiDate,
+} from './credit-account-sync';
 
 describe('inferAccountType', () => {
     it('detects a mortgage/bond creditor', () => {
@@ -94,5 +100,64 @@ describe('mapExtractedAccountToCandidate', () => {
             []
         );
         expect(candidate.status).toBe('ACTIVE');
+    });
+});
+
+describe('mapExtractedAdverseListingToCandidate', () => {
+    it('maps a written-off adverse listing into a candidate using openBalance', () => {
+        const candidate = mapExtractedAdverseListingToCandidate(
+            {
+                creditor: 'LEWIS STORES',
+                accountNumber: '0903150',
+                adverseCode: 'Written Off',
+                lastPaymentDate: '2024-11-07',
+                openBalance: 33330,
+                overdueBalance: 33330,
+                status: 'WRITTEN OFF',
+            },
+            { id: 'doc-1', type: 'CREDIT_REPORT_EXPERIAN' },
+            []
+        );
+
+        expect(candidate.matchStatus).toBe('NEW');
+        expect(candidate.creditorName).toBe('LEWIS STORES');
+        expect(candidate.outstandingBalance).toBe(33330);
+        expect(candidate.status).toBe('WRITTEN OFF');
+        expect(candidate.accountType).toBe('Retail');
+    });
+
+    it('falls back to overdueBalance when openBalance is missing', () => {
+        const candidate = mapExtractedAdverseListingToCandidate(
+            { creditor: 'African Bank', overdueBalance: 1200 },
+            { id: 'doc-1', type: 'CREDIT_REPORT' },
+            []
+        );
+        expect(candidate.outstandingBalance).toBe(1200);
+    });
+
+    it('falls back to adverseCode when status is missing, and to a generic label when both are missing', () => {
+        const withCode = mapExtractedAdverseListingToCandidate(
+            { creditor: 'X', adverseCode: 'Handed Over' },
+            { id: 'doc-1', type: 'CREDIT_REPORT' },
+            []
+        );
+        expect(withCode.status).toBe('Handed Over');
+
+        const withNeither = mapExtractedAdverseListingToCandidate(
+            { creditor: 'X' },
+            { id: 'doc-1', type: 'CREDIT_REPORT' },
+            []
+        );
+        expect(withNeither.status).toBe('ADVERSE LISTING');
+    });
+
+    it('flags a DUPLICATE when it matches an existing CreditAccount by account number', () => {
+        const candidate = mapExtractedAdverseListingToCandidate(
+            { creditor: 'LEWIS STORES', accountNumber: '0903150', openBalance: 33330, status: 'WRITTEN OFF' },
+            { id: 'doc-1', type: 'CREDIT_REPORT' },
+            [{ id: 'existing-1', creditorName: 'LEWIS STORES', accountNumber: '0903150' }]
+        );
+        expect(candidate.matchStatus).toBe('DUPLICATE');
+        expect(candidate.existingAccountId).toBe('existing-1');
     });
 });

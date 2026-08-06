@@ -27,6 +27,9 @@ export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'head
     const runAnalysis = async (force: boolean) => {
         setRunning(true);
         setError(null);
+        setRan(false);
+        setResults([]);
+        setSummary(null);
         try {
             const res = await fetch(`/api/cases/${caseId}/credit-reports/analyze`, {
                 method: 'POST',

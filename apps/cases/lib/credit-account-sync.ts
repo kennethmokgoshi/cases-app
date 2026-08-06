@@ -121,3 +121,55 @@ export function mapExtractedAccountToCandidate(
         existingAccountId: existing ? existing.id : null,
     };
 }
+
+/**
+ * Written-off / handed-over / judgment accounts live in a separate `adverseListings[]`
+ * array in the AI extraction, not `accounts[]` — a credit report can have real, currently
+ * owed debt with an empty `accounts` array and everything sitting here instead.
+ */
+export interface ExtractedAdverseListingRaw {
+    creditor?: string;
+    accountNumber?: string;
+    adverseCode?: string;
+    adverseDate?: string;
+    lastPaymentDate?: string;
+    openBalance?: number;
+    overdueBalance?: number;
+    monthsInArrears?: number;
+    paymentHistory?: string;
+    status?: string;
+}
+
+/** Maps one AI-extracted adverse listing row onto a staff-reviewable CreditAccount candidate. */
+export function mapExtractedAdverseListingToCandidate(
+    raw: ExtractedAdverseListingRaw,
+    source: { id: string; type: string },
+    existingAccounts: { id: string; creditorName: string; accountNumber: string | null }[]
+): CreditAccountCandidate {
+    const creditorName = (raw.creditor || 'Unknown Creditor').trim() || 'Unknown Creditor';
+    const rawAccountNumber = (raw.accountNumber || '').trim();
+    const accountNumber = rawAccountNumber && rawAccountNumber.toUpperCase() !== 'NA' ? rawAccountNumber : null;
+    const lastPaymentDate = parseAiDate(raw.lastPaymentDate);
+
+    const existing = existingAccounts.find(e => accountsMatch({ creditorName, accountNumber }, e));
+    const status = (raw.status || raw.adverseCode || '').trim() || 'ADVERSE LISTING';
+    const balance = raw.openBalance ?? raw.overdueBalance;
+
+    return {
+        sourceDocumentId: source.id,
+        sourceDocumentType: source.type,
+        creditorName,
+        accountNumber,
+        accountType: inferAccountType(creditorName),
+        outstandingBalance: Number(balance) || 0,
+        monthlyInstalment: null,
+        termMonths: null,
+        accountOpenDate: null,
+        lastPaymentDate: lastPaymentDate ? lastPaymentDate.toISOString() : null,
+        status,
+        hasInsurance: false,
+        premiumAmount: null,
+        matchStatus: existing ? 'DUPLICATE' : 'NEW',
+        existingAccountId: existing ? existing.id : null,
+    };
+}

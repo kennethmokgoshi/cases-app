@@ -6,6 +6,7 @@ import {
     CREDIT_REPORT_DOC_TYPES,
     accountsMatch,
     mapExtractedAccountToCandidate,
+    mapExtractedAdverseListingToCandidate,
 } from '@/lib/credit-account-sync';
 
 const logger = createLogger('api/cases/[id]/credit-accounts/sync');
@@ -56,6 +57,17 @@ export async function GET(
             const accounts = Array.isArray(parsed?.accounts) ? parsed.accounts : [];
             for (const raw of accounts) {
                 const candidate = mapExtractedAccountToCandidate(raw, { id: doc.id, type: doc.type }, existingAccounts);
+                const dupWithinBatch = seenWithinBatch.some(s => accountsMatch(s, candidate));
+                if (dupWithinBatch) continue;
+                seenWithinBatch.push({ creditorName: candidate.creditorName, accountNumber: candidate.accountNumber });
+                candidates.push(candidate);
+            }
+
+            // Written-off/handed-over/judgment accounts live in a separate array — a report
+            // can have real, currently-owed debt here with an empty `accounts` array.
+            const adverseListings = Array.isArray(parsed?.adverseListings) ? parsed.adverseListings : [];
+            for (const raw of adverseListings) {
+                const candidate = mapExtractedAdverseListingToCandidate(raw, { id: doc.id, type: doc.type }, existingAccounts);
                 const dupWithinBatch = seenWithinBatch.some(s => accountsMatch(s, candidate));
                 if (dupWithinBatch) continue;
                 seenWithinBatch.push({ creditorName: candidate.creditorName, accountNumber: candidate.accountNumber });

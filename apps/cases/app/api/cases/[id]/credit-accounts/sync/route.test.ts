@@ -90,6 +90,46 @@ describe('GET /api/cases/[id]/credit-accounts/sync', () => {
         expect(edgars.matchStatus).toBe('DUPLICATE');
         expect(edgars.existingAccountId).toBe('existing-1');
     });
+
+    it('includes adverseListings candidates even when accounts is empty — this is where written-off debt often lives', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            id: 'c1',
+            documents: [
+                {
+                    id: 'doc-1',
+                    type: 'CREDIT_REPORT_EXPERIAN',
+                    fileName: 'report.pdf',
+                    extractedData: JSON.stringify({
+                        accounts: [],
+                        adverseListings: [
+                            {
+                                creditor: 'LEWIS STORES',
+                                accountNumber: '0903150',
+                                adverseCode: 'Written Off',
+                                openBalance: 33330,
+                                overdueBalance: 33330,
+                                lastPaymentDate: '2024-11-07',
+                                status: 'WRITTEN OFF',
+                            },
+                        ],
+                    }),
+                },
+            ],
+            creditAccounts: [],
+        } as never);
+
+        const res = await GET(new Request('http://localhost/api/cases/c1/credit-accounts/sync') as never, {
+            params: Promise.resolve({ id: 'c1' }),
+        });
+        const data = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(data.candidates).toHaveLength(1);
+        expect(data.candidates[0].creditorName).toBe('LEWIS STORES');
+        expect(data.candidates[0].outstandingBalance).toBe(33330);
+        expect(data.candidates[0].status).toBe('WRITTEN OFF');
+        expect(data.candidates[0].matchStatus).toBe('NEW');
+    });
 });
 
 describe('POST /api/cases/[id]/credit-accounts/sync', () => {
