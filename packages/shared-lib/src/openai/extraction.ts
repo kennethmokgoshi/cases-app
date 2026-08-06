@@ -36,7 +36,9 @@ export async function analyzeDocument(
         onProgress?.(`📄 Extracting text from ${documentType}...`);
         let extractedText = '';
         try {
-            extractedText = await extractTextFromPdf(base64Pdf, 10, password);
+            // 0 = no page limit (see extractTextFromPdf) — long bureau reports (15+ pages)
+            // were silently losing account tables past page 10; accuracy over API cost.
+            extractedText = await extractTextFromPdf(base64Pdf, 0, password);
         } catch (e) {
             logger.warn({ err: e }, '⚠️ Text extraction failed');
         }
@@ -45,7 +47,8 @@ export async function analyzeDocument(
 
         try {
             onProgress?.(`🖼️ Converting ${documentType} pages to images for OCR...`);
-            const images = await convertPdfToImages(base64Pdf, 6, undefined, password);
+            // 0 = no page limit — same reasoning as the text extraction above.
+            const images = await convertPdfToImages(base64Pdf, 0, undefined, password);
             images.forEach((imgBase64, index) => {
                 contentParts.push({ type: 'text', text: `[PAGE SCAN] Page: ${index + 1}` });
                 contentParts.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imgBase64}`, detail: 'high' } });
@@ -55,7 +58,10 @@ export async function analyzeDocument(
         }
 
         if (extractedText) {
-            contentParts.push({ type: 'text', text: `[EXTRACTED TEXT CONTENT]\n\n${extractedText.substring(0, 20000)}` });
+            // Was capped at 20,000 chars, silently truncating long reports before the AI
+            // ever saw the rest. 200,000 is a safety ceiling against pathological inputs,
+            // not a practical limit for any real credit report.
+            contentParts.push({ type: 'text', text: `[EXTRACTED TEXT CONTENT]\n\n${extractedText.substring(0, 200000)}` });
         }
 
         const { client, model } = await getAiClientForTask('document_analysis');
