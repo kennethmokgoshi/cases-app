@@ -23,6 +23,7 @@ import { AIPlanTab } from '@zenowethu/ui';
 import { AIChatTab } from '@zenowethu/ui';
 import { DebtReviewTab } from './DebtReviewTab';
 import { CourtDocsTab } from './CourtDocsTab';
+import { CreditReportInsightsTab } from './CreditReportInsightsTab';
 import { WorkflowTimeline } from './WorkflowTimeline';
 import { SavingsAuditCard } from './SavingsAuditCard';
 import { AssistClientConsentModal } from './AssistClientConsentModal';
@@ -501,7 +502,7 @@ export default function CaseDetailPage() {
     const [isMandateModalOpen, setIsMandateModalOpen] = useState(false);
     const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
 
-    const VALID_TABS = ['ACTIVITY', 'DOCUMENTS', 'COMMUNICATION', 'AI_PLAN', 'AI_ASSISTANT', 'DEBT_REVIEW', 'COURT_DOCS', 'WORKFLOW'] as const;
+    const VALID_TABS = ['ACTIVITY', 'DOCUMENTS', 'CREDIT_REPORT', 'COMMUNICATION', 'AI_PLAN', 'AI_ASSISTANT', 'DEBT_REVIEW', 'COURT_DOCS', 'WORKFLOW'] as const;
     type DetailTab = typeof VALID_TABS[number];
     const tabFromUrl = searchParams.get('tab')?.toUpperCase() as DetailTab | null;
     const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>(
@@ -5087,6 +5088,15 @@ export default function CaseDetailPage() {
                                 <span>📁</span> Documents
                             </button>
                             <button
+                                onClick={() => setActiveDetailTab('CREDIT_REPORT')}
+                                className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'CREDIT_REPORT'
+                                    ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+                                    }`}
+                            >
+                                <span>📊</span> Credit Report
+                            </button>
+                            <button
                                 onClick={() => setActiveDetailTab('COMMUNICATION')}
                                 className={`flex-1 min-w-[140px] md:flex-initial px-4 py-2.5 text-xs md:text-sm font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 rounded-xl whitespace-nowrap ${activeDetailTab === 'COMMUNICATION'
                                     ? 'text-zeno-cyan bg-zeno-cyan/10 border border-zeno-cyan/20 shadow-sm'
@@ -5156,6 +5166,11 @@ export default function CaseDetailPage() {
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} />
                                     <ConsumerPortalPanel caseId={caseData.id} />
+                                </div>
+                            )}
+                            {activeDetailTab === 'CREDIT_REPORT' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <CreditReportInsightsTab caseId={caseData.id} />
                                 </div>
                             )}
                             {activeDetailTab === 'COMMUNICATION' && (
