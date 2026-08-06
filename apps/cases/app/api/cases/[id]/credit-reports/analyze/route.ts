@@ -102,6 +102,27 @@ export async function POST(
                 const result = await analyzeDocument(base64File, promptType, doc.mimeType);
                 const analysis = result.data;
 
+                // A single CREDIT_REPORT pass is known to be unreliable for the financial
+                // totals in the "Accounts Summary" table — a dedicated summary-only prompt
+                // exists specifically for this and is more accurate; use it to correct
+                // totalDebt/totalInstallment without discarding the detailed pass's accounts.
+                if (promptType === 'CREDIT_REPORT') {
+                    try {
+                        // 'CREDIT_REPORT_SUMMARY' is a valid PROMPTS key (packages/shared-lib/src/openai/prompts.ts)
+                        // but isn't part of the exported DocType union — same cast used at the only other call site.
+                        const summaryResult = await analyzeDocument(base64File, 'CREDIT_REPORT_SUMMARY' as unknown as DocType, doc.mimeType);
+                        if (summaryResult.data) {
+                            analysis.summary = {
+                                ...(analysis.summary || {}),
+                                totalDebt: summaryResult.data.totalDebt,
+                                totalInstallment: summaryResult.data.totalInstallment,
+                            };
+                        }
+                    } catch (err) {
+                        logger.warn(`Summary-totals pass failed for document ${doc.id}, keeping detailed-pass totals`, err as Error);
+                    }
+                }
+
                 await prisma.document.update({
                     where: { id: doc.id },
                     data: {

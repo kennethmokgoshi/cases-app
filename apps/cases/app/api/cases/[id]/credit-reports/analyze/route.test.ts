@@ -76,7 +76,9 @@ describe('POST /api/cases/[id]/credit-reports/analyze', () => {
                 { id: 'd2', type: 'CREDIT_REPORT_XDS', fileName: 'xds.pdf', extractedData: '{"accounts":[]}', fileUrl: '/uploads/xds.pdf', mimeType: 'application/pdf' },
             ],
         } as never);
-        vi.mocked(analyzeDocument).mockResolvedValue({ data: { accounts: [{ creditor: 'African Bank' }] } } as never);
+        vi.mocked(analyzeDocument)
+            .mockResolvedValueOnce({ data: { accounts: [{ creditor: 'African Bank' }] } } as never) // detailed pass
+            .mockResolvedValueOnce({ data: { totalDebt: 8467, totalInstallment: 450 } } as never); // summary-totals pass
         vi.mocked(prisma.document.update).mockResolvedValue({} as never);
 
         const res = await POST(makeRequest({}), { params: Promise.resolve({ id: 'c1' }) });
@@ -85,11 +87,60 @@ describe('POST /api/cases/[id]/credit-reports/analyze', () => {
         expect(res.status).toBe(200);
         expect(data.analyzed).toBe(1);
         expect(data.skipped).toBe(1);
-        expect(analyzeDocument).toHaveBeenCalledTimes(1);
-        expect(analyzeDocument).toHaveBeenCalledWith(expect.any(String), 'CREDIT_REPORT', 'application/pdf');
+        expect(analyzeDocument).toHaveBeenCalledTimes(2);
+        expect(analyzeDocument).toHaveBeenNthCalledWith(1, expect.any(String), 'CREDIT_REPORT', 'application/pdf');
+        expect(analyzeDocument).toHaveBeenNthCalledWith(2, expect.any(String), 'CREDIT_REPORT_SUMMARY', 'application/pdf');
         expect(prisma.document.update).toHaveBeenCalledWith({
             where: { id: 'd1' },
-            data: { extractedData: JSON.stringify({ accounts: [{ creditor: 'African Bank' }] }), analyzedAt: expect.any(Date) },
+            data: {
+                extractedData: JSON.stringify({
+                    accounts: [{ creditor: 'African Bank' }],
+                    summary: { totalDebt: 8467, totalInstallment: 450 },
+                }),
+                analyzedAt: expect.any(Date),
+            },
+        });
+    });
+
+    it('does not run the summary-totals pass for a non-major-bureau report type', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            id: 'c1',
+            documents: [
+                { id: 'd1', type: 'CLEAR_SCORE', fileName: 'clearscore.pdf', extractedData: null, fileUrl: '/uploads/clearscore.pdf', mimeType: 'application/pdf' },
+            ],
+        } as never);
+        vi.mocked(analyzeDocument).mockResolvedValue({ data: { accounts: [] } } as never);
+        vi.mocked(prisma.document.update).mockResolvedValue({} as never);
+
+        const res = await POST(makeRequest({}), { params: Promise.resolve({ id: 'c1' }) });
+        expect(res.status).toBe(200);
+        expect(analyzeDocument).toHaveBeenCalledTimes(1);
+        expect(analyzeDocument).toHaveBeenCalledWith(expect.any(String), 'CREDIT_REPORT_OTHER', 'application/pdf');
+    });
+
+    it('keeps the detailed-pass totals when the summary-totals pass fails', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            id: 'c1',
+            documents: [
+                { id: 'd1', type: 'CREDIT_REPORT_EXPERIAN', fileName: 'experian.pdf', extractedData: null, fileUrl: '/uploads/experian.pdf', mimeType: 'application/pdf' },
+            ],
+        } as never);
+        vi.mocked(analyzeDocument)
+            .mockResolvedValueOnce({ data: { accounts: [], summary: { totalDebt: 100, totalInstallment: 10 } } } as never)
+            .mockRejectedValueOnce(new Error('summary pass timed out'));
+        vi.mocked(prisma.document.update).mockResolvedValue({} as never);
+
+        const res = await POST(makeRequest({}), { params: Promise.resolve({ id: 'c1' }) });
+        const data = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(data.analyzed).toBe(1);
+        expect(prisma.document.update).toHaveBeenCalledWith({
+            where: { id: 'd1' },
+            data: {
+                extractedData: JSON.stringify({ accounts: [], summary: { totalDebt: 100, totalInstallment: 10 } }),
+                analyzedAt: expect.any(Date),
+            },
         });
     });
 
@@ -120,8 +171,9 @@ describe('POST /api/cases/[id]/credit-reports/analyze', () => {
             ],
         } as never);
         vi.mocked(analyzeDocument)
-            .mockRejectedValueOnce(new Error('AI provider timeout'))
-            .mockResolvedValueOnce({ data: { accounts: [] } } as never);
+            .mockRejectedValueOnce(new Error('AI provider timeout')) // d1 detailed pass fails
+            .mockResolvedValueOnce({ data: { accounts: [] } } as never) // d2 detailed pass succeeds
+            .mockResolvedValueOnce({ data: {} } as never); // d2 summary-totals pass
         vi.mocked(prisma.document.update).mockResolvedValue({} as never);
 
         const res = await POST(makeRequest({}), { params: Promise.resolve({ id: 'c1' }) });
