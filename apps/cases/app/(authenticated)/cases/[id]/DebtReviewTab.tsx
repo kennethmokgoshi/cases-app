@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { GenerateClearanceButton } from '@/components/GenerateClearanceButton';
+import { CreditorLinkPicker } from '@/components/CreditorLinkPicker';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,9 +26,10 @@ interface DebtReviewDoc {
 }
 
 interface MissingEmail {
-    accountId:    string;
-    creditorName: string;
-    providerName: string | null;
+    accountId:        string;
+    creditorName:     string;
+    creditProviderId: string | null;
+    providerName:     string | null;
 }
 
 interface OpenAccountRow {
@@ -728,6 +730,14 @@ export function DebtReviewTab({ caseId, canApprove, onDocumentGenerated }: DebtR
                                 {m.creditorName}
                                 {m.providerName && m.providerName !== m.creditorName && (
                                     <span className="text-amber-400/60">({m.providerName})</span>
+                                )}
+                                {!m.creditProviderId && (
+                                    <CreditorLinkPicker
+                                        caseId={caseId}
+                                        accountId={m.accountId}
+                                        creditorName={m.creditorName}
+                                        onLinked={fetchData}
+                                    />
                                 )}
                             </li>
                         ))}

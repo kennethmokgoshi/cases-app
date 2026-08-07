@@ -23,6 +23,14 @@ vi.mock('@zenowethu/database', () => ({
             create: vi.fn(),
             update: vi.fn(),
         },
+        creditAccount: {
+            update: vi.fn(),
+        },
+        creditProvider: {
+            findFirst: vi.fn(),
+            findMany: vi.fn(),
+            findUnique: vi.fn(),
+        },
     },
 }));
 
@@ -49,6 +57,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { generateForm19 } from '@/lib/form19-pdf';
 import { generateForm172C } from '@/lib/form17-2c-pdf';
 import { generateSection7172Statement } from '@/lib/section71-72-statement-pdf';
+import { generateForm17W } from '@/lib/form17w-pdf';
 
 import { POST } from './route';
 
@@ -139,6 +148,10 @@ beforeEach(() => {
     vi.mocked(generateForm19).mockResolvedValue(new Uint8Array([37, 80, 68, 70]));
     vi.mocked(generateForm172C).mockResolvedValue(new Uint8Array([37, 80, 68, 70]));
     vi.mocked(generateSection7172Statement).mockResolvedValue(new Uint8Array([37, 80, 68, 70]));
+    vi.mocked(generateForm17W).mockResolvedValue(new Uint8Array([37, 80, 68, 70]));
+    vi.mocked(prisma.creditProvider.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.creditProvider.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.creditAccount.update).mockResolvedValue({} as never);
 });
 
 describe('POST /api/cases/[id]/debt-review/generate D4 documents', () => {
@@ -220,5 +233,111 @@ describe('POST /api/cases/[id]/debt-review/generate D4 documents', () => {
                 mimeType: 'application/pdf',
             }),
         });
+    });
+
+    it('generates a Form 17.W withdrawal notice when targetStatus is B (as sent by /clearance/evaluate), selecting option A', async () => {
+        const res = await POST(req('FORM_17_W', { targetStatus: 'B' }), ctx('case-1'));
+
+        expect(res.status).toBe(201);
+        expect(generateForm17W).toHaveBeenCalledWith(expect.objectContaining({
+            fileNumber: 'ZW-0001',
+            firstName: 'Thabo',
+            lastName: 'Mokoena',
+            selectedOption: 'A',
+            // Both fixture accounts are excluded: the mortgage account and the closed account.
+            accounts: [],
+        }));
+        expect(prisma.debtReviewDocument.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ documentType: 'FORM_17_W' }),
+        }));
+    });
+
+    it('generates a Form 17.W withdrawal notice selecting option C when targetStatus is G (court rescission)', async () => {
+        const res = await POST(req('FORM_17_W', { targetStatus: 'G' }), ctx('case-1'));
+
+        expect(res.status).toBe(201);
+        expect(generateForm17W).toHaveBeenCalledWith(expect.objectContaining({ selectedOption: 'C' }));
+    });
+
+    it('auto-links and persists a matching CreditProvider for an outstanding account that has none yet', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            ...caseRecord,
+            creditAccounts: [
+                ...caseRecord.creditAccounts,
+                {
+                    id: 'acc-unlinked',
+                    creditorName: 'Nimble',
+                    accountNumber: 'N-1',
+                    accountType: 'PERSONAL_LOAN',
+                    outstandingBalance: 13164,
+                    monthlyInstalment: 13164,
+                    interestRate: null,
+                    isPrescribed: false,
+                    isIncluded: true,
+                    status: 'ACTIVE',
+                    creditProvider: null,
+                    documents: [],
+                },
+            ],
+        } as never);
+        vi.mocked(prisma.creditProvider.findFirst).mockResolvedValue({
+            id: 'cp-nimble', name: 'Nimble', email: 'collections@nimble.co.za', phone: '0861555000', address: 'PO Box 100, Cape Town',
+        } as never);
+
+        const res = await POST(req('FORM_17_W', { targetStatus: 'B' }), ctx('case-1'));
+
+        expect(res.status).toBe(201);
+        expect(prisma.creditAccount.update).toHaveBeenCalledWith({
+            where: { id: 'acc-unlinked' },
+            data: { creditProviderId: 'cp-nimble' },
+        });
+        expect(generateForm17W).toHaveBeenCalledWith(expect.objectContaining({
+            accounts: [expect.objectContaining({ creditorName: 'Nimble', email: 'collections@nimble.co.za' })],
+        }));
+    });
+
+    it('includes outstanding non-mortgage accounts with creditor contact details in the Form 17.W notice', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            ...caseRecord,
+            creditAccounts: [
+                ...caseRecord.creditAccounts,
+                {
+                    creditorName: 'Nimble Group',
+                    accountNumber: 'NG-1',
+                    accountType: 'PERSONAL_LOAN',
+                    outstandingBalance: 9816,
+                    monthlyInstalment: 450,
+                    interestRate: 22.5,
+                    isPrescribed: false,
+                    isIncluded: true,
+                    status: 'ACTIVE',
+                    creditProvider: { id: 'cp-1', email: 'collections@nimble.co.za', phone: '0861123456', address: '1 Nimble Street, Cape Town' },
+                    documents: [],
+                },
+            ],
+        } as never);
+
+        const res = await POST(req('FORM_17_W', { targetStatus: 'B' }), ctx('case-1'));
+
+        expect(res.status).toBe(201);
+        expect(generateForm17W).toHaveBeenCalledWith(expect.objectContaining({
+            accounts: [expect.objectContaining({
+                creditorName: 'Nimble Group',
+                address: '1 Nimble Street, Cape Town',
+                phone: '0861123456',
+                email: 'collections@nimble.co.za',
+                currentBalance: 9816,
+                instalment: 450,
+                interestRate: 22.5,
+            })],
+        }));
+    });
+
+    it('rejects a genuinely invalid targetStatus with 422', async () => {
+        const res = await POST(req('FORM_17_W', { targetStatus: 'NOT_A_STATUS' }), ctx('case-1'));
+
+        expect(res.status).toBe(422);
+        expect(generateForm17W).not.toHaveBeenCalled();
+        expect(prisma.debtReviewDocument.create).not.toHaveBeenCalled();
     });
 });

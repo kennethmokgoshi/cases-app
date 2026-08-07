@@ -9,6 +9,7 @@ vi.mock('@zenowethu/database', () => ({
     prisma: {
         case: { findUnique: vi.fn() },
         creditAccount: { create: vi.fn(), update: vi.fn() },
+        creditProvider: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
         workflowLog: { create: vi.fn() },
     },
 }));
@@ -139,6 +140,8 @@ describe('POST /api/cases/[id]/credit-accounts/sync', () => {
         vi.mocked(prisma.case.findUnique).mockResolvedValue({ id: 'c1', clientId: 'client-1' } as never);
         vi.mocked(prisma.creditAccount.create).mockResolvedValue({ id: 'new-1' } as never);
         vi.mocked(prisma.creditAccount.update).mockResolvedValue({ id: 'existing-1' } as never);
+        vi.mocked(prisma.creditProvider.findFirst).mockResolvedValue(null);
+        vi.mocked(prisma.creditProvider.findMany).mockResolvedValue([]);
         vi.mocked(prisma.workflowLog.create).mockResolvedValue({} as never);
     });
 
@@ -188,6 +191,57 @@ describe('POST /api/cases/[id]/credit-accounts/sync', () => {
         expect(prisma.creditAccount.create).toHaveBeenCalledTimes(1);
         expect(prisma.creditAccount.update).toHaveBeenCalledTimes(1);
         expect(prisma.workflowLog.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('auto-links a newly created account to a matching CreditProvider by name', async () => {
+        vi.mocked(prisma.creditProvider.findFirst).mockResolvedValue({ id: 'cp-1', name: 'African Bank' } as never);
+
+        const res = await POST(
+            new Request('http://localhost/api/cases/c1/credit-accounts/sync', {
+                method: 'POST',
+                body: JSON.stringify({
+                    accounts: [{
+                        include: true,
+                        creditorName: 'African Bank',
+                        accountNumber: '999888',
+                        accountType: 'Personal Loan',
+                        outstandingBalance: 8467,
+                        status: 'ACTIVE',
+                        existingAccountId: null,
+                    }],
+                }),
+            }) as never,
+            { params: Promise.resolve({ id: 'c1' }) }
+        );
+
+        expect(res.status).toBe(200);
+        expect(prisma.creditAccount.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({ creditProviderId: 'cp-1' }),
+        });
+    });
+
+    it('leaves creditProviderId null when no provider matches', async () => {
+        const res = await POST(
+            new Request('http://localhost/api/cases/c1/credit-accounts/sync', {
+                method: 'POST',
+                body: JSON.stringify({
+                    accounts: [{
+                        include: true,
+                        creditorName: 'Totally Unknown Creditor',
+                        accountType: 'Other',
+                        outstandingBalance: 100,
+                        status: 'ACTIVE',
+                        existingAccountId: null,
+                    }],
+                }),
+            }) as never,
+            { params: Promise.resolve({ id: 'c1' }) }
+        );
+
+        expect(res.status).toBe(200);
+        expect(prisma.creditAccount.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({ creditProviderId: null }),
+        });
     });
 
     it('rejects when no accounts are marked as included', async () => {

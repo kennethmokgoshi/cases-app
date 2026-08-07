@@ -8,6 +8,7 @@ import {
     mapExtractedAccountToCandidate,
     mapExtractedAdverseListingToCandidate,
 } from '@/lib/credit-account-sync';
+import { findMatchingCreditProvider } from '@/lib/credit-provider-match';
 
 const logger = createLogger('api/cases/[id]/credit-accounts/sync');
 
@@ -175,11 +176,13 @@ export async function POST(
                 });
                 updated++;
             } else {
+                const matchedProvider = await findMatchingCreditProvider(prisma, acc.creditorName);
                 await prisma.creditAccount.create({
                     data: {
                         caseId,
                         clientId: caseData.clientId,
                         creditorName: acc.creditorName,
+                        creditProviderId: matchedProvider?.id ?? null,
                         accountNumber: acc.accountNumber || null,
                         accountType: acc.accountType,
                         originalAmount: acc.originalAmount ?? null,

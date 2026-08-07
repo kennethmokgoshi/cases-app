@@ -81,7 +81,8 @@ export async function GET(
 
         const pdfBytes = await generateForm16(data);
 
-        const fileName = `Form16_${caseRecord.fileNumber}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        const safeFileNumber = (caseRecord.fileNumber || 'Unknown').replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = `Form16_${safeFileNumber}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
         return new NextResponse(Buffer.from(pdfBytes), {
             status: 200,

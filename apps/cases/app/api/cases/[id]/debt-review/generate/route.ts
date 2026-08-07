@@ -19,6 +19,7 @@ import { generateCourtDoc, type CourtDocType, type CourtDocInput } from '@zenowe
 import { generateForm19, type Form19Data } from '@/lib/form19-pdf';
 import { generateForm172C, type Form172CData } from '@/lib/form17-2c-pdf';
 import { generateSection7172Statement, type Section7172StatementData } from '@/lib/section71-72-statement-pdf';
+import { findMatchingCreditProvider } from '@/lib/credit-provider-match';
 
 const logger = createLogger('api/cases/[id]/debt-review/generate');
 
@@ -50,7 +51,9 @@ const GenerateSchema = z.object({
     courtName:       z.string().max(200).optional(),
     courtCaseNumber: z.string().max(100).optional(),
     // Used by D4 packs to decide whether Form 19 is the F1 or F2 variant.
-    targetStatus: z.enum(['F1', 'F2', 'G']).optional(),
+    // 'B' is included because /clearance/evaluate recommends it for FORM_17_W
+    // withdrawals outside the D3/D4 DHS statuses.
+    targetStatus: z.enum(['F1', 'F2', 'G', 'B']).optional(),
 });
 
 const COURT_DOC_TYPES: ReadonlySet<string> = new Set([
@@ -151,7 +154,7 @@ export async function POST(request: Request, { params }: RouteContext) {
                 creditAccounts: {
                     orderBy: { creditorName: 'asc' },
                     include: {
-                        creditProvider: { select: { id: true, email: true } },
+                        creditProvider: { select: { id: true, email: true, phone: true, address: true } },
                         documents: {
                             where:  { documentType: 'PAID_UP_LETTER' },
                             select: { documentType: true, uploadedAt: true, fileName: true },
@@ -291,6 +294,23 @@ export async function POST(request: Request, { params }: RouteContext) {
             };
             pdfBytes = await generateForm17(data);
         } else if (documentType === 'FORM_17_W') {
+            const outstandingAccounts = allAccounts.filter(a => !isSettledAccount(a) && !isMortgageAccount(a));
+
+            // Best-effort auto-link for accounts that predate creditor auto-matching
+            // (e.g. manually entered, or synced before this matching existed) — the
+            // link is persisted so future documents/emails benefit too.
+            const resolvedProviders = await Promise.all(outstandingAccounts.map(async a => {
+                if (a.creditProvider) return a.creditProvider;
+                const matched = await findMatchingCreditProvider(prisma, a.creditorName).catch(() => null);
+                if (matched) {
+                    await prisma.creditAccount.update({
+                        where: { id: a.id },
+                        data:  { creditProviderId: matched.id },
+                    }).catch(() => null);
+                }
+                return matched;
+            }));
+
             const data: Form17WData = {
                 fileNumber:             caseRecord.fileNumber,
                 withdrawalDate:         now,
@@ -300,8 +320,19 @@ export async function POST(request: Request, { params }: RouteContext) {
                 email:                  client.email,
                 phone:                  client.phone,
                 address:                client.address,
+                accounts: outstandingAccounts.map((a, i) => ({
+                    creditorName:   a.creditorName,
+                    address:        resolvedProviders[i]?.address ?? null,
+                    phone:          resolvedProviders[i]?.phone ?? null,
+                    email:          resolvedProviders[i]?.email ?? null,
+                    currentBalance: Number(a.outstandingBalance),
+                    instalment:     a.monthlyInstalment ? Number(a.monthlyInstalment) : null,
+                    interestRate:   a.interestRate ? Number(a.interestRate) : null,
+                })),
                 dcNcrdcNo: dc.ncrdc, dcName: dc.name, dcAddress: dc.address, dcPhone: dc.phone, dcEmail: dc.email,
-                reasonForWithdrawal:    'Settled in full / Clearance Certificate Issued',
+                // Court-order rescission (targetStatus 'G') selects option C; the default
+                // withdrawal-prior-to-Form-17.2 path (targetStatus 'B') selects option A.
+                selectedOption: targetStatus === 'G' ? 'C' : 'A',
             };
             pdfBytes = await generateForm17W(data);
         } else if (documentType === 'SECTION_86_NOTICE') {
@@ -507,7 +538,8 @@ export async function POST(request: Request, { params }: RouteContext) {
 
         const dateStr  = now.toISOString().slice(0, 10);
         const baseName = DOC_FILENAMES[documentType];
-        const fileName = `${baseName}_${caseRecord.fileNumber}_${dateStr}.pdf`;
+        const safeFileNumber = (caseRecord.fileNumber || 'Unknown').replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = `${baseName}_${safeFileNumber}_${dateStr}.pdf`;
 
         await writeFile(path.join(publicUploadDir, fileName), pdfBytes);
         await writeFile(path.join(storageUploadDir, fileName), pdfBytes).catch(() => null);

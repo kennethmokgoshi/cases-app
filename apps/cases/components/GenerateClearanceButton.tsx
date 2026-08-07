@@ -124,6 +124,11 @@ export function GenerateClearanceButton({
                 }),
             });
 
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `Server error: ${res.status}`);
+            }
+
             const genResult = await res.json();
             const isB2B = genResult.isB2B;
 
