@@ -15,12 +15,21 @@ interface ReportData {
     income?: { grossSalary?: number; netSalary?: number; affordability?: string };
     debtRestructuring?: { ncrdcNo?: string; debtCounsellorName?: string; dhsStatus?: string };
     adverseListings?: { creditor?: string; accountNumber?: string; openBalance?: number; overdueBalance?: number; status?: string; lastPaymentDate?: string }[];
-    accounts?: { creditor?: string; accountNumber?: string; originalAmount?: number; balance?: number; installment?: number; status?: string; lastPaymentDate?: string }[];
+    accounts?: { creditor?: string; accountNumber?: string; originalAmount?: number; balance?: number; installment?: number; status?: string; contractStart?: string; lastPaymentDate?: string }[];
 }
 
 function isClosedStatus(status: string | undefined): boolean {
     const s = (status || '').toUpperCase();
     return s.includes('CLOSED') || s.includes('PAID') || s.includes('SETTLED');
+}
+
+/** AI-extracted dates arrive as 'YYYY-MM-DD' or the literal string 'NA'. */
+function formatReportDate(value: string | undefined): { text: string; stated: boolean } {
+    const trimmed = (value || '').trim();
+    if (!trimmed || trimmed.toUpperCase() === 'NA') return { text: 'Not stated', stated: false };
+    const d = new Date(trimmed);
+    if (isNaN(d.getTime())) return { text: 'Not stated', stated: false };
+    return { text: d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }), stated: true };
 }
 
 interface ReportEntry {
@@ -88,6 +97,8 @@ function ReportCard({ report }: { report: ReportEntry }) {
             installment: a.installment,
             status: a.status || 'ACTIVE',
             closed: isClosedStatus(a.status),
+            openDate: a.contractStart,
+            lastPaymentDate: a.lastPaymentDate,
         })),
         ...(report.data.adverseListings || []).map(a => ({
             creditor: a.creditor || 'Unknown creditor',
@@ -97,6 +108,8 @@ function ReportCard({ report }: { report: ReportEntry }) {
             installment: undefined as number | undefined,
             status: a.status || 'Adverse Listing',
             closed: false,
+            openDate: undefined as string | undefined,
+            lastPaymentDate: a.lastPaymentDate,
         })),
     ];
 
@@ -151,7 +164,7 @@ function ReportCard({ report }: { report: ReportEntry }) {
                         All Accounts ({allAccountRows.length})
                     </p>
                     <div className="border border-zinc-800 rounded-xl overflow-hidden text-xs overflow-x-auto">
-                        <table className="w-full text-left min-w-[500px]">
+                        <table className="w-full text-left min-w-[700px]">
                             <thead className="bg-zinc-800/80 text-zinc-400 font-semibold border-b border-zinc-700/60">
                                 <tr>
                                     <th className="p-2">Creditor</th>
@@ -159,25 +172,33 @@ function ReportCard({ report }: { report: ReportEntry }) {
                                     <th className="p-2">Opening Balance</th>
                                     <th className="p-2">Current Balance</th>
                                     <th className="p-2">Monthly Instalment</th>
+                                    <th className="p-2">Open Date</th>
+                                    <th className="p-2">Last Payment</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800 text-zinc-300">
-                                {allAccountRows.map((a, i) => (
-                                    <tr key={`${a.creditor}-${a.accountNumber ?? i}`} className="hover:bg-zinc-800/30">
-                                        <td className="p-2 font-medium">
-                                            {a.creditor}
-                                            {a.accountNumber && <div className="text-[10px] text-zinc-500">{a.accountNumber}</div>}
-                                        </td>
-                                        <td className="p-2">
-                                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${a.closed ? 'bg-zinc-700/50 text-zinc-400' : 'bg-emerald-500/20 text-emerald-300'}`}>
-                                                {a.status}
-                                            </span>
-                                        </td>
-                                        <td className="p-2 text-zinc-400">{a.originalAmount != null ? formatZAR(a.originalAmount) : '—'}</td>
-                                        <td className="p-2">{formatZAR(a.balance)}</td>
-                                        <td className="p-2 text-zinc-400">{a.installment != null ? formatZAR(a.installment) : '—'}</td>
-                                    </tr>
-                                ))}
+                                {allAccountRows.map((a, i) => {
+                                    const openDate = formatReportDate(a.openDate);
+                                    const lastPayment = formatReportDate(a.lastPaymentDate);
+                                    return (
+                                        <tr key={`${a.creditor}-${a.accountNumber ?? i}`} className="hover:bg-zinc-800/30">
+                                            <td className="p-2 font-medium">
+                                                {a.creditor}
+                                                {a.accountNumber && <div className="text-[10px] text-zinc-500">{a.accountNumber}</div>}
+                                            </td>
+                                            <td className="p-2">
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${a.closed ? 'bg-zinc-700/50 text-zinc-400' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                                    {a.status}
+                                                </span>
+                                            </td>
+                                            <td className="p-2 text-zinc-400">{a.originalAmount != null ? formatZAR(a.originalAmount) : '—'}</td>
+                                            <td className="p-2">{formatZAR(a.balance)}</td>
+                                            <td className="p-2 text-zinc-400">{a.installment != null ? formatZAR(a.installment) : '—'}</td>
+                                            <td className={`p-2 ${openDate.stated ? 'text-zinc-400' : 'text-amber-400 italic'}`}>{openDate.text}</td>
+                                            <td className={`p-2 ${lastPayment.stated ? 'text-zinc-400' : 'text-amber-400 italic'}`}>{lastPayment.text}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
