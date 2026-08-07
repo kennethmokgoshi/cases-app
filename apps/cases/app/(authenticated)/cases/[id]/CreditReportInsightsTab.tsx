@@ -163,8 +163,8 @@ function ReportCard({ report }: { report: ReportEntry }) {
                     <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                         All Accounts ({allAccountRows.length})
                     </p>
-                    <div className="border border-zinc-800 rounded-xl overflow-hidden text-xs overflow-x-auto">
-                        <table className="w-full text-left min-w-[700px]">
+                    <div className="border border-zinc-800 rounded-xl overflow-hidden text-xs">
+                        <table className="w-full text-left">
                             <thead className="bg-zinc-800/80 text-zinc-400 font-semibold border-b border-zinc-700/60">
                                 <tr>
                                     <th className="p-2">Creditor</th>

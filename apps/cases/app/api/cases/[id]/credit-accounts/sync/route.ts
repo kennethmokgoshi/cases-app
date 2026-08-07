@@ -141,7 +141,7 @@ export async function POST(
 
         const caseData = await prisma.case.findUnique({
             where: { id: caseId },
-            select: { id: true, clientId: true },
+            select: { id: true, clientId: true, status: true },
         });
         if (!caseData) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
@@ -206,7 +206,8 @@ export async function POST(
                 caseId,
                 notes: `[CREDIT_ACCOUNTS_SYNCED] Synced from credit report(s): ${created} created, ${updated} updated`,
                 userId: session.user.id,
-            } as any,
+                toStatus: caseData.status,
+            },
         });
 
         return NextResponse.json({ created, updated });
