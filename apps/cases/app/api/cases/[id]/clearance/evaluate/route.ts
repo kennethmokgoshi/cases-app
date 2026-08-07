@@ -61,7 +61,8 @@ export async function GET(
         });
 
         const unsecuredOpenAccounts = openAccounts.filter(a => a.id !== mortgageAccount?.id);
-        const totalBalance = openAccounts.reduce((sum, a) => sum + ((a as any).outstandingBalance ?? (a as any).balance ?? 0), 0);
+        const totalBalance = openAccounts.reduce((sum, a) => sum + Number((a as any).outstandingBalance ?? (a as any).balance ?? 0), 0);
+        const totalInstalment = openAccounts.reduce((sum, a) => sum + Number((a as any).monthlyInstalment ?? 0), 0);
 
         let recommendedForm: 'FORM_19_F2' | 'FORM_19_F1' | 'FORM_17_W' = 'FORM_19_F2';
         let recommendedFormTitle = 'Form 19 (F2 - Full Clearance Certificate)';
@@ -96,7 +97,9 @@ export async function GET(
                 creditorName: a.creditorName,
                 accountNumber: a.accountNumber,
                 accountType: a.accountType,
-                balance: (a as any).outstandingBalance ?? (a as any).balance ?? 0,
+                openingBalance: Number((a as any).originalAmount ?? 0),
+                balance: Number((a as any).outstandingBalance ?? (a as any).balance ?? 0),
+                instalment: Number((a as any).monthlyInstalment ?? 0),
                 isMortgage,
                 isPrescribedCandidate,
                 lastPaymentDate: a.lastPaymentDate ? new Date(a.lastPaymentDate).toISOString() : null,
@@ -114,6 +117,7 @@ export async function GET(
                 openCount: openAccounts.length,
                 closedCount: closedAccounts.length,
                 totalBalance,
+                totalInstalment,
                 openAccounts: mappedAccounts,
             },
             candidateForms: [

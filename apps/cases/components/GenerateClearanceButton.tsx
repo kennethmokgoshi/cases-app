@@ -8,7 +8,9 @@ interface AccountRow {
     creditorName: string;
     accountNumber: string | null;
     accountType: string;
+    openingBalance?: number;
     balance: number;
+    instalment?: number;
     isMortgage: boolean;
     isPrescribedCandidate: boolean;
     lastPaymentDate: string | null;
@@ -33,6 +35,7 @@ interface EvaluationResult {
         openCount: number;
         closedCount: number;
         totalBalance: number;
+        totalInstalment?: number;
         openAccounts: AccountRow[];
     };
     candidateForms: CandidateForm[];
@@ -266,9 +269,12 @@ export function GenerateClearanceButton({
                                         <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                                             Credit Report Accounts Analyzed ({assessment.accountsSummary.openAccounts.length} Open)
                                         </span>
-                                        <span className="text-xs text-zinc-400">
-                                            Total Open Balance: R{assessment.accountsSummary.totalBalance.toLocaleString()}
-                                        </span>
+                                        <div className="text-xs text-zinc-400 flex flex-col items-end">
+                                            <span>Balance: R{assessment.accountsSummary.totalBalance.toLocaleString()}</span>
+                                            {assessment.accountsSummary.totalInstalment !== undefined && (
+                                                <span>Instalment: R{assessment.accountsSummary.totalInstalment.toLocaleString()}</span>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {assessment.accountsSummary.openAccounts.length === 0 ? (
@@ -277,34 +283,41 @@ export function GenerateClearanceButton({
                                         </div>
                                     ) : (
                                         <div className="border border-zinc-800 rounded-xl overflow-hidden text-xs">
-                                            <table className="w-full text-left">
+                                            <table className="w-full text-left table-fixed">
                                                 <thead className="bg-zinc-800/80 text-zinc-400 font-semibold border-b border-zinc-700/60">
                                                     <tr>
-                                                        <th className="p-2">Creditor</th>
-                                                        <th className="p-2">Type</th>
-                                                        <th className="p-2">Balance</th>
-                                                        <th className="p-2">Status / Notes</th>
+                                                        <th className="p-2 w-[30%] truncate">Creditor</th>
+                                                        <th className="p-2 w-[15%] truncate">Type</th>
+                                                        <th className="p-2 w-[15%] truncate">Opening</th>
+                                                        <th className="p-2 w-[20%] truncate">Instalment</th>
+                                                        <th className="p-2 w-[20%] truncate">Balance</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-zinc-800 text-zinc-300">
                                                     {assessment.accountsSummary.openAccounts.map(acc => (
                                                         <tr key={acc.id} className="hover:bg-zinc-800/30">
-                                                            <td className="p-2 font-medium">{acc.creditorName}</td>
-                                                            <td className="p-2 text-zinc-400">{acc.accountType || '—'}</td>
-                                                            <td className="p-2">R{(acc.balance || 0).toLocaleString()}</td>
-                                                            <td className="p-2">
-                                                                {acc.isMortgage ? (
-                                                                    <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px]">
-                                                                        Mortgage Bond
-                                                                    </span>
-                                                                ) : acc.isPrescribedCandidate ? (
-                                                                    <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px]">
-                                                                        Prescription Candidate (&gt;3 yrs)
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-amber-400 text-[10px]">Active Balance</span>
-                                                                )}
+                                                            <td className="p-2 font-medium truncate" title={acc.creditorName}>
+                                                                <div className="truncate">{acc.creditorName}</div>
+                                                                <div className="mt-1">
+                                                                    {acc.isMortgage ? (
+                                                                        <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[9px] whitespace-nowrap">
+                                                                            Mortgage Bond
+                                                                        </span>
+                                                                    ) : acc.isPrescribedCandidate ? (
+                                                                        <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[9px] whitespace-nowrap" title="Prescription Candidate (>3 yrs)">
+                                                                            Prescription (&gt;3 yrs)
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-amber-400 text-[9px]">Active Balance</span>
+                                                                    )}
+                                                                </div>
                                                             </td>
+                                                            <td className="p-2 text-zinc-400 truncate" title={acc.accountType || '—'}>
+                                                                {acc.accountType || '—'}
+                                                            </td>
+                                                            <td className="p-2 truncate">R{(acc.openingBalance || 0).toLocaleString()}</td>
+                                                            <td className="p-2 truncate">R{(acc.instalment || 0).toLocaleString()}</td>
+                                                            <td className="p-2 truncate">R{(acc.balance || 0).toLocaleString()}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
