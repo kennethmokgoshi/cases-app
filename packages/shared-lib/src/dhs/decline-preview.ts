@@ -246,7 +246,9 @@ export async function previewDHSDecline(params: {
                     fileNumber,
                     dcName,
                     declineReason,
+                    hasAttachments: docAttachments.length > 0,
                 }),
+                attachments: docAttachments,
             });
             if (caseData.client.email) {
                 preview.messages.push({

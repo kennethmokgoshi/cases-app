@@ -746,6 +746,7 @@ export async function handleDHSDecline(params: {
                     fileNumber,
                     dcName,
                     declineReason,
+                    hasAttachments: docAttachments.length > 0,
                 });
                 const dcInvoiceSubject = `Request for Invoice/Statement – ${clientName} (ID: ${idNumber})`;
 
@@ -755,12 +756,13 @@ export async function handleDHSDecline(params: {
                     dcEmail,
                     dcInvoiceEmailBody,
                     dcInvoiceSubject,
-                    { cc: clientCc }
+                    { attachments: docAttachments, cc: clientCc }
                 );
 
                 if (dcEmailResult.emailSuccess) {
                     result.emailSent = true;
-                    result.actionsPerformed.push(`Invoice request emailed to DC at ${dcEmail} (client CC'd)`);
+                    const withPoa = docAttachments.length > 0 ? ' (POA + ID attached)' : '';
+                    result.actionsPerformed.push(`Invoice request emailed to DC at ${dcEmail}${withPoa} (client CC'd)`);
                     updateData.lastKnownEmail = dcEmail;
                 } else {
                     result.errors.push(...dcEmailResult.errors);
@@ -1247,7 +1249,11 @@ function buildRequestInvoiceEmail(p: {
     fileNumber: string;
     dcName: string;
     declineReason: string;
+    hasAttachments: boolean;
 }): string {
+    const poaLine = p.hasAttachments
+        ? `\n\nFor your reference and as proof of our authority to act on the consumer's behalf, please find attached our client's signed Power of Attorney and identity document.`
+        : '';
     return `Dear ${p.dcName},
 
 Thank you for your response via the NCR Debt Help System (DHS) regarding the transfer request for the following consumer:
@@ -1259,7 +1265,7 @@ Thank you for your response via the NCR Debt Help System (DHS) regarding the tra
 Your DHS response indicates that there are outstanding fees:
 "${p.declineReason}"
 
-Please provide a detailed invoice or statement of the outstanding amount, along with the firm's banking details, so that we can forward it to the consumer for payment.
+Please provide a detailed invoice or statement of the outstanding amount, along with the firm's banking details, so that we can forward it to the consumer for payment.${poaLine}
 
 Please note: our client (${p.clientName}) has been copied on this email for transparency.
 

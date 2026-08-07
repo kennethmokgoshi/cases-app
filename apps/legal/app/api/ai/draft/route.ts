@@ -28,6 +28,7 @@ export async function POST(
             where: { id: caseId },
             include: {
                 client: true,
+                documents: true,
                 LegalMatter: {
                     where: matterId ? { id: matterId } : undefined,
                     take: 1
@@ -86,12 +87,23 @@ export async function POST(
         // 5. If Autopilot: Send immediately via GHL
         if (decision.shouldExecute && (letter.recipientEmail || caseRecord.client.email)) {
             const recipient = letter.recipientEmail || caseRecord.client.email || '';
+
+            // This letter is sent to a third party (DC, credit provider, or credit
+            // bureau) on the consumer's behalf. Attach the signed POA + barcoded ID
+            // as proof of consent/authority to act — same convention as the Cases
+            // app's DHS decline handler.
+            const casesAppUrl = process.env.CASES_APP_URL || 'https://cases.zenowethu.co.za';
+            const attachments = caseRecord.documents
+                .filter((d) => ['ID', 'POA', 'ZENOWETHU_POA'].includes(d.type))
+                .map((d) => `${casesAppUrl}${d.fileUrl}`);
+
             await sendManualMessage(
                 caseId,
                 'EMAIL',
                 recipient,
                 draft.content,
-                draft.subject
+                draft.subject,
+                { attachments }
             );
         }
 

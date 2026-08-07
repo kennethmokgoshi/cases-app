@@ -207,14 +207,42 @@ describe('handleDHSDecline OUTSTANDING_FEES automated dc invoice request', () =>
         expect(firstCall[1]).toBe('EMAIL');
         expect(firstCall[2]).toBe('dc@example.co.za');
         expect(firstCall[5]?.cc).toEqual(['john@example.com']);
+        // POA + ID must be attached — they serve as proof of consent to act for the consumer.
+        expect(firstCall[5]?.attachments).toEqual([
+            'https://cases.zenowethu.co.za/uploads/case1/id.pdf',
+            'https://cases.zenowethu.co.za/uploads/case1/poa.pdf',
+        ]);
 
         // Verify second email call (to client)
         const secondCall = sendMsg.mock.calls[1];
         expect(secondCall[1]).toBe('EMAIL');
         expect(secondCall[2]).toBe('john@example.com');
 
-        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (client CC\'d)');
+        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (POA + ID attached) (client CC\'d)');
         expect(result.actionsPerformed).toContain('Outstanding fees email sent to consumer (john@example.com)');
+    });
+
+    it('sends the DC email without an attachments note when no POA/ID is on file yet', async () => {
+        db.case.findUnique.mockResolvedValue({
+            ...baseCase,
+            documents: [],
+            preferredDcEmail: 'dc@example.co.za',
+            client: {
+                ...baseCase.client,
+                email: 'john@example.com',
+            },
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        const result = await handleDHSDecline({
+            caseId: 'case1',
+            declineReason: feesReason,
+            triggeredByUserId: 'staff1',
+        });
+
+        const firstCall = sendMsg.mock.calls[0];
+        expect(firstCall[5]?.attachments).toEqual([]);
+        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (client CC\'d)');
     });
 
     it('emails client only and logs warning when DC email is missing', async () => {

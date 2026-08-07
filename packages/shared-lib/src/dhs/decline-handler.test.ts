@@ -340,6 +340,7 @@ describe('consumer decline email copy', () => {
             fileNumber: 'ZDM-2026-1005-BZP',
             dcName: 'Gasant Essack',
             declineReason: 'outstanding fees of R1500',
+            hasAttachments: false,
         });
 
         expect(body).toContain('Dear Gasant Essack,');
@@ -348,6 +349,21 @@ describe('consumer decline email copy', () => {
         expect(body).toContain('File Number:  ZDM-2026-1005-BZP');
         expect(body).toContain('outstanding fees of R1500');
         expect(body).toContain('Please provide a detailed invoice or statement');
+        expect(body).not.toContain('signed Power of Attorney');
+    });
+
+    it('mentions the attached POA + ID when documents are available', () => {
+        const body = buildRequestInvoiceEmail({
+            clientName: 'Nombulelo Dlamini',
+            idNumber: '8501015009087',
+            fileNumber: 'ZDM-2026-1005-BZP',
+            dcName: 'Gasant Essack',
+            declineReason: 'outstanding fees of R1500',
+            hasAttachments: true,
+        });
+
+        expect(body).toContain('proof of our authority to act on the consumer\'s behalf');
+        expect(body).toContain('signed Power of Attorney and identity document');
     });
 });
 

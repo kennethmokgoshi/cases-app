@@ -91,8 +91,10 @@ describe('previewDHSDecline', () => {
         const dcEmail = emails.find(m => m.to === 'dc@example.co.za');
         expect(dcEmail).toBeDefined();
         expect(dcEmail?.cc).toEqual(['john@example.com']);
+        expect(dcEmail?.attachments).toHaveLength(2);
         expect(dcEmail?.body).toContain('Dear Jane DC,');
         expect(dcEmail?.body).toContain('Client owes outstanding fees to the current DC.');
+        expect(dcEmail?.body).toContain('signed Power of Attorney and identity document');
 
         const clientEmail = emails.find(m => m.to === 'john@example.com');
         expect(clientEmail).toBeDefined();
