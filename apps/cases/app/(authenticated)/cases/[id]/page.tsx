@@ -698,16 +698,30 @@ export default function CaseDetailPage() {
     }, [tabFromUrl, loading]);
 
     // "View in Portal" (Analyse Credit Reports) also triggers a case refetch, which briefly
-    // unmounts the tabs panel via `loading` — wait for that to clear before scrolling,
-    // rather than a fixed delay racing against the refetch.
+    // unmounts the tabs panel via `loading` (tabsPanelRef.current goes null mid-unmount) —
+    // poll for the ref to come back rather than trust a single effect run to land after
+    // the remount commits.
     const [pendingScrollToCreditReport, setPendingScrollToCreditReport] = useState(false);
     useEffect(() => {
-        if (!pendingScrollToCreditReport || loading) return;
-        setPendingScrollToCreditReport(false);
-        const timer = setTimeout(() => {
-            tabsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
-        return () => clearTimeout(timer);
+        if (!pendingScrollToCreditReport) return;
+        let cancelled = false;
+        let attempts = 0;
+        const tryScroll = () => {
+            if (cancelled) return;
+            if (!loading && tabsPanelRef.current) {
+                tabsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                setPendingScrollToCreditReport(false);
+                return;
+            }
+            attempts++;
+            if (attempts > 100) { // ~5s safety cutoff
+                setPendingScrollToCreditReport(false);
+                return;
+            }
+            setTimeout(tryScroll, 50);
+        };
+        tryScroll();
+        return () => { cancelled = true; };
     }, [pendingScrollToCreditReport, loading]);
 
     const goToCreditReportTab = useCallback(() => {
@@ -5086,7 +5100,7 @@ export default function CaseDetailPage() {
                     </div >
 
                     {/* Enhanced Case Utilities - Tabbed Interface */}
-                    <div ref={tabsPanelRef} className="mt-12 bg-zeno-blue/10 rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
+                    <div ref={tabsPanelRef} className="mt-12 bg-zeno-blue/10 rounded-2xl border border-white/5 overflow-hidden shadow-2xl scroll-mt-[140px]">
                         <nav className="flex flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible p-2 gap-1.5 bg-zeno-navy/90 border-b border-white/5 scrollbar-none">
                             <button
                                 onClick={() => setActiveDetailTab('ACTIVITY')}

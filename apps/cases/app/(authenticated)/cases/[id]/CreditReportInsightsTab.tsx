@@ -64,9 +64,15 @@ function InsightColumn({ category, items }: { category: InsightItem['category'];
     );
 }
 
+const OWN_NCRDC_NO = 'NCRDC3693';
+
 function ReportCard({ report }: { report: ReportEntry }) {
     const byCategory = (cat: InsightItem['category']) => report.insights.filter(i => i.category === cat);
     const score = report.data.creditScore;
+    const prescribedCount = report.insights.filter(i => i.category === 'dispute' && i.title.startsWith('Possible prescription')).length;
+    const ncrdcNo = (report.data.debtRestructuring?.ncrdcNo || '').trim();
+    const hasDebtReview = ncrdcNo && ncrdcNo.toUpperCase() !== 'NA';
+    const isOwnDebtReview = hasDebtReview && ncrdcNo.toUpperCase() === OWN_NCRDC_NO;
 
     return (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
@@ -84,9 +90,9 @@ function ReportCard({ report }: { report: ReportEntry }) {
                 )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center">
                 <div className="rounded-lg bg-zinc-800/50 p-2">
-                    <p className="text-[10px] text-zinc-500 uppercase">Total Debt</p>
+                    <p className="text-[10px] text-zinc-500 uppercase">Balance</p>
                     <p className="text-sm font-semibold text-zinc-100">{formatZAR(report.data.summary?.totalDebt)}</p>
                 </div>
                 <div className="rounded-lg bg-zinc-800/50 p-2">
@@ -94,12 +100,22 @@ function ReportCard({ report }: { report: ReportEntry }) {
                     <p className="text-sm font-semibold text-zinc-100">{formatZAR(report.data.summary?.totalInstallment)}</p>
                 </div>
                 <div className="rounded-lg bg-zinc-800/50 p-2">
-                    <p className="text-[10px] text-zinc-500 uppercase">Active</p>
+                    <p className="text-[10px] text-zinc-500 uppercase">Open</p>
                     <p className="text-sm font-semibold text-zinc-100">{report.data.summary?.activeAccounts ?? 0}</p>
                 </div>
                 <div className="rounded-lg bg-zinc-800/50 p-2">
                     <p className="text-[10px] text-zinc-500 uppercase">Closed</p>
                     <p className="text-sm font-semibold text-zinc-100">{report.data.summary?.closedAccounts ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-zinc-800/50 p-2">
+                    <p className="text-[10px] text-zinc-500 uppercase">Prescribed</p>
+                    <p className={`text-sm font-semibold ${prescribedCount > 0 ? 'text-red-300' : 'text-zinc-100'}`}>{prescribedCount}</p>
+                </div>
+                <div className="rounded-lg bg-zinc-800/50 p-2">
+                    <p className="text-[10px] text-zinc-500 uppercase">Debt Review</p>
+                    <p className={`text-sm font-semibold ${!hasDebtReview ? 'text-zinc-100' : isOwnDebtReview ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {!hasDebtReview ? 'None found' : isOwnDebtReview ? 'Zenowethu' : ncrdcNo}
+                    </p>
                 </div>
             </div>
 
