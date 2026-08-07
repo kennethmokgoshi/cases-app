@@ -13,10 +13,11 @@ interface AnalysisResult {
 interface AnalyseCreditReportsButtonProps {
     caseId: string;
     onAnalyzed?: () => void;
+    onViewInsights?: () => void;
     variant?: 'header' | 'tab';
 }
 
-export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'header' }: AnalyseCreditReportsButtonProps) {
+export function AnalyseCreditReportsButton({ caseId, onAnalyzed, onViewInsights, variant = 'header' }: AnalyseCreditReportsButtonProps) {
     const [modalOpen, setModalOpen] = useState(false);
     const [running, setRunning] = useState(false);
     const [ran, setRan] = useState(false);
@@ -44,7 +45,9 @@ export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'head
             setResults(data.results || []);
             setSummary({ analyzed: data.analyzed, failed: data.failed, skipped: data.skipped, message: data.message });
             setRan(true);
-            if (data.analyzed > 0) onAnalyzed?.();
+            // Deliberately not calling onAnalyzed() here: it triggers a case refetch on the
+            // parent page, which sets its own loading state and unmounts this modal (and
+            // its results) before the user ever sees them. Deferred to modal dismissal instead.
         } catch (err: any) {
             setError(err.message || 'An error occurred while analyzing credit reports.');
         } finally {
@@ -58,6 +61,11 @@ export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'head
         setResults([]);
         setSummary(null);
         setError(null);
+    };
+
+    const closeModal = () => {
+        setModalOpen(false);
+        if (summary && summary.analyzed > 0) onAnalyzed?.();
     };
 
     const buttonClass = variant === 'header'
@@ -89,7 +97,7 @@ export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'head
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={() => setModalOpen(false)} className="text-zinc-400 hover:text-white text-xl p-1">
+                            <button onClick={closeModal} className="text-zinc-400 hover:text-white text-xl p-1">
                                 ✕
                             </button>
                         </div>
@@ -156,7 +164,7 @@ export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'head
                         <div className="flex items-center justify-end gap-2 pt-4 border-t border-zinc-800">
                             <button
                                 type="button"
-                                onClick={() => setModalOpen(false)}
+                                onClick={closeModal}
                                 className="px-4 py-2 text-xs font-semibold rounded-xl bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-all"
                             >
                                 {ran ? 'Close' : 'Cancel'}
@@ -169,6 +177,19 @@ export function AnalyseCreditReportsButton({ caseId, onAnalyzed, variant = 'head
                                     className="px-4 py-2 text-xs font-semibold rounded-xl bg-zinc-700 text-zinc-200 hover:bg-zinc-600 disabled:opacity-50 transition-all"
                                 >
                                     Force Re-analyze All
+                                </button>
+                            )}
+                            {ran && summary && summary.analyzed > 0 && onViewInsights && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        closeModal();
+                                        onViewInsights();
+                                    }}
+                                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-violet-600 text-white hover:bg-violet-500 transition-all flex items-center gap-1.5"
+                                >
+                                    <span>📊</span>
+                                    <span>View in Portal</span>
                                 </button>
                             )}
                             {!ran && (

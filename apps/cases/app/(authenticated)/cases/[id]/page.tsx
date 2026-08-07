@@ -697,6 +697,24 @@ export default function CaseDetailPage() {
         return () => clearTimeout(timer);
     }, [tabFromUrl, loading]);
 
+    // "View in Portal" (Analyse Credit Reports) also triggers a case refetch, which briefly
+    // unmounts the tabs panel via `loading` — wait for that to clear before scrolling,
+    // rather than a fixed delay racing against the refetch.
+    const [pendingScrollToCreditReport, setPendingScrollToCreditReport] = useState(false);
+    useEffect(() => {
+        if (!pendingScrollToCreditReport || loading) return;
+        setPendingScrollToCreditReport(false);
+        const timer = setTimeout(() => {
+            tabsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [pendingScrollToCreditReport, loading]);
+
+    const goToCreditReportTab = useCallback(() => {
+        setActiveDetailTab('CREDIT_REPORT');
+        setPendingScrollToCreditReport(true);
+    }, []);
+
     const handleUpdateAssignments = async (userIds: string[]) => {
         try {
             const response = await fetch(`/api/cases/${params.id}`, {
@@ -4192,6 +4210,7 @@ export default function CaseDetailPage() {
                                                     <AnalyseCreditReportsButton
                                                         caseId={caseData.id}
                                                         onAnalyzed={fetchCase}
+                                                        onViewInsights={goToCreditReportTab}
                                                         variant="header"
                                                     />
                                                     <SyncCreditAccountsButton
