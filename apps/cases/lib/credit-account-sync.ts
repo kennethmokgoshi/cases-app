@@ -59,6 +59,7 @@ export function accountsMatch(
 export interface ExtractedAccountRaw {
     creditor?: string;
     accountNumber?: string;
+    originalAmount?: number;
     balance?: number;
     installment?: number;
     insurancePremium?: number;
@@ -77,6 +78,7 @@ export interface CreditAccountCandidate {
     creditorName: string;
     accountNumber: string | null;
     accountType: string;
+    originalAmount: number | null;
     outstandingBalance: number;
     monthlyInstalment: number | null;
     termMonths: number | null;
@@ -109,6 +111,7 @@ export function mapExtractedAccountToCandidate(
         creditorName,
         accountNumber,
         accountType: inferAccountType(creditorName),
+        originalAmount: raw.originalAmount != null && Number(raw.originalAmount) > 0 ? Number(raw.originalAmount) : null,
         outstandingBalance: Number(raw.balance) || 0,
         monthlyInstalment: raw.installment != null && !isNaN(Number(raw.installment)) ? Number(raw.installment) : null,
         termMonths: raw.contractTerm != null && !isNaN(Number(raw.contractTerm)) ? Number(raw.contractTerm) : null,
@@ -161,6 +164,7 @@ export function mapExtractedAdverseListingToCandidate(
         creditorName,
         accountNumber,
         accountType: inferAccountType(creditorName),
+        originalAmount: null,
         outstandingBalance: Number(balance) || 0,
         monthlyInstalment: null,
         termMonths: null,

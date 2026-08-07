@@ -14,8 +14,13 @@ interface ReportData {
     summary?: { totalDebt?: number; totalInstallment?: number; activeAccounts?: number; closedAccounts?: number };
     income?: { grossSalary?: number; netSalary?: number; affordability?: string };
     debtRestructuring?: { ncrdcNo?: string; debtCounsellorName?: string; dhsStatus?: string };
-    adverseListings?: { creditor?: string; accountNumber?: string; openBalance?: number; status?: string; lastPaymentDate?: string }[];
-    accounts?: { creditor?: string; accountNumber?: string; balance?: number; status?: string; lastPaymentDate?: string }[];
+    adverseListings?: { creditor?: string; accountNumber?: string; openBalance?: number; overdueBalance?: number; status?: string; lastPaymentDate?: string }[];
+    accounts?: { creditor?: string; accountNumber?: string; originalAmount?: number; balance?: number; installment?: number; status?: string; lastPaymentDate?: string }[];
+}
+
+function isClosedStatus(status: string | undefined): boolean {
+    const s = (status || '').toUpperCase();
+    return s.includes('CLOSED') || s.includes('PAID') || s.includes('SETTLED');
 }
 
 interface ReportEntry {
@@ -74,6 +79,27 @@ function ReportCard({ report }: { report: ReportEntry }) {
     const hasDebtReview = ncrdcNo && ncrdcNo.toUpperCase() !== 'NA';
     const isOwnDebtReview = hasDebtReview && ncrdcNo.toUpperCase() === OWN_NCRDC_NO;
 
+    const allAccountRows = [
+        ...(report.data.accounts || []).map(a => ({
+            creditor: a.creditor || 'Unknown creditor',
+            accountNumber: a.accountNumber,
+            originalAmount: a.originalAmount,
+            balance: a.balance,
+            installment: a.installment,
+            status: a.status || 'ACTIVE',
+            closed: isClosedStatus(a.status),
+        })),
+        ...(report.data.adverseListings || []).map(a => ({
+            creditor: a.creditor || 'Unknown creditor',
+            accountNumber: a.accountNumber,
+            originalAmount: undefined as number | undefined,
+            balance: a.openBalance ?? a.overdueBalance,
+            installment: undefined as number | undefined,
+            status: a.status || 'Adverse Listing',
+            closed: false,
+        })),
+    ];
+
     return (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -118,6 +144,45 @@ function ReportCard({ report }: { report: ReportEntry }) {
                     </p>
                 </div>
             </div>
+
+            {allAccountRows.length > 0 && (
+                <div className="space-y-2">
+                    <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                        All Accounts ({allAccountRows.length})
+                    </p>
+                    <div className="border border-zinc-800 rounded-xl overflow-hidden text-xs overflow-x-auto">
+                        <table className="w-full text-left min-w-[500px]">
+                            <thead className="bg-zinc-800/80 text-zinc-400 font-semibold border-b border-zinc-700/60">
+                                <tr>
+                                    <th className="p-2">Creditor</th>
+                                    <th className="p-2">Status</th>
+                                    <th className="p-2">Opening Balance</th>
+                                    <th className="p-2">Current Balance</th>
+                                    <th className="p-2">Monthly Instalment</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800 text-zinc-300">
+                                {allAccountRows.map((a, i) => (
+                                    <tr key={`${a.creditor}-${a.accountNumber ?? i}`} className="hover:bg-zinc-800/30">
+                                        <td className="p-2 font-medium">
+                                            {a.creditor}
+                                            {a.accountNumber && <div className="text-[10px] text-zinc-500">{a.accountNumber}</div>}
+                                        </td>
+                                        <td className="p-2">
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${a.closed ? 'bg-zinc-700/50 text-zinc-400' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                                {a.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-2 text-zinc-400">{a.originalAmount != null ? formatZAR(a.originalAmount) : '—'}</td>
+                                        <td className="p-2">{formatZAR(a.balance)}</td>
+                                        <td className="p-2 text-zinc-400">{a.installment != null ? formatZAR(a.installment) : '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <InsightColumn category="dispute" items={byCategory('dispute')} />

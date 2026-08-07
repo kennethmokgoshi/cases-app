@@ -101,6 +101,26 @@ describe('mapExtractedAccountToCandidate', () => {
         );
         expect(candidate.status).toBe('ACTIVE');
     });
+
+    it('maps a closed/paid-up account (balance 0) with its original opening amount', () => {
+        const candidate = mapExtractedAccountToCandidate(
+            { creditor: 'Truworths', accountNumber: '555', originalAmount: 5000, balance: 0, status: 'Paid Up' },
+            { id: 'doc-1', type: 'CREDIT_REPORT' },
+            []
+        );
+        expect(candidate.originalAmount).toBe(5000);
+        expect(candidate.outstandingBalance).toBe(0);
+        expect(candidate.status).toBe('Paid Up');
+    });
+
+    it('leaves originalAmount null when the AI does not report one', () => {
+        const candidate = mapExtractedAccountToCandidate(
+            { creditor: 'Capfin', balance: 500 },
+            { id: 'doc-1', type: 'CREDIT_REPORT' },
+            []
+        );
+        expect(candidate.originalAmount).toBeNull();
+    });
 });
 
 describe('mapExtractedAdverseListingToCandidate', () => {

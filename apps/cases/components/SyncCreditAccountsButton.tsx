@@ -15,6 +15,7 @@ interface Candidate {
     creditorName: string;
     accountNumber: string | null;
     accountType: string;
+    originalAmount: number | null;
     outstandingBalance: number;
     monthlyInstalment: number | null;
     termMonths: number | null;
@@ -100,6 +101,7 @@ export function SyncCreditAccountsButton({ caseId, onSynced, variant = 'header' 
                         creditorName: r.creditorName,
                         accountNumber: r.accountNumber,
                         accountType: r.accountType,
+                        originalAmount: r.originalAmount,
                         outstandingBalance: r.outstandingBalance,
                         monthlyInstalment: r.monthlyInstalment,
                         lastPaymentDate: r.lastPaymentDate,
@@ -220,6 +222,7 @@ export function SyncCreditAccountsButton({ caseId, onSynced, variant = 'header' 
                                                         <th className="p-2 w-8"></th>
                                                         <th className="p-2">Creditor</th>
                                                         <th className="p-2">Type</th>
+                                                        <th className="p-2">Opening</th>
                                                         <th className="p-2">Balance</th>
                                                         <th className="p-2">Status</th>
                                                         <th className="p-2">Match</th>
@@ -253,6 +256,7 @@ export function SyncCreditAccountsButton({ caseId, onSynced, variant = 'header' 
                                                                     ))}
                                                                 </select>
                                                             </td>
+                                                            <td className="p-2 text-zinc-400">{r.originalAmount != null ? formatZAR(r.originalAmount) : '—'}</td>
                                                             <td className="p-2">{formatZAR(r.outstandingBalance)}</td>
                                                             <td className="p-2 text-zinc-400">{r.status}</td>
                                                             <td className="p-2">

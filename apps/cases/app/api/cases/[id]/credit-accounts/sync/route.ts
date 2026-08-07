@@ -99,6 +99,7 @@ const AccountInputSchema = z.object({
     creditorName: z.string().min(1).max(200),
     accountNumber: z.string().max(100).nullable().optional(),
     accountType: z.string().min(1).max(100),
+    originalAmount: z.number().nonnegative().nullable().optional(),
     outstandingBalance: z.number().nonnegative(),
     monthlyInstalment: z.number().nonnegative().nullable().optional(),
     lastPaymentDate: z.string().nullable().optional(),
@@ -164,6 +165,7 @@ export async function POST(
                 await prisma.creditAccount.update({
                     where: { id: acc.existingAccountId },
                     data: {
+                        originalAmount: acc.originalAmount ?? undefined,
                         outstandingBalance: acc.outstandingBalance,
                         monthlyInstalment: acc.monthlyInstalment ?? null,
                         lastPaymentDate,
@@ -180,6 +182,7 @@ export async function POST(
                         creditorName: acc.creditorName,
                         accountNumber: acc.accountNumber || null,
                         accountType: acc.accountType,
+                        originalAmount: acc.originalAmount ?? null,
                         outstandingBalance: acc.outstandingBalance,
                         monthlyInstalment: acc.monthlyInstalment ?? null,
                         termMonths: acc.termMonths ?? null,

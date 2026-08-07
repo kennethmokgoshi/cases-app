@@ -295,9 +295,11 @@ CRITICAL: Use the specific sections below to extract data.
      - paymentHistory: 24-month payment history string (e.g. "CCCCCC333300" or NA)
      - status: current status label from the report
 
-8. **OPEN ACCOUNT DETAILS** (Manual Scan)
-   - Scan the report for OPEN/ACTIVE/ARREARS accounts (exclude adverse/written-off accounts already in section 7).
-   - Extract details for each.
+8. **ALL ACCOUNT DETAILS — OPEN AND CLOSED** (Manual Scan)
+   - Scan the report for EVERY individual credit account listed — both OPEN/ACTIVE/ARREARS accounts AND CLOSED/PAID-UP/SETTLED accounts (exclude adverse/written-off/judgment accounts already captured in section 7 above — those stay in adverseListings only).
+   - Do not skip closed or paid-up accounts. A closed account typically has balance 0 and a status like "Closed" or "Paid Up" — extract it anyway with that status.
+   - Extract details for each account found, open or closed. Go through the ENTIRE accounts table row by row — do not stop after the first several rows, and do not summarize or skip rows to save space.
+   - originalAmount: the ORIGINAL loan amount / opening balance / credit limit when the account was first opened (look for "Original Amount", "Opening Balance", "Loan Amount", or "Credit Limit"). Use 0 if not found. This is different from the current/closing balance.
    - For each account, also extract the 24-month payment history code string if available.
    - **INSURANCE AUDIT**: Extract the "Insurance", "Credit Life", or "Monthly Fee" specifically related to the account if visible.
    - **SAVINGS METRICS**: Extract the **"Contract Start Date"** and **"Contract Term"** (e.g., 72 months) or "Months Remaining".
@@ -364,6 +366,7 @@ Output JSON:
     {
       "creditor": "string",
       "accountNumber": "string",
+      "originalAmount": number,
       "balance": number,
       "installment": number,
       "insurancePremium": number,
@@ -371,7 +374,7 @@ Output JSON:
       "contractTerm": number,
       "remainingMonths": number,
       "arrearsAmount": number,
-      "status": "string",
+      "status": "string (include CLOSED/PAID UP accounts here too, not just open ones)",
       "paymentHistory": "string (24-month code string e.g. CCCCCC000122C, or NA if not found)",
       "lastPaymentDate": "string (YYYY-MM-DD or NA if not found)"
     }
