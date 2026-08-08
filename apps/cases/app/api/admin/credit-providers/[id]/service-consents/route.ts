@@ -30,22 +30,6 @@ const MetadataSchema = z.object({
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-type ServiceConsentSession = {
-    user?: {
-        isAdmin?: boolean;
-        isExecutive?: boolean;
-        isSeniorManager?: boolean;
-    };
-} | null | undefined;
-
-function canMutateServiceConsents(session: ServiceConsentSession): boolean {
-    return Boolean(
-        session?.user?.isAdmin ||
-        session?.user?.isExecutive ||
-        session?.user?.isSeniorManager
-    );
-}
-
 function cleanText(value: FormDataEntryValue | null): string | undefined {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
@@ -92,14 +76,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
     }
 }
 
+// Upload is open to any signed-in staff member.
 export async function POST(request: Request, { params }: RouteContext) {
     try {
         const session = await auth();
         if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        if (!canMutateServiceConsents(session)) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const { id } = await params;

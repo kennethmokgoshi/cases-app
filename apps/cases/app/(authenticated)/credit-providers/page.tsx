@@ -3,7 +3,6 @@ import { confirm } from '@zenowethu/ui';
 
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
-import Link from 'next/link'
 import { useSession } from '@zenowethu/ui'
 
 type CreditProvider = {
@@ -16,6 +15,10 @@ type CreditProvider = {
   attorney: string | null
   attorneyEmail: string | null
   attorneyPhone: string | null
+  contactSource: 'MANUAL' | 'WEB_LOOKUP' | 'XDS'
+  contactSourceNotes: string | null
+  contactVerifiedAt: string | null
+  needsReview: boolean
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -37,7 +40,7 @@ type ServiceConsentDocument = {
   uploadedBy: { firstName: string; lastName: string; email: string } | null
 }
 
-type Meta = { total: number; active: number; inactive: number }
+type Meta = { total: number; active: number; inactive: number; needsReview: number }
 
 const PROVIDER_TYPES = ['BANK', 'MICRO_LENDER', 'TELECOM', 'RETAILER', 'OTHER'] as const
 type ProviderType = typeof PROVIDER_TYPES[number]
@@ -272,10 +275,14 @@ function ProviderModal({
 function ServiceConsentModal({
   provider,
   canMutate,
+  canManage,
   onClose,
 }: {
   provider: CreditProvider
+  /** Upload / activate / deactivate — any staff member. */
   canMutate: boolean
+  /** Delete — admins, executives, senior managers, and managers only. */
+  canManage: boolean
   onClose: () => void
 }) {
   const [documents, setDocuments] = useState<ServiceConsentDocument[]>([])
@@ -471,7 +478,7 @@ function ServiceConsentModal({
                     <th className="px-4 py-3 text-left">Received</th>
                     <th className="px-4 py-3 text-left">Dates</th>
                     <th className="px-4 py-3 text-left">Status</th>
-                    {canMutate && <th className="px-4 py-3 text-right">Actions</th>}
+                    {(canMutate || canManage) && <th className="px-4 py-3 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -500,21 +507,25 @@ function ServiceConsentModal({
                           {doc.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      {canMutate && (
+                      {(canMutate || canManage) && (
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => setDocumentActive(doc, !doc.isActive)}
-                              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-xs transition-colors"
-                            >
-                              {doc.isActive ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              onClick={() => deleteDocument(doc)}
-                              className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs transition-colors"
-                            >
-                              Delete
-                            </button>
+                            {canMutate && (
+                              <button
+                                onClick={() => setDocumentActive(doc, !doc.isActive)}
+                                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-xs transition-colors"
+                              >
+                                {doc.isActive ? 'Deactivate' : 'Activate'}
+                              </button>
+                            )}
+                            {canManage && (
+                              <button
+                                onClick={() => deleteDocument(doc)}
+                                className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs transition-colors"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       )}
@@ -536,17 +547,24 @@ function CreditProvidersContent() {
   const [total, setTotal]         = useState(0)
   const [page, setPage]           = useState(1)
   const [pages, setPages]         = useState(1)
-  const [meta, setMeta]           = useState<Meta>({ total: 0, active: 0, inactive: 0 })
+  const [meta, setMeta]           = useState<Meta>({ total: 0, active: 0, inactive: 0, needsReview: 0 })
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [activeFilter, setActiveFilter] = useState('')
+  const [needsReviewFilter, setNeedsReviewFilter] = useState('')
   const [modal, setModal]         = useState<Partial<CreditProvider> | null | false>(false)
   const [serviceConsentProvider, setServiceConsentProvider] = useState<CreditProvider | null>(null)
   const [deleting, setDeleting]   = useState<string | null>(null)
+  const [verifying, setVerifying] = useState<string | null>(null)
 
-  const canMutate = session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager
-  const canDelete = session?.user?.isAdmin || session?.user?.isExecutive
+  // Add / edit / upload consent docs — any signed-in staff member.
+  const canEdit = Boolean(session?.user)
+  // Delete provider or consent doc, and Verify (the "confirmed correct for legal
+  // notices" compliance action) — admins, executives, senior managers, and managers only.
+  const canManage = Boolean(
+    session?.user?.isAdmin || session?.user?.isExecutive || session?.user?.isSeniorManager || session?.user?.isManager
+  )
 
   const fetchProviders = useCallback(async (pg = 1) => {
     setLoading(true)
@@ -556,6 +574,7 @@ function CreditProvidersContent() {
       if (search) params.set('search', search)
       if (typeFilter) params.set('type', typeFilter)
       if (activeFilter) params.set('isActive', activeFilter)
+      if (needsReviewFilter) params.set('needsReview', needsReviewFilter)
       const res = await fetch(`/api/admin/credit-providers?${params}`)
       if (res.ok) {
         const data = await res.json()
@@ -568,7 +587,7 @@ function CreditProvidersContent() {
     } finally {
       setLoading(false)
     }
-  }, [search, typeFilter, activeFilter])
+  }, [search, typeFilter, activeFilter, needsReviewFilter])
 
   useEffect(() => { fetchProviders(1) }, [fetchProviders])
 
@@ -583,22 +602,33 @@ function CreditProvidersContent() {
     }
   }
 
+  async function verifyProvider(p: CreditProvider) {
+    setVerifying(p.id)
+    try {
+      const res = await fetch(`/api/admin/credit-providers/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markVerified: true }),
+      })
+      if (res.ok) fetchProviders(page)
+    } finally {
+      setVerifying(null)
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <Link href="/admin" className="text-cyan-400 hover:text-cyan-300 text-sm mb-2 inline-block">
-            ← Admin
-          </Link>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
             Credit Providers
           </h1>
           <p className="text-gray-400 text-sm mt-1">
-            Global registry of credit providers — names, emails, and attorney contact details
+            Registry of credit providers — names, addresses, and contact details. All staff can add, edit, and upload consent documents; deleting and verifying is restricted to admins, executives, senior managers, and managers.
           </p>
         </div>
-        {canMutate && (
+        {canEdit && (
           <button
             onClick={() => setModal({})}
             className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
@@ -609,7 +639,7 @@ function CreditProvidersContent() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-[var(--color-bg-secondary)] p-5 rounded-2xl border border-white/5">
           <p className="text-gray-400 text-xs uppercase tracking-wider">Total</p>
           <p className="text-2xl font-bold text-white mt-2">{meta.total}</p>
@@ -622,6 +652,13 @@ function CreditProvidersContent() {
           <p className="text-gray-400 text-xs uppercase tracking-wider">Inactive</p>
           <p className="text-2xl font-bold text-gray-400 mt-2">{meta.inactive}</p>
         </div>
+        <button
+          onClick={() => setNeedsReviewFilter(needsReviewFilter === 'true' ? '' : 'true')}
+          className={`p-5 rounded-2xl border text-left transition-colors ${needsReviewFilter === 'true' ? 'bg-amber-500/10 border-amber-500/40' : 'bg-[var(--color-bg-secondary)] border-white/5 hover:border-amber-500/30'}`}
+        >
+          <p className="text-gray-400 text-xs uppercase tracking-wider">Needs Review</p>
+          <p className="text-2xl font-bold text-amber-400 mt-2">{meta.needsReview}</p>
+        </button>
       </div>
 
       {/* Filters */}
@@ -661,7 +698,7 @@ function CreditProvidersContent() {
           </select>
         </div>
         <button
-          onClick={() => { setSearch(''); setTypeFilter(''); setActiveFilter('') }}
+          onClick={() => { setSearch(''); setTypeFilter(''); setActiveFilter(''); setNeedsReviewFilter('') }}
           className="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm transition-colors"
         >
           Clear
@@ -678,7 +715,7 @@ function CreditProvidersContent() {
           <div className="text-center py-16">
             <div className="text-4xl mb-3">🏦</div>
             <p className="text-gray-400">No credit providers found</p>
-            {canMutate && (
+            {canEdit && (
               <button
                 onClick={() => setModal({})}
                 className="mt-4 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-white rounded-lg text-sm font-medium transition-colors"
@@ -697,7 +734,7 @@ function CreditProvidersContent() {
                   <th className="px-6 py-3 text-gray-500 font-medium text-xs uppercase tracking-wider">Email</th>
                   <th className="px-6 py-3 text-gray-500 font-medium text-xs uppercase tracking-wider">Attorney</th>
                   <th className="px-6 py-3 text-gray-500 font-medium text-xs uppercase tracking-wider">Status</th>
-                  {canMutate && (
+                  {(canEdit || canManage) && (
                     <th className="px-6 py-3 text-gray-500 font-medium text-xs uppercase tracking-wider text-right">
                       Actions
                     </th>
@@ -710,6 +747,11 @@ function CreditProvidersContent() {
                     <td className="px-6 py-4">
                       <p className="text-white font-medium">{p.name}</p>
                       {p.phone && <p className="text-gray-500 text-xs mt-0.5">{p.phone}</p>}
+                      {p.needsReview && (
+                        <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          {p.contactSource === 'WEB_LOOKUP' ? 'Web lookup — unverified' : 'Needs review'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${TYPE_COLORS[p.type as ProviderType] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/30'}`}>
@@ -750,22 +792,36 @@ function CreditProvidersContent() {
                         {p.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    {canMutate && (
+                    {(canEdit || canManage) && (
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setModal(p)}
-                            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-xs transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setServiceConsentProvider(p)}
-                            className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 rounded-lg text-xs transition-colors"
-                          >
-                            Service docs
-                          </button>
-                          {canDelete && (
+                          {p.needsReview && canManage && (
+                            <button
+                              onClick={() => verifyProvider(p)}
+                              disabled={verifying === p.id}
+                              title={p.contactSourceNotes ?? undefined}
+                              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-lg text-xs transition-colors disabled:opacity-50"
+                            >
+                              {verifying === p.id ? '…' : 'Verify'}
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              onClick={() => setModal(p)}
+                              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-xs transition-colors"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              onClick={() => setServiceConsentProvider(p)}
+                              className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 rounded-lg text-xs transition-colors"
+                            >
+                              Service docs
+                            </button>
+                          )}
+                          {canManage && (
                             <button
                               onClick={() => deleteProvider(p)}
                               disabled={deleting === p.id}
@@ -822,7 +878,8 @@ function CreditProvidersContent() {
       {serviceConsentProvider && (
         <ServiceConsentModal
           provider={serviceConsentProvider}
-          canMutate={Boolean(canMutate)}
+          canMutate={canEdit}
+          canManage={canManage}
           onClose={() => setServiceConsentProvider(null)}
         />
       )}

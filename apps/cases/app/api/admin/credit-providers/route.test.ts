@@ -28,10 +28,11 @@ import { prisma } from '@zenowethu/database';
 import { GET, POST } from './route';
 import { GET as GET_ID, PATCH, DELETE } from './[id]/route';
 
-const mockAdmin = { user: { id: 'u1', isAdmin: true, isExecutive: false, isSeniorManager: false } };
-const mockExecutive = { user: { id: 'u2', isAdmin: false, isExecutive: true, isSeniorManager: false } };
-const mockSeniorManager = { user: { id: 'u3', isAdmin: false, isExecutive: false, isSeniorManager: true } };
-const mockMember = { user: { id: 'u4', isAdmin: false, isExecutive: false, isSeniorManager: false } };
+const mockAdmin = { user: { id: 'u1', isAdmin: true, isExecutive: false, isSeniorManager: false, isManager: false } };
+const mockExecutive = { user: { id: 'u2', isAdmin: false, isExecutive: true, isSeniorManager: false, isManager: false } };
+const mockSeniorManager = { user: { id: 'u3', isAdmin: false, isExecutive: false, isSeniorManager: true, isManager: false } };
+const mockManager = { user: { id: 'u5', isAdmin: false, isExecutive: false, isSeniorManager: false, isManager: true } };
+const mockMember = { user: { id: 'u4', isAdmin: false, isExecutive: false, isSeniorManager: false, isManager: false } };
 const unauthenticated = null;
 
 const sampleProvider = {
@@ -44,6 +45,10 @@ const sampleProvider = {
     attorney: null,
     attorneyEmail: null,
     attorneyPhone: null,
+    contactSource: 'MANUAL',
+    contactSourceNotes: null,
+    contactVerifiedAt: null,
+    needsReview: false,
     isActive: true,
     createdAt: new Date('2026-03-24'),
     updatedAt: new Date('2026-03-24'),
@@ -83,7 +88,8 @@ describe('GET /api/admin/credit-providers', () => {
         vi.mocked(prisma.creditProvider.count)
             .mockResolvedValueOnce(1)  // filtered total
             .mockResolvedValueOnce(5)  // overall total
-            .mockResolvedValueOnce(4); // active total
+            .mockResolvedValueOnce(4)  // active total
+            .mockResolvedValueOnce(2); // needsReview total
         const res = await GET(makeReq('http://localhost/api/admin/credit-providers'));
         const body = await res.json();
         expect(res.status).toBe(200);
@@ -91,6 +97,7 @@ describe('GET /api/admin/credit-providers', () => {
         expect(body.meta.total).toBe(5);
         expect(body.meta.active).toBe(4);
         expect(body.meta.inactive).toBe(1);
+        expect(body.meta.needsReview).toBe(2);
     });
 
     it('passes search and type filters to prisma', async () => {
@@ -114,10 +121,11 @@ describe('POST /api/admin/credit-providers', () => {
         expect(res.status).toBe(401);
     });
 
-    it('returns 403 for member role', async () => {
+    it('allows a member (regular staff) to create a provider', async () => {
         vi.mocked(auth).mockResolvedValue(mockMember as any);
-        const res = await POST(makeReq('http://localhost/api/admin/credit-providers', 'POST', { name: 'X', type: 'BANK' }));
-        expect(res.status).toBe(403);
+        vi.mocked(prisma.creditProvider.create).mockResolvedValue(sampleProvider as any);
+        const res = await POST(makeReq('http://localhost/api/admin/credit-providers', 'POST', { name: 'FNB', type: 'BANK' }));
+        expect(res.status).toBe(201);
     });
 
     it('returns 422 for missing required fields', async () => {
@@ -180,11 +188,34 @@ describe('GET /api/admin/credit-providers/[id]', () => {
 // ── PATCH ────────────────────────────────────────────────────────────────────
 
 describe('PATCH /api/admin/credit-providers/[id]', () => {
-    it('returns 403 for member role', async () => {
+    it('allows a member (regular staff) to edit fields', async () => {
         vi.mocked(auth).mockResolvedValue(mockMember as any);
+        vi.mocked(prisma.creditProvider.findUnique).mockResolvedValue(sampleProvider as any);
+        vi.mocked(prisma.creditProvider.update).mockResolvedValue({ ...sampleProvider, email: 'new@example.com' } as any);
         const { req, ctx } = makeIdReq('cp-1', 'PATCH', { email: 'new@example.com' });
         const res = await PATCH(req, ctx);
+        expect(res.status).toBe(200);
+    });
+
+    it('returns 403 when a member (regular staff) attempts markVerified', async () => {
+        vi.mocked(auth).mockResolvedValue(mockMember as any);
+        const { req, ctx } = makeIdReq('cp-1', 'PATCH', { markVerified: true });
+        const res = await PATCH(req, ctx);
         expect(res.status).toBe(403);
+        expect(prisma.creditProvider.update).not.toHaveBeenCalled();
+    });
+
+    it('allows a manager to markVerified', async () => {
+        vi.mocked(auth).mockResolvedValue(mockManager as any);
+        vi.mocked(prisma.creditProvider.findUnique).mockResolvedValue(
+            { ...sampleProvider, contactSource: 'WEB_LOOKUP', needsReview: true } as any
+        );
+        vi.mocked(prisma.creditProvider.update).mockResolvedValue(
+            { ...sampleProvider, contactSource: 'MANUAL', needsReview: false } as any
+        );
+        const { req, ctx } = makeIdReq('cp-1', 'PATCH', { markVerified: true });
+        const res = await PATCH(req, ctx);
+        expect(res.status).toBe(200);
     });
 
     it('returns 404 if not found', async () => {
@@ -205,16 +236,54 @@ describe('PATCH /api/admin/credit-providers/[id]', () => {
         const body = await res.json();
         expect(body.email).toBe('new@fnb.com');
     });
+
+    it('markVerified clears needsReview and stamps contactVerifiedAt/MANUAL source', async () => {
+        vi.mocked(auth).mockResolvedValue(mockAdmin as any);
+        vi.mocked(prisma.creditProvider.findUnique).mockResolvedValue(
+            { ...sampleProvider, contactSource: 'WEB_LOOKUP', needsReview: true } as any
+        );
+        vi.mocked(prisma.creditProvider.update).mockResolvedValue(
+            { ...sampleProvider, contactSource: 'MANUAL', needsReview: false } as any
+        );
+        const { req, ctx } = makeIdReq('cp-1', 'PATCH', { markVerified: true });
+        const res = await PATCH(req, ctx);
+        expect(res.status).toBe(200);
+        const callArgs = vi.mocked(prisma.creditProvider.update).mock.calls[0][0] as any;
+        expect(callArgs.data.markVerified).toBeUndefined();
+        expect(callArgs.data.needsReview).toBe(false);
+        expect(callArgs.data.contactSource).toBe('MANUAL');
+        expect(callArgs.data.contactVerifiedAt).toBeInstanceOf(Date);
+    });
 });
 
 // ── DELETE ───────────────────────────────────────────────────────────────────
 
 describe('DELETE /api/admin/credit-providers/[id]', () => {
-    it('returns 403 for senior manager (not admin/executive)', async () => {
-        vi.mocked(auth).mockResolvedValue(mockSeniorManager as any);
+    it('returns 403 for member role (regular staff cannot delete)', async () => {
+        vi.mocked(auth).mockResolvedValue(mockMember as any);
         const { req, ctx } = makeIdReq('cp-1', 'DELETE');
         const res = await DELETE(req, ctx);
         expect(res.status).toBe(403);
+    });
+
+    it('allows a senior manager to delete', async () => {
+        vi.mocked(auth).mockResolvedValue(mockSeniorManager as any);
+        vi.mocked(prisma.creditProvider.findUnique).mockResolvedValue(sampleProvider as any);
+        vi.mocked(prisma.creditAccount.updateMany).mockResolvedValue({ count: 0 });
+        vi.mocked(prisma.creditProvider.delete).mockResolvedValue(sampleProvider as any);
+        const { req, ctx } = makeIdReq('cp-1', 'DELETE');
+        const res = await DELETE(req, ctx);
+        expect(res.status).toBe(200);
+    });
+
+    it('allows a manager to delete', async () => {
+        vi.mocked(auth).mockResolvedValue(mockManager as any);
+        vi.mocked(prisma.creditProvider.findUnique).mockResolvedValue(sampleProvider as any);
+        vi.mocked(prisma.creditAccount.updateMany).mockResolvedValue({ count: 0 });
+        vi.mocked(prisma.creditProvider.delete).mockResolvedValue(sampleProvider as any);
+        const { req, ctx } = makeIdReq('cp-1', 'DELETE');
+        const res = await DELETE(req, ctx);
+        expect(res.status).toBe(200);
     });
 
     it('returns 404 when provider not found', async () => {

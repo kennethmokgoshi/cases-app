@@ -69,6 +69,7 @@ export function GenerateClearanceButton({
     const [selectedForm, setSelectedForm] = useState<'FORM_19_F2' | 'FORM_19_F1' | 'FORM_17_W' | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    const [contactWarnings, setContactWarnings] = useState<string[]>([]);
 
     const eligible = isClearanceButtonEligible({
         status,
@@ -109,6 +110,7 @@ export function GenerateClearanceButton({
         setGenerating(true);
         setError(null);
         setSuccessMsg(null);
+        setContactWarnings([]);
 
         try {
             const formChoice = assessment.candidateForms.find(f => f.id === selectedForm);
@@ -131,17 +133,23 @@ export function GenerateClearanceButton({
 
             const genResult = await res.json();
             const isB2B = genResult.isB2B;
+            const warnings: string[] = genResult.warnings ?? [];
 
             if (isB2B) {
                 setSuccessMsg(`Successfully generated ${formChoice?.label || docType}! Uploaded to Consumer Profile Vault (🔒 B2B Restricted: Crediva download disabled & mailing blocked).`);
             } else {
                 setSuccessMsg(`Successfully generated ${formChoice?.label || docType}! Uploaded to Consumer Profile Vault (✓ Accessible on Crediva).`);
             }
+            setContactWarnings(warnings);
 
             onDocumentGenerated?.();
-            setTimeout(() => {
-                setModalOpen(false);
-            }, 2500);
+            // Leave the modal open when a creditor is missing contact details so
+            // staff actually see the warning instead of it disappearing in 2.5s.
+            if (warnings.length === 0) {
+                setTimeout(() => {
+                    setModalOpen(false);
+                }, 2500);
+            }
         } catch (err: any) {
             setError(err.message || 'Error generating clearance certificate.');
         } finally {
@@ -335,6 +343,18 @@ export function GenerateClearanceButton({
                                     <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-700/60 text-emerald-200 text-xs flex items-center gap-2">
                                         <span>✓</span>
                                         <span>{successMsg}</span>
+                                    </div>
+                                )}
+
+                                {contactWarnings.length > 0 && (
+                                    <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-700/60 text-amber-200 text-xs space-y-1.5">
+                                        <div className="flex items-center gap-2 font-semibold">
+                                            <span>⚠️</span>
+                                            <span>{contactWarnings.length} creditor{contactWarnings.length > 1 ? 's' : ''} missing contact details</span>
+                                        </div>
+                                        <ul className="list-disc list-inside space-y-0.5 text-amber-300/90">
+                                            {contactWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                                        </ul>
                                     </div>
                                 )}
                                 </>

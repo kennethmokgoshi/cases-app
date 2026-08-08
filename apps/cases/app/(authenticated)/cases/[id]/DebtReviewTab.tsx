@@ -200,11 +200,11 @@ export function DebtReviewTab({ caseId, canApprove, onDocumentGenerated }: DebtR
     const [sendingReferrer,setSendingReferrer] = useState<Record<string, boolean>>({});
     const [sendingCreditors, setSendingCreditors] = useState(false);
 
-    const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+    const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
-    const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    const showToast = (msg: string, type: 'success' | 'error' | 'warning' = 'success') => {
         setToast({ msg, type });
-        setTimeout(() => setToast(null), 4000);
+        setTimeout(() => setToast(null), 6000);
     };
 
     const fetchData = useCallback(async () => {
@@ -249,7 +249,15 @@ export function DebtReviewTab({ caseId, canApprove, onDocumentGenerated }: DebtR
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error ?? 'Generate failed');
-            showToast(`${DOC_LABELS[documentType]} generated successfully`);
+            const warnings: string[] = json.warnings ?? [];
+            if (warnings.length > 0) {
+                showToast(
+                    `${DOC_LABELS[documentType]} generated, but ${warnings.length} creditor${warnings.length > 1 ? 's are' : ' is'} missing contact details: ${warnings.map(w => w.split(':')[0]).join(', ')}. Add details in Admin → Credit Providers before sending.`,
+                    'warning'
+                );
+            } else {
+                showToast(`${DOC_LABELS[documentType]} generated successfully`);
+            }
             await fetchData();
         } catch (e) {
             showToast(e instanceof Error ? e.message : 'Generate failed', 'error');
@@ -444,9 +452,11 @@ export function DebtReviewTab({ caseId, canApprove, onDocumentGenerated }: DebtR
         <div className="space-y-6">
             {/* Toast */}
             {toast && (
-                <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-xl transition-all ${
+                <div className={`fixed bottom-6 right-6 z-50 max-w-md px-5 py-3 rounded-xl text-sm font-medium shadow-xl transition-all ${
                     toast.type === 'success'
                         ? 'bg-emerald-500/90 text-white'
+                        : toast.type === 'warning'
+                        ? 'bg-amber-500/90 text-white'
                         : 'bg-red-500/90 text-white'
                 }`}>
                     {toast.msg}
@@ -743,7 +753,7 @@ export function DebtReviewTab({ caseId, canApprove, onDocumentGenerated }: DebtR
                         ))}
                     </ul>
                     <a
-                        href="/admin/credit-providers"
+                        href="/credit-providers"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="mt-3 inline-block text-xs text-amber-300 underline hover:text-amber-200"

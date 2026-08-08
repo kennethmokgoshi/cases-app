@@ -29,8 +29,9 @@ import { mkdir, writeFile } from 'fs/promises';
 import { GET, POST } from './route';
 import { PATCH, DELETE } from './[docId]/route';
 
-const adminSession = { user: { id: 'u1', isAdmin: true, isExecutive: false, isSeniorManager: false } };
-const memberSession = { user: { id: 'u2', isAdmin: false, isExecutive: false, isSeniorManager: false } };
+const adminSession = { user: { id: 'u1', isAdmin: true, isExecutive: false, isSeniorManager: false, isManager: false } };
+const memberSession = { user: { id: 'u2', isAdmin: false, isExecutive: false, isSeniorManager: false, isManager: false } };
+const managerSession = { user: { id: 'u3', isAdmin: false, isExecutive: false, isSeniorManager: false, isManager: true } };
 const provider = { id: 'cp-1', name: 'FNB' };
 const serviceDoc = {
     id: 'doc-1',
@@ -107,11 +108,11 @@ describe('GET /api/admin/credit-providers/[id]/service-consents', () => {
 });
 
 describe('POST /api/admin/credit-providers/[id]/service-consents', () => {
-    it('returns 403 for members', async () => {
+    it('allows members (regular staff) to upload', async () => {
         vi.mocked(auth).mockResolvedValue(memberSession as never);
         const file = new File([new Uint8Array([1, 2, 3])], 'consent.pdf', { type: 'application/pdf' });
         const res = await POST(uploadReq(file), ctx());
-        expect(res.status).toBe(403);
+        expect(res.status).toBe(201);
     });
 
     it('validates that a file is supplied', async () => {
@@ -150,10 +151,29 @@ describe('PATCH/DELETE /api/admin/credit-providers/[id]/service-consents/[docId]
         });
     });
 
+    it('allows members (regular staff) to activate/deactivate', async () => {
+        vi.mocked(auth).mockResolvedValue(memberSession as never);
+        const res = await PATCH(jsonReq({ isActive: false }), ctx());
+        expect(res.status).toBe(200);
+    });
+
     it('deletes a provider consent document', async () => {
         vi.mocked(auth).mockResolvedValue(adminSession as never);
         const res = await DELETE(new Request('http://localhost/test', { method: 'DELETE' }), ctx());
         expect(res.status).toBe(200);
         expect(prisma.creditProviderServiceConsentDocument.delete).toHaveBeenCalledWith({ where: { id: 'doc-1' } });
+    });
+
+    it('allows a manager to delete a provider consent document', async () => {
+        vi.mocked(auth).mockResolvedValue(managerSession as never);
+        const res = await DELETE(new Request('http://localhost/test', { method: 'DELETE' }), ctx());
+        expect(res.status).toBe(200);
+    });
+
+    it('returns 403 for members (regular staff cannot delete)', async () => {
+        vi.mocked(auth).mockResolvedValue(memberSession as never);
+        const res = await DELETE(new Request('http://localhost/test', { method: 'DELETE' }), ctx());
+        expect(res.status).toBe(403);
+        expect(prisma.creditProviderServiceConsentDocument.delete).not.toHaveBeenCalled();
     });
 });

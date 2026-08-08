@@ -106,6 +106,8 @@ export default auth((req) => {
             const isAdmin = req.auth?.user?.isAdmin === true
             // Exception: the Debt Counsellors directory is viewable by ALL staff
             // (per operations spec) — its edit APIs enforce isAdmin server-side.
+            // (Credit Providers lives at /credit-providers, outside /admin entirely,
+            // for the same reason — see that route for details.)
             const isStaffViewable = pathname.startsWith('/admin/debt-counsellors')
             if (!isAdmin && !isStaffViewable) {
                 return NextResponse.redirect(new URL('/', req.url))

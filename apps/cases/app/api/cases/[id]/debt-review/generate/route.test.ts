@@ -333,6 +333,66 @@ describe('POST /api/cases/[id]/debt-review/generate D4 documents', () => {
         }));
     });
 
+    it('warns when a notified creditor has no address, phone, or email on file', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            ...caseRecord,
+            creditAccounts: [
+                ...caseRecord.creditAccounts,
+                {
+                    id: 'acc-no-contact',
+                    creditorName: 'Mystery Lender',
+                    accountNumber: 'ML-1',
+                    accountType: 'PERSONAL_LOAN',
+                    outstandingBalance: 5000,
+                    monthlyInstalment: 500,
+                    interestRate: null,
+                    isPrescribed: false,
+                    isIncluded: true,
+                    status: 'ACTIVE',
+                    creditProvider: null,
+                    documents: [],
+                },
+            ],
+        } as never);
+        // No CreditProvider matches by name either — findMatchingCreditProvider returns null.
+        vi.mocked(prisma.creditProvider.findFirst).mockResolvedValue(null);
+
+        const res = await POST(req('FORM_17_W', { targetStatus: 'B' }), ctx('case-1'));
+        const body = await res.json();
+
+        expect(res.status).toBe(201);
+        expect(body.warnings).toHaveLength(1);
+        expect(body.warnings[0]).toContain('Mystery Lender');
+    });
+
+    it('returns no warnings when every notified creditor has contact details on file', async () => {
+        vi.mocked(prisma.case.findUnique).mockResolvedValue({
+            ...caseRecord,
+            creditAccounts: [
+                ...caseRecord.creditAccounts,
+                {
+                    creditorName: 'Nimble Group',
+                    accountNumber: 'NG-1',
+                    accountType: 'PERSONAL_LOAN',
+                    outstandingBalance: 9816,
+                    monthlyInstalment: 450,
+                    interestRate: 22.5,
+                    isPrescribed: false,
+                    isIncluded: true,
+                    status: 'ACTIVE',
+                    creditProvider: { id: 'cp-1', email: 'collections@nimble.co.za', phone: '0861123456', address: '1 Nimble Street, Cape Town' },
+                    documents: [],
+                },
+            ],
+        } as never);
+
+        const res = await POST(req('FORM_17_W', { targetStatus: 'B' }), ctx('case-1'));
+        const body = await res.json();
+
+        expect(res.status).toBe(201);
+        expect(body.warnings).toEqual([]);
+    });
+
     it('rejects a genuinely invalid targetStatus with 422', async () => {
         const res = await POST(req('FORM_17_W', { targetStatus: 'NOT_A_STATUS' }), ctx('case-1'));
 

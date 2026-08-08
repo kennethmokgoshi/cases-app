@@ -14,7 +14,12 @@ const PatchSchema = z.object({
     attorney: z.string().max(200).nullable().optional(),
     attorneyEmail: z.string().email().nullable().optional(),
     attorneyPhone: z.string().max(30).nullable().optional(),
+    contactSource: z.enum(['MANUAL', 'WEB_LOOKUP', 'XDS']).optional(),
+    contactSourceNotes: z.string().max(1000).nullable().optional(),
+    needsReview: z.boolean().optional(),
     isActive: z.boolean().optional(),
+    /** Staff confirms the current contact details are correct — clears the review flag. */
+    markVerified: z.boolean().optional(),
 });
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -39,17 +44,15 @@ export async function GET(_req: Request, { params }: RouteContext) {
     }
 }
 
-// PATCH /api/admin/credit-providers/[id] — update a credit provider
+// PATCH /api/admin/credit-providers/[id] — update a credit provider.
+// Editing fields is open to any signed-in staff member; markVerified (the
+// "confirmed correct for legal notices" compliance action) is restricted to
+// admins, executives, senior managers, and managers.
 export async function PATCH(request: Request, { params }: RouteContext) {
     try {
         const session = await auth();
         if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        const canMutate =
-            session.user.isAdmin || session.user.isExecutive || session.user.isSeniorManager;
-        if (!canMutate) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const { id } = await params;
@@ -62,14 +65,28 @@ export async function PATCH(request: Request, { params }: RouteContext) {
             );
         }
 
+        if (parsed.data.markVerified) {
+            const canManage =
+                session.user.isAdmin || session.user.isExecutive ||
+                session.user.isSeniorManager || session.user.isManager;
+            if (!canManage) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+        }
+
         const existing = await prisma.creditProvider.findUnique({ where: { id } });
         if (!existing) {
             return NextResponse.json({ error: 'Not found' }, { status: 404 });
         }
 
+        const { markVerified, ...rest } = parsed.data;
+        const data = markVerified
+            ? { ...rest, contactSource: 'MANUAL' as const, needsReview: false, contactVerifiedAt: new Date() }
+            : rest;
+
         const provider = await prisma.creditProvider.update({
             where: { id },
-            data: parsed.data,
+            data,
         });
 
         logger.info(`Credit provider updated by user ${session.user.id}: ${provider.name}`);
@@ -91,14 +108,18 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
 }
 
-// DELETE /api/admin/credit-providers/[id] — remove a credit provider (admin/executive only)
+// DELETE /api/admin/credit-providers/[id] — remove a credit provider
+// (admins, executives, senior managers, and managers only)
 export async function DELETE(_req: Request, { params }: RouteContext) {
     try {
         const session = await auth();
         if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        if (!session.user.isAdmin && !session.user.isExecutive) {
+        const canManage =
+            session.user.isAdmin || session.user.isExecutive ||
+            session.user.isSeniorManager || session.user.isManager;
+        if (!canManage) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 

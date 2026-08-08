@@ -176,13 +176,28 @@ export async function POST(
                 });
                 updated++;
             } else {
-                const matchedProvider = await findMatchingCreditProvider(prisma, acc.creditorName);
+                let matchedProvider = await findMatchingCreditProvider(prisma, acc.creditorName);
+                if (!matchedProvider) {
+                    // No registry entry for this creditor at all — rather than leave the
+                    // account silently unlinked (which produces blank contact details on
+                    // Form 17.W and similar notices), create a stub the admin UI flags for
+                    // review instead of losing track of it.
+                    matchedProvider = await prisma.creditProvider.create({
+                        data: {
+                            name: acc.creditorName,
+                            type: 'OTHER',
+                            contactSource: 'XDS',
+                            contactSourceNotes: `Auto-created during credit report sync — no existing CreditProvider matched "${acc.creditorName}". Contact details need to be sourced and confirmed.`,
+                            needsReview: true,
+                        },
+                    });
+                }
                 await prisma.creditAccount.create({
                     data: {
                         caseId,
                         clientId: caseData.clientId,
                         creditorName: acc.creditorName,
-                        creditProviderId: matchedProvider?.id ?? null,
+                        creditProviderId: matchedProvider.id,
                         accountNumber: acc.accountNumber || null,
                         accountType: acc.accountType,
                         originalAmount: acc.originalAmount ?? null,

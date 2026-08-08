@@ -8,6 +8,7 @@ const logger = createLogger('api/admin/credit-providers');
 const PAGE_SIZE = 20;
 
 export const PROVIDER_TYPES = ['BANK', 'MICRO_LENDER', 'TELECOM', 'RETAILER', 'OTHER'] as const;
+export const CONTACT_SOURCES = ['MANUAL', 'WEB_LOOKUP', 'XDS'] as const;
 
 const CreateSchema = z.object({
     name: z.string().min(1).max(200),
@@ -18,6 +19,9 @@ const CreateSchema = z.object({
     attorney: z.string().max(200).nullable().optional(),
     attorneyEmail: z.string().email().nullable().optional(),
     attorneyPhone: z.string().max(30).nullable().optional(),
+    contactSource: z.enum(CONTACT_SOURCES).optional(),
+    contactSourceNotes: z.string().max(1000).nullable().optional(),
+    needsReview: z.boolean().optional(),
     isActive: z.boolean().optional(),
 });
 
@@ -34,12 +38,14 @@ export async function GET(request: Request) {
         const search = searchParams.get('search') ?? '';
         const type = searchParams.get('type') ?? '';
         const isActiveParam = searchParams.get('isActive') ?? '';
+        const needsReviewParam = searchParams.get('needsReview') ?? '';
 
         const where: Record<string, unknown> = {};
         if (search) where.name = { contains: search, mode: 'insensitive' };
         if (type) where.type = type;
         if (isActiveParam === 'true') where.isActive = true;
         if (isActiveParam === 'false') where.isActive = false;
+        if (needsReviewParam === 'true') where.needsReview = true;
 
         const [providers, total] = await Promise.all([
             prisma.creditProvider.findMany({
@@ -51,9 +57,10 @@ export async function GET(request: Request) {
             prisma.creditProvider.count({ where }),
         ]);
 
-        const [totalCount, activeCount] = await Promise.all([
+        const [totalCount, activeCount, needsReviewCount] = await Promise.all([
             prisma.creditProvider.count(),
             prisma.creditProvider.count({ where: { isActive: true } }),
+            prisma.creditProvider.count({ where: { needsReview: true } }),
         ]);
 
         return NextResponse.json({
@@ -65,6 +72,7 @@ export async function GET(request: Request) {
                 total: totalCount,
                 active: activeCount,
                 inactive: totalCount - activeCount,
+                needsReview: needsReviewCount,
             },
         });
     } catch (error) {
@@ -73,17 +81,12 @@ export async function GET(request: Request) {
     }
 }
 
-// POST /api/admin/credit-providers — create a new credit provider
+// POST /api/admin/credit-providers — create a new credit provider (any signed-in staff member)
 export async function POST(request: Request) {
     try {
         const session = await auth();
         if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        const canMutate =
-            session.user.isAdmin || session.user.isExecutive || session.user.isSeniorManager;
-        if (!canMutate) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const body = await request.json();
@@ -95,8 +98,10 @@ export async function POST(request: Request) {
             );
         }
 
-        const { name, type, email, phone, address, attorney, attorneyEmail, attorneyPhone, isActive } =
-            parsed.data;
+        const {
+            name, type, email, phone, address, attorney, attorneyEmail, attorneyPhone,
+            contactSource, contactSourceNotes, needsReview, isActive,
+        } = parsed.data;
 
         const provider = await prisma.creditProvider.create({
             data: {
@@ -108,6 +113,9 @@ export async function POST(request: Request) {
                 attorney: attorney ?? null,
                 attorneyEmail: attorneyEmail ?? null,
                 attorneyPhone: attorneyPhone ?? null,
+                contactSource: contactSource ?? 'MANUAL',
+                contactSourceNotes: contactSourceNotes ?? null,
+                needsReview: needsReview ?? false,
                 isActive: isActive ?? true,
             },
         });

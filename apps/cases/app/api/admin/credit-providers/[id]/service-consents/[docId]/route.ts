@@ -11,30 +11,30 @@ const PatchSchema = z.object({
 
 type RouteContext = { params: Promise<{ id: string; docId: string }> };
 
-type ServiceConsentSession = {
+type ManageSession = {
     user?: {
         isAdmin?: boolean;
         isExecutive?: boolean;
         isSeniorManager?: boolean;
+        isManager?: boolean;
     };
 } | null | undefined;
 
-function canMutateServiceConsents(session: ServiceConsentSession): boolean {
+function canManageServiceConsents(session: ManageSession): boolean {
     return Boolean(
         session?.user?.isAdmin ||
         session?.user?.isExecutive ||
-        session?.user?.isSeniorManager
+        session?.user?.isSeniorManager ||
+        session?.user?.isManager
     );
 }
 
+// Activate/deactivate is open to any signed-in staff member.
 export async function PATCH(request: Request, { params }: RouteContext) {
     try {
         const session = await auth();
         if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        if (!canMutateServiceConsents(session)) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const { id, docId } = await params;
@@ -70,13 +70,14 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
 }
 
+// Delete is restricted to admins, executives, senior managers, and managers.
 export async function DELETE(_request: Request, { params }: RouteContext) {
     try {
         const session = await auth();
         if (!session?.user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        if (!canMutateServiceConsents(session)) {
+        if (!canManageServiceConsents(session)) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 

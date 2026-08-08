@@ -220,6 +220,9 @@ export async function POST(request: Request, { params }: RouteContext) {
 
         // ── Generate PDF bytes ────────────────────────────────────────────────
         let pdfBytes: Uint8Array;
+        // Populated for FORM_17_W — surfaced to staff so an NCA notice with
+        // incomplete creditor contact details is never mistaken for a complete one.
+        let documentWarnings: string[] = [];
 
         if (COURT_DOC_TYPES.has(documentType)) {
             // Status C → G rescission pack — shared court-doc generators
@@ -334,6 +337,14 @@ export async function POST(request: Request, { params }: RouteContext) {
                 // withdrawal-prior-to-Form-17.2 path (targetStatus 'B') selects option A.
                 selectedOption: targetStatus === 'G' ? 'C' : 'A',
             };
+
+            // A creditor with none of address/phone/email on file can't actually be
+            // individually notified per the form's own "TO:" instruction — flag it
+            // rather than let the PDF quietly go out with blank contact columns.
+            documentWarnings = data.accounts
+                .filter(a => !a.address && !a.phone && !a.email)
+                .map(a => `${a.creditorName}: no address, phone, or email on file — this creditor cannot be individually notified yet. Add contact details in Admin → Credit Providers before sending.`);
+
             pdfBytes = await generateForm17W(data);
         } else if (documentType === 'SECTION_86_NOTICE') {
             const data: Section86Data = {
@@ -648,8 +659,14 @@ export async function POST(request: Request, { params }: RouteContext) {
         }
 
         logger.info(`Generated ${documentType} for case ${id} by user ${session.user.id}: ${publicUrl} (isB2B=${isB2B})`);
+        if (documentWarnings.length > 0) {
+            logger.warn(`${documentType} for case ${id} generated with ${documentWarnings.length} creditor contact warning(s)`);
+        }
 
-        return NextResponse.json({ success: true, document: docRecord, url: publicUrl, isB2B }, { status: 201 });
+        return NextResponse.json(
+            { success: true, document: docRecord, url: publicUrl, isB2B, warnings: documentWarnings },
+            { status: 201 }
+        );
     } catch (error) {
         logger.error('Error generating debt review document:', error);
         return NextResponse.json({ error: 'Failed to generate document' }, { status: 500 });

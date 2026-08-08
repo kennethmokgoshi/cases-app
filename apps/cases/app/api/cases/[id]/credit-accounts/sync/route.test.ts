@@ -9,7 +9,7 @@ vi.mock('@zenowethu/database', () => ({
     prisma: {
         case: { findUnique: vi.fn() },
         creditAccount: { create: vi.fn(), update: vi.fn() },
-        creditProvider: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+        creditProvider: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
         workflowLog: { create: vi.fn() },
     },
 }));
@@ -142,6 +142,7 @@ describe('POST /api/cases/[id]/credit-accounts/sync', () => {
         vi.mocked(prisma.creditAccount.update).mockResolvedValue({ id: 'existing-1' } as never);
         vi.mocked(prisma.creditProvider.findFirst).mockResolvedValue(null);
         vi.mocked(prisma.creditProvider.findMany).mockResolvedValue([]);
+        vi.mocked(prisma.creditProvider.create).mockResolvedValue({ id: 'cp-stub' } as never);
         vi.mocked(prisma.workflowLog.create).mockResolvedValue({} as never);
     });
 
@@ -220,7 +221,7 @@ describe('POST /api/cases/[id]/credit-accounts/sync', () => {
         });
     });
 
-    it('leaves creditProviderId null when no provider matches', async () => {
+    it('auto-creates a needs-review CreditProvider stub and links it when no provider matches', async () => {
         const res = await POST(
             new Request('http://localhost/api/cases/c1/credit-accounts/sync', {
                 method: 'POST',
@@ -239,8 +240,15 @@ describe('POST /api/cases/[id]/credit-accounts/sync', () => {
         );
 
         expect(res.status).toBe(200);
+        expect(prisma.creditProvider.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({
+                name: 'Totally Unknown Creditor',
+                contactSource: 'XDS',
+                needsReview: true,
+            }),
+        });
         expect(prisma.creditAccount.create).toHaveBeenCalledWith({
-            data: expect.objectContaining({ creditProviderId: null }),
+            data: expect.objectContaining({ creditProviderId: 'cp-stub' }),
         });
     });
 
