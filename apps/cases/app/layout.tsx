@@ -50,24 +50,55 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
-        {/* Service Worker Registration */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(registration) {
-                      console.log('[INFO] ServiceWorker registered:', registration.scope);
-                    },
-                    function(err) {
-                      console.log('[INFO] ServiceWorker registration failed:', err);
-                    }
-                  );
-                });
-              }
-            ` }}
-        />
+        {/* Service Worker Registration — production only. A caching service worker
+            fighting Turbopack's dev-mode rebuilds is what causes "Failed to fetch"
+            on client-side navigation in local dev, and it survives dev server
+            restarts since it lives in the browser, not the server. In non-production
+            builds we instead actively unregister any worker + caches left over from
+            before this guard existed, so a stale one doesn't linger silently. */}
+        {process.env.NODE_ENV === 'production' ? (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                if ('serviceWorker' in navigator) {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js').then(
+                      function(registration) {
+                        console.log('[INFO] ServiceWorker registered:', registration.scope);
+                      },
+                      function(err) {
+                        console.log('[INFO] ServiceWorker registration failed:', err);
+                      }
+                    );
+                  });
+                }
+              ` }}
+          />
+        ) : (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    if (regs.length === 0) return;
+                    // Unregistering doesn't stop a worker that's already controlling
+                    // THIS page load — only the next one. Force that next load
+                    // ourselves once cleanup finishes, so one reload is enough
+                    // instead of leaving the user to hard-reload twice. This can't
+                    // loop: once the worker is gone, regs.length is 0 and we stop.
+                    Promise.all(regs.map(function(reg) { return reg.unregister(); }))
+                      .then(function() {
+                        if (!('caches' in window)) { window.location.reload(); return; }
+                        caches.keys().then(function(names) {
+                          Promise.all(names.map(function(name) { return caches.delete(name); }))
+                            .then(function() { window.location.reload(); });
+                        });
+                      });
+                  });
+                }
+              ` }}
+          />
+        )}
       </body>
     </html>
   );
