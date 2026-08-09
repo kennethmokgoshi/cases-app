@@ -43,6 +43,11 @@ vi.mock('@zenowethu/database', () => ({
     },
 }));
 
+const runCaseAutomationTrigger = vi.fn().mockResolvedValue(undefined);
+vi.mock('@zenowethu/shared-lib/src/ai/case-automation-trigger', () => ({
+    runCaseAutomationTrigger: (...args: unknown[]) => runCaseAutomationTrigger(...args),
+}));
+
 function req() {
     return new Request('http://localhost/api/referrer-portal/referrals/case-123/documents', {
         method: 'POST',
@@ -109,5 +114,51 @@ describe('POST /api/referrer-portal/referrals/[caseId]/documents', () => {
                 type: 'REFERRER_DOCUMENT_UPLOAD',
             }),
         }));
+
+        // ID_DOCUMENT is a DHS-recognized type — should re-trigger automation immediately
+        // instead of leaving the case to wait for the next cron pass. The trigger fires via
+        // a fire-and-forget dynamic import, so wait for it rather than asserting synchronously.
+        await vi.waitFor(() => {
+            expect(runCaseAutomationTrigger).toHaveBeenCalledWith('case-123', 'DOCUMENT_UPLOADED');
+        });
+    });
+
+    it('does not re-trigger automation for a document type the DHS gate does not care about', async () => {
+        vi.mocked(getCurrentReferrerPortalAccess).mockResolvedValueOnce({
+            ok: true,
+            sessionUserId: 'user-1',
+            referrer: { id: 'ref-1', firstName: 'William', lastName: 'Maesela' },
+        });
+
+        vi.mocked(prisma.case.findFirst).mockResolvedValueOnce({
+            id: 'case-123',
+            fileNumber: 'ZDM-123',
+            assignedToId: null,
+        } as never);
+
+        vi.mocked(parseMultipartForm).mockResolvedValueOnce({
+            fields: { documentType: 'PAYSLIP', notes: '' },
+            files: [{ name: 'payslip.pdf', fieldName: 'file', buffer: Buffer.from('hello'), type: 'application/pdf' }],
+        });
+
+        vi.mocked(prisma.document.create).mockResolvedValueOnce({
+            id: 'doc-2',
+            createdAt: new Date(),
+        } as never);
+
+        vi.mocked(prisma.caseComment.create).mockResolvedValueOnce({
+            id: 'comment-2',
+            content: 'Auto comment',
+            createdAt: new Date(),
+            user: { firstName: 'William', lastName: 'Maesela', userType: 'REFERRER' },
+        } as never);
+
+        const res = await POST(req(), { params: Promise.resolve({ caseId: 'case-123' }) });
+        expect(res.status).toBe(201);
+
+        // Give the (not-taken) fire-and-forget trigger path the same window the positive
+        // test needs, to prove this isn't a false negative from checking too early.
+        await new Promise((r) => setTimeout(r, 20));
+        expect(runCaseAutomationTrigger).not.toHaveBeenCalled();
     });
 });

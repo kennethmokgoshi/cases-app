@@ -804,7 +804,7 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                                             className="bg-zeno-gray border border-white/10 text-white rounded-lg p-3 focus:outline-none focus:border-zeno-cyan [color-scheme:dark] [&>option]:bg-zeno-dark [&>option]:text-white"
                                         >
                                             <option value="ID" className="bg-zeno-dark text-white">ID Copy</option>
-                                            <option value="POA" className="bg-zeno-dark text-white">Proof of Address</option>
+                                            <option value="POA" className="bg-zeno-dark text-white">Power of Attorney / Consent</option>
                                             <option value="CREDIT_REPORT" className="bg-zeno-dark text-white">Credit Report</option>
                                             <option value="PAYSLIP" className="bg-zeno-dark text-white">Payslip</option>
                                             <option value="BANK_STATEMENT" className="bg-zeno-dark text-white">Bank Statement</option>

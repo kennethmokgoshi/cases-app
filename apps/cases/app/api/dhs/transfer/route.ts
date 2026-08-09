@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { requestTransfer } from '@zenowethu/shared-lib/src/dhs/transfer';
 import { closeBrowser } from '@zenowethu/shared-lib/src/dhs/browser';
+import { ID_DOCUMENT_TYPES, POA_DOCUMENT_TYPES } from '@zenowethu/shared-lib/src/automation/workflow-engine';
 import { prisma } from '@zenowethu/database';
 import path from 'path';
 import fs from 'fs';
@@ -116,18 +117,19 @@ export async function POST(request: Request) {
             // First try ZENOWETHU_POA (the signed consent form)
             poaDoc = caseData.documents.find(d => d.type === 'ZENOWETHU_POA');
 
-            // Fall back to regular POA if ZENOWETHU_POA not found
+            // Fall back to any other recognized POA/consent type code, then filename
             if (!poaDoc) {
                 poaDoc = caseData.documents.find(d =>
+                    POA_DOCUMENT_TYPES.includes(d.type) ||
                     d.fileName?.toLowerCase().includes('poa') ||
                     d.fileName?.toLowerCase().includes('power of attorney') ||
-                    d.type === 'POA'
+                    d.fileName?.toLowerCase().includes('consent')
                 );
             }
         }
         if (!idDoc) {
             idDoc = caseData.documents.find(d =>
-                d.type === 'ID' ||
+                ID_DOCUMENT_TYPES.includes(d.type) ||
                 (d.fileName?.toLowerCase().includes('id') &&
                     !d.fileName?.toLowerCase().includes('credit'))
             );

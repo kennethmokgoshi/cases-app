@@ -381,11 +381,21 @@ export function resolveDocPath(fileUrl: string): string {
 }
 
 /**
+ * Document.type codes that count as an ID / Power of Attorney for DHS purposes.
+ * The referrer self-service portal (apps/cases/app/referrer) lets partners pick
+ * more granular labels (ID_DOCUMENT, POWER_OF_ATTORNEY, CONSENT_FORM) than the
+ * staff-facing upload surfaces (ID, POA, ZENOWETHU_POA) — both sets must be
+ * recognized here or referral cases never clear NOT_REQUESTED_VIA_DHS.
+ */
+export const ID_DOCUMENT_TYPES = ['ID', 'ID_DOCUMENT'];
+export const POA_DOCUMENT_TYPES = ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY', 'CONSENT_FORM'];
+
+/**
  * Check if a case has both ID and POA documents with resolvable file paths.
  */
 export function getDHSDocuments(c: OverdueCase): { idPath: string | null; poaPath: string | null } {
-    const idDoc = c.documents.find(d => d.type === 'ID');
-    const poaDoc = c.documents.find(d => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
+    const idDoc = c.documents.find(d => ID_DOCUMENT_TYPES.includes(d.type));
+    const poaDoc = c.documents.find(d => POA_DOCUMENT_TYPES.includes(d.type));
 
     const idPath = idDoc ? resolveDocPath(idDoc.fileUrl) : null;
     const poaPath = poaDoc ? resolveDocPath(poaDoc.fileUrl) : null;
@@ -403,8 +413,8 @@ export function getDHSDocumentUrls(
     c: OverdueCase,
     appUrl: string
 ): { idUrl: string | null; poaUrl: string | null; idFileName: string | null; poaFileName: string | null } {
-    const idDoc = c.documents.find(d => d.type === 'ID');
-    const poaDoc = c.documents.find(d => d.type === 'POA' || d.type === 'ZENOWETHU_POA');
+    const idDoc = c.documents.find(d => ID_DOCUMENT_TYPES.includes(d.type));
+    const poaDoc = c.documents.find(d => POA_DOCUMENT_TYPES.includes(d.type));
 
     const toAbsolute = (fileUrl: string) =>
         fileUrl.startsWith('http') ? fileUrl : `${appUrl.replace(/\/$/, '')}${fileUrl}`;

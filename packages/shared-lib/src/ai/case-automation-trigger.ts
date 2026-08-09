@@ -35,6 +35,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { GhlService } from '../integrations/ghl-service';
 import { getAutomationUserId } from '../automation/automation-user';
+import { ID_DOCUMENT_TYPES, POA_DOCUMENT_TYPES } from '../automation/workflow-engine';
 
 const logger = createLogger('ai/case-automation-trigger');
 
@@ -202,7 +203,7 @@ export async function runCaseAutomationTrigger(
 
                     // Find combined file or ID doc to re-analyse
                     const combinedFile = caseData.documents.find(d => d.type === 'COMBINED' || d.type === 'OTHER');
-                    const idDoc = caseData.documents.find(d => d.type === 'ID');
+                    const idDoc = caseData.documents.find(d => ID_DOCUMENT_TYPES.includes(d.type));
                     const docToProcess = combinedFile || idDoc;
 
                     if (docToProcess) {
@@ -426,8 +427,8 @@ export async function runCaseAutomationTrigger(
     // DHS portal confirmed NOT_REQUESTED (or check failed) — proceed to document check and submit transfer.
 
     //  Step 4: Check for Zenowethu POA and ID
-    let poaDoc = currentCase.documents.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
-    let idDoc = currentCase.documents.find(d => d.type === 'ID');
+    let poaDoc = currentCase.documents.find(d => POA_DOCUMENT_TYPES.includes(d.type));
+    let idDoc = currentCase.documents.find(d => ID_DOCUMENT_TYPES.includes(d.type));
 
     //  Step 4b: If documents missing, try to run extraction
     if (!poaDoc || !idDoc) {
@@ -444,8 +445,8 @@ export async function runCaseAutomationTrigger(
 
                 // Re-check for docs after extraction
                 const refreshedDocs = await prisma.document.findMany({ where: { caseId: currentCase.id } });
-                poaDoc = refreshedDocs.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
-                idDoc = refreshedDocs.find(d => d.type === 'ID');
+                poaDoc = refreshedDocs.find(d => POA_DOCUMENT_TYPES.includes(d.type));
+                idDoc = refreshedDocs.find(d => ID_DOCUMENT_TYPES.includes(d.type));
             } catch (extractErr) {
                 logger.error(`[CASE_AUTOMATION] Auto-extraction failed for ${currentCase.id}:`, extractErr);
             }
@@ -611,8 +612,8 @@ async function performAutoDhsTransferRequest(
 
     // Step 6a: Fetch the latest POA and ID documents and resolve their file paths
     const latestDocs = await prisma.document.findMany({ where: { caseId } });
-    const poaDoc = latestDocs.find(d => d.type === 'ZENOWETHU_POA' || d.type === 'POA');
-    const idDoc  = latestDocs.find(d => d.type === 'ID');
+    const poaDoc = latestDocs.find(d => POA_DOCUMENT_TYPES.includes(d.type));
+    const idDoc  = latestDocs.find(d => ID_DOCUMENT_TYPES.includes(d.type));
 
     if (!poaDoc || !idDoc) {
         await saveAIComment(caseId, adminId, {

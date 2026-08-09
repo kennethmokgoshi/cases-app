@@ -7,6 +7,7 @@ import { existsSync } from 'fs';
 import { getCurrentReferrerPortalAccess } from '@/lib/referrer-portal-access';
 import { parseMultipartForm } from '@/lib/form-parser';
 import { formatDocumentTypeLabel, REFERRER_COMMENT_TYPE } from '@/lib/referrer-portal';
+import { ID_DOCUMENT_TYPES, POA_DOCUMENT_TYPES } from '@zenowethu/shared-lib/src/automation/workflow-engine';
 
 const logger = createLogger('api/referrer-portal/referrals/documents');
 
@@ -90,6 +91,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
         });
 
         await touchCaseAction(caseId, 'DOCUMENT_UPLOAD', { userId: access.sessionUserId });
+
+        // Re-run the DHS automation trigger immediately when a referrer uploads a document
+        // the DHS gate recognizes (ID/POA/consent) — mirrors the staff upload route's behavior
+        // so a referral case doesn't have to wait for the next cron run to progress.
+        if (ID_DOCUMENT_TYPES.includes(documentType) || POA_DOCUMENT_TYPES.includes(documentType)) {
+            import('@zenowethu/shared-lib/src/ai/case-automation-trigger').then(({ runCaseAutomationTrigger }) => {
+                runCaseAutomationTrigger(caseId, 'DOCUMENT_UPLOADED').catch((err: unknown) => {
+                    logger.error(`Case automation trigger failed for ${caseId}:`, err);
+                });
+            });
+        }
 
         // Notify assigned staff user if any
         if (referralCase.assignedToId) {

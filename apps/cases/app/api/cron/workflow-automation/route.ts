@@ -43,6 +43,8 @@ import {
     getDHSDocuments,
     getDHSDocumentUrls,
     hasPriorDHSAttempt,
+    ID_DOCUMENT_TYPES,
+    POA_DOCUMENT_TYPES,
     type OverdueCase,
 } from '@zenowethu/shared-lib/src/automation/workflow-engine';
 import { checkTransferStatus, requestTransfer, closeBrowser, handleDhsAccepted } from '@zenowethu/shared-lib/src/dhs';
@@ -119,8 +121,8 @@ export async function POST(request: Request) {
                     const clientName = `${c.client.firstName} ${c.client.lastName}`.trim();
 
                     // Check if ID + POA arrived (either as documents or inbound messages)
-                    const hasId = hasDocument(c, ['ID'], ['identity', 'id doc', 'id_doc']);
-                    const hasPoa = hasDocument(c, ['POA', 'ZENOWETHU_POA'], ['poa', 'power of attorney', 'consent']);
+                    const hasId = hasDocument(c, ID_DOCUMENT_TYPES, ['identity', 'id doc', 'id_doc']);
+                    const hasPoa = hasDocument(c, POA_DOCUMENT_TYPES, ['poa', 'power of attorney', 'consent']);
                     const hasInbound = await hasInboundKeyword(c.id, ['id', 'document', 'attached', 'proof']);
 
                     if (hasId && hasPoa) {
