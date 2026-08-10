@@ -8,6 +8,88 @@ import { useState } from 'react';
 
 type PoaType    = 'STANDARD' | 'WESBANK';
 type PoaChannel = 'EMAIL' | 'WHATSAPP';
+/** SEND = deliver only · SAVE = file under Documents only · SEND_AND_SAVE = both */
+type PoaMode    = 'SEND' | 'SAVE' | 'SEND_AND_SAVE';
+
+interface SavedDocument {
+    name:     string;
+    fileName: string;
+    fileUrl:  string;
+}
+
+interface DeliveryFailure {
+    name:   string;
+    reason: string;
+}
+
+/** Raw shape returned by POST /api/cases/[id]/poa */
+export interface PoaApiResponse {
+    success?:        boolean;
+    error?:          string;
+    message?:        string;
+    missingFields?:  string[];
+    sentTo?:         string[];
+    savedDocuments?: SavedDocument[];
+    skippedClients?: string[];
+    failures?:       DeliveryFailure[];
+}
+
+export interface PoaResultView {
+    ok:            boolean;
+    /** Success summary when ok, error text otherwise. */
+    message:       string;
+    missingFields: string[];
+    sent:          string[];
+    saved:         SavedDocument[];
+    skipped:       string[];
+    failures:      DeliveryFailure[];
+}
+
+/**
+ * Turn an API response into what the modal shows.
+ *
+ * The API is the only authority on what actually happened — a request that
+ * delivered nothing must never be reported as a successful send.
+ */
+export function interpretPoaResponse(
+    httpOk:  boolean,
+    data:    PoaApiResponse,
+    channel: PoaChannel,
+): PoaResultView {
+    const sent:     string[]          = data.sentTo ?? [];
+    const saved:    SavedDocument[]   = data.savedDocuments ?? [];
+    const skipped:  string[]          = data.skippedClients ?? [];
+    const failures: DeliveryFailure[] = data.failures ?? [];
+
+    if (!httpOk || data.success === false || (sent.length === 0 && saved.length === 0)) {
+        const isProfileError = data.error === 'incomplete_staff_profile';
+        return {
+            ok: false,
+            message: isProfileError
+                ? (data.message ?? 'Your staff profile is incomplete.')
+                : (data.error ?? 'The POA could not be processed. Please try again.'),
+            missingFields: isProfileError ? (data.missingFields ?? []) : [],
+            sent: [],
+            saved: [],
+            skipped,
+            failures,
+        };
+    }
+
+    const parts: string[] = [];
+    if (sent.length > 0)  parts.push(`sent via ${channel === 'EMAIL' ? 'email' : 'WhatsApp'} to ${sent.join(' & ')}`);
+    if (saved.length > 0) parts.push(`saved to case Documents for ${saved.map(d => d.name).join(' & ')}`);
+
+    return {
+        ok: true,
+        message: `POA ${parts.join(', and ')}.`,
+        missingFields: [],
+        sent,
+        saved,
+        skipped,
+        failures,
+    };
+}
 
 interface SendPoaModalProps {
     isOpen:     boolean;
@@ -24,6 +106,8 @@ interface SendPoaModalProps {
     services?:   string | null;   // JSON array string, e.g. '["Debt Review Flag Removal"]'
     dcName?:     string | null;
     dcNcrdcNo?:  string | null;
+    /** Called after a POA is saved to case Documents, so the parent can refresh. */
+    onSaved?:    () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,16 +127,24 @@ export function SendPoaModal({
     services,
     dcName,
     dcNcrdcNo,
+    onSaved,
 }: SendPoaModalProps) {
     const [poaType,    setPoaType]    = useState<PoaType>('STANDARD');
     const [channel,    setChannel]    = useState<PoaChannel>('EMAIL');
+    const [mode,       setMode]       = useState<PoaMode>('SEND');
     const [loading,    setLoading]    = useState(false);
     const [error,      setError]      = useState('');
     const [success,    setSuccess]    = useState('');
     const [missingFields, setMissingFields] = useState<string[]>([]);
-    const [successDetails, setSuccessDetails] = useState<{ sent: string[]; skipped: string[] }>({ sent: [], skipped: [] });
+    const [failures,   setFailures]   = useState<DeliveryFailure[]>([]);
+    const [successDetails, setSuccessDetails] = useState<{ sent: string[]; saved: SavedDocument[]; skipped: string[] }>({ sent: [], saved: [], skipped: [] });
 
     if (!isOpen) return null;
+
+    // ── Mode helpers ─────────────────────────────────────────────────────────
+    const wantsSend = mode === 'SEND' || mode === 'SEND_AND_SAVE';
+    const wantsSave = mode === 'SAVE' || mode === 'SEND_AND_SAVE';
+    const channelLabel = channel === 'EMAIL' ? 'Email' : 'WhatsApp';
 
     // ── DRR awareness ────────────────────────────────────────────────────────
     const serviceList: string[] = (() => {
@@ -62,12 +154,19 @@ export function SendPoaModal({
     const dcMissing = isDRR && (!dcName || !dcNcrdcNo);
     // Block send when Standard POA is selected for a DRR case with no DC details
     const sendBlocked = poaType === 'STANDARD' && dcMissing;
+    // Saving needs no contact details — only sending does.
+    const noContactOnFile = wantsSend && !clientEmail && !clientPhone;
 
-    const handleSend = async () => {
+    const resetResults = () => {
         setError('');
         setSuccess('');
         setMissingFields([]);
-        setSuccessDetails({ sent: [], skipped: [] });
+        setFailures([]);
+        setSuccessDetails({ sent: [], saved: [], skipped: [] });
+    };
+
+    const handleSubmit = async () => {
+        resetResults();
         setLoading(true);
 
         try {
@@ -76,38 +175,33 @@ export function SendPoaModal({
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({
                     type: poaType,
-                    channel,
+                    mode,
+                    // Channel is only meaningful when we are delivering.
+                    channel: wantsSend ? channel : undefined,
                     includeJointClient: !!jointClientName && (
-                        (channel === 'EMAIL' && jointClientEmail) ||
-                        (channel === 'WHATSAPP' && jointClientPhone)
+                        !wantsSend ||
+                        (channel === 'EMAIL' && !!jointClientEmail) ||
+                        (channel === 'WHATSAPP' && !!jointClientPhone)
                     ),
                 }),
             });
 
-            const data = await res.json();
+            const data: PoaApiResponse = await res.json();
 
-            if (!res.ok) {
-                if (data.error === 'incomplete_staff_profile') {
-                    setMissingFields(data.missingFields ?? []);
-                    setError(data.message ?? 'Your staff profile is incomplete.');
-                } else {
-                    setError(data.error ?? 'Something went wrong. Please try again.');
-                }
+            // The API is the authority on what happened — never assume a send worked.
+            const result = interpretPoaResponse(res.ok, data, channel);
+
+            setFailures(result.failures);
+            setSuccessDetails({ sent: result.sent, saved: result.saved, skipped: result.skipped });
+
+            if (!result.ok) {
+                setMissingFields(result.missingFields);
+                setError(result.message);
                 return;
             }
 
-            const channelLabel = channel === 'EMAIL' ? 'email' : 'WhatsApp';
-            const sent = data.sentTo ?? [clientName];
-            const skipped = data.skippedClients ?? [];
-
-            setSuccessDetails({ sent, skipped });
-            let message = `POA sent successfully via ${channelLabel}`;
-            if (sent.length > 1) {
-                message += ` to ${sent.join(' & ')}.`;
-            } else {
-                message += ` to ${sent[0]}.`;
-            }
-            setSuccess(message);
+            setSuccess(result.message);
+            if (result.saved.length > 0) onSaved?.();
         } catch {
             setError('Network error. Please check your connection and try again.');
         } finally {
@@ -116,25 +210,37 @@ export function SendPoaModal({
     };
 
     const handleClose = () => {
-        setError('');
-        setSuccess('');
-        setMissingFields([]);
-        setSuccessDetails({ sent: [], skipped: [] });
+        resetResults();
         setPoaType('STANDARD');
         setChannel('EMAIL');
+        setMode('SEND');
         onClose();
     };
 
+    const modeOptions: Array<{ value: PoaMode; label: string; hint: string }> = [
+        { value: 'SEND',          label: `Send only`,   hint: `Deliver via ${channelLabel}` },
+        { value: 'SEND_AND_SAVE', label: 'Send & save', hint: 'Deliver and file a copy' },
+        { value: 'SAVE',          label: 'Save only',   hint: 'File under Documents' },
+    ];
+
+    const actionLabel = loading
+        ? (wantsSend ? 'Sending...' : 'Saving...')
+        : mode === 'SAVE'
+            ? `Save ${poaType === 'WESBANK' ? 'Wesbank ' : ''}POA to Documents`
+            : mode === 'SEND_AND_SAVE'
+                ? `Send via ${channelLabel} & Save`
+                : `Send ${poaType === 'WESBANK' ? 'Wesbank ' : ''}POA via ${channelLabel}`;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-navy-900">
                     <div>
-                        <h2 className="text-lg font-bold text-white">Send Power of Attorney</h2>
+                        <h2 className="text-lg font-bold text-white">Power of Attorney</h2>
                         <p className="text-xs text-gray-400 mt-0.5">
-                            Generate and send a pre-filled POA to <span className="text-white font-medium">{clientName}</span>
+                            Generate a pre-filled POA for <span className="text-white font-medium">{clientName}</span> — send it, save it, or both
                         </p>
                     </div>
                     <button
@@ -229,72 +335,112 @@ export function SendPoaModal({
                         </div>
                     )}
 
-                    {/* Delivery Channel */}
+                    {/* What to do with it */}
                     <div>
                         <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                            Send Via
+                            What should we do with it?
                         </label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setChannel('EMAIL')}
-                                disabled={!clientEmail}
-                                className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                                    channel === 'EMAIL'
-                                        ? 'border-blue-500 bg-blue-500/10 text-white'
-                                        : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
-                                }`}
-                            >
-                                <div className="font-semibold text-sm">Email</div>
-                                <div className="text-xs mt-0.5 opacity-70 truncate">
-                                    {clientEmail ?? 'No email on file'}
-                                </div>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setChannel('WHATSAPP')}
-                                disabled={!clientPhone}
-                                className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                                    channel === 'WHATSAPP'
-                                        ? 'border-green-500 bg-green-500/10 text-white'
-                                        : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
-                                }`}
-                            >
-                                <div className="font-semibold text-sm">WhatsApp</div>
-                                <div className="text-xs mt-0.5 opacity-70">
-                                    {clientPhone ?? 'No phone on file'}
-                                </div>
-                            </button>
+                        <div className="grid grid-cols-3 gap-2">
+                            {modeOptions.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setMode(opt.value)}
+                                    className={`rounded-xl border px-3 py-3 text-left transition-all ${
+                                        mode === opt.value
+                                            ? 'border-blue-500 bg-blue-500/10 text-white'
+                                            : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                                    }`}
+                                >
+                                    <div className="font-semibold text-xs">{opt.label}</div>
+                                    <div className="text-[11px] mt-0.5 opacity-70 leading-tight">{opt.hint}</div>
+                                </button>
+                            ))}
                         </div>
+                        {wantsSave && (
+                            <p className="mt-2 text-xs text-gray-400">
+                                A copy is filed under <strong className="text-gray-300">Documents</strong> as a Zenowethu POA,
+                                ready to download, print or hand over.
+                            </p>
+                        )}
                     </div>
+
+                    {/* Delivery Channel */}
+                    {wantsSend && (
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                                Send Via
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setChannel('EMAIL')}
+                                    disabled={!clientEmail}
+                                    className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                                        channel === 'EMAIL'
+                                            ? 'border-blue-500 bg-blue-500/10 text-white'
+                                            : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                                    }`}
+                                >
+                                    <div className="font-semibold text-sm">Email</div>
+                                    <div className="text-xs mt-0.5 opacity-70 truncate">
+                                        {clientEmail ?? 'No email on file'}
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setChannel('WHATSAPP')}
+                                    disabled={!clientPhone}
+                                    className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                                        channel === 'WHATSAPP'
+                                            ? 'border-green-500 bg-green-500/10 text-white'
+                                            : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                                    }`}
+                                >
+                                    <div className="font-semibold text-sm">WhatsApp</div>
+                                    <div className="text-xs mt-0.5 opacity-70">
+                                        {clientPhone ?? 'No phone on file'}
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Recipients */}
                     <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
-                        <p className="text-xs font-semibold text-gray-300 mb-3">Will be sent via {channel === 'EMAIL' ? 'Email' : 'WhatsApp'}:</p>
+                        <p className="text-xs font-semibold text-gray-300 mb-3">
+                            {wantsSend
+                                ? `Will be sent via ${channelLabel}:`
+                                : 'A personalised POA will be generated for:'}
+                        </p>
                         <div className="space-y-2">
                             {/* Primary Client */}
                             <div className="flex items-start gap-2">
                                 <span className="text-green-400 text-sm mt-0.5">✓</span>
                                 <div>
                                     <p className="text-xs font-medium text-white">{clientName}</p>
-                                    <p className="text-xs text-gray-400">
-                                        {channel === 'EMAIL' ? clientEmail || '(no email on file)' : clientPhone || '(no phone on file)'}
-                                    </p>
+                                    {wantsSend && (
+                                        <p className="text-xs text-gray-400">
+                                            {channel === 'EMAIL' ? clientEmail || '(no email on file)' : clientPhone || '(no phone on file)'}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Joint Client */}
                             {jointClientName && (
                                 <div className="flex items-start gap-2">
-                                    {(channel === 'EMAIL' ? jointClientEmail : jointClientPhone) ? (
+                                    {(!wantsSend || (channel === 'EMAIL' ? jointClientEmail : jointClientPhone)) ? (
                                         <>
                                             <span className="text-green-400 text-sm mt-0.5">✓</span>
                                             <div>
                                                 <p className="text-xs font-medium text-white">{jointClientName}</p>
-                                                <p className="text-xs text-gray-400">
-                                                    {channel === 'EMAIL' ? jointClientEmail : jointClientPhone}
-                                                </p>
+                                                {wantsSend && (
+                                                    <p className="text-xs text-gray-400">
+                                                        {channel === 'EMAIL' ? jointClientEmail : jointClientPhone}
+                                                    </p>
+                                                )}
                                             </div>
                                         </>
                                     ) : (
@@ -303,7 +449,7 @@ export function SendPoaModal({
                                             <div>
                                                 <p className="text-xs font-medium text-amber-300">{jointClientName}</p>
                                                 <p className="text-xs text-amber-200">
-                                                    No {channel === 'EMAIL' ? 'email' : 'phone'} on file — update client record to send
+                                                    No {channel === 'EMAIL' ? 'email' : 'phone'} on file — update the client record, or use “Save only”
                                                 </p>
                                             </div>
                                         </>
@@ -312,9 +458,23 @@ export function SendPoaModal({
                             )}
                         </div>
                         <div className="mt-3 pt-3 border-t border-white/10">
-                            <p className="text-xs text-gray-400">Each recipient gets a personalised PDF with their details pre-filled. They can sign online or manually.</p>
+                            <p className="text-xs text-gray-400">
+                                {wantsSend
+                                    ? 'Each recipient gets a personalised PDF with their details pre-filled. They can sign online or manually.'
+                                    : 'Each PDF is pre-filled with that person’s details, ready for a manual signature.'}
+                            </p>
                         </div>
                     </div>
+
+                    {/* No contact details at all */}
+                    {noContactOnFile && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                            <p className="text-xs text-amber-200">
+                                This client has no email or phone number on file. Choose <strong>Save only</strong> to
+                                generate the POA and file it under Documents instead.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Error / incomplete profile warning */}
                     {error && (
@@ -334,6 +494,20 @@ export function SendPoaModal({
                                     </a>
                                 </div>
                             )}
+                            {failures.length > 0 && (
+                                <ul className="mt-2 text-xs text-red-300 space-y-0.5">
+                                    {failures.map(f => <li key={f.name}>• {f.name}: {f.reason}</li>)}
+                                </ul>
+                            )}
+                            {successDetails.skipped.length > 0 && (
+                                <p className="text-xs text-red-300 mt-2">
+                                    {successDetails.skipped.join(', ')} {successDetails.skipped.length === 1 ? 'has' : 'have'} no contact details for this channel.
+                                </p>
+                            )}
+                            <p className="text-xs text-red-300/80 mt-2">
+                                Nothing was delivered. You can retry, or switch to <strong>Save only</strong> to file the POA
+                                under Documents and share it manually.
+                            </p>
                         </div>
                     )}
 
@@ -341,14 +515,48 @@ export function SendPoaModal({
                     {success && (
                         <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
                             <p className="text-sm text-green-400 font-medium">{success}</p>
+
+                            {successDetails.saved.length > 0 && (
+                                <div className="mt-2">
+                                    <p className="text-xs text-green-300 mb-1">Filed under Documents:</p>
+                                    <ul className="text-xs space-y-0.5">
+                                        {successDetails.saved.map(doc => (
+                                            <li key={doc.fileUrl}>
+                                                <a
+                                                    href={doc.fileUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-blue-300 underline hover:text-blue-200"
+                                                >
+                                                    {doc.fileName}
+                                                </a>
+                                                <span className="text-green-300/70"> — {doc.name}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {failures.length > 0 && (
+                                <div className="mt-2">
+                                    <p className="text-xs text-amber-300 mb-1">Not everything succeeded:</p>
+                                    <ul className="text-xs text-amber-200 space-y-0.5">
+                                        {failures.map(f => <li key={f.name}>• {f.name}: {f.reason}</li>)}
+                                    </ul>
+                                </div>
+                            )}
+
                             {successDetails.skipped.length > 0 && (
                                 <p className="text-xs text-amber-300 mt-2">
                                     Note: {successDetails.skipped.join(', ')} {successDetails.skipped.length === 1 ? 'was' : 'were'} skipped (no contact info for this channel).
                                 </p>
                             )}
-                            <p className="text-xs text-green-300 mt-1">
-                                Each recipient will sign and return their document. Once received, upload it under Documents.
-                            </p>
+
+                            {successDetails.sent.length > 0 && (
+                                <p className="text-xs text-green-300 mt-1">
+                                    Each recipient will sign and return their document. Once received, upload it under Documents.
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>
@@ -364,8 +572,8 @@ export function SendPoaModal({
 
                     {!success && (
                         <button
-                            onClick={handleSend}
-                            disabled={loading || (!clientEmail && !clientPhone) || sendBlocked}
+                            onClick={handleSubmit}
+                            disabled={loading || noContactOnFile || sendBlocked}
                             title={sendBlocked ? 'Run DHS Auto-Fill first to get the current debt counsellor details' : undefined}
                             className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                 poaType === 'WESBANK'
@@ -373,7 +581,7 @@ export function SendPoaModal({
                                     : 'bg-blue-600 hover:bg-blue-500 text-white'
                             }`}
                         >
-                            {loading ? 'Sending...' : `Send ${poaType === 'WESBANK' ? 'Wesbank ' : ''}POA via ${channel === 'EMAIL' ? 'Email' : 'WhatsApp'}`}
+                            {actionLabel}
                         </button>
                     )}
                 </div>

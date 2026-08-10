@@ -5575,6 +5575,7 @@ export default function CaseDetailPage() {
                     services={caseData.services}
                     dcName={caseData.debtCounsellorName}
                     dcNcrdcNo={caseData.ncrdcNo}
+                    onSaved={fetchCase}
                 />
             )}
 
