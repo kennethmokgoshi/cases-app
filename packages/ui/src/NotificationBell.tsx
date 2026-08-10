@@ -30,7 +30,7 @@ const TYPE_ICONS: Record<string, string> = {
     OVERDUE: '🚨',
 };
 
-export function NotificationBell() {
+export function NotificationBell({ viewAllHref = '/notifications' }: { viewAllHref?: string } = {}) {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     // null = not yet fetched (don't show badge yet); number = live count
     const [unreadCount, setUnreadCount] = useState<number | null>(null);
@@ -206,7 +206,7 @@ export function NotificationBell() {
                                     className={`relative group border-b border-white/5 hover:bg-zeno-blue/30 transition-colors ${!notification.isRead ? 'bg-zeno-blue/20' : ''}`}
                                 >
                                     <Link
-                                        href={notification.linkUrl || '/notifications'}
+                                        href={notification.linkUrl || viewAllHref}
                                         onClick={() => {
                                             if (!notification.isRead) markAsRead(notification.id);
                                             setIsOpen(false);
@@ -250,7 +250,7 @@ export function NotificationBell() {
                     {/* Footer */}
                     <div className="p-3 border-t border-white/10 text-center">
                         <Link
-                            href="/notifications"
+                            href={viewAllHref}
                             onClick={() => setIsOpen(false)}
                             className="text-xs text-zeno-cyan hover:text-cyan-300 font-medium transition-colors"
                         >

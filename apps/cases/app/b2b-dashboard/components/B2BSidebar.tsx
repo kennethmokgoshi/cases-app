@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
+import { type BranchNode, type YearNode, type MonthNode, filterBranchHierarchy, filterTimelineYears, getDisplayMonthsForYear } from './b2b-sidebar-filters';
 
 // Client-side logger
 const logger = {
@@ -20,26 +21,6 @@ type ProjectNode = {
     type: string;
     parentId: string | null;
     _count?: { cases: number };
-};
-
-type BranchNode = {
-    name: string;
-    projectId: string;
-    totalCases: number;
-    years: YearNode[];
-};
-
-type YearNode = {
-    name: string;
-    projectId: string;
-    totalCases: number;
-    months: MonthNode[];
-};
-
-type MonthNode = {
-    name: string;
-    projectId: string;
-    cases: number;
 };
 
 // Month sort order for consistent ordering
@@ -80,6 +61,9 @@ export function B2BSidebar() {
     const [expandedYears, setExpandedYears] = useState<string[]>([]);
     // Track expanded branches and their years: "branchId" or "branchId:year"
     const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+    // Search filter applied to both the Sources and Timeline trees
+    const [searchQuery, setSearchQuery] = useState('');
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
     useEffect(() => {
         if (session?.user) {
@@ -262,6 +246,25 @@ export function B2BSidebar() {
         return branches.sort((a, b) => a.name.localeCompare(b.name));
     }, [projectData]);
 
+    // Sources view filtered by search: keep a branch if it matches, or if any of its
+    // years/months (subprojects) match. When the branch itself matches, show all of
+    // its years/months unfiltered; otherwise narrow down to the matching subprojects.
+    const filteredBranchHierarchy = useMemo(
+        () => filterBranchHierarchy(branchHierarchy, searchQuery),
+        [branchHierarchy, searchQuery]
+    );
+
+    // Timeline view filtered by search: keep a year if it matches, or if any of its
+    // months (subprojects) match.
+    const filteredTimelineYears = useMemo(
+        () => filterTimelineYears(timelineData, searchQuery),
+        [timelineData, searchQuery]
+    );
+
+    // Returns the months to render for a given year in the Timeline view, narrowed
+    // to matches when the year itself doesn't match the search query.
+    const getDisplayMonths = (year: string): string[] => getDisplayMonthsForYear(timelineData, year, searchQuery);
+
     // Auto-expand current year in branches on first load
     useEffect(() => {
         if (branchHierarchy.length > 0 && expandedNodes.size === 0) {
@@ -278,6 +281,22 @@ export function B2BSidebar() {
             setExpandedNodes(newExpanded);
         }
     }, [branchHierarchy]);
+
+    // While searching, auto-expand every branch/year that matched so results are
+    // visible without the user having to click through the tree.
+    useEffect(() => {
+        if (!normalizedQuery) return;
+
+        const newExpanded = new Set<string>();
+        filteredBranchHierarchy.forEach(branch => {
+            newExpanded.add(branch.projectId);
+            branch.years.forEach(year => {
+                newExpanded.add(`${branch.projectId}:${year.name}`);
+            });
+        });
+        setExpandedNodes(newExpanded);
+        setExpandedYears(filteredTimelineYears);
+    }, [normalizedQuery, filteredBranchHierarchy, filteredTimelineYears]);
 
     const toggleNode = (key: string) => {
         setExpandedNodes(prev => {
@@ -296,8 +315,6 @@ export function B2BSidebar() {
             prev.includes(year) ? prev.filter((y: string) => y !== year) : [...prev, year]
         );
     };
-
-    const sortedYears = Object.keys(timelineData).sort((a, b) => b.localeCompare(a));
 
     // Chevron icon component
     const Chevron = ({ expanded }: { expanded: boolean }) => (
@@ -369,15 +386,42 @@ export function B2BSidebar() {
                         </button>
                     </div>
 
+                    {/* Search: filters projects (branches/years) and their subprojects (months) in both views */}
+                    <div className="relative mb-3">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                        </svg>
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder={viewMode === 'SOURCE' ? 'Search sources...' : 'Search dates...'}
+                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-8 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan/50 focus:bg-white/10 transition-colors"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                                aria-label="Clear search"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+
                     <div className="space-y-0.5">
                         {viewMode === 'SOURCE' ? (
                             /* ═══════════════════════════════════════════
                                SOURCES VIEW: Branch → Year → Month
                                ═══════════════════════════════════════════ */
-                            branchHierarchy.length === 0 ? (
-                                <p className="text-xs text-gray-600 px-3 py-2 italic">No sources found</p>
+                            filteredBranchHierarchy.length === 0 ? (
+                                <p className="text-xs text-gray-600 px-3 py-2 italic">
+                                    {normalizedQuery ? 'No matches found' : 'No sources found'}
+                                </p>
                             ) : (
-                                branchHierarchy.map(branch => {
+                                filteredBranchHierarchy.map(branch => {
                                     const branchExpanded = expandedNodes.has(branch.projectId);
                                     return (
                                         <div key={branch.projectId}>
@@ -470,11 +514,15 @@ export function B2BSidebar() {
                                     );
                                 })
                             )
+                        ) : filteredTimelineYears.length === 0 ? (
+                            <p className="text-xs text-gray-600 px-3 py-2 italic">
+                                {normalizedQuery ? 'No matches found' : 'No dates found'}
+                            </p>
                         ) : (
                             /* ═══════════════════════════════════════════
-                               TIMELINE VIEW: Year → Month  (unchanged)
+                               TIMELINE VIEW: Year → Month
                                ═══════════════════════════════════════════ */
-                            sortedYears.map(year => (
+                            filteredTimelineYears.map(year => (
                                 <div key={year} className="group">
                                     <div className="w-full flex items-center justify-between px-3 py-2 text-sm transition-colors">
                                         <div className="flex items-center gap-2">
@@ -502,7 +550,7 @@ export function B2BSidebar() {
 
                                     {expandedYears.includes(year) && (
                                         <div className="ml-4 pl-4 border-l border-white/5 mt-1 space-y-1">
-                                            {Object.keys(timelineData[year].months).map(month => (
+                                            {getDisplayMonths(year).map(month => (
                                                 <Link
                                                     key={`${year}-${month}`}
                                                     href={`/b2b-dashboard/cases?year=${year}&month=${month}`}

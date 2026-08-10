@@ -64,19 +64,21 @@ async function generateFileNumber(): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `ZDM-${year}-`;
 
-    const lastCase = await prisma.case.findFirst({
+    const cases = await prisma.case.findMany({
         where: { fileNumber: { startsWith: prefix } },
-        orderBy: { fileNumber: 'desc' },
         select: { fileNumber: true },
     });
 
-    let nextNumber = 1;
-    if (lastCase) {
-        const parts = lastCase.fileNumber.split('-');
-        const last = parseInt(parts[parts.length - 1], 10);
-        if (!isNaN(last)) nextNumber = last + 1;
+    let maxNumber = 0;
+    for (const c of cases) {
+        const parts = c.fileNumber.split('-');
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxNumber) {
+            maxNumber = num;
+        }
     }
 
+    const nextNumber = maxNumber + 1;
     return `${prefix}${String(nextNumber).padStart(3, '0')}`;
 }
 
@@ -492,6 +494,27 @@ export async function runXdsSync(mode: 'daily' | 'today' | 'full' = 'daily'): Pr
     } finally {
         if (page) await page.close().catch(() => null);
         await closeXdsBrowser();
+
+        // Save sync log to database
+        try {
+            const { prisma } = require('@zenowethu/database');
+            await prisma.xdsSyncLog.create({
+                data: {
+                    processed: result.processed,
+                    newFilesCreated: result.newFilesCreated,
+                    existingFilesUpdated: result.existingFilesUpdated,
+                    errors: result.errors,
+                    details: result.details,
+                    datesProcessed: result.datesProcessed,
+                    mode: mode,
+                    // startedAt would be handled by default(now()) but let's record it properly if needed.
+                    // For now, completedAt is now() which is sufficient.
+                }
+            });
+            logger.info('[XDS] Sync log saved to database');
+        } catch (logError) {
+            logger.error('[XDS] Failed to save sync log to database:', logError);
+        }
     }
 
     return result;

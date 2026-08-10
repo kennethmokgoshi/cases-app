@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { B2BSidebar } from './components/B2BSidebar';
-import { useSession, signOut } from '@zenowethu/ui';
+import { useSession, signOut, NotificationBell } from '@zenowethu/ui';
 import Link from 'next/link';
 import { DashboardSwitcher } from '@zenowethu/ui';
 import B2BClientSearch from './components/B2BClientSearch';
@@ -39,6 +39,8 @@ export default function B2BLayout({
 
                     <div className="flex items-center gap-6 flex-shrink-0">
                         <DashboardSwitcher />
+
+                        <NotificationBell viewAllHref="/b2b-dashboard/notifications" />
 
                         {/* User Profile */}
                         <Link

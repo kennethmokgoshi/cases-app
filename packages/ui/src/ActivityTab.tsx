@@ -2,7 +2,7 @@
 import { toast } from './ui/Toaster';
 
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -41,13 +41,37 @@ type Comment = {
     }>;
 };
 
-type UserSuggestion = {
+type UserMentionSuggestion = {
+    kind: 'user';
     id: string;
     firstName: string;
     lastName: string;
     email: string;
     username: string;
 };
+
+type GroupMentionSuggestion = {
+    kind: 'group';
+    id: string;
+    name: string;
+    memberCount: number;
+};
+
+type MentionSuggestion = UserMentionSuggestion | GroupMentionSuggestion;
+
+function matchesMentionQuery(item: MentionSuggestion, query: string): boolean {
+    if (!query) return true;
+    if (item.kind === 'group') {
+        return item.name.toLowerCase().includes(query) || item.name.toLowerCase().replace(/\s+/g, '').includes(query);
+    }
+    return (
+        item.firstName.toLowerCase().includes(query) ||
+        item.lastName.toLowerCase().includes(query) ||
+        `${item.firstName}${item.lastName}`.toLowerCase().includes(query) ||
+        item.email.toLowerCase().includes(query) ||
+        item.username.toLowerCase().includes(query)
+    );
+}
 
 interface ActivityTabProps {
     caseId: string;
@@ -63,7 +87,12 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
     const [submitting, setSubmitting] = useState(false);
     const [showMentions, setShowMentions] = useState(false);
     const [mentionQuery, setMentionQuery] = useState('');
-    const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
+    const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+    // The whole mentionable set (users + groups) is small, so it's fetched once and
+    // cached rather than hitting the server on every keystroke — filtering happens
+    // client-side, which is what actually made the dropdown feel slow to load.
+    const mentionCacheRef = useRef<MentionSuggestion[] | null>(null);
+    const [mentionCacheVersion, setMentionCacheVersion] = useState(0);
     const [cursorPosition, setCursorPosition] = useState(0);
     const [showInternal, setShowInternal] = useState(true);
     const [composerMode, setComposerMode] = useState<'NOTE' | 'JOURNAL' | 'REFERRER'>('NOTE');
@@ -114,28 +143,42 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
         return () => clearTimeout(timer);
     }, [highlightCommentId, loading]);
 
-    // Search users for @mentions
+    // Load the mentionable users + groups once (lazily, the first time '@' is
+    // typed) and cache them for the lifetime of the component.
     useEffect(() => {
-        if (mentionQuery.length < 1) {
-            setUserSuggestions([]);
-            return;
-        }
+        if (!showMentions || mentionCacheRef.current) return;
 
-        const searchUsers = async () => {
+        let cancelled = false;
+        (async () => {
             try {
-                const res = await fetch(`/api/users/search?q=${encodeURIComponent(mentionQuery)}`);
+                const res = await fetch('/api/users/search');
                 if (res.ok) {
-                    const data = await res.json();
-                    setUserSuggestions(data);
+                    const data: MentionSuggestion[] = await res.json();
+                    if (!cancelled) {
+                        mentionCacheRef.current = data;
+                        setMentionCacheVersion(v => v + 1);
+                    }
                 }
             } catch (error) {
-                logger.error('Failed to search users', error);
+                logger.error('Failed to load mention suggestions', error);
             }
-        };
+        })();
 
-        const debounce = setTimeout(searchUsers, 200);
-        return () => clearTimeout(debounce);
-    }, [mentionQuery]);
+        return () => { cancelled = true; };
+    }, [showMentions]);
+
+    // Filter the cached list client-side as the user types — no network round-trip per keystroke.
+    const userSuggestions = useMemo<MentionSuggestion[]>(() => {
+        const cache = mentionCacheRef.current;
+        if (!cache) return [];
+        const query = mentionQuery.toLowerCase();
+        return cache.filter(item => matchesMentionQuery(item, query)).slice(0, 8);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mentionQuery, mentionCacheVersion]);
+
+    useEffect(() => {
+        setActiveMentionIndex(0);
+    }, [userSuggestions]);
 
     // Handle text change and detect @mentions
     const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -157,20 +200,44 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
         }
     };
 
-    // Insert mention
-    const insertMention = (user: UserSuggestion) => {
+    // Insert mention (user or group — group names are compacted to a single
+    // @token by stripping spaces, matching the server-side group-mention resolver)
+    const insertMention = (suggestion: MentionSuggestion) => {
         const textBeforeCursor = newComment.substring(0, cursorPosition);
         const textAfterCursor = newComment.substring(cursorPosition);
         const mentionStart = textBeforeCursor.lastIndexOf('@');
+        const mentionToken = suggestion.kind === 'group'
+            ? suggestion.name.replace(/\s+/g, '')
+            : `${suggestion.firstName}${suggestion.lastName}`;
         const newText = textBeforeCursor.substring(0, mentionStart) +
-            `@${user.firstName}${user.lastName} ` + textAfterCursor;
+            `@${mentionToken} ` + textAfterCursor;
 
         setNewComment(newText);
         setShowMentions(false);
         setMentionQuery('');
         textareaRef.current?.focus();
     };
-    
+
+    // Keyboard navigation for the @mention suggestions dropdown
+    const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (!showMentions || userSuggestions.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActiveMentionIndex(prev => (prev + 1) % userSuggestions.length);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActiveMentionIndex(prev => (prev - 1 + userSuggestions.length) % userSuggestions.length);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            insertMention(userSuggestions[activeMentionIndex]);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setShowMentions(false);
+            setMentionQuery('');
+        }
+    };
+
     // Handle file selection and upload
     const handleFileUpload = async (files: FileList | File[]) => {
         if (!files || files.length === 0) return;
@@ -329,6 +396,7 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                         ref={textareaRef}
                         value={newComment}
                         onChange={handleTextChange}
+                        onKeyDown={handleTextareaKeyDown}
                         onPaste={handlePaste}
                         placeholder={isJournalMode ? "Type internal team note..." : isReferrerMode ? "Reply to the referrer (visible in their portal)..." : "Add a public comment..."}
                         className={`w-full px-4 py-3 bg-zeno-navy border rounded-xl text-white placeholder-gray-500 transition-all focus:outline-none resize-none ${isJournalMode ? 'border-amber-500/30 ring-1 ring-amber-500/10' : isReferrerMode ? 'border-zeno-cyan/40 ring-1 ring-zeno-cyan/10' : 'border-white/10 focus:border-zeno-cyan'
@@ -364,15 +432,28 @@ export function ActivityTab({ caseId, fileNumber, lastUpdate = 0, highlightComme
                     {/* Mention suggestions dropdown */}
                     {showMentions && userSuggestions.length > 0 && (
                         <div className="absolute bottom-full left-0 w-full mb-1 bg-zeno-navy border border-white/20 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
-                            {userSuggestions.map(user => (
+                            {userSuggestions.map((item, index) => (
                                 <button
-                                    key={user.id}
+                                    key={item.id}
                                     type="button"
-                                    onClick={() => insertMention(user)}
-                                    className="w-full px-4 py-2 text-left hover:bg-zeno-blue/50 transition-colors"
+                                    onClick={() => insertMention(item)}
+                                    onMouseEnter={() => setActiveMentionIndex(index)}
+                                    className={`w-full px-4 py-2 text-left transition-colors flex items-center ${index === activeMentionIndex ? 'bg-zeno-blue/50' : 'hover:bg-zeno-blue/50'
+                                        }`}
                                 >
-                                    <span className="text-white font-medium">{user.firstName} {user.lastName}</span>
-                                    <span className="text-gray-500 text-sm ml-2">{user.email}</span>
+                                    {item.kind === 'group' ? (
+                                        <>
+                                            <span className="text-base mr-2">👥</span>
+                                            <span className="text-white font-medium">{item.name}</span>
+                                            <span className="text-gray-500 text-xs ml-2">{item.memberCount} member{item.memberCount === 1 ? '' : 's'}</span>
+                                            <span className="text-[10px] text-zeno-cyan/80 font-bold uppercase tracking-wider ml-auto pl-2">Group</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="text-white font-medium">{item.firstName} {item.lastName}</span>
+                                            <span className="text-gray-500 text-sm ml-2">{item.email}</span>
+                                        </>
+                                    )}
                                 </button>
                             ))}
                         </div>

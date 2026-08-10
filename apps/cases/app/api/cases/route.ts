@@ -218,6 +218,7 @@ export async function GET(request: Request) {
                     updatedAt: true,
                     createdAt: true,
                     recordedAt: true,
+                    createdById: true,
                     client: { select: { firstName: true, lastName: true, email: true, phone: true, idNumber: true } },
                     updatedBy: { select: { firstName: true, lastName: true } },
                     projects: { select: { isPrimary: true, projectId: true, project: { select: { id: true, name: true } } } },

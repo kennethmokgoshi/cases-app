@@ -1,6 +1,6 @@
 'use client';
 import { toast, confirm } from '@zenowethu/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
@@ -71,6 +71,13 @@ type Document = {
     uploadedById?: string | null;
 };
 
+type MentionableUser = {
+    id: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+};
+
 type WorkflowLog = {
     id: string;
     fromStatus: string | null;
@@ -95,6 +102,15 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [postingComment, setPostingComment] = useState(false);
+    const [showMentions, setShowMentions] = useState(false);
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+    // Mentionable candidates are static per case, so fetch once and cache rather
+    // than re-hitting the server on every keystroke — that round trip was what
+    // made the dropdown feel slow, since the result never actually changed.
+    const mentionCacheRef = useRef<{ caseId: string; candidates: MentionableUser[] } | null>(null);
+    const [mentionCacheVersion, setMentionCacheVersion] = useState(0);
+    const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Documents state
     const [documents, setDocuments] = useState<Document[]>([]);
@@ -182,10 +198,11 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
             const response = await fetch(`/api/cases/${caseId}/comments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: newComment }) });
+                body: JSON.stringify({ content: newComment, isInternal: false }) });
 
             if (response.ok) {
                 setNewComment('');
+                setShowMentions(false);
                 fetchComments();
             } else {
                 toast.error('Failed to post comment');
@@ -195,6 +212,100 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
             toast.error('Error posting comment');
         } finally {
             setPostingComment(false);
+        }
+    };
+
+    // Detect an in-progress @token as the user types and surface suggestions
+    const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const value = e.target.value;
+        setNewComment(value);
+
+        const cursorPos = e.target.selectionStart;
+        const textBeforeCursor = value.slice(0, cursorPos);
+        const match = textBeforeCursor.match(/@(\w*)$/);
+        if (match) {
+            setMentionQuery(match[1]);
+            setShowMentions(true);
+        } else {
+            setShowMentions(false);
+        }
+    };
+
+    // Fetch the mentionable candidates for this case once and cache them.
+    useEffect(() => {
+        if (!showMentions) return;
+        if (mentionCacheRef.current?.caseId === caseId) return;
+
+        let cancelled = false;
+        (async () => {
+            try {
+                const response = await fetch(`/api/b2b/cases/${caseId}/mentionable-users`);
+                if (response.ok) {
+                    const candidates: MentionableUser[] = await response.json();
+                    if (!cancelled) {
+                        mentionCacheRef.current = { caseId, candidates };
+                        setMentionCacheVersion(v => v + 1);
+                    }
+                }
+            } catch (err) {
+                logger.error('Failed to fetch mention suggestions:', err);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [showMentions, caseId]);
+
+    // Filter the cached candidates client-side as the user types.
+    const mentionSuggestions = useMemo<MentionableUser[]>(() => {
+        const cache = mentionCacheRef.current;
+        if (!cache || cache.caseId !== caseId) return [];
+        const query = mentionQuery.toLowerCase();
+        const matches = !query
+            ? cache.candidates
+            : cache.candidates.filter(u =>
+                u.firstName.toLowerCase().includes(query) ||
+                u.lastName.toLowerCase().includes(query) ||
+                `${u.firstName}${u.lastName}`.toLowerCase().includes(query) ||
+                u.username.toLowerCase().includes(query)
+            );
+        return matches.slice(0, 8);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mentionQuery, mentionCacheVersion, caseId]);
+
+    useEffect(() => {
+        setActiveMentionIndex(0);
+    }, [mentionSuggestions]);
+
+    const insertMention = (user: MentionableUser) => {
+        const value = newComment;
+        const cursorPos = commentTextareaRef.current?.selectionStart ?? value.length;
+        const textBeforeCursor = value.slice(0, cursorPos);
+        const match = textBeforeCursor.match(/@(\w*)$/);
+        if (!match || match.index === undefined) return;
+
+        const mentionText = `@${user.firstName}${user.lastName} `;
+        const newValue = value.slice(0, match.index) + mentionText + value.slice(cursorPos);
+        setNewComment(newValue);
+        setShowMentions(false);
+
+        requestAnimationFrame(() => commentTextareaRef.current?.focus());
+    };
+
+    // Keyboard navigation for the @mention suggestions dropdown
+    const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (!showMentions || mentionSuggestions.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActiveMentionIndex(prev => (prev + 1) % mentionSuggestions.length);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActiveMentionIndex(prev => (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            insertMention(mentionSuggestions[activeMentionIndex]);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setShowMentions(false);
         }
     };
 
@@ -743,12 +854,42 @@ export function CaseDetailContent({ caseId }: { caseId: string }) {
                             <div className="space-y-6">
                                 {/* Comment Input */}
                                 <div className="bg-black/20 rounded-lg p-4">
-                                    <textarea
-                                        value={newComment}
-                                        onChange={(e) => setNewComment(e.target.value)}
-                                        placeholder="Add a comment... Use @name to mention someone"
-                                        className="w-full bg-transparent text-white border border-white/10 rounded-lg p-3 focus:outline-none focus:border-zeno-cyan min-h-[100px]"
-                                    />
+                                    <div className="relative">
+                                        <textarea
+                                            ref={commentTextareaRef}
+                                            value={newComment}
+                                            onChange={handleCommentChange}
+                                            onKeyDown={handleCommentKeyDown}
+                                            onBlur={() => setTimeout(() => setShowMentions(false), 150)}
+                                            placeholder="Add a comment... Use @name to mention someone"
+                                            className="w-full bg-transparent text-white border border-white/10 rounded-lg p-3 focus:outline-none focus:border-zeno-cyan min-h-[100px]"
+                                        />
+                                        {showMentions && mentionSuggestions.length > 0 && (
+                                            <div className="absolute left-0 bottom-full mb-1 w-72 max-h-56 overflow-y-auto bg-zeno-navy border border-white/10 rounded-lg shadow-xl z-20">
+                                                {mentionSuggestions.map((user, index) => (
+                                                    <button
+                                                        key={user.id}
+                                                        type="button"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onClick={() => insertMention(user)}
+                                                        onMouseEnter={() => setActiveMentionIndex(index)}
+                                                        className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${index === activeMentionIndex ? 'bg-white/5' : 'hover:bg-white/5'
+                                                            }`}
+                                                    >
+                                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zeno-cyan to-cyan-600 flex items-center justify-center flex-shrink-0">
+                                                            <span className="text-white font-bold text-xs">
+                                                                {user.firstName[0]}{user.lastName[0]}
+                                                            </span>
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm text-white truncate">{user.firstName} {user.lastName}</p>
+                                                            <p className="text-xs text-gray-500 truncate">@{user.username}</p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="flex justify-between items-center mt-3">
                                         <p className="text-sm text-gray-400">Tip: Use @name to mention and notify someone</p>
                                         <button

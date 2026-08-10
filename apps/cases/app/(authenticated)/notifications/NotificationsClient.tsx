@@ -23,6 +23,8 @@ export type NotificationWithCase = {
 type Props = {
     initialNotifications: NotificationWithCase[];
     totalUnread: number;
+    /** Base path for case links - lets the B2B portal reuse this client pointed at its own case routes. */
+    baseCasePath?: string;
 };
 
 const TYPE_META: Record<string, { label: string; icon: string; source: string; color: string; tab: string }> = {
@@ -42,12 +44,12 @@ function getMeta(type: string) {
 }
 
 /** Build the case URL so the right tab opens and the specific comment is highlighted */
-function buildCaseUrl(n: NotificationWithCase): string {
+function buildCaseUrl(n: NotificationWithCase, baseCasePath: string): string {
     if (!n.caseId) return n.linkUrl ?? '#';
     const meta = getMeta(n.type);
     const params = new URLSearchParams({ tab: meta.tab });
     if (n.commentId) params.set('comment', n.commentId);
-    return `/cases/${n.caseId}?${params.toString()}`;
+    return `${baseCasePath}/${n.caseId}?${params.toString()}`;
 }
 
 const ALL_FILTER_TABS = [
@@ -102,7 +104,7 @@ function ConfirmDeleteModal({ count, onConfirm, onCancel }: {
     );
 }
 
-function DetailPanel({ n, allNotifications, onClose, onMarkRead, onMarkAllCaseRead, onDelete, isPending }: {
+function DetailPanel({ n, allNotifications, onClose, onMarkRead, onMarkAllCaseRead, onDelete, isPending, baseCasePath }: {
     n: NotificationWithCase;
     allNotifications: NotificationWithCase[];
     onClose: () => void;
@@ -110,6 +112,7 @@ function DetailPanel({ n, allNotifications, onClose, onMarkRead, onMarkAllCaseRe
     onMarkAllCaseRead: (caseId: string) => void;
     onDelete: (id: string) => void;
     isPending: boolean;
+    baseCasePath: string;
 }) {
     const meta = getMeta(n.type);
     const clientName = n.case?.client
@@ -122,7 +125,7 @@ function DetailPanel({ n, allNotifications, onClose, onMarkRead, onMarkAllCaseRe
         : [];
     const otherUnread = otherCaseNotifications.filter(x => !x.isRead);
 
-    const caseUrl = buildCaseUrl(n);
+    const caseUrl = buildCaseUrl(n, baseCasePath);
 
     return (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
@@ -265,7 +268,7 @@ function DetailPanel({ n, allNotifications, onClose, onMarkRead, onMarkAllCaseRe
     );
 }
 
-export function NotificationsClient({ initialNotifications }: Props) {
+export function NotificationsClient({ initialNotifications, baseCasePath = '/cases' }: Props) {
     const [notifications, setNotifications] = useState(initialNotifications);
     const [activeTab, setActiveTab] = useState('ALL');
     const [unreadOnly, setUnreadOnly] = useState(false);
@@ -355,6 +358,7 @@ export function NotificationsClient({ initialNotifications }: Props) {
                     onMarkAllCaseRead={markAllCaseRead}
                     onDelete={deleteOne}
                     isPending={isPending}
+                    baseCasePath={baseCasePath}
                 />
             )}
 

@@ -2265,4 +2265,19 @@ model EmployeeSession {
   @@index([loginAt])
 }
 
+model XdsSyncLog {
+  id                   String   @id @default(cuid())
+  processed            Int
+  newFilesCreated      Int
+  existingFilesUpdated Int
+  errors               Json?
+  details              Json?
+  datesProcessed       Json?
+  startedAt            DateTime @default(now())
+  completedAt          DateTime @default(now())
+  mode                 String   @default("daily")
+
+  @@index([startedAt])
+}
+
 
