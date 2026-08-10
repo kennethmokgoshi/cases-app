@@ -5,6 +5,7 @@ import { prisma } from '@zenowethu/database';
 export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { DashboardCasesTable } from '@/components/DashboardCasesTable';
+import CheckDhsOverdueButton from '@/components/CheckDhsOverdueButton';
 
 // Force Node.js runtime to allow shared-lib imports with pino logger
 export const runtime = 'nodejs';
@@ -307,7 +308,7 @@ export default async function DirectorDashboard() {
       </div>
 
       {/* Case Management Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
 
         {/* My Cases */}
         <Link href="/cases?filter=my-cases" className="group bg-purple-950/20 border border-purple-500/20 rounded-2xl p-6 hover:bg-purple-900/20 transition-all cursor-pointer relative overflow-hidden">
@@ -362,6 +363,9 @@ export default async function DirectorDashboard() {
             </div>
           </div>
         </Link>
+
+        {/* DHS Overdue Check */}
+        <CheckDhsOverdueButton />
       </div>
 
       {/* Unified Activity Stream */}
