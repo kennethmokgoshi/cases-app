@@ -18,12 +18,14 @@ export async function getXdsBrowser(): Promise<Browser> {
         const puppeteer = require('puppeteer');
         xdsBrowser = await puppeteer.launch({
             headless: true,
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
             ],
+            timeout: 60000,
         });
     }
     return xdsBrowser;

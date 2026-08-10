@@ -164,15 +164,23 @@ async function downloadReportPdf(
         if (directPdfUrl) {
             logger.info(`[XDS] Found direct PDF link: ${directPdfUrl}`);
             const base64 = await page.evaluate(async (url: string) => {
-                const res = await fetch(url, { credentials: 'include' });
-                if (!res.ok) return null;
-                const blob = await res.blob();
-                return new Promise<string | null>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve((reader.result as string).split(',')[1] ?? null);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 45000);
+                try {
+                    const res = await fetch(url, { credentials: 'include', signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (!res.ok) return null;
+                    const blob = await res.blob();
+                    return new Promise<string | null>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve((reader.result as string).split(',')[1] ?? null);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    clearTimeout(timeoutId);
+                    return null;
+                }
             }, directPdfUrl);
 
             if (base64) return Buffer.from(base64, 'base64');
