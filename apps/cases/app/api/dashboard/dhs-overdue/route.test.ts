@@ -41,17 +41,34 @@ describe('GET /api/dashboard/dhs-overdue', () => {
         const res = await GET();
         expect(res.status).toBe(200);
         expect(db.projectMember.findMany).not.toHaveBeenCalled();
-        expect(db.case.findMany).toHaveBeenCalledWith(
-            expect.objectContaining({
-                where: expect.objectContaining({
-                    status: 'REQUESTED_VIA_DHS',
-                    isOverdue: true,
-                }),
-            })
-        );
         const whereArg = db.case.findMany.mock.calls[0][0].where;
         expect(whereArg.isAdminOnly).toBeUndefined();
         expect(whereArg.projects).toBeUndefined();
+    });
+
+    it('covers BOTH requested-via-DHS statuses, not just REQUESTED_VIA_DHS', async () => {
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'admin1', isAdmin: true, role: 'ADMIN' } } as any);
+
+        await GET();
+
+        const whereArg = db.case.findMany.mock.calls[0][0].where;
+        expect(whereArg.status.in).toEqual(['REQUESTED_VIA_DHS', 'DHS_REQUESTED']);
+    });
+
+    it('treats a file as overdue via the isOverdue flag, an elapsed nextUpdate, OR a stale statusEntryDate', async () => {
+        // DHS_REQUESTED carries no SLA, so isOverdue alone would never match it.
+        vi.mocked(auth).mockResolvedValue({ user: { id: 'admin1', isAdmin: true, role: 'ADMIN' } } as any);
+
+        await GET();
+
+        const whereArg = db.case.findMany.mock.calls[0][0].where;
+        expect(whereArg.OR).toHaveLength(3);
+        expect(whereArg.OR[0]).toEqual({ isOverdue: true });
+        expect(whereArg.OR[1].nextUpdate.lt).toBeInstanceOf(Date);
+
+        const cutoff: Date = whereArg.OR[2].statusEntryDate.lt;
+        const daysBack = Math.round((Date.now() - cutoff.getTime()) / 86_400_000);
+        expect(daysBack).toBe(7);
     });
 
     it('restricts a non-admin STAFF user to their ProjectMember projects, expanded to descendants', async () => {
@@ -94,6 +111,7 @@ describe('GET /api/dashboard/dhs-overdue', () => {
             {
                 id: 'case-1',
                 fileNumber: 'ZDM-2026-001',
+                status: 'REQUESTED_VIA_DHS',
                 daysInStatus: 12,
                 statusEntryDate: new Date('2026-07-01'),
                 client: { firstName: 'Jane', lastName: 'Doe' },
@@ -102,6 +120,7 @@ describe('GET /api/dashboard/dhs-overdue', () => {
             {
                 id: 'case-2',
                 fileNumber: 'ZDM-2026-002',
+                status: 'DHS_REQUESTED',
                 daysInStatus: 9,
                 statusEntryDate: new Date('2026-07-05'),
                 client: null,
@@ -113,7 +132,7 @@ describe('GET /api/dashboard/dhs-overdue', () => {
         const body = await res.json();
 
         expect(body.count).toBe(2);
-        expect(body.cases[0]).toMatchObject({ id: 'case-1', clientName: 'Jane Doe', projectName: 'Shosholoza' });
-        expect(body.cases[1]).toMatchObject({ id: 'case-2', clientName: 'Unknown Client', projectName: 'Unknown Project' });
+        expect(body.cases[0]).toMatchObject({ id: 'case-1', clientName: 'Jane Doe', projectName: 'Shosholoza', status: 'REQUESTED_VIA_DHS' });
+        expect(body.cases[1]).toMatchObject({ id: 'case-2', clientName: 'Unknown Client', projectName: 'Unknown Project', status: 'DHS_REQUESTED' });
     });
 });

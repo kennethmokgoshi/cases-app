@@ -8,10 +8,17 @@ interface DhsOverdueCase {
     id: string;
     fileNumber: string;
     clientName: string;
+    /** REQUESTED_VIA_DHS or DHS_REQUESTED — both mean "awaiting a DHS outcome". */
+    status: string;
     daysInStatus: number;
     statusEntryDate: string;
     projectName: string;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+    REQUESTED_VIA_DHS: 'Requested via DHS',
+    DHS_REQUESTED: 'DHS Requested',
+};
 
 interface DhsOverdueResult {
     count: number;
@@ -232,7 +239,11 @@ export default function CheckDhsOverdueButton() {
                                                     </Link>
                                                     <span className="text-amber-400 font-semibold">{c.daysInStatus}d</span>
                                                 </div>
-                                                <div className="text-white/40">{c.projectName}</div>
+                                                <div className="text-white/40 flex items-center gap-1.5">
+                                                    <span>{c.projectName}</span>
+                                                    <span className="text-white/25">·</span>
+                                                    <span>{STATUS_LABELS[c.status] ?? c.status}</span>
+                                                </div>
                                                 {bulkItem && (
                                                     <div className={`mt-1.5 pt-1.5 border-t border-white/10 ${bulkItemColor(bulkItem)}`}>
                                                         {bulkItem.outcome}

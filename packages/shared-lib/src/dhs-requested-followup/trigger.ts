@@ -1,17 +1,22 @@
 /**
  * Requested-via-DHS Follow-up Automation
  *
- * Target cohort: OVERDUE files whose service list includes Debt Review Flag Removal
- * and whose status is exactly REQUESTED_VIA_DHS.
+ * Target cohort: every OVERDUE file that is sitting on DHS awaiting a transfer
+ * outcome — i.e. status REQUESTED_VIA_DHS *or* DHS_REQUESTED, across all
+ * services. Both statuses mean the same thing operationally; DHS_REQUESTED is
+ * what /api/dhs/transfer writes, REQUESTED_VIA_DHS is the workflow-engine one.
  *
- * ⚠️ By design this EXCLUDES the look-alike status DHS_REQUESTED. A separate
- * automation will later cover DHS_REQUESTED (the two are operationally the same
- * "transfer request pending" state, but the business asked to roll them out
- * separately). See COHORT_STATUS below.
+ * ⚠️ DHS_REQUESTED is NOT present in WORKFLOW_STATUSES, so it carries no SLA and
+ * overdue-scan can never set `isOverdue` on it. Overdue is therefore evaluated
+ * as: isOverdue flag OR nextUpdate elapsed OR statusEntryDate older than
+ * FALLBACK_OVERDUE_DAYS. Without the fallback the DHS_REQUESTED files would be
+ * invisible to this automation. See isOverdueWhere().
  *
  * For each file the automation re-checks the DHS transfer status and routes:
  *   • ACCEPTED / AUTO_TRANSFERRED → status → ACCEPTED_VIA_DHS (staff take it from there)
- *   • DECLINED                    → handleDHSDecline() (classify + email/SMS/status)
+ *   • DECLINED                    → depends on declineMode (see DeclineMode below):
+ *                                   'review' (default) classifies + flags staff, sends NOTHING;
+ *                                   'auto' runs handleDHSDecline() (emails/SMS/status).
  *   • PENDING                     → nextUpdate +3 working days, system comment
  *   • NOT_LINKED / NOT_REQUESTED  → system comment, left for staff review
  *
@@ -24,18 +29,48 @@
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { checkTransferStatus, closeBrowser } from '../dhs';
-import { handleDHSDecline } from '../dhs/decline-handler';
+import { handleDHSDecline, classifyDeclineReason } from '../dhs/decline-handler';
 import { previewDHSDecline, type DeclinePreview } from '../dhs/decline-preview';
 import { getAutomationUserId } from '../automation/automation-user';
 import { updateCaseStatus, setNextUpdate, addSystemComment } from '../automation/workflow-engine';
 
 const logger = createLogger('dhs-requested-followup');
 
+/** Optional service filter — pass as `service` to narrow to Debt Review Flag Removal files only. */
 export const FLAG_REMOVAL_SERVICE = 'debt_review_flag_removal';
-/** This automation deliberately covers ONLY this status — NOT the DHS_REQUESTED look-alike. */
-export const COHORT_STATUS = 'REQUESTED_VIA_DHS';
+
+/** Both statuses that mean "a transfer request is pending an outcome on DHS". */
+export const COHORT_STATUSES = ['REQUESTED_VIA_DHS', 'DHS_REQUESTED'] as const;
+
+/**
+ * Fallback overdue window in calendar days, for cohort statuses that carry no SLA
+ * in WORKFLOW_STATUSES (DHS_REQUESTED is absent from the registry entirely, so
+ * overdue-scan never flags it). Mirrors the 7-day SLA REQUESTED_VIA_DHS carries.
+ */
+export const FALLBACK_OVERDUE_DAYS = 7;
+
 const DHS_TIMEOUT_MS = 90000;
 const PENDING_RETRY_DAYS = 3;
+
+/**
+ * How DECLINED outcomes are handled.
+ *   'review' — classify and flag for staff; sends NOTHING. Default, because a
+ *              DHS "decline" is frequently a false positive or an under-review
+ *              state, and the auto path emails and SMSes the consumer directly.
+ *   'auto'   — run the full handleDHSDecline() response (emails/SMS/status).
+ */
+export type DeclineMode = 'review' | 'auto';
+export const DEFAULT_DECLINE_MODE: DeclineMode = 'review';
+
+/** Marker written into the review comment so repeat runs can recognise their own work. */
+export const DECLINE_REVIEW_MARKER = '[DHS DECLINE — AWAITING STAFF REVIEW]';
+
+/**
+ * How long a flagged-for-review file is left alone before it is re-checked.
+ * Prevents a file staff haven't actioned from being re-notified — and from
+ * burning a 90s DHS check — on every single run.
+ */
+export const REVIEW_COOLDOWN_DAYS = 14;
 
 /** Representative decline reason used only to render dry-run previews (most common real-world category). */
 export const SAMPLE_DECLINE_REASON =
@@ -45,6 +80,10 @@ export type FollowupOutcome =
     | 'PREVIEW'
     | 'ACCEPTED'
     | 'DECLINED'
+    /** Declined, classified and flagged for staff — nothing sent (review mode). */
+    | 'DECLINED_REVIEW'
+    /** Already flagged for review and still inside the cooldown — not re-checked. */
+    | 'SKIPPED_AWAITING_REVIEW'
     | 'STILL_PENDING'
     | 'NOT_ON_DHS'
     | 'TIMEOUT'
@@ -54,6 +93,8 @@ export interface FollowupFileResult {
     caseId: string;
     fileNumber: string;
     clientName: string;
+    /** Cohort status the file was picked up in (REQUESTED_VIA_DHS or DHS_REQUESTED). */
+    previousStatus: string;
     outcome: FollowupOutcome;
     /** Status the file would move to / moved to. */
     statusChange: string | null;
@@ -64,11 +105,19 @@ export interface FollowupFileResult {
 
 export interface FollowupRunResult {
     dryRun: boolean;
-    cohortStatus: string;
+    cohortStatuses: string[];
+    /** Service the cohort was narrowed to, or null when all services are included. */
+    cohortService: string | null;
     cohortCount: number;
+    declineMode: DeclineMode;
     stats: {
         accepted: number;
+        /** Declines that were actioned — messages sent. Always 0 in review mode. */
         declined: number;
+        /** Declines classified and flagged for staff, nothing sent. */
+        declinedForReview: number;
+        /** Files left alone because they are already awaiting staff review. */
+        skippedAwaitingReview: number;
         stillPending: number;
         notOnDhs: number;
         previewed: number;
@@ -80,52 +129,174 @@ export interface FollowupRunResult {
 interface CohortCase {
     id: string;
     fileNumber: string;
+    status: string;
     client: { firstName: string; lastName: string; idNumber: string };
 }
 
-/** Fetch the overdue + flag-removal + REQUESTED_VIA_DHS cohort. */
-export async function getRequestedViaDhsCohort(limit?: number): Promise<CohortCase[]> {
+export interface CohortOptions {
+    limit?: number;
+    /** Defaults to both "requested via DHS" statuses. */
+    statuses?: readonly string[];
+    /** Narrow to a single service (e.g. FLAG_REMOVAL_SERVICE). Default: all services. */
+    service?: string | null;
+    /** Overrides the fallback overdue window for statuses that carry no SLA. */
+    overdueDays?: number;
+}
+
+/**
+ * "Overdue" for this cohort, evaluated three ways because DHS_REQUESTED has no
+ * SLA entry and so is never flagged by overdue-scan:
+ *   1. the nightly isOverdue flag, 2. an elapsed nextUpdate date, or
+ *   3. simply having sat in the status longer than the fallback window.
+ */
+function isOverdueWhere(overdueDays: number) {
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - overdueDays);
+    return [
+        { isOverdue: true },
+        { nextUpdate: { lt: now } },
+        { statusEntryDate: { lt: cutoff } },
+    ];
+}
+
+/** Fetch every overdue file awaiting a DHS transfer outcome. */
+export async function getRequestedViaDhsCohort(opts: CohortOptions = {}): Promise<CohortCase[]> {
+    const statuses = opts.statuses ?? COHORT_STATUSES;
+    const service = opts.service ?? null;
+
     return prisma.case.findMany({
         where: {
             deletedAt: null,
-            isOverdue: true,
-            status: COHORT_STATUS,
-            services: { contains: FLAG_REMOVAL_SERVICE },
+            status: { in: [...statuses] },
+            ...(service ? { services: { contains: service } } : {}),
+            OR: isOverdueWhere(opts.overdueDays ?? FALLBACK_OVERDUE_DAYS),
         },
         select: {
             id: true,
             fileNumber: true,
+            status: true,
             client: { select: { firstName: true, lastName: true, idNumber: true } },
         },
         orderBy: { statusEntryDate: 'asc' },
-        ...(limit ? { take: limit } : {}),
+        ...(opts.limit ? { take: opts.limit } : {}),
     });
 }
 
-export async function runRequestedViaDhsFollowup(opts: {
+/**
+ * True when this case was already flagged for staff review inside the cooldown
+ * window. Never throws — on a DB error we treat the file as not-yet-flagged, so
+ * the worst case is a duplicate review note rather than a silently skipped file.
+ */
+export async function isAwaitingDeclineReview(caseId: string): Promise<boolean> {
+    const since = new Date();
+    since.setDate(since.getDate() - REVIEW_COOLDOWN_DAYS);
+    try {
+        const prior = await prisma.caseComment.findFirst({
+            where: { caseId, content: { contains: DECLINE_REVIEW_MARKER }, createdAt: { gte: since } },
+            select: { id: true },
+        });
+        return prior !== null;
+    } catch (err) {
+        logger.error(`[DHS_FOLLOWUP] Review-flag lookup failed for ${caseId} — treating as not flagged:`, err);
+        return false;
+    }
+}
+
+/** Record a decline for staff to verify, and notify them. Sends nothing to the consumer or DC. */
+async function flagDeclineForReview(params: {
+    caseId: string;
+    fileNumber: string;
+    clientName: string;
+    declineReason: string;
+    adminId: string | undefined;
+}): Promise<{ category: string; notified: number }> {
+    const { caseId, fileNumber, clientName, declineReason, adminId } = params;
+    const category = classifyDeclineReason(declineReason);
+
+    await prisma.caseComment.create({
+        data: {
+            caseId,
+            userId: adminId,
+            content:
+                `[SYSTEM] ${DECLINE_REVIEW_MARKER}\n` +
+                `DHS reports this transfer request as DECLINED.\n` +
+                `Reason given on DHS: "${declineReason}"\n` +
+                `Auto-classified as: ${category}\n\n` +
+                `NOTHING has been sent to the consumer or the Debt Counsellor. DHS declines are ` +
+                `frequently false positives or still-under-review states, so this is left for a ` +
+                `person to confirm. If the decline is genuine, action it from the case's DHS ` +
+                `decline tools. This file will not be re-checked automatically for ` +
+                `${REVIEW_COOLDOWN_DAYS} days.`,
+        },
+    });
+
+    // Notify the assigned staff member plus admins, matching overdue-scan's alert pattern.
+    const [caseRow, admins] = await Promise.all([
+        prisma.case.findUnique({ where: { id: caseId }, select: { assignedToId: true } }),
+        prisma.user.findMany({ where: { isAdmin: true, isLocked: false }, select: { id: true } }),
+    ]);
+
+    const recipientIds = new Set<string>(admins.map(u => u.id));
+    if (caseRow?.assignedToId) recipientIds.add(caseRow.assignedToId);
+
+    if (recipientIds.size > 0) {
+        await prisma.inAppNotification.createMany({
+            data: [...recipientIds].map(userId => ({
+                userId,
+                type: 'DHS_DECLINE_REVIEW',
+                title: `🔍 Verify DHS decline: ${fileNumber}`,
+                message: `${clientName} — DHS reports DECLINED (${category}). Nothing was sent; please confirm before actioning.`,
+                caseId,
+                linkUrl: `/cases/${caseId}`,
+            })),
+        });
+    }
+
+    return { category, notified: recipientIds.size };
+}
+
+export async function runRequestedViaDhsFollowup(opts: CohortOptions & {
     dryRun?: boolean;
-    limit?: number;
+    declineMode?: DeclineMode;
     sampleDeclineReason?: string;
 } = {}): Promise<FollowupRunResult> {
     const dryRun = opts.dryRun ?? false;
+    const declineMode = opts.declineMode ?? DEFAULT_DECLINE_MODE;
     const sampleReason = opts.sampleDeclineReason ?? SAMPLE_DECLINE_REASON;
+    const statuses = opts.statuses ?? COHORT_STATUSES;
+    const service = opts.service ?? null;
 
-    const cohort = await getRequestedViaDhsCohort(opts.limit);
+    const cohort = await getRequestedViaDhsCohort(opts);
     const result: FollowupRunResult = {
         dryRun,
-        cohortStatus: COHORT_STATUS,
+        cohortStatuses: [...statuses],
+        cohortService: service,
         cohortCount: cohort.length,
-        stats: { accepted: 0, declined: 0, stillPending: 0, notOnDhs: 0, previewed: 0, errors: 0 },
+        declineMode,
+        stats: {
+            accepted: 0,
+            declined: 0,
+            declinedForReview: 0,
+            skippedAwaitingReview: 0,
+            stillPending: 0,
+            notOnDhs: 0,
+            previewed: 0,
+            errors: 0,
+        },
         files: [],
     };
 
-    logger.info(`[DHS_FOLLOWUP] ${cohort.length} file(s) in cohort (dryRun=${dryRun})`);
+    logger.info(
+        `[DHS_FOLLOWUP] ${cohort.length} file(s) in cohort ` +
+        `(statuses=${statuses.join('/')}, service=${service ?? 'all'}, dryRun=${dryRun})`,
+    );
 
     const adminId = dryRun ? undefined : (await getAutomationUserId()) ?? undefined;
 
     for (const c of cohort) {
         const clientName = `${c.client.firstName} ${c.client.lastName}`.trim();
-        const base = { caseId: c.id, fileNumber: c.fileNumber, clientName };
+        const base = { caseId: c.id, fileNumber: c.fileNumber, clientName, previousStatus: c.status };
 
         // ── DRY RUN: render the decline path preview, touch nothing ──
         if (dryRun) {
@@ -139,7 +310,11 @@ export async function runRequestedViaDhsFollowup(opts: {
                     message:
                         `Would re-check DHS. If ACCEPTED → ACCEPTED_VIA_DHS. ` +
                         `If PENDING → nextUpdate +${PENDING_RETRY_DAYS} working days. ` +
-                        `If DECLINED → handle decline (preview below, using a representative reason).`,
+                        (declineMode === 'review'
+                            ? `If DECLINED → classify and flag for staff, SENDING NOTHING (declineMode=review). ` +
+                              `The preview below shows what the 'auto' mode would have sent instead.`
+                            : `If DECLINED → handle decline and SEND the messages previewed below ` +
+                              `(declineMode=auto; the reason shown is representative, not the real one).`),
                     declinePreview,
                 });
             } catch (err) {
@@ -151,6 +326,18 @@ export async function runRequestedViaDhsFollowup(opts: {
 
         // ── LIVE: re-check DHS and route ──
         try {
+            // Already sitting with staff — don't re-notify, and don't burn a 90s DHS check on it.
+            if (declineMode === 'review' && await isAwaitingDeclineReview(c.id)) {
+                result.stats.skippedAwaitingReview++;
+                result.files.push({
+                    ...base,
+                    outcome: 'SKIPPED_AWAITING_REVIEW',
+                    statusChange: null,
+                    message: `Already flagged for staff review within the last ${REVIEW_COOLDOWN_DAYS} days — not re-checked`,
+                });
+                continue;
+            }
+
             const check = await withTimeout(() => checkTransferStatus(c.client.idNumber));
             if (!check) {
                 result.stats.errors++;
@@ -169,6 +356,28 @@ export async function runRequestedViaDhsFollowup(opts: {
 
             if (check.status === 'DECLINED') {
                 const reason = check.declineReason || 'No decline reason captured on DHS';
+
+                // Review mode: classify, record, notify staff — send nothing.
+                if (declineMode === 'review') {
+                    const { category, notified } = await flagDeclineForReview({
+                        caseId: c.id,
+                        fileNumber: c.fileNumber,
+                        clientName,
+                        declineReason: reason,
+                        adminId,
+                    });
+                    result.stats.declinedForReview++;
+                    result.files.push({
+                        ...base,
+                        outcome: 'DECLINED_REVIEW',
+                        statusChange: null,
+                        message:
+                            `Declined on DHS (classified ${category}) — flagged for staff, nothing sent. ` +
+                            `${notified} staff member(s) notified. Reason: "${reason}"`,
+                    });
+                    continue;
+                }
+
                 const handled = await handleDHSDecline({ caseId: c.id, declineReason: reason, triggeredByUserId: adminId });
                 result.stats.declined++;
                 result.files.push({
@@ -189,7 +398,7 @@ export async function runRequestedViaDhsFollowup(opts: {
             }
 
             // NOT_LINKED / NOT_REQUESTED — surface for staff, don't silently flip status
-            await addSystemComment(c.id, `[AUTO] Requested-via-DHS follow-up: DHS now reports "${check.status}" for a file we had as Requested via DHS. Staff to review.`, adminId);
+            await addSystemComment(c.id, `[AUTO] Requested-via-DHS follow-up: DHS now reports "${check.status}" for a file we had as "${c.status}". Staff to review.`, adminId);
             result.stats.notOnDhs++;
             result.files.push({ ...base, outcome: 'NOT_ON_DHS', statusChange: null, message: `DHS reports ${check.status} — flagged for staff` });
         } catch (err) {
