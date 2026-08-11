@@ -104,7 +104,10 @@ export async function POST(request: Request) {
                 switch (newStatus) {
                     case 'ACCEPTED_VIA_DHS': summary.accepted++; break;
                     case 'DECLINED_VIA_DHS': summary.declined++; break;
-                    case 'REQUESTED_VIA_DHS': summary.pending++; break;
+                    // Both statuses mean "still awaiting a DHS outcome" — see COHORT_STATUSES
+                    // in packages/shared-lib/src/dhs-requested-followup/trigger.ts
+                    case 'REQUESTED_VIA_DHS':
+                    case 'DHS_REQUESTED': summary.pending++; break;
                     case 'NOT_LINKED': summary.notLinked++; break;
                     case 'NOT_REQUESTED_VIA_DHS': summary.notRequested++; break;
                     case 'ZDM_CLIENT': summary.zdmClient++; break;

@@ -21,6 +21,7 @@ const TYPE_TO_ENDPOINT: Record<string, string> = {
     R350_REMINDER:         '/api/cron/r350-reminder',
     OVERDUE_SCAN:          '/api/cron/overdue-scan',
     DRR_TRIGGER:           '/api/cron/drr-trigger',
+    DHS_REQUESTED_FOLLOWUP: '/api/cron/dhs-requested-followup',
 };
 
 export async function POST(request: Request): Promise<NextResponse> {
