@@ -144,19 +144,34 @@ export interface CohortOptions {
 }
 
 /**
- * "Overdue" for this cohort, evaluated three ways because DHS_REQUESTED has no
- * SLA entry and so is never flagged by overdue-scan:
- *   1. the nightly isOverdue flag, 2. an elapsed nextUpdate date, or
- *   3. simply having sat in the status longer than the fallback window.
+ * "Due for a DHS re-check" for this cohort.
+ *
+ * DHS_REQUESTED has no SLA entry, so overdue-scan never sets `isOverdue` on it —
+ * hence the isOverdue flag alone is not enough and we fall back to how long the
+ * file has sat in the status.
+ *
+ * `nextUpdate` is the throttle and MUST win: a file the automation has just
+ * actioned is scheduled forward, and it stays out of the cohort until that date
+ * passes. An earlier version OR-ed the stale-statusEntryDate check in
+ * unconditionally, which meant any file older than the window matched on every
+ * single run no matter how recently it had been handled — the cohort never
+ * drained and each run re-spent a DHS check on the same files.
+ *
+ * Due when:  nextUpdate has passed
+ *        OR  nextUpdate was never set AND (flagged overdue OR sat too long)
  */
-function isOverdueWhere(overdueDays: number) {
+function isDueWhere(overdueDays: number) {
     const now = new Date();
     const cutoff = new Date(now);
     cutoff.setDate(cutoff.getDate() - overdueDays);
     return [
-        { isOverdue: true },
         { nextUpdate: { lt: now } },
-        { statusEntryDate: { lt: cutoff } },
+        {
+            AND: [
+                { nextUpdate: null },
+                { OR: [{ isOverdue: true }, { statusEntryDate: { lt: cutoff } }] },
+            ],
+        },
     ];
 }
 
@@ -170,7 +185,7 @@ export async function getRequestedViaDhsCohort(opts: CohortOptions = {}): Promis
             deletedAt: null,
             status: { in: [...statuses] },
             ...(service ? { services: { contains: service } } : {}),
-            OR: isOverdueWhere(opts.overdueDays ?? FALLBACK_OVERDUE_DAYS),
+            OR: isDueWhere(opts.overdueDays ?? FALLBACK_OVERDUE_DAYS),
         },
         select: {
             id: true,
@@ -366,6 +381,9 @@ export async function runRequestedViaDhsFollowup(opts: CohortOptions & {
                         declineReason: reason,
                         adminId,
                     });
+                    // Schedule past the review cooldown so the file leaves the cohort
+                    // entirely rather than being re-fetched and skipped every run.
+                    await setNextUpdate(c.id, REVIEW_COOLDOWN_DAYS, adminId);
                     result.stats.declinedForReview++;
                     result.files.push({
                         ...base,
@@ -397,8 +415,10 @@ export async function runRequestedViaDhsFollowup(opts: CohortOptions & {
                 continue;
             }
 
-            // NOT_LINKED / NOT_REQUESTED — surface for staff, don't silently flip status
+            // NOT_LINKED / NOT_REQUESTED — surface for staff, don't silently flip status.
+            // Still schedule it forward, or it would be re-checked on every run forever.
             await addSystemComment(c.id, `[AUTO] Requested-via-DHS follow-up: DHS now reports "${check.status}" for a file we had as "${c.status}". Staff to review.`, adminId);
+            await setNextUpdate(c.id, PENDING_RETRY_DAYS, adminId);
             result.stats.notOnDhs++;
             result.files.push({ ...base, outcome: 'NOT_ON_DHS', statusChange: null, message: `DHS reports ${check.status} — flagged for staff` });
         } catch (err) {

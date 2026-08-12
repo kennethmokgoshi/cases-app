@@ -41,6 +41,7 @@ import {
     FLAG_REMOVAL_SERVICE,
     DECLINE_REVIEW_MARKER,
     DEFAULT_DECLINE_MODE,
+    REVIEW_COOLDOWN_DAYS,
 } from './trigger';
 
 const findMany = prisma.case.findMany as unknown as ReturnType<typeof vi.fn>;
@@ -80,18 +81,41 @@ describe('getRequestedViaDhsCohort', () => {
         expect(DEFAULT_DECLINE_MODE).toBe('review');
     });
 
-    it('treats overdue three ways so DHS_REQUESTED (no SLA, never flagged) is still caught', async () => {
+    it('an elapsed nextUpdate makes a file due', async () => {
         findMany.mockResolvedValue([]);
         await getRequestedViaDhsCohort();
         const where = findMany.mock.calls[0][0].where;
 
-        expect(where.OR).toHaveLength(3);
-        expect(where.OR[0]).toEqual({ isOverdue: true });
-        expect(where.OR[1].nextUpdate.lt).toBeInstanceOf(Date);
+        expect(where.OR).toHaveLength(2);
+        expect(where.OR[0].nextUpdate.lt).toBeInstanceOf(Date);
+    });
 
-        const cutoff: Date = where.OR[2].statusEntryDate.lt;
+    it('falls back to the isOverdue flag / stale statusEntryDate ONLY when nextUpdate was never set', async () => {
+        // DHS_REQUESTED has no SLA, so isOverdue alone never catches it — but the
+        // fallback must not override the nextUpdate throttle, or a file actioned
+        // moments ago is re-picked (and re-checked on DHS) on the very next run.
+        findMany.mockResolvedValue([]);
+        await getRequestedViaDhsCohort();
+        const fallback = findMany.mock.calls[0][0].where.OR[1];
+
+        expect(fallback.AND[0]).toEqual({ nextUpdate: null });
+        expect(fallback.AND[1].OR[0]).toEqual({ isOverdue: true });
+
+        const cutoff: Date = fallback.AND[1].OR[1].statusEntryDate.lt;
         const daysBack = Math.round((Date.now() - cutoff.getTime()) / 86_400_000);
         expect(daysBack).toBe(FALLBACK_OVERDUE_DAYS);
+    });
+
+    it('never matches a file scheduled into the future', async () => {
+        findMany.mockResolvedValue([]);
+        await getRequestedViaDhsCohort();
+        const or = findMany.mock.calls[0][0].where.OR;
+
+        // Every branch either requires an elapsed nextUpdate or an absent one.
+        const requiresElapsed = or[0].nextUpdate?.lt instanceof Date;
+        const requiresNull = or[1].AND?.some((c: { nextUpdate?: null }) => c.nextUpdate === null);
+        expect(requiresElapsed).toBe(true);
+        expect(requiresNull).toBe(true);
     });
 
     it('still supports narrowing to one status, one service, and a custom window', async () => {
@@ -108,7 +132,7 @@ describe('getRequestedViaDhsCohort', () => {
         expect(call.where.services).toEqual({ contains: FLAG_REMOVAL_SERVICE });
         expect(call.take).toBe(5);
 
-        const cutoff: Date = call.where.OR[2].statusEntryDate.lt;
+        const cutoff: Date = call.where.OR[1].AND[1].OR[1].statusEntryDate.lt;
         expect(Math.round((Date.now() - cutoff.getTime()) / 86_400_000)).toBe(30);
     });
 });
@@ -218,6 +242,21 @@ describe('runRequestedViaDhsFollowup — live routing', () => {
         const notified = db.inAppNotification.createMany.mock.calls[0][0].data;
         expect(notified.map((n: { userId: string }) => n.userId).sort()).toEqual(['admin1', 'staff1']);
         expect(notified[0].type).toBe('DHS_DECLINE_REVIEW');
+
+        // Scheduled past the cooldown so it leaves the cohort instead of being
+        // re-fetched and skipped on every subsequent run.
+        expect(setNextUpdate).toHaveBeenCalledWith('c1', REVIEW_COOLDOWN_DAYS, 'admin1');
+    });
+
+    it('NOT_ON_DHS schedules the file forward so it is not re-checked every run', async () => {
+        findMany.mockResolvedValue([cohortRow('c1', 'ZDM-1')]);
+        (checkTransferStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ found: false, status: 'NOT_REQUESTED' });
+
+        const res = await runRequestedViaDhsFollowup({ dryRun: false });
+
+        expect(res.stats.notOnDhs).toBe(1);
+        expect(setNextUpdate).toHaveBeenCalledWith('c1', 3, 'admin1');
+        expect(updateCaseStatus).not.toHaveBeenCalled();
     });
 
     it('a file already flagged for review is skipped without burning a DHS check', async () => {
