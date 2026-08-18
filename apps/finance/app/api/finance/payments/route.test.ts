@@ -5,6 +5,9 @@ vi.mock('@zenowethu/database', () => ({
   prisma: {
     payment: { findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
     client: { findUnique: vi.fn() },
+    case: { findUnique: vi.fn() },
+    paymentArrangement: { findMany: vi.fn() },
+    paymentArrangementInstalment: { findUnique: vi.fn() },
   },
 }));
 
@@ -28,6 +31,9 @@ const mockCount = vi.mocked(prisma.payment.count);
 const mockCreate = vi.mocked(prisma.payment.create);
 const mockUpdate = vi.mocked(prisma.payment.update);
 const mockWriteFile = vi.mocked(writeFile);
+const mockCaseFindUnique = vi.mocked(prisma.case.findUnique);
+const mockInstalmentFindUnique = vi.mocked(prisma.paymentArrangementInstalment.findUnique);
+const mockArrangementFindMany = vi.mocked(prisma.paymentArrangement.findMany);
 
 function makeMultipartRequest(fields: Record<string, string>, file?: { name: string; type: string; content?: string }): Request {
   const form = new FormData();
@@ -151,5 +157,77 @@ describe('POST /api/finance/payments', () => {
     expect(res.status).toBe(201);
     const data = await res.json();
     expect(data.proofUploadError).toBeTruthy();
+  });
+});
+
+describe('POST /api/finance/payments — case and instalment allocation', () => {
+  beforeEach(() => {
+    mockArrangementFindMany.mockResolvedValue([] as never);
+    mockCreate.mockResolvedValue({ id: 'pay-1', caseId: 'case-1', amount: 500 } as never);
+  });
+
+  it('pins the payment to the case the staff member was looking at', async () => {
+    // Without an explicit caseId we guess the client's newest open case, which is
+    // wrong when a consumer has more than one file.
+    mockCaseFindUnique.mockResolvedValue({ id: 'case-1', clientId: 'client-1' } as never);
+
+    const res = await POST(makePostRequest({ caseId: 'case-1', amount: '500', date: '2026-08-18', method: 'EFT' }));
+
+    expect(res.status).toBe(201);
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ caseId: 'case-1', clientId: 'client-1' }),
+      })
+    );
+    // The ID-number fallback must not run when a case is given.
+    expect(vi.mocked(prisma.client.findUnique)).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the given case does not exist', async () => {
+    mockCaseFindUnique.mockResolvedValue(null as never);
+    const res = await POST(makePostRequest({ caseId: 'nope', amount: '500', date: '2026-08-18', method: 'EFT' }));
+    expect(res.status).toBe(404);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('stores the instalment a back-dated payment settles', async () => {
+    mockCaseFindUnique.mockResolvedValue({ id: 'case-1', clientId: 'client-1' } as never);
+    mockInstalmentFindUnique.mockResolvedValue({
+      arrangement: { caseId: 'case-1', clientId: 'client-1' },
+    } as never);
+
+    const res = await POST(
+      makePostRequest({ caseId: 'case-1', instalmentId: 'inst-3', amount: '500', date: '2026-10-01', method: 'EFT' })
+    );
+
+    expect(res.status).toBe(201);
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ instalmentId: 'inst-3' }) })
+    );
+  });
+
+  it('rejects an instalment belonging to a different case', async () => {
+    mockCaseFindUnique.mockResolvedValue({ id: 'case-1', clientId: 'client-1' } as never);
+    mockInstalmentFindUnique.mockResolvedValue({
+      arrangement: { caseId: 'other-case', clientId: 'other-client' },
+    } as never);
+
+    const res = await POST(
+      makePostRequest({ caseId: 'case-1', instalmentId: 'inst-x', amount: '500', date: '2026-10-01', method: 'EFT' })
+    );
+
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('leaves instalmentId null when no month is chosen, so it falls to FIFO matching', async () => {
+    mockCaseFindUnique.mockResolvedValue({ id: 'case-1', clientId: 'client-1' } as never);
+
+    const res = await POST(makePostRequest({ caseId: 'case-1', amount: '500', date: '2026-08-18', method: 'EFT' }));
+
+    expect(res.status).toBe(201);
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ instalmentId: null }) })
+    );
   });
 });

@@ -12,9 +12,45 @@ type ClientMatch = {
     activeCase: { fileNumber: string } | null;
 };
 
+// One month of the case's payment arrangement, as returned by
+// GET /api/finance/cases/[id]/arrangements.
+type InstalmentOption = {
+    id: string;
+    sequence: number;
+    dueDate: string;
+    amountDue: number;
+    amountPaid: number;
+    balance: number;
+    status: 'PENDING' | 'PAID' | 'PARTIAL' | 'MISSED' | 'WAIVED';
+    paymentCount: number;
+};
+
+type ArrangementOption = {
+    id: string;
+    frequency: string;
+    reason: string | null;
+    instalments: InstalmentOption[];
+    summary: { instalmentCount: number; paidCount: number; missedCount: number };
+};
+
+function periodWord(frequency: string): string {
+    if (frequency === 'WEEKLY') return 'Week';
+    if (frequency === 'ONCE') return 'Once-off';
+    return 'Month';
+}
+
+function fmtDay(value: string): string {
+    return new Date(value).toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function fmtAmount(value: number): string {
+    return `R${value.toFixed(2)}`;
+}
+
 export default function RecordPaymentPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const caseId = searchParams.get('caseId') ?? '';
     const [idNumber, setIdNumber] = useState(searchParams.get('idNumber') ?? '');
     const [clientMatch, setClientMatch] = useState<ClientMatch | null>(null);
     const [lookupLoading, setLookupLoading] = useState(false);
@@ -27,6 +63,11 @@ export default function RecordPaymentPage() {
     const [notes, setNotes] = useState('');
     const [category, setCategory] = useState('INSTALLMENT');
 
+    // Which month of the arrangement this payment settles. Empty = let the
+    // system apply it to the oldest unpaid month.
+    const [arrangements, setArrangements] = useState<ArrangementOption[]>([]);
+    const [instalmentId, setInstalmentId] = useState(searchParams.get('instalmentId') ?? '');
+
     const [proofFile, setProofFile] = useState<File | null>(null);
 
     const [submitting, setSubmitting] = useState(false);
@@ -37,6 +78,40 @@ export default function RecordPaymentPage() {
         if (idNumber.length >= 6) lookupClient();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Load the case's payment schedule so staff can say which month this covers.
+    useEffect(() => {
+        if (!caseId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`/api/finance/cases/${caseId}/arrangements`, { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!cancelled) setArrangements(data.arrangements ?? []);
+            } catch {
+                // A missing schedule just means the month picker stays hidden.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [caseId]);
+
+    const allInstalments = arrangements.flatMap((a) =>
+        a.instalments.map((i) => ({ ...i, frequency: a.frequency, arrangementReason: a.reason }))
+    );
+    const chosen = allInstalments.find((i) => i.id === instalmentId) ?? null;
+    // Any later month already carrying money means this capture is back-dated.
+    const isBackDated =
+        chosen !== null &&
+        allInstalments.some((i) => i.sequence > chosen.sequence && (i.amountPaid > 0 || i.status === 'PAID'));
+
+    // Offer the outstanding amount for the chosen month — staff can still overtype it.
+    const chosenBalance = chosen?.balance ?? 0;
+    useEffect(() => {
+        if (chosenBalance > 0) setAmount(chosenBalance.toFixed(2));
+    }, [chosenBalance]);
 
     async function lookupClient() {
         if (idNumber.length < 6) return;
@@ -75,6 +150,8 @@ export default function RecordPaymentPage() {
             if (proofFile) {
                 const form = new FormData();
                 if (idNumber) form.set('idNumber', idNumber);
+                if (caseId) form.set('caseId', caseId);
+                if (instalmentId) form.set('instalmentId', instalmentId);
                 form.set('amount', amount);
                 form.set('date', date);
                 form.set('method', method);
@@ -87,7 +164,11 @@ export default function RecordPaymentPage() {
                 res = await fetch('/api/finance/payments', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ idNumber: idNumber || undefined, amount, date, method, reference, notes, category }) });
+                    body: JSON.stringify({
+                        idNumber: idNumber || undefined,
+                        caseId: caseId || undefined,
+                        instalmentId: instalmentId || undefined,
+                        amount, date, method, reference, notes, category }) });
             }
             if (!res.ok) {
                 const data = await res.json();
@@ -99,7 +180,11 @@ export default function RecordPaymentPage() {
                 setWarning(created.proofUploadError);
                 return;
             }
-            router.push('/payments');
+            // Land back on the consumer's file so staff see the payment in context,
+            // not on the global payments list they came from.
+            const destination = caseId || created.caseId;
+            router.push(destination ? `/cases/${destination}` : '/payments');
+            router.refresh();
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -110,10 +195,19 @@ export default function RecordPaymentPage() {
     return (
         <div className="p-6 max-w-2xl mx-auto">
             <div className="mb-8">
-                <Link href="/payments" className="text-cyan-400 hover:text-cyan-300 text-sm mb-2 inline-block">← Back to Payments</Link>
+                <Link
+                    href={caseId ? `/cases/${caseId}` : '/payments'}
+                    className="text-cyan-400 hover:text-cyan-300 text-sm mb-2 inline-block"
+                >
+                    ← {caseId ? 'Back to file' : 'Back to Payments'}
+                </Link>
 
                 <h1 className="text-3xl font-bold text-white">Record Manual Payment</h1>
-                <p className="text-gray-400 text-sm mt-1">Log a single payment and link it to a client</p>
+                <p className="text-gray-400 text-sm mt-1">
+                    {caseId
+                        ? 'Log a payment against this file — you return to the file once it saves'
+                        : 'Log a single payment and link it to a client'}
+                </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -218,6 +312,49 @@ export default function RecordPaymentPage() {
                         </div>
                     </div>
 
+                    {/* Which month of the arrangement this payment settles */}
+                    {allInstalments.length > 0 && (
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1.5 block">Apply to instalment</label>
+                            <select
+                                value={instalmentId}
+                                onChange={(e) => setInstalmentId(e.target.value)}
+                                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:border-cyan-500 focus:outline-none"
+                            >
+                                <option value="">Auto — apply to the oldest unpaid instalment</option>
+                                {arrangements.map((a) => (
+                                    <optgroup
+                                        key={a.id}
+                                        label={`${a.reason || 'Payment arrangement'} — ${a.summary.instalmentCount} ${periodWord(a.frequency).toLowerCase()}${a.summary.instalmentCount === 1 ? '' : 's'}`}
+                                    >
+                                        {a.instalments.map((i) => (
+                                            <option key={i.id} value={i.id}>
+                                                {periodWord(a.frequency)} {i.sequence} · due {fmtDay(i.dueDate)} · {fmtAmount(i.amountDue)} · {i.status}
+                                                {i.balance > 0 && i.status !== 'PENDING' ? ` (${fmtAmount(i.balance)} short)` : ''}
+                                                {i.paymentCount > 0 ? ` · ${i.paymentCount} payment${i.paymentCount === 1 ? '' : 's'} already` : ''}
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-600 mt-1">
+                                Pick the instalment this proof covers. Leave on Auto and it fills the oldest unpaid one.
+                            </p>
+                            {isBackDated && (
+                                <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-300 text-xs">
+                                    Proof brought forward — this instalment sits before ones already paid. It will be
+                                    marked paid without disturbing the later instalments.
+                                </div>
+                            )}
+                            {chosen && chosen.status === 'PAID' && (
+                                <div className="mt-2 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2 text-cyan-300 text-xs">
+                                    This instalment is already settled — recording here counts as an extra payment in the
+                                    same period.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div>
                         <label className="text-xs text-gray-500 mb-1.5 block">Reference</label>
                         <input
@@ -267,7 +404,12 @@ export default function RecordPaymentPage() {
                 {warning && (
                     <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-amber-400 text-sm">
                         {warning}{' '}
-                        <Link href="/payments" className="underline hover:text-amber-300">Go to Payments</Link>
+                        <Link
+                            href={caseId ? `/cases/${caseId}` : '/payments'}
+                            className="underline hover:text-amber-300"
+                        >
+                            {caseId ? 'Go to file' : 'Go to Payments'}
+                        </Link>
                     </div>
                 )}
 
@@ -280,7 +422,7 @@ export default function RecordPaymentPage() {
                         {submitting ? 'Recording...' : 'Record Payment'}
                     </button>
                     <Link
-                        href="/payments"
+                        href={caseId ? `/cases/${caseId}` : '/payments'}
                         className="px-6 py-3 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl font-medium transition-colors text-center"
                     >
                         Cancel

@@ -848,6 +848,26 @@ function NewCaseWithAIComponent() {
     };
 
     const handleSubmit = async (forceUpdate = false) => {
+        // A referral without an email address cannot be updated on DHS or receive
+        // any case correspondence, so it has to be captured before submitting.
+        const emailVal = formData.email?.trim();
+        if (!emailVal || emailVal === 'NA') {
+            setSubmitError({
+                title: '❌ Email Required',
+                message: 'Please enter the consumer\'s email address before submitting this referral.',
+                code: 'MISSING_EMAIL'
+            });
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+            setSubmitError({
+                title: '❌ Invalid Email Address',
+                message: 'Please enter a valid email address, for example name@example.com.',
+                code: 'INVALID_EMAIL'
+            });
+            return;
+        }
+
         setSubmitting(true);
         // Clear previous errors
         setSubmitError(null);
@@ -862,7 +882,7 @@ function NewCaseWithAIComponent() {
                         firstName: formData.names.split(' ')[0], // Simplistic split, maybe user should enter separate? Form has 'names' field.
                         lastName: formData.surname,
                         idNumber: formData.idNumber,
-                        email: formData.email || null,
+                        email: emailVal,
                         phone: formData.cellNumber || null,
                         address: formData.address || null,
                         employer: formData.employer || null,
@@ -1603,13 +1623,16 @@ function NewCaseWithAIComponent() {
                                     )}
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Email</label>
+                                    <label className="block text-xs text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
                                     <input
                                         type="email"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                        className={`w-full px-3 py-2 bg-zeno-navy border rounded text-white focus:border-zeno-cyan focus:outline-none ${!formData.email ? 'border-red-500/70' : 'border-white/10'}`}
                                     />
+                                    {!formData.email && (
+                                        <div className="text-[10px] text-red-400 mt-1">Email is required</div>
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -22,9 +22,7 @@ import { scanMailboxForClient } from '@zenowethu/shared-lib/src/integrations/ima
 import { decryptSecret } from '@zenowethu/shared-lib/src/security/encryption';
 import { isUsableMailboxPassword, usesSmtpPassword } from '@/lib/mailboxes';
 import { getSmtpUsernameIfConfigured } from '@/lib/mailbox-smtp';
-import { join } from 'path';
-import { mkdir, writeFile } from 'fs/promises';
-import crypto from 'crypto';
+import { ingestAttachment, hashBuffer } from '@zenowethu/shared-lib/src/documents/ingest';
 
 const logger = createLogger('cron/invoice-email-scan');
 
@@ -144,7 +142,8 @@ export async function POST(request: Request) {
         const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
         let totalDocsSaved = 0;
         let totalEmailsScanned = 0;
-        const caseResults: Array<{ caseId: string; fileNumber: string; docsSaved: number }> = [];
+        let totalQuarantined = 0;
+        const caseResults: Array<{ caseId: string; fileNumber: string; docsSaved: number; quarantined: number }> = [];
 
         const systemUser = await prisma.user.findFirst({
             where: { role: 'ADMIN' },
@@ -155,8 +154,8 @@ export async function POST(request: Request) {
         for (const caseData of validCases) {
             const caseId = caseData.id;
             const idNumber = caseData.client.idNumber!.trim();
-            const uploadDir = join(process.cwd(), 'storage', 'uploads', caseId);
             let caseDocsSaved = 0;
+            let caseQuarantined = 0;
 
             for (const mailbox of readableMailboxes) {
                 let password: string | null = null;
@@ -202,61 +201,69 @@ export async function POST(request: Request) {
 
                     totalEmailsScanned += scanResult.emailsScanned;
 
-                    if (scanResult.attachments.length > 0) {
-                        try { await mkdir(uploadDir, { recursive: true }); } catch { /* ignore */ }
+                    for (const att of scanResult.attachments) {
+                        const hash = hashBuffer(att.buffer);
 
-                        for (const att of scanResult.attachments) {
-                            const hash = crypto.createHash('sha256').update(att.buffer).digest('hex');
+                        // Already on the case, already processed from this message, or
+                        // already sitting in quarantine — don't re-ingest either way.
+                        const [existingDoc, existingMessage, existingQuarantine] = await Promise.all([
+                            prisma.document.findFirst({
+                                where: { caseId, fileSize: att.buffer.length, fileName: att.fileName },
+                            }),
+                            att.messageId ? prisma.processedMailboxMessage.findFirst({
+                                where: { mailboxAccountId: mailbox.id, messageId: att.messageId, attachmentHash: hash },
+                            }) : null,
+                            prisma.quarantinedDocument.findFirst({
+                                where: { intendedCaseId: caseId, attachmentHash: hash },
+                            }),
+                        ]);
 
-                            const [existingDoc, existingMessage] = await Promise.all([
-                                prisma.document.findFirst({
-                                    where: { caseId, fileSize: att.buffer.length, fileName: att.fileName },
-                                }),
-                                att.messageId ? prisma.processedMailboxMessage.findFirst({
-                                    where: { mailboxAccountId: mailbox.id, messageId: att.messageId, attachmentHash: hash },
-                                }) : null,
-                            ]);
+                        if (existingDoc || existingMessage || existingQuarantine) continue;
 
-                            if (existingDoc || existingMessage) continue;
+                        const docType = att.detectedType && att.detectedType !== 'OTHER'
+                            ? att.detectedType
+                            : (att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT');
 
-                            const safeName = att.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-                            const uniqueFileName = `${Date.now()}-${safeName}`;
-                            await writeFile(join(uploadDir, uniqueFileName), att.buffer);
+                        // The gate: reads the file and refuses to attach it to this
+                        // case if the contents belong to a different consumer.
+                        const outcome = await ingestAttachment({
+                            baseDir: process.cwd(),
+                            caseId,
+                            expectedIdNumber: idNumber,
+                            expectedFirstName: caseData.client.firstName,
+                            expectedLastName: caseData.client.lastName,
+                            fileName: att.fileName,
+                            mimeType: att.mimeType,
+                            buffer: att.buffer,
+                            detectedType: docType,
+                            uploadedById: systemUserId,
+                            source: {
+                                mailboxId: mailbox.id,
+                                messageId: att.messageId ?? null,
+                            },
+                        });
 
-                            const fileUrl = `/uploads/${caseId}/${uniqueFileName}`;
-                            const docType = att.detectedType && att.detectedType !== 'OTHER'
-                                ? att.detectedType
-                                : (att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT');
-
-                            await prisma.document.create({
-                                data: {
-                                    caseId,
-                                    type: docType,
-                                    fileName: att.fileName,
-                                    fileUrl,
-                                    fileSize: att.buffer.length,
-                                    mimeType: att.mimeType,
-                                    uploadedById: systemUserId,
-                                },
-                            });
-
-                            if (att.messageId) {
-                                await prisma.processedMailboxMessage.upsert({
-                                    where: {
-                                        mailboxAccountId_messageId: {
-                                            mailboxAccountId: mailbox.id,
-                                            messageId: att.messageId,
-                                        },
-                                    },
-                                    update: { attachmentHash: hash },
-                                    create: {
+                        if (att.messageId) {
+                            await prisma.processedMailboxMessage.upsert({
+                                where: {
+                                    mailboxAccountId_messageId: {
                                         mailboxAccountId: mailbox.id,
                                         messageId: att.messageId,
-                                        attachmentHash: hash,
                                     },
-                                });
-                            }
+                                },
+                                update: { attachmentHash: hash },
+                                create: {
+                                    mailboxAccountId: mailbox.id,
+                                    messageId: att.messageId,
+                                    attachmentHash: hash,
+                                },
+                            });
+                        }
 
+                        if (outcome.action === 'QUARANTINED') {
+                            caseQuarantined++;
+                            totalQuarantined++;
+                        } else {
                             caseDocsSaved++;
                             totalDocsSaved++;
                         }
@@ -266,8 +273,18 @@ export async function POST(request: Request) {
                 }
             }
 
-            if (caseDocsSaved > 0) {
-                const note = `🤖 Automated Cron Scan harvested ${caseDocsSaved} invoice/PoP document(s) from mailboxes.`;
+            if (caseDocsSaved > 0 || caseQuarantined > 0) {
+                const parts: string[] = [];
+                if (caseDocsSaved > 0) {
+                    parts.push(`harvested ${caseDocsSaved} invoice/PoP document(s) from mailboxes`);
+                }
+                if (caseQuarantined > 0) {
+                    parts.push(
+                        `⚠️ BLOCKED ${caseQuarantined} document(s) whose contents belong to a different consumer — ` +
+                        `held for review, NOT attached to this file`,
+                    );
+                }
+                const note = `🤖 Automated Cron Scan ${parts.join('; ')}.`;
                 await Promise.all([
                     prisma.caseComment.create({
                         data: {
@@ -276,7 +293,7 @@ export async function POST(request: Request) {
                             content: note,
                             type: 'NOTE',
                             isInternal: true,
-                            activityType: 'CRON_INVOICE_SCAN_HARVESTED',
+                            activityType: caseQuarantined > 0 ? 'CRON_INVOICE_SCAN_QUARANTINED' : 'CRON_INVOICE_SCAN_HARVESTED',
                         },
                     }),
                     prisma.workflowLog.create({
@@ -284,7 +301,7 @@ export async function POST(request: Request) {
                             caseId,
                             fromStatus: caseData.status,
                             toStatus: caseData.status,
-                            action: 'CRON_INVOICE_SCAN_HARVESTED',
+                            action: caseQuarantined > 0 ? 'CRON_INVOICE_SCAN_QUARANTINED' : 'CRON_INVOICE_SCAN_HARVESTED',
                             userId: systemUserId,
                             notes: note,
                         },
@@ -292,12 +309,17 @@ export async function POST(request: Request) {
                 ]);
             }
 
-            caseResults.push({ caseId: caseData.id, fileNumber: caseData.fileNumber, docsSaved: caseDocsSaved });
+            caseResults.push({
+                caseId: caseData.id,
+                fileNumber: caseData.fileNumber,
+                docsSaved: caseDocsSaved,
+                quarantined: caseQuarantined,
+            });
         }
 
         await logAutomationRun({
             type: 'INVOICE_EMAIL_SCAN',
-            status: 'SUCCESS',
+            status: totalQuarantined > 0 ? 'NEEDS_REVIEW' : 'SUCCESS',
             startedAt,
             logs: {
                 casesEligible: cases.length,
@@ -305,15 +327,17 @@ export async function POST(request: Request) {
                 mailboxesScanned: readableMailboxes.length,
                 totalEmailsScanned,
                 totalDocsSaved,
+                totalQuarantined,
                 caseResults,
             },
         });
 
-        logger.info(`[CRON] Invoice email scan finished. Scanned ${validCases.length} cases, saved ${totalDocsSaved} documents.`);
+        logger.info(`[CRON] Invoice email scan finished. Scanned ${validCases.length} cases, saved ${totalDocsSaved} documents, quarantined ${totalQuarantined}.`);
         return NextResponse.json({
             success: true,
             casesScanned: validCases.length,
             documentsHarvested: totalDocsSaved,
+            documentsQuarantined: totalQuarantined,
             ranAt: new Date().toISOString(),
         });
     } catch (error) {

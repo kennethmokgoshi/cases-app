@@ -79,6 +79,9 @@ export default function LegalSmartStartPage() {
         setStep(2);
     };
 
+    // The case-create API rejects new clients without an email address: DHS
+    // consumer updates and case correspondence both depend on it.
+    const isNewClientEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClientData.email.trim());
     // --- PHASE 2 LOGIC ---
 
     const handleSubmit = async () => {
@@ -195,8 +198,14 @@ export default function LegalSmartStartPage() {
                                     value={newClientData.firstName} onChange={e => setNewClientData({ ...newClientData, firstName: e.target.value })} />
                                 <input placeholder="Last Name" className="bg-black/20 border border-white/10 rounded px-4 py-2 text-white"
                                     value={newClientData.lastName} onChange={e => setNewClientData({ ...newClientData, lastName: e.target.value })} />
-                                <input placeholder="Email" className="bg-black/20 border border-white/10 rounded px-4 py-2 text-white"
-                                    value={newClientData.email} onChange={e => setNewClientData({ ...newClientData, email: e.target.value })} />
+                                <div>
+                                    <input placeholder="Email *" type="email"
+                                        className={`w-full bg-black/20 border rounded px-4 py-2 text-white ${isNewClientEmailValid ? 'border-white/10' : 'border-red-500/70'}`}
+                                        value={newClientData.email} onChange={e => setNewClientData({ ...newClientData, email: e.target.value })} />
+                                    {!isNewClientEmailValid && (
+                                        <div className="text-[10px] text-red-400 mt-1">A valid email address is required</div>
+                                    )}
+                                </div>
                                 <input placeholder="Phone" className="bg-black/20 border border-white/10 rounded px-4 py-2 text-white"
                                     value={newClientData.phone} onChange={e => setNewClientData({ ...newClientData, phone: e.target.value })} />
                             </div>
@@ -206,7 +215,7 @@ export default function LegalSmartStartPage() {
                     <div className="flex justify-end">
                         <button
                             onClick={handleContinueToPhase2}
-                            disabled={!clientData && !newClientData.firstName}
+                            disabled={!clientData && (!newClientData.firstName || !isNewClientEmailValid)}
                             className="px-8 py-3 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Continue →

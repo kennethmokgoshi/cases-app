@@ -367,7 +367,7 @@ function PartnerNewCaseComponent() {
     };
 
     const handleCreateCase = async () => {
-        // Validate required fields (phone and email are now optional)
+        // Validate required fields (email is mandatory, phone is optional)
         if (!surname || !fullNames || !idNumber) {
             toast.error('Please fill in Surname, Full Names, and ID Number');
             return;
@@ -401,13 +401,16 @@ function PartnerNewCaseComponent() {
             }
         }
 
-        // Validate Email format (if provided)
-        if (email && email.trim() !== '') {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                toast.error('❌ Invalid Email Address\n\nPlease enter a valid email address.\n\nExample: name@example.com');
-                return;
-            }
+        // Email is mandatory on referrals: without one the consumer cannot be
+        // updated on DHS or receive any case correspondence.
+        if (!email || email.trim() === '') {
+            toast.error('❌ Email Address Required\n\nPlease enter the consumer\'s email address before submitting this referral.');
+            return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+            toast.error('❌ Invalid Email Address\n\nPlease enter a valid email address.\n\nExample: name@example.com');
+            return;
         }
 
         // Documents are optional - partners can upload later
@@ -426,7 +429,7 @@ function PartnerNewCaseComponent() {
                         lastName: surname,
                         idNumber: idNumber,
                         phone: cellNumber, // API expects 'phone' not 'cellNumber'
-                        email: email || null },
+                        email: email.trim() },
                     projectId: finalProjectId,
                     acquisitionType: 'B2B',
                     partnerName: getPartnerNameFromProject(),
@@ -766,14 +769,14 @@ function PartnerNewCaseComponent() {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Email
+                                    Email <span className="text-red-400">*</span>
                                 </label>
                                 <input
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     className={`w-full bg-zeno-navy border rounded-lg px-4 py-3 text-white focus:outline-none ${(() => {
-                                        if (email.trim() === '') return 'border-white/20 focus:border-zeno-cyan';
+                                        if (email.trim() === '') return 'border-red-500/70 focus:border-red-400';
                                         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                                         return emailRegex.test(email)
                                             ? 'border-green-500 focus:border-green-400'

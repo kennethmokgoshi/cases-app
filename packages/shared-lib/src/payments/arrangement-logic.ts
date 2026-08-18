@@ -146,6 +146,19 @@ export interface ReconcileInstalment {
     status?: InstalmentStatus;
     /** Already-recorded paid amount for this line (manual confirmation). */
     amountPaid?: number | string;
+    /** Payments staff explicitly pinned to this instalment (month). */
+    allocations?: InstalmentAllocation[];
+}
+
+/** One recorded payment deliberately applied to a specific instalment. */
+export interface InstalmentAllocation {
+    paymentId?: string;
+    amount: number | string;
+    /** Date the consumer paid (the payment's own date). */
+    paidOn?: Date | string;
+    /** When staff captured it. Drives brought-forward detection. */
+    recordedAt?: Date | string;
+    reference?: string | null;
 }
 
 export interface ReconciledInstalment {
@@ -157,6 +170,17 @@ export interface ReconciledInstalment {
     balance: number;
     status: InstalmentStatus;
     isOverdue: boolean;
+    /** Paid above what this month asked for — e.g. two payments in one month. */
+    overpaid: number;
+    /** How many separate payments landed on this month. */
+    paymentCount: number;
+    /**
+     * True when this month's proof was captured only after a LATER month had
+     * already been captured — i.e. staff back-dated it. Surfaces the "proof
+     * brought forward" case in the UI.
+     */
+    broughtForward: boolean;
+    allocations: InstalmentAllocation[];
 }
 
 /**
@@ -176,11 +200,31 @@ export function computeInstalmentStatus(
     return 'PENDING';
 }
 
+/** Sum of a line's explicitly allocated payments. */
+function allocatedTotal(allocations: InstalmentAllocation[]): number {
+    return round2(allocations.reduce((s, a) => s + Math.max(0, Number(a.amount) || 0), 0));
+}
+
+function earliestRecordedAt(allocations: InstalmentAllocation[]): number | null {
+    const times = allocations
+        .map((a) => (a.recordedAt ? new Date(a.recordedAt).getTime() : NaN))
+        .filter((t) => !Number.isNaN(t));
+    return times.length > 0 ? Math.min(...times) : null;
+}
+
 /**
- * Reconcile a pool of paid money (e.g. total COMPLETED payments) across the
- * instalments in due order (FIFO). WAIVED lines are skipped. Lines that already
- * carry a manual amountPaid keep at least that amount. Returns per-line paid,
- * balance and computed status.
+ * Reconcile recorded payments against an arrangement's instalments.
+ *
+ * Two layers, in this order:
+ *  1. Payments staff pinned to a specific month (`allocations`) settle exactly
+ *     that month — never any other. This is what lets month 3 sit MISSED while
+ *     months 4 and 5 read PAID, and lets two payments land on month 7.
+ *  2. Whatever is left unpinned (`paidPool`) fills the remaining open months in
+ *     due order (FIFO), which is the old behaviour for files nobody allocates
+ *     by hand.
+ *
+ * WAIVED lines are skipped. A line manually confirmed honoured counts as fully
+ * paid and never draws from the pool.
  */
 export function reconcileInstalments(
     instalments: ReconcileInstalment[],
@@ -197,6 +241,8 @@ export function reconcileInstalments(
     for (const inst of ordered) {
         const dueDate = new Date(inst.dueDate);
         const amountDue = round2(Number(inst.amountDue));
+        const allocations = inst.allocations ?? [];
+        const allocated = allocatedTotal(allocations);
 
         if (inst.status === 'WAIVED') {
             result.push({
@@ -208,48 +254,101 @@ export function reconcileInstalments(
                 balance: 0,
                 status: 'WAIVED',
                 isOverdue: false,
+                overpaid: 0,
+                paymentCount: allocations.length,
+                broughtForward: false,
+                allocations,
             });
             continue;
         }
 
         // Manually confirmed honoured — fully paid, never draws from the auto pool.
         if (inst.status === 'PAID') {
+            const paid = Math.max(amountDue, allocated);
             result.push({
                 id: inst.id,
                 sequence: inst.sequence,
                 dueDate,
                 amountDue,
-                amountPaid: amountDue,
+                amountPaid: paid,
                 balance: 0,
                 status: 'PAID',
                 isOverdue: false,
+                overpaid: round2(Math.max(0, paid - amountDue)),
+                paymentCount: allocations.length,
+                broughtForward: false,
+                allocations,
             });
             continue;
         }
 
         const manualPaid = round2(Math.max(0, Number(inst.amountPaid ?? 0)));
-        // Take from the shared pool up to what this line still needs after manual paid.
-        const stillNeeded = Math.max(0, amountDue - manualPaid);
+        const pinned = round2(manualPaid + allocated);
+        // Take from the shared pool up to what this line still needs after pinned money.
+        const stillNeeded = Math.max(0, amountDue - pinned);
         const fromPool = Math.min(pool, stillNeeded);
         pool = round2(pool - fromPool);
 
-        const amountPaid = round2(manualPaid + fromPool);
+        const amountPaid = round2(pinned + fromPool);
         const balance = round2(Math.max(0, amountDue - amountPaid));
-        const status = computeInstalmentStatus(amountDue, amountPaid, dueDate, now);
+        let status = computeInstalmentStatus(amountDue, amountPaid, dueDate, now);
+        // Staff explicitly flagged this month as missed — keep it missed until
+        // money actually lands on it, even if it is not yet past due.
+        if (inst.status === 'MISSED' && amountPaid < amountDue) status = 'MISSED';
 
-        result.push({ id: inst.id, sequence: inst.sequence, dueDate, amountDue, amountPaid, balance, status, isOverdue: status === 'MISSED' });
+        result.push({
+            id: inst.id,
+            sequence: inst.sequence,
+            dueDate,
+            amountDue,
+            amountPaid,
+            balance,
+            status,
+            isOverdue: status === 'MISSED',
+            overpaid: round2(Math.max(0, amountPaid - amountDue)),
+            paymentCount: allocations.length,
+            broughtForward: false,
+            allocations,
+        });
     }
 
-    return result.sort((a, b) => a.sequence - b.sequence);
+    // Brought-forward pass: a month whose proof was only captured after a LATER
+    // month had already been captured was back-dated by staff.
+    const bySequence = result.sort((a, b) => a.sequence - b.sequence);
+    for (let i = 0; i < bySequence.length; i++) {
+        const mine = earliestRecordedAt(bySequence[i].allocations);
+        if (mine === null) continue;
+        for (let j = i + 1; j < bySequence.length; j++) {
+            const later = earliestRecordedAt(bySequence[j].allocations);
+            if (later !== null && later < mine) {
+                bySequence[i].broughtForward = true;
+                break;
+            }
+        }
+    }
+
+    return bySequence;
 }
 
 export interface ArrangementSummary {
     totalDue: number;
     totalPaid: number;
     balance: number;
+    /** Number of periods (months, for a MONTHLY arrangement) the consumer pays over. */
     instalmentCount: number;
     paidCount: number;
     missedCount: number;
+    partialCount: number;
+    pendingCount: number;
+    waivedCount: number;
+    /** Periods still to settle — missed + partial + pending. */
+    outstandingCount: number;
+    /** Total paid above what the settled periods asked for. */
+    overpaidTotal: number;
+    /** Total number of individual payments allocated across all periods. */
+    allocatedPaymentCount: number;
+    /** Periods whose proof was captured late, after a later period (back-dated). */
+    broughtForwardCount: number;
     /** The earliest unsettled instalment — drives Finance "Next Payment Date". */
     nextPaymentDate: Date | null;
     nextPaymentAmount: number | null;
@@ -272,6 +371,12 @@ export function summariseArrangement(
     const balance = round2(Math.max(0, totalDue - totalPaid));
     const paidCount = considered.filter((i) => i.status === 'PAID').length;
     const missedCount = considered.filter((i) => i.status === 'MISSED').length;
+    const partialCount = considered.filter((i) => i.status === 'PARTIAL').length;
+    const pendingCount = considered.filter((i) => i.status === 'PENDING').length;
+    const waivedCount = instalments.filter((i) => i.status === 'WAIVED').length;
+    const overpaidTotal = round2(considered.reduce((s, i) => s + (i.overpaid ?? 0), 0));
+    const allocatedPaymentCount = instalments.reduce((s, i) => s + (i.paymentCount ?? 0), 0);
+    const broughtForwardCount = instalments.filter((i) => i.broughtForward).length;
 
     const unsettled = considered
         .filter((i) => i.status !== 'PAID')
@@ -292,6 +397,13 @@ export function summariseArrangement(
         instalmentCount: considered.length,
         paidCount,
         missedCount,
+        partialCount,
+        pendingCount,
+        waivedCount,
+        outstandingCount: missedCount + partialCount + pendingCount,
+        overpaidTotal,
+        allocatedPaymentCount,
+        broughtForwardCount,
         nextPaymentDate: next?.dueDate ?? null,
         nextPaymentAmount: next?.amountDue ?? null,
         nextPaymentBalance: next?.balance ?? null,

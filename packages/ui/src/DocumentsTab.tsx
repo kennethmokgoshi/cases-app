@@ -54,6 +54,14 @@ type Document = {
     isAdminOnly: boolean;
     uploadedById?: string | null;
     accessGrants?: DocumentAccessGrant[];
+    /**
+     * Set on documents ingested from a mailbox — VERIFIED means the client's ID
+     * number was found inside the file itself. UNVERIFIED means ownership could
+     * not be confirmed, so the document must not be trusted or automated on.
+     * (MISMATCH never reaches a case; those are quarantined instead.)
+     */
+    verificationStatus?: string | null;
+    extractedIdNumber?: string | null;
 };
 
 const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
@@ -988,6 +996,22 @@ export function DocumentsTab({ caseId, refreshTrigger }: { caseId: string; refre
                                         {doc.isAdminOnly && (
                                             <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium flex items-center gap-1">
                                                 🔒 Admin Only
+                                            </span>
+                                        )}
+                                        {doc.verificationStatus === 'VERIFIED' && (
+                                            <span
+                                                title={`The client's ID number${doc.extractedIdNumber ? ` (${doc.extractedIdNumber})` : ''} was found inside this file.`}
+                                                className="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-medium flex items-center gap-1"
+                                            >
+                                                ✓ Owner verified
+                                            </span>
+                                        )}
+                                        {doc.verificationStatus === 'UNVERIFIED' && (
+                                            <span
+                                                title="No ID number could be read from this file, so it has not been confirmed as belonging to this client. Please check it before relying on it."
+                                                className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-medium flex items-center gap-1"
+                                            >
+                                                ⚠ Owner unverified
                                             </span>
                                         )}
                                         {/* Type Edit Dropdown */}

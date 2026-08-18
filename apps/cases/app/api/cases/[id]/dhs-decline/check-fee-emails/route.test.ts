@@ -31,7 +31,19 @@ vi.mock('@zenowethu/database', () => ({
             findMany: vi.fn(),
             upsert: vi.fn(),
         },
+        quarantinedDocument: {
+            findFirst: vi.fn(),
+        },
     },
+}));
+
+// The route now routes every attachment through the ownership gate rather than
+// writing a Document row itself. The gate reads file contents (puppeteer / vision
+// OCR), so it is stubbed here; its own behaviour is covered by
+// packages/shared-lib/src/documents/verify-ownership.test.ts.
+vi.mock('@zenowethu/shared-lib/src/documents/ingest', () => ({
+    ingestAttachment: vi.fn(),
+    hashBuffer: (buf: Buffer) => `hash-${buf.length}`,
 }));
 
 vi.mock('@zenowethu/shared-lib', () => ({
@@ -56,7 +68,10 @@ vi.mock('@zenowethu/shared-lib/src/integrations/imap', () => ({
 import { prisma } from '@zenowethu/database';
 import { auth, getSMTPCredentials } from '@zenowethu/shared-lib';
 import { scanMailboxForClient } from '@zenowethu/shared-lib/src/integrations/imap';
+import { ingestAttachment } from '@zenowethu/shared-lib/src/documents/ingest';
 import { POST, GET } from './route';
+
+const mockedIngest = ingestAttachment as unknown as ReturnType<typeof vi.fn>;
 
 type PrismaMock = {
     case: {
@@ -83,6 +98,9 @@ type PrismaMock = {
     processedMailboxMessage: {
         findMany: ReturnType<typeof vi.fn>;
         upsert: ReturnType<typeof vi.fn>;
+    };
+    quarantinedDocument: {
+        findFirst: ReturnType<typeof vi.fn>;
     };
 };
 
@@ -183,6 +201,14 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
         db.document.findFirst.mockResolvedValue(null);
         db.processedMailboxMessage.findMany.mockResolvedValue([]);
         db.processedMailboxMessage.upsert.mockResolvedValue({ id: 'pm-1' });
+        db.quarantinedDocument.findFirst.mockResolvedValue(null);
+        // Default: ownership confirmed, so the attachment is attached to the case.
+        mockedIngest.mockResolvedValue({
+            action: 'ATTACHED',
+            documentId: 'doc-1',
+            attachmentHash: 'hash-1',
+            verification: { verdict: 'VERIFIED', message: 'ok' },
+        });
         db.user.findFirst.mockResolvedValue({ id: 'admin-1', role: 'ADMIN' });
         db.user.findUnique.mockResolvedValue({ firstName: 'Thabo', lastName: 'Molefe', email: 'thabo@zenowethu.co.za' });
         mockedSmtp.mockResolvedValue({ username: '', password: '' });
@@ -443,7 +469,7 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
             ],
         });
 
-        db.document.create.mockClear();
+        mockedIngest.mockClear();
 
         const response = await POST(
             request({ lookbackDays: 30 }),
@@ -452,19 +478,51 @@ describe('POST /api/cases/[id]/dhs-decline/check-fee-emails', () => {
 
         expect(response.status).toBe(200);
         await parseResponse(response);
-        expect(db.document.create).toHaveBeenCalledTimes(2);
-        expect(db.document.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
-            data: expect.objectContaining({
-                type: 'FORM_17_1',
-                fileName: 'Form_17.1_Client.pdf',
-            })
+        expect(mockedIngest).toHaveBeenCalledTimes(2);
+        expect(mockedIngest).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            detectedType: 'FORM_17_1',
+            fileName: 'Form_17.1_Client.pdf',
+            expectedIdNumber: '8912015638081',
         }));
-        expect(db.document.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            data: expect.objectContaining({
-                type: 'FORM_17_7',
-                fileName: 'Form_17.7_Client.pdf',
-            })
+        expect(mockedIngest).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            detectedType: 'FORM_17_7',
+            fileName: 'Form_17.7_Client.pdf',
+            expectedIdNumber: '8912015638081',
         }));
+    });
+
+    it('never searches by client name — only the ID number may match an email', async () => {
+        // Two consumers can share a name; matching on it pulls another consumer's
+        // documents onto this case, contradicting the route's own match policy.
+        await parseResponse(await POST(request(), params));
+
+        const scanArgs = (scanMailboxForClient as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(scanArgs.idNumber).toBe('8912015638081');
+        expect(scanArgs.clientName).toBeUndefined();
+    });
+
+    it('reports a blocked document and does not count it as uploaded', async () => {
+        mockedIngest.mockResolvedValueOnce({
+            action: 'QUARANTINED',
+            quarantineId: 'q-1',
+            attachmentHash: 'hash-1',
+            verification: {
+                verdict: 'MISMATCH',
+                message: 'Blocked: this document contains ID number 8001015009087, but this case belongs to 8912015638081.',
+            },
+        });
+
+        const response = await POST(request(), params);
+        const body = await parseResponse(response);
+
+        expect(response.status).toBe(200);
+        expect(body.quarantinedDocuments).toHaveLength(1);
+        expect(body.quarantinedDocuments[0].fileName).toBe('invoice-1.pdf');
+        expect(body.scanSummary.uploadedDocuments).toBe(0);
+
+        const content = db.caseComment.create.mock.calls[0][0].data.content as string;
+        expect(content).toContain('BLOCKED');
+        expect(content).toContain('belong to a different consumer');
     });
 
     it('records who ran the scan and which folders (inbox/sent) were searched', async () => {

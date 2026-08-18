@@ -62,6 +62,10 @@ export default function ForensicSmartStartPage() {
         }
     };
 
+    // The forensic case API rejects new subjects without an email address:
+    // DHS consumer updates and case correspondence both depend on it.
+    const isNewSubjectEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClientData.email.trim());
+
     const toggleDocument = (type: string) => {
         // Mock File Selection - In real app this would contain file upload logic
         setDocuments(prev => {
@@ -139,13 +143,24 @@ export default function ForensicSmartStartPage() {
                                     value={newClientData.firstName} onChange={e => setNewClientData({ ...newClientData, firstName: e.target.value })} />
                                 <input placeholder="Last Name" className="bg-black/20 border border-gray-700 rounded px-4 py-2"
                                     value={newClientData.lastName} onChange={e => setNewClientData({ ...newClientData, lastName: e.target.value })} />
+                                <div className="col-span-2">
+                                    <input
+                                        type="email"
+                                        placeholder="Email Address *"
+                                        className={`w-full bg-black/20 border rounded px-4 py-2 ${isNewSubjectEmailValid ? 'border-gray-700' : 'border-red-500/70'}`}
+                                        value={newClientData.email}
+                                        onChange={e => setNewClientData({ ...newClientData, email: e.target.value })} />
+                                    {!isNewSubjectEmailValid && (
+                                        <div className="text-[10px] text-red-400 mt-1">A valid email address is required</div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
 
                     <div className="flex justify-end">
                         <button
-                            disabled={!clientData && !newClientData.firstName}
+                            disabled={!clientData && (!newClientData.firstName || !isNewSubjectEmailValid)}
                             onClick={() => setStep(2)}
                             className="px-8 py-3 bg-white text-black font-bold rounded-lg hover:bg-gray-200 disabled:opacity-50"
                         >

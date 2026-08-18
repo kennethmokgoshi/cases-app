@@ -5,6 +5,14 @@ import { toast } from '@zenowethu/ui';
 import { formatRand } from '../../../../lib/case-financials';
 
 // Shape returned by GET /api/finance/cases/[id]/arrangements (ArrangementView)
+type Allocation = {
+    paymentId?: string;
+    amount: number;
+    paidOn?: string;
+    recordedAt?: string;
+    reference?: string | null;
+};
+
 type Instalment = {
     id: string;
     sequence: number;
@@ -14,6 +22,10 @@ type Instalment = {
     balance: number;
     status: 'PENDING' | 'PAID' | 'PARTIAL' | 'MISSED' | 'WAIVED';
     isOverdue: boolean;
+    overpaid: number;
+    paymentCount: number;
+    broughtForward: boolean;
+    allocations: Allocation[];
 };
 
 type ArrangementView = {
@@ -32,6 +44,13 @@ type ArrangementView = {
         instalmentCount: number;
         paidCount: number;
         missedCount: number;
+        partialCount: number;
+        pendingCount: number;
+        waivedCount: number;
+        outstandingCount: number;
+        overpaidTotal: number;
+        allocatedPaymentCount: number;
+        broughtForwardCount: number;
         nextPaymentDate: string | null;
         nextPaymentAmount: number | null;
         nextPaymentBalance: number | null;
@@ -41,9 +60,23 @@ type ArrangementView = {
     };
 };
 
-function fmtDate(value: string | null): string {
+function fmtDate(value: string | null | undefined): string {
     if (!value) return '—';
     return new Date(value).toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/** What one line of this arrangement is called — a month, a week, or a once-off. */
+function periodWord(frequency: string): string {
+    if (frequency === 'WEEKLY') return 'Week';
+    if (frequency === 'ONCE') return 'Once-off';
+    return 'Month';
+}
+
+/** "Paying over 7 months" — the headline the consumer's schedule length gives. */
+function durationLabel(frequency: string, count: number): string {
+    if (frequency === 'ONCE') return 'Once-off payment';
+    const unit = frequency === 'WEEKLY' ? 'week' : 'month';
+    return `Paying over ${count} ${unit}${count === 1 ? '' : 's'}`;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -160,16 +193,22 @@ export default function PaymentArrangements({ caseId }: { caseId: string }) {
         }
     }, [mandate, caseId, load]);
 
-    const markHonoured = useCallback(
-        async (instalmentId: string, honoured: boolean) => {
+    const setOutcome = useCallback(
+        async (instalmentId: string, outcome: 'PAID' | 'MISSED' | 'AUTO') => {
             try {
                 const res = await fetch(`/api/finance/instalments/${instalmentId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ honoured }),
+                    body: JSON.stringify({ outcome }),
                 });
                 if (!res.ok) throw new Error(`Failed (${res.status})`);
-                toast.success(honoured ? 'Marked honoured' : 'Marked missed');
+                toast.success(
+                    outcome === 'PAID'
+                        ? 'Marked paid'
+                        : outcome === 'MISSED'
+                          ? 'Marked not paid'
+                          : 'Manual mark cleared — recorded payments decide again'
+                );
                 await load();
             } catch (e: unknown) {
                 toast.error(e instanceof Error ? e.message : 'Could not update instalment');
@@ -338,10 +377,45 @@ export default function PaymentArrangements({ caseId }: { caseId: string }) {
                                     >
                                         {a.summary.status}
                                     </span>
-                                    <p className="text-xs text-gray-500 mt-1">
+                                    <p className="text-sm text-white font-semibold mt-1">
+                                        {durationLabel(a.frequency, a.summary.instalmentCount)}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
                                         {a.source === 'MANDATE' ? 'From debit-order mandate' : 'Manual'} · {a.frequency.toLowerCase()}
                                     </p>
                                 </div>
+                            </div>
+
+                            {/* How the schedule is tracking, period by period */}
+                            <div className="px-4 py-3 border-b border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                                <span className="px-2 py-1 rounded bg-emerald-500/15 text-emerald-400 font-medium">
+                                    {a.summary.paidCount} of {a.summary.instalmentCount} paid
+                                </span>
+                                {a.summary.missedCount > 0 && (
+                                    <span className="px-2 py-1 rounded bg-red-500/15 text-red-400 font-medium">
+                                        {a.summary.missedCount} not paid
+                                    </span>
+                                )}
+                                {a.summary.partialCount > 0 && (
+                                    <span className="px-2 py-1 rounded bg-amber-500/15 text-amber-400 font-medium">
+                                        {a.summary.partialCount} part-paid
+                                    </span>
+                                )}
+                                {a.summary.pendingCount > 0 && (
+                                    <span className="px-2 py-1 rounded bg-gray-500/15 text-gray-400 font-medium">
+                                        {a.summary.pendingCount} still to come
+                                    </span>
+                                )}
+                                {a.summary.broughtForwardCount > 0 && (
+                                    <span className="px-2 py-1 rounded bg-purple-500/15 text-purple-300 font-medium">
+                                        {a.summary.broughtForwardCount} brought forward
+                                    </span>
+                                )}
+                                {a.summary.overpaidTotal > 0 && (
+                                    <span className="px-2 py-1 rounded bg-cyan-500/15 text-cyan-300 font-medium">
+                                        {formatRand(a.summary.overpaidTotal)} paid over
+                                    </span>
+                                )}
                             </div>
 
                             {/* Totals */}
@@ -365,48 +439,96 @@ export default function PaymentArrangements({ caseId }: { caseId: string }) {
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="text-left text-xs text-gray-500 uppercase tracking-wider">
-                                            <th className="px-4 py-2 font-medium">#</th>
+                                            <th className="px-4 py-2 font-medium">{periodWord(a.frequency)}</th>
                                             <th className="px-4 py-2 font-medium">Due</th>
                                             <th className="px-4 py-2 font-medium">Amount</th>
                                             <th className="px-4 py-2 font-medium">Paid</th>
                                             <th className="px-4 py-2 font-medium">Balance</th>
                                             <th className="px-4 py-2 font-medium">Status</th>
-                                            <th className="px-4 py-2 font-medium text-right">Honoured?</th>
+                                            <th className="px-4 py-2 font-medium text-right">Was it paid?</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {a.instalments.map((inst) => (
-                                            <tr key={inst.sequence} className="border-t border-white/5 text-gray-300">
-                                                <td className="px-4 py-2.5">{inst.sequence}</td>
+                                            <tr key={inst.sequence} className="border-t border-white/5 text-gray-300 align-top">
+                                                <td className="px-4 py-2.5 whitespace-nowrap">
+                                                    <span className="text-white font-medium">
+                                                        {periodWord(a.frequency)} {inst.sequence}
+                                                    </span>
+                                                    {inst.paymentCount > 1 && (
+                                                        <span className="ml-2 px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 text-[10px] font-semibold">
+                                                            {inst.paymentCount} payments
+                                                        </span>
+                                                    )}
+                                                    {inst.broughtForward && (
+                                                        <span
+                                                            className="ml-2 px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 text-[10px] font-semibold"
+                                                            title="Captured after a later instalment — proof brought forward"
+                                                        >
+                                                            brought forward
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-2.5 whitespace-nowrap">{fmtDate(inst.dueDate)}</td>
                                                 <td className="px-4 py-2.5 text-white">{formatRand(inst.amountDue)}</td>
-                                                <td className="px-4 py-2.5 text-emerald-400">{formatRand(inst.amountPaid)}</td>
-                                                <td className="px-4 py-2.5 text-amber-400">{formatRand(inst.balance)}</td>
+                                                <td className="px-4 py-2.5 text-emerald-400">
+                                                    {formatRand(inst.amountPaid)}
+                                                    {inst.allocations.length > 0 && (
+                                                        <span className="block text-[11px] text-gray-500 mt-0.5">
+                                                            {inst.allocations
+                                                                .map((p) => `${formatRand(p.amount)} on ${fmtDate(p.paidOn)}`)
+                                                                .join(' · ')}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-2.5 text-amber-400">
+                                                    {formatRand(inst.balance)}
+                                                    {inst.overpaid > 0 && (
+                                                        <span className="block text-[11px] text-cyan-300 mt-0.5">
+                                                            +{formatRand(inst.overpaid)} over
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-2.5">
                                                     <span
                                                         className={`px-2 py-0.5 rounded text-xs font-medium ${INST_COLORS[inst.status] ?? 'bg-gray-500/20 text-gray-400'}`}
                                                     >
-                                                        {inst.status}
+                                                        {inst.status === 'MISSED' ? 'NOT PAID' : inst.status}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-2.5 text-right">
-                                                    {inst.status !== 'PAID' && inst.status !== 'WAIVED' ? (
-                                                        <div className="flex items-center gap-1 justify-end">
+                                                    <div className="flex items-center gap-1 justify-end">
+                                                        {inst.status !== 'PAID' && (
                                                             <button
-                                                                onClick={() => markHonoured(inst.id, true)}
+                                                                onClick={() => setOutcome(inst.id, 'PAID')}
                                                                 className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded text-xs transition-colors"
                                                             >
-                                                                Honoured
+                                                                Paid
                                                             </button>
+                                                        )}
+                                                        {inst.status !== 'MISSED' && (
                                                             <button
-                                                                onClick={() => markHonoured(inst.id, false)}
+                                                                onClick={() => setOutcome(inst.id, 'MISSED')}
                                                                 className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded text-xs transition-colors"
                                                             >
-                                                                Missed
+                                                                Not paid
                                                             </button>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-gray-600 text-xs">—</span>
+                                                        )}
+                                                        <button
+                                                            onClick={() => setOutcome(inst.id, 'AUTO')}
+                                                            title="Clear the manual mark and let recorded payments decide"
+                                                            className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 rounded text-xs transition-colors"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    </div>
+                                                    {inst.balance > 0 && (
+                                                        <a
+                                                            href={`/payments/record?caseId=${encodeURIComponent(caseId)}&instalmentId=${encodeURIComponent(inst.id)}`}
+                                                            className="inline-block mt-1 text-[11px] text-cyan-400 hover:text-cyan-300"
+                                                        >
+                                                            Capture payment for this {periodWord(a.frequency).toLowerCase()} →
+                                                        </a>
                                                     )}
                                                 </td>
                                             </tr>

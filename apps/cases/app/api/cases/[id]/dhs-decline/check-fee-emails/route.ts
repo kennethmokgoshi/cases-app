@@ -6,9 +6,7 @@ import { decryptSecret } from '@zenowethu/shared-lib/src/security/encryption';
 import { z } from 'zod';
 import { isUsableMailboxPassword, usesSmtpPassword } from '@/lib/mailboxes';
 import { getSmtpUsernameIfConfigured } from '@/lib/mailbox-smtp';
-import { join } from 'path';
-import { mkdir, writeFile } from 'fs/promises';
-import crypto from 'crypto';
+import { ingestAttachment, hashBuffer } from '@zenowethu/shared-lib/src/documents/ingest';
 
 const logger = createLogger('api/cases/[id]/dhs-decline/check-fee-emails');
 
@@ -351,6 +349,7 @@ export async function POST(
                     let newEmailsFound = 0;
                     let invoiceCandidatesFound = 0;
                     const savedDocuments: string[] = [];
+                    const quarantinedDocuments: Array<{ fileName: string; message: string }> = [];
                     const mailboxErrors: string[] = [];
                     const foldersScannedSet = new Set<string>();
 
@@ -363,7 +362,6 @@ export async function POST(
                                 ],
                             },
                         });
-                        const uploadDir = join(process.cwd(), 'storage', 'uploads', caseId);
                         const totalMbx = configuredMailboxes.length;
 
                         for (let i = 0; i < totalMbx; i++) {
@@ -418,7 +416,11 @@ export async function POST(
                                         password,
                                     },
                                     idNumber,
-                                    clientName,
+                                    // Deliberately NOT passing clientName as a search key.
+                                    // The route's own match policy states only emails
+                                    // containing the client's ID number may be opened, and
+                                    // two consumers can share a name — matching on name
+                                    // pulls another consumer's documents onto this case.
                                     since: searchFrom,
                                     skipMessageIds,
                                     docGroup,
@@ -441,80 +443,92 @@ export async function POST(
                                 newEmailsFound += scanResult.newEmailsFound;
                                 invoiceCandidatesFound += scanResult.invoiceCandidatesFound;
 
-                                if (scanResult.attachments.length > 0) {
-                                    try {
-                                        await mkdir(uploadDir, { recursive: true });
-                                    } catch {
-                                        // Directory creation warning/ignored
-                                    }
-                                    for (const att of scanResult.attachments) {
-                                        // Compute SHA-256 hash of attachment
-                                        const hash = crypto.createHash('sha256').update(att.buffer).digest('hex');
-                                        const [existingDoc, existingMessage] = await Promise.all([
-                                            prisma.document.findFirst({
-                                                where: {
-                                                    caseId,
-                                                    fileSize: att.buffer.length,
-                                                    fileName: att.fileName,
-                                                }
-                                            }),
-                                            att.messageId ? prisma.processedMailboxMessage.findFirst({
-                                                where: {
-                                                    mailboxAccountId: mailbox.id,
-                                                    messageId: att.messageId,
-                                                    attachmentHash: hash,
-                                                }
-                                            }) : null,
-                                        ]);
-                                        if (existingDoc || existingMessage) {
-                                            continue; // Skip already downloaded document
-                                        }
-
-                                        const safeName = att.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-                                        const uniqueFileName = `${Date.now()}-${safeName}`;
-                                        try {
-                                            await writeFile(join(uploadDir, uniqueFileName), att.buffer);
-                                        } catch (wErr) {
-                                            logger.warn(`Could not save attachment file ${uniqueFileName}:`, wErr);
-                                        }
-
-                                        const fileUrl = `/uploads/${caseId}/${uniqueFileName}`;
-                                        const docType = att.detectedType && att.detectedType !== 'OTHER'
-                                            ? att.detectedType
-                                            : (att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT');
-
-                                        await prisma.document.create({
-                                            data: {
+                                for (const att of scanResult.attachments) {
+                                    const hash = hashBuffer(att.buffer);
+                                    const [existingDoc, existingMessage, existingQuarantine] = await Promise.all([
+                                        prisma.document.findFirst({
+                                            where: {
                                                 caseId,
-                                                type: docType,
-                                                fileName: att.fileName,
-                                                fileUrl,
                                                 fileSize: att.buffer.length,
-                                                mimeType: att.mimeType,
-                                                uploadedById: systemUser?.id || session.user.id,
+                                                fileName: att.fileName,
+                                            }
+                                        }),
+                                        att.messageId ? prisma.processedMailboxMessage.findFirst({
+                                            where: {
+                                                mailboxAccountId: mailbox.id,
+                                                messageId: att.messageId,
+                                                attachmentHash: hash,
+                                            }
+                                        }) : null,
+                                        prisma.quarantinedDocument.findFirst({
+                                            where: { intendedCaseId: caseId, attachmentHash: hash },
+                                        }),
+                                    ]);
+                                    if (existingDoc || existingMessage || existingQuarantine) {
+                                        continue; // Already attached, already processed, or already held for review
+                                    }
+
+                                    const docType = att.detectedType && att.detectedType !== 'OTHER'
+                                        ? att.detectedType
+                                        : (att.isInvoice ? 'FEE_INVOICE' : 'PROOF_OF_PAYMENT');
+
+                                    // The gate: reads the file and refuses to attach it to
+                                    // this case if the contents belong to someone else.
+                                    let outcome;
+                                    try {
+                                        outcome = await ingestAttachment({
+                                            baseDir: process.cwd(),
+                                            caseId,
+                                            expectedIdNumber: idNumber,
+                                            expectedFirstName: caseData.client.firstName,
+                                            expectedLastName: caseData.client.lastName,
+                                            fileName: att.fileName,
+                                            mimeType: att.mimeType,
+                                            buffer: att.buffer,
+                                            detectedType: docType,
+                                            uploadedById: systemUser?.id || session.user.id,
+                                            source: {
+                                                mailboxId: mailbox.id,
+                                                messageId: att.messageId ?? null,
                                             },
                                         });
-                                        savedDocuments.push(fileUrl);
+                                    } catch (ingestErr) {
+                                        logger.warn(`Could not ingest attachment ${att.fileName}:`, ingestErr);
+                                        continue;
+                                    }
 
-                                        // Record that this messageId and attachment hash has been processed
-                                        if (att.messageId) {
-                                            await prisma.processedMailboxMessage.upsert({
-                                                where: {
-                                                    mailboxAccountId_messageId: {
-                                                        mailboxAccountId: mailbox.id,
-                                                        messageId: att.messageId,
-                                                    }
-                                                },
-                                                update: {
-                                                    attachmentHash: hash
-                                                },
-                                                create: {
+                                    // Record that this messageId and attachment hash has been processed
+                                    if (att.messageId) {
+                                        await prisma.processedMailboxMessage.upsert({
+                                            where: {
+                                                mailboxAccountId_messageId: {
                                                     mailboxAccountId: mailbox.id,
                                                     messageId: att.messageId,
-                                                    attachmentHash: hash
                                                 }
-                                            });
-                                        }
+                                            },
+                                            update: {
+                                                attachmentHash: hash
+                                            },
+                                            create: {
+                                                mailboxAccountId: mailbox.id,
+                                                messageId: att.messageId,
+                                                attachmentHash: hash
+                                            }
+                                        });
+                                    }
+
+                                    if (outcome.action === 'QUARANTINED') {
+                                        quarantinedDocuments.push({
+                                            fileName: att.fileName,
+                                            message: outcome.verification.message,
+                                        });
+                                        send({
+                                            type: 'quarantined',
+                                            fileName: att.fileName,
+                                            message: outcome.verification.message,
+                                        });
+                                    } else {
+                                        savedDocuments.push(att.fileName);
                                     }
                                 }
                             } catch (err: any) {
@@ -570,6 +584,7 @@ export async function POST(
                         scannedInbox,
                         scannedSent,
                         scanSummary,
+                        quarantinedDocuments,
                     };
 
                     const mailboxSummary = selectedMailboxes.length > 0
@@ -581,6 +596,12 @@ export async function POST(
                     const emailCountsLine = scanStatus === 'COMPLETED'
                         ? `Email counts: ${emailsScanned} scanned, ${newEmailsFound} new, ${invoiceCandidatesFound} invoice/PoP candidates, ${savedDocuments.length} documents uploaded.`
                         : 'Email counts: pending inbox worker (emails scanned/found/uploaded not available yet).';
+
+                    const quarantineLine = quarantinedDocuments.length > 0
+                        ? `⚠️ ${quarantinedDocuments.length} document(s) were BLOCKED and not attached because their contents belong to a different consumer: ` +
+                          quarantinedDocuments.map(q => `${q.fileName} — ${q.message}`).join(' | ') +
+                          ' See Documents → Quarantine to reassign or discard.'
+                        : null;
 
                     const configLine = scanStatus === 'COMPLETED'
                         ? `Scan completed successfully. Saved documents: ${savedDocuments.length} file(s) attached.`
@@ -602,6 +623,7 @@ export async function POST(
                         `Mailbox summary: ${selectedMailboxes.length} selected, ${configuredMailboxes.length} readable, ${selectedMailboxes.length - configuredMailboxes.length} skipped.`,
                         foldersLine,
                         emailCountsLine,
+                        quarantineLine,
                         configLine,
                         mailboxErrors.length > 0 ? `Errors: ${mailboxErrors.join('; ')}` : null,
                         reason ? `Decline reason: ${reason}` : null,
@@ -660,8 +682,12 @@ export async function POST(
                             scannedSent,
                             matchPolicy,
                             scanSummary,
+                            quarantinedDocuments,
                             message: scanStatus === 'COMPLETED'
                                 ? `Fee-invoice email check completed. Scanned ${emailsScanned} email(s), found ${invoiceCandidatesFound} invoice/PoP candidate(s), uploaded ${savedDocuments.length} document(s).`
+                                    + (quarantinedDocuments.length > 0
+                                        ? ` ⚠️ ${quarantinedDocuments.length} document(s) were blocked because they belong to a different consumer.`
+                                        : '')
                                 : 'Fee-invoice email check logged. Save mailbox passwords in Admin → Settings before the app can read emails automatically.',
                         }
                     });

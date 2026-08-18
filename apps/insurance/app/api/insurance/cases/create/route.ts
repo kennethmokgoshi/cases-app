@@ -17,6 +17,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Client identification is required' }, { status: 400 });
         }
 
+        // A consumer record created here must carry an email address: DHS consumer
+        // updates and every piece of outbound case correspondence depend on it.
+        const clientEmail = typeof client.email === 'string' ? client.email.trim().toLowerCase() : '';
+        if (!client.id) {
+            if (!clientEmail) {
+                return NextResponse.json({ error: 'Client email is required' }, { status: 400 });
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+                return NextResponse.json({ error: 'Client email is not a valid email address' }, { status: 400 });
+            }
+        }
+
         // Use a transaction to ensure all records are created or nothing is
         const result = await prisma.$transaction(async (tx) => {
             let dbClient;
@@ -33,7 +45,7 @@ export async function POST(request: Request) {
                     update: {
                         firstName: client.firstName,
                         lastName: client.lastName,
-                        email: client.email,
+                        email: clientEmail,
                         phone: client.phone,
                         address: client.address
                     },
@@ -41,7 +53,7 @@ export async function POST(request: Request) {
                         firstName: client.firstName,
                         lastName: client.lastName,
                         idNumber: cleanId,
-                        email: client.email,
+                        email: clientEmail,
                         phone: client.phone,
                         address: client.address
                     }

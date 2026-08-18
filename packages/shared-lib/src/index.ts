@@ -64,6 +64,12 @@ export * from './crediva';
 
 // Utils
 export * from './utils/extract-id-number';
+// Ownership verification is safe to export from the main index — its heavy,
+// Node-only dependencies (puppeteer PDF text extraction, vision OCR) are behind
+// dynamic imports. The ingest helper is NOT exported here because it touches the
+// filesystem at module scope; routes deep-import './documents/ingest'.
+export * from './documents/verify-ownership';
+export * from './documents/client-identity-guard';
 
 // Court Documents (Node-only — pdf-lib; import directly in server routes)
 // import { generateCourtDoc } from '@zenowethu/shared-lib/src/court-docs'

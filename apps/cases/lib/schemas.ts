@@ -27,6 +27,17 @@ export const requiredEmailField = z
     .email('Invalid email address')
     .toLowerCase();
 
+// ─── Provisional client shells ────────────────────────────────────────────────
+// The staff new-case flow opens a placeholder case before the consumer's details
+// are known: documents are uploaded first, then AI-extracted, then PATCHed onto
+// the shell. Those shells carry a synthetic ID number and are the only create
+// path allowed through without an email address.
+export const PROVISIONAL_ID_PATTERN = /^(TEMP|MANUAL)-\d+$/;
+
+export function isProvisionalIdNumber(idNumber: string | null | undefined): boolean {
+    return typeof idNumber === 'string' && PROVISIONAL_ID_PATTERN.test(idNumber.trim());
+}
+
 export const nonEmptyString = z.string().min(1, 'This field is required').max(500);
 export const optionalString = z.string().max(500).optional().nullable();
 
@@ -76,7 +87,18 @@ export const CaseCreateSchema = z.object({
     services: z.array(z.string()).optional().nullable(),
     referrerId: z.string().optional().nullable(),
     assignedToId: z.string().optional().nullable(),
-    allowDuplicate: z.boolean().optional().default(false) });
+    allowDuplicate: z.boolean().optional().default(false) })
+    .superRefine((data, ctx) => {
+        // Every real consumer must have an email address on file — DHS consumer
+        // updates and all outbound case correspondence depend on it.
+        if (!isProvisionalIdNumber(data.client.idNumber) && !data.client.email) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['client', 'email'],
+                message: 'Email address is required'
+            });
+        }
+    });
 
 export const CasePatchSchema = z.object({
     client: ClientUpdateSchema.optional(),
@@ -128,7 +150,19 @@ export const CasePatchSchema = z.object({
     adminFee: z.number().optional().nullable(),
     distributeWaitList: z.boolean().optional(),
     isAdminOnly: z.boolean().optional(),
-    nextUpdate: z.string().optional().nullable() }).passthrough(); // allow remaining fields via otherCaseData spread in the route
+    nextUpdate: z.string().optional().nullable() })
+    .passthrough() // allow remaining fields via otherCaseData spread in the route
+    .superRefine((data, ctx) => {
+        // Passing client.email through as empty or null would wipe an address the
+        // consumer record already has. Omit the key to leave it untouched.
+        if (data.client && 'email' in data.client && !data.client.email) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['client', 'email'],
+                message: 'Email address is required'
+            });
+        }
+    });
 
 export const CaseStatusSchema = z.object({
     newStatus: z.string().min(1, 'New status is required'),

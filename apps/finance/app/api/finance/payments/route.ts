@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger } from '@zenowethu/shared-lib';
 import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync';
+import { resyncCaseArrangements } from '@zenowethu/shared-lib/src/payments/payment-arrangement-service';
 import { z } from 'zod';
 import { readPaymentRequest, validateProofFile, saveProofFile } from '../../../../lib/payment-proof';
 
@@ -16,6 +17,13 @@ const PaymentQuerySchema = z.object({
 
 const PaymentCreateSchema = z.object({
     idNumber: z.string().optional(),
+    // Pins the payment to one specific file. Without it we fall back to the
+    // client's most recent open case, which is wrong when a consumer has more
+    // than one file.
+    caseId: z.string().optional().nullable(),
+    // Pins the payment to one month of the payment arrangement, so a back-dated
+    // month lands where staff intend rather than on the oldest open month.
+    instalmentId: z.string().optional().nullable(),
     amount: z.union([z.string(), z.number()]).refine(
         val => !isNaN(parseFloat(String(val))) && parseFloat(String(val)) > 0,
         { message: 'amount must be a positive number' }
@@ -122,13 +130,23 @@ export async function POST(request: Request) {
             }
         }
 
-        const { idNumber, amount, date, method, reference, notes, category } = parsed.data;
+        const { idNumber, caseId: requestedCaseId, instalmentId, amount, date, method, reference, notes, category } = parsed.data;
 
-        // Look up the client by ID number if provided
         let clientId: string | undefined;
         let caseId: string | undefined;
 
-        if (idNumber) {
+        // An explicit case wins — it is the file the staff member was looking at.
+        if (requestedCaseId) {
+            const caseRecord = await prisma.case.findUnique({
+                where: { id: requestedCaseId },
+                select: { id: true, clientId: true } });
+            if (!caseRecord) {
+                return NextResponse.json({ error: 'Case not found' }, { status: 404 });
+            }
+            caseId = caseRecord.id;
+            clientId = caseRecord.clientId;
+        } else if (idNumber) {
+            // Fall back to the client's most recent open case.
             const client = await prisma.client.findUnique({
                 where: { idNumber },
                 include: {
@@ -145,6 +163,25 @@ export async function POST(request: Request) {
             }
         }
 
+        // A month can only be chosen when it belongs to this case's arrangement.
+        if (instalmentId) {
+            const instalment = await prisma.paymentArrangementInstalment.findUnique({
+                where: { id: instalmentId },
+                select: { arrangement: { select: { caseId: true, clientId: true } } } });
+            if (!instalment) {
+                return NextResponse.json({ error: 'Instalment not found' }, { status: 404 });
+            }
+            const belongs = caseId
+                ? instalment.arrangement.caseId === caseId
+                : instalment.arrangement.clientId === clientId;
+            if (!belongs) {
+                return NextResponse.json(
+                    { error: 'That instalment belongs to a different case' },
+                    { status: 400 }
+                );
+            }
+        }
+
         let payment = await prisma.payment.create({
             data: {
                 amount: parseFloat(String(amount)),
@@ -156,6 +193,7 @@ export async function POST(request: Request) {
                 status: 'COMPLETED',
                 clientId: clientId || null,
                 caseId: caseId || null,
+                instalmentId: instalmentId || null,
                 recordedById: session.user.id },
             include: {
                 client: { select: { firstName: true, lastName: true } },
@@ -164,6 +202,14 @@ export async function POST(request: Request) {
         // Captured payments may now cover the case's accepted quote — advance
         // the case workflow (forward-only). Never fails the recorded payment.
         await checkQuoteFulfilmentSafe(payment.caseId, session.user.id);
+
+        // Re-summarise the month-by-month schedule and the Finance "Next Payment
+        // Date". Never fails the recorded payment.
+        try {
+            await resyncCaseArrangements(payment.caseId);
+        } catch (syncError) {
+            logger.error('[Finance] POST /payments arrangement resync failed:', syncError);
+        }
 
         // Save proof of payment after the payment exists — a failed file write must
         // not lose the recorded payment, so it degrades to a warning instead
