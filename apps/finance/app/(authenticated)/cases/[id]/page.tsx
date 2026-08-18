@@ -420,7 +420,7 @@ export default function FinanceCaseDetailPage() {
                         <div className="flex items-center justify-between p-5 pb-3">
                             <h2 className="text-white font-semibold">Payments</h2>
                             <Link
-                                href={`/payments/record?idNumber=${encodeURIComponent(client.idNumber)}`}
+                                href={`/payments/record?caseId=${encodeURIComponent(caseInfo.id)}&idNumber=${encodeURIComponent(client.idNumber)}`}
                                 className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-xs font-semibold transition-colors"
                             >
                                 + Record Payment

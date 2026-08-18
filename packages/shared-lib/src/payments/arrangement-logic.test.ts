@@ -179,3 +179,122 @@ describe('summariseArrangement', () => {
         expect(s.isOverdue).toBe(false);
     });
 });
+
+describe('reconcileInstalments — explicit per-month allocation', () => {
+    const now = new Date('2027-03-01T00:00:00Z');
+
+    // A 7-month schedule of R500. Months are pinned individually so a skipped
+    // month stays skipped instead of swallowing later months' money.
+    function sevenMonths() {
+        return Array.from({ length: 7 }, (_, i) => ({
+            id: `inst-${i + 1}`,
+            sequence: i + 1,
+            dueDate: new Date(Date.UTC(2026, 7 + i, 1)),
+            amountDue: 500,
+        }));
+    }
+
+    it('keeps month 3 unpaid while months 4 and 5 read paid', () => {
+        const lines = sevenMonths();
+        const allocated = lines.map((l) =>
+            [1, 2, 4, 5].includes(l.sequence)
+                ? { ...l, allocations: [{ paymentId: `p${l.sequence}`, amount: 500 }] }
+                : l
+        );
+        const r = reconcileInstalments(allocated, 0, now);
+
+        expect(r[0].status).toBe('PAID');
+        expect(r[1].status).toBe('PAID');
+        expect(r[2]).toMatchObject({ status: 'MISSED', amountPaid: 0, balance: 500 });
+        expect(r[3].status).toBe('PAID');
+        expect(r[4].status).toBe('PAID');
+    });
+
+    it('records two payments in one month and reports the overpayment', () => {
+        const lines = sevenMonths();
+        const allocated = lines.map((l) =>
+            l.sequence === 7
+                ? {
+                      ...l,
+                      allocations: [
+                          { paymentId: 'p7a', amount: 500 },
+                          { paymentId: 'p7b', amount: 300 },
+                      ],
+                  }
+                : l
+        );
+        const r = reconcileInstalments(allocated, 0, now);
+
+        expect(r[6]).toMatchObject({ status: 'PAID', amountPaid: 800, paymentCount: 2, overpaid: 300 });
+    });
+
+    it('flags a month as brought forward when its proof was captured after a later month', () => {
+        const lines = sevenMonths();
+        const allocated = lines.map((l) => {
+            if (l.sequence === 3) {
+                // Month 3's proof only arrived in February — after month 7 was captured.
+                return { ...l, allocations: [{ amount: 500, recordedAt: new Date('2027-02-20') }] };
+            }
+            if (l.sequence === 7) {
+                return { ...l, allocations: [{ amount: 500, recordedAt: new Date('2027-02-01') }] };
+            }
+            return l;
+        });
+        const r = reconcileInstalments(allocated, 0, now);
+
+        expect(r[2]).toMatchObject({ status: 'PAID', broughtForward: true });
+        expect(r[6]).toMatchObject({ status: 'PAID', broughtForward: false });
+    });
+
+    it('does not let pinned money leak onto other months', () => {
+        // R500 pinned to month 5 must not settle the older, unpaid month 1.
+        const lines = sevenMonths();
+        const allocated = lines.map((l) =>
+            l.sequence === 5 ? { ...l, allocations: [{ amount: 500 }] } : l
+        );
+        const r = reconcileInstalments(allocated, 0, now);
+
+        expect(r[0]).toMatchObject({ status: 'MISSED', amountPaid: 0 });
+        expect(r[4]).toMatchObject({ status: 'PAID', amountPaid: 500 });
+    });
+
+    it('still fills the oldest open month from unpinned money', () => {
+        const lines = sevenMonths();
+        const allocated = lines.map((l) =>
+            l.sequence === 4 ? { ...l, allocations: [{ amount: 500 }] } : l
+        );
+        // R500 captured with no month chosen lands on month 1, the oldest open one.
+        const r = reconcileInstalments(allocated, 500, now);
+
+        expect(r[0]).toMatchObject({ status: 'PAID', amountPaid: 500 });
+        expect(r[1]).toMatchObject({ status: 'MISSED', amountPaid: 0 });
+        expect(r[3]).toMatchObject({ status: 'PAID', amountPaid: 500 });
+    });
+
+    it('keeps a month staff marked as not paid even before it falls due', () => {
+        const future = [{ id: 'f1', sequence: 1, dueDate: new Date('2027-12-01'), amountDue: 500, status: 'MISSED' as const }];
+        const r = reconcileInstalments(future, 0, now);
+        expect(r[0]).toMatchObject({ status: 'MISSED', isOverdue: true });
+    });
+});
+
+describe('summariseArrangement — month counts', () => {
+    const now = new Date('2027-03-01T00:00:00Z');
+
+    it('counts how many months are paid, missed and still to come', () => {
+        const lines = Array.from({ length: 7 }, (_, i) => ({
+            id: `i${i + 1}`,
+            sequence: i + 1,
+            dueDate: new Date(Date.UTC(2026, 7 + i, 1)),
+            amountDue: 500,
+            allocations: [1, 2, 4, 5].includes(i + 1) ? [{ amount: 500 }] : [],
+        }));
+        const s = summariseArrangement(reconcileInstalments(lines, 0, now), now);
+
+        expect(s.instalmentCount).toBe(7);
+        expect(s.paidCount).toBe(4);
+        expect(s.missedCount).toBe(3); // months 3, 6, 7 — all past due and unpaid
+        expect(s.outstandingCount).toBe(3);
+        expect(s.allocatedPaymentCount).toBe(4);
+    });
+});

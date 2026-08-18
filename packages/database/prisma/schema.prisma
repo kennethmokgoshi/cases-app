@@ -407,6 +407,8 @@ model Case {
   dhsOutcomeEvents        DhsOutcomeEvent[]
   creditTransfersFrom     CreditTransfer[]         @relation("CreditTransferFrom")
   creditTransfersTo       CreditTransfer[]         @relation("CreditTransferTo")
+  quarantinedDocuments    QuarantinedDocument[]    @relation("QuarantineIntendedCase")
+  quarantineReassignments QuarantinedDocument[]    @relation("QuarantineReassignedCase")
 
   debtCounsellordId String?
   debtCounsellor    DebtCounsellor? @relation(fields: [debtCounsellordId], references: [id])
@@ -517,6 +519,23 @@ model Document {
   extractedData String?
   uploadedById  String?
   isAdminOnly   Boolean               @default(false)
+  // ── Consumer-ownership verification ────────────────────────────────────────
+  // Set when a document is ingested from a mailbox. Its contents are read and the
+  // SA ID numbers inside are compared against the case client's ID, so a file
+  // belonging to a different consumer never gets filed on the wrong case.
+  //   VERIFIED   — the case client's ID was found inside the file
+  //   UNVERIFIED — no ID could be read (poor scan / no text layer); attached but
+  //                excluded from all automation
+  //   MISMATCH   — a different consumer's ID was found; never attached (quarantined)
+  //   NOT_CHECKED — staff/manual upload that did not go through the ingest gate
+  verificationStatus String             @default("NOT_CHECKED")
+  // The ID number actually read out of the file contents (not the email).
+  extractedIdNumber  String?
+  verifiedAt         DateTime?
+  // Provenance of a mailbox-harvested document, so a mis-file can be traced back
+  // to the exact email it arrived on.
+  sourceMailboxId    String?
+  sourceMessageId    String?
   case          Case                  @relation(fields: [caseId], references: [id], onDelete: Cascade)
   uploadedBy    User?                 @relation(fields: [uploadedById], references: [id])
   accessGrants  DocumentAccessGrant[]
@@ -525,6 +544,8 @@ model Document {
   @@index([type])
   @@index([uploadedById])
   @@index([isAdminOnly])
+  @@index([verificationStatus])
+  @@index([sourceMessageId])
 }
 
 model DocumentAccessGrant {
@@ -605,6 +626,7 @@ model User {
   uploadedDocuments          Document[]
   grantedDocumentAccess      DocumentAccessGrant[]          @relation("DocumentAccessGranter")
   documentAccessGrants       DocumentAccessGrant[]          @relation("DocumentAccessGrantee")
+  reviewedQuarantinedDocs    QuarantinedDocument[]          @relation("QuarantineReviewer")
   ForensicAudit              ForensicAudit[]
   inAppNotifications         InAppNotification[]
   invoicesCreated            Invoice[]                      @relation("InvoiceCreator")
@@ -774,6 +796,7 @@ model PaymentArrangementInstalment {
   updatedAt     DateTime           @updatedAt
   arrangement   PaymentArrangement @relation(fields: [arrangementId], references: [id], onDelete: Cascade)
   honouredBy    User?              @relation("InstalmentHonouredBy", fields: [honouredById], references: [id])
+  payments      Payment[]
 
   @@index([arrangementId])
   @@index([dueDate])
@@ -983,6 +1006,11 @@ model Payment {
   batchId      String?
   unmatchedId  String?
   invoiceId    String?
+  // Which scheduled instalment (month) this payment settles. Null = unallocated,
+  // so it falls through to FIFO matching against the oldest open month. Set
+  // explicitly when staff back-date a month that was skipped after later months
+  // were already captured (proof brought forward).
+  instalmentId String?
   recordedById String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -990,12 +1018,14 @@ model Payment {
   case         Case?         @relation(fields: [caseId], references: [id])
   client       Client?       @relation(fields: [clientId], references: [id])
   invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+  instalment   PaymentArrangementInstalment? @relation(fields: [instalmentId], references: [id], onDelete: SetNull)
   recordedBy   User?         @relation("PaymentRecorder", fields: [recordedById], references: [id])
 
   @@index([clientId])
   @@index([caseId])
   @@index([batchId])
   @@index([invoiceId])
+  @@index([instalmentId])
   @@index([date])
   @@index([status])
 }
@@ -1911,6 +1941,7 @@ model MailboxAccount {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   processedMessages ProcessedMailboxMessage[]
+  quarantinedDocuments QuarantinedDocument[]
 
   @@index([isActive])
 }
@@ -1927,6 +1958,58 @@ model ProcessedMailboxMessage {
   @@unique([mailboxAccountId, messageId])
   @@index([mailboxAccountId])
   @@index([messageId])
+}
+
+// A document that arrived on a case's email thread but whose CONTENTS belong to a
+// different consumer. It is deliberately NOT written to the Document table — that
+// would associate one consumer's personal data with another consumer's file, which
+// is exactly the POPIA disclosure this guard exists to prevent. It is held here
+// until a staff member either reassigns it to the correct case or discards it.
+model QuarantinedDocument {
+  id                String    @id @default(cuid())
+  // The case we were scanning for when this file arrived (i.e. the WRONG owner).
+  intendedCaseId    String
+  fileName          String
+  // Path on disk, outside any case's upload directory.
+  storagePath       String
+  fileSize          Int
+  mimeType          String
+  detectedType      String
+  attachmentHash    String
+  // Why it was held: MISMATCH is currently the only automatic reason.
+  reason            String    @default("MISMATCH")
+  // ID read out of the file contents vs the ID on the intended case's client.
+  extractedIdNumber String?
+  expectedIdNumber  String?
+  // All IDs found in the file, comma-separated — useful when a document legitimately
+  // references several people (e.g. a joint application).
+  allExtractedIds   String?
+  // Source email provenance.
+  sourceMailboxId   String?
+  sourceMessageId   String?
+  sourceFrom        String?
+  sourceSubject     String?
+  sourceDate        DateTime?
+  // PENDING_REVIEW | REASSIGNED | DISCARDED
+  status            String    @default("PENDING_REVIEW")
+  reviewedById      String?
+  reviewedAt        DateTime?
+  reviewNotes       String?
+  // Set when staff route the file to the consumer it actually belongs to.
+  reassignedToCaseId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  intendedCase     Case            @relation("QuarantineIntendedCase", fields: [intendedCaseId], references: [id], onDelete: Cascade)
+  reassignedToCase Case?           @relation("QuarantineReassignedCase", fields: [reassignedToCaseId], references: [id])
+  reviewedBy       User?           @relation("QuarantineReviewer", fields: [reviewedById], references: [id])
+  sourceMailbox    MailboxAccount? @relation(fields: [sourceMailboxId], references: [id])
+
+  @@index([status])
+  @@index([intendedCaseId])
+  @@index([reassignedToCaseId])
+  @@index([sourceMailboxId])
+  @@index([attachmentHash])
 }
 
 

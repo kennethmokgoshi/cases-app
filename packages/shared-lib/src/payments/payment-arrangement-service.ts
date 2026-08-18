@@ -137,7 +137,8 @@ export async function createArrangementFromMandate(
 /**
  * The pool of paid money available to auto-match against an arrangement's
  * instalments: COMPLETED payments on the case dated on/after the arrangement
- * was created.
+ * was created, excluding any payment staff pinned to a specific instalment —
+ * those are applied to their own month and must not be counted twice.
  */
 async function paidPoolForArrangement(arrangement: {
     caseId: string | null;
@@ -148,7 +149,12 @@ async function paidPoolForArrangement(arrangement: {
         ? { caseId: arrangement.caseId }
         : { clientId: arrangement.clientId };
     const payments = await prisma.payment.findMany({
-        where: { ...where, status: 'COMPLETED', date: { gte: arrangement.createdAt } },
+        where: {
+            ...where,
+            status: 'COMPLETED',
+            date: { gte: arrangement.createdAt },
+            instalmentId: null,
+        },
         select: { amount: true },
     });
     return round2(payments.reduce((s, p) => s + Number(p.amount), 0));
@@ -175,7 +181,18 @@ export async function getArrangementView(
 ): Promise<ArrangementView | null> {
     const arrangement = await prisma.paymentArrangement.findUnique({
         where: { id: arrangementId },
-        include: { instalments: { orderBy: { sequence: 'asc' } } },
+        include: {
+            instalments: {
+                orderBy: { sequence: 'asc' },
+                include: {
+                    payments: {
+                        where: { status: 'COMPLETED' },
+                        orderBy: { date: 'asc' },
+                        select: { id: true, amount: true, date: true, createdAt: true, reference: true },
+                    },
+                },
+            },
+        },
     });
     if (!arrangement) return null;
 
@@ -188,6 +205,13 @@ export async function getArrangementView(
             amountDue: Number(i.amountDue),
             status: i.status as InstalmentStatus,
             amountPaid: Number(i.amountPaid),
+            allocations: i.payments.map((p) => ({
+                paymentId: p.id,
+                amount: Number(p.amount),
+                paidOn: p.date,
+                recordedAt: p.createdAt,
+                reference: p.reference,
+            })),
         })),
         pool,
         now
@@ -220,19 +244,98 @@ export async function listCaseArrangements(caseId: string, now: Date = new Date(
     return views.filter((v): v is ArrangementView => v !== null);
 }
 
-/** Manually mark an instalment honoured (PAID) or missed. */
+/**
+ * Pin a recorded payment to a specific instalment (month), or unpin it by
+ * passing null so it falls back into the FIFO pool.
+ *
+ * This is what lets staff capture a back-dated month — e.g. enter month 3's
+ * proof after month 7 was already recorded — without the money silently
+ * sliding onto the wrong month.
+ */
+export async function allocatePaymentToInstalment(
+    paymentId: string,
+    instalmentId: string | null
+) {
+    const payment = await prisma.payment.findUnique({
+        where: { id: paymentId },
+        select: { id: true, caseId: true, clientId: true, instalmentId: true },
+    });
+    if (!payment) throw new Error('Payment not found');
+
+    const arrangementIds = new Set<string>();
+
+    if (instalmentId) {
+        const instalment = await prisma.paymentArrangementInstalment.findUnique({
+            where: { id: instalmentId },
+            select: { id: true, arrangement: { select: { id: true, caseId: true, clientId: true } } },
+        });
+        if (!instalment) throw new Error('Instalment not found');
+        const belongs = payment.caseId
+            ? instalment.arrangement.caseId === payment.caseId
+            : instalment.arrangement.clientId === payment.clientId;
+        if (!belongs) {
+            throw new Error('That instalment belongs to a different case');
+        }
+        arrangementIds.add(instalment.arrangement.id);
+    }
+
+    // The previous allocation's arrangement also needs re-summarising.
+    if (payment.instalmentId && payment.instalmentId !== instalmentId) {
+        const previous = await prisma.paymentArrangementInstalment.findUnique({
+            where: { id: payment.instalmentId },
+            select: { arrangementId: true },
+        });
+        if (previous) arrangementIds.add(previous.arrangementId);
+    }
+
+    const updated = await prisma.payment.update({
+        where: { id: paymentId },
+        data: { instalmentId },
+    });
+
+    for (const id of arrangementIds) {
+        await syncNextPaymentDate(id);
+    }
+
+    return updated;
+}
+
+/**
+ * Recompute every arrangement on a case. Call after recording, editing or
+ * deleting a payment so the month-by-month schedule and the Finance
+ * "Next Payment Date" stay in step with the money actually captured.
+ */
+export async function resyncCaseArrangements(caseId: string | null | undefined) {
+    if (!caseId) return;
+    const arrangements = await prisma.paymentArrangement.findMany({
+        where: { caseId },
+        select: { id: true },
+    });
+    for (const a of arrangements) {
+        await syncNextPaymentDate(a.id);
+    }
+}
+
+/**
+ * Manually record whether a month's instalment was honoured.
+ *
+ *  - `PAID`   — staff confirm the consumer paid that month
+ *  - `MISSED` — staff confirm they did not
+ *  - `AUTO`   — clear the manual call and let recorded payments decide again
+ */
 export async function setInstalmentHonoured(
     instalmentId: string,
-    honoured: boolean,
+    outcome: 'PAID' | 'MISSED' | 'AUTO',
     userId?: string | null
 ) {
+    const cleared = outcome === 'AUTO';
     const updated = await prisma.paymentArrangementInstalment.update({
         where: { id: instalmentId },
         data: {
-            status: honoured ? 'PAID' : 'MISSED',
-            honouredById: userId ?? null,
-            honouredAt: new Date(),
-            paidAt: honoured ? new Date() : null,
+            status: cleared ? 'PENDING' : outcome,
+            honouredById: cleared ? null : userId ?? null,
+            honouredAt: cleared ? null : new Date(),
+            paidAt: outcome === 'PAID' ? new Date() : null,
         },
     });
     await syncNextPaymentDate(updated.arrangementId);
