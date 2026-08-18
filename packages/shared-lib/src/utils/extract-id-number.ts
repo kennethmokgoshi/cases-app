@@ -37,6 +37,17 @@ export function extractAllSaIdNumbers(text: string): string[] {
     return matches ?? [];
 }
 
+/**
+ * True when the 13-digit ID passes the SA ID Luhn check digit.
+ *
+ * Exported because ownership verification treats a Luhn-valid foreign ID as hard
+ * evidence that a document belongs to someone else (and quarantines it), while a
+ * merely structural match is not strong enough to block a file.
+ */
+export function isValidSaIdChecksum(id: string): boolean {
+    return /^\d{13}$/.test(id) && isValidLuhn(id);
+}
+
 function isValidLuhn(id: string): boolean {
     let sum = 0;
     let alternate = false;

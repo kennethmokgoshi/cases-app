@@ -6,7 +6,13 @@ export interface RunLoggerParams {
     caseId?: string;
     clientId?: string;
     triggeredById?: string;
-    status: 'SUCCESS' | 'FAILED';
+    /**
+     * NEEDS_REVIEW marks a run that completed without error but produced something
+     * a human must action — e.g. a document was quarantined because its contents
+     * belong to a different consumer. It is already a documented AutomationRun
+     * status; it was simply not reachable through this helper before.
+     */
+    status: 'SUCCESS' | 'FAILED' | 'NEEDS_REVIEW';
     startedAt: Date;
     logs?: Record<string, unknown>;
     errorMessage?: string;

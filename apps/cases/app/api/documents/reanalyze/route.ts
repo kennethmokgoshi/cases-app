@@ -3,6 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { extractDocumentsFromCombinedPdf, analyzeDocument, batchAnalyzeDocuments, verifyIdNumbers } from '@zenowethu/shared-lib/src/openai';
+import { resolveClientIdNumberUpdate, resolveClientNameUpdate } from '@zenowethu/shared-lib/src/documents/client-identity-guard';
 import { ReanalyzeSchema, parseBody } from '@/lib/schemas';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: 'No documents provided for batch analysis' }, { status: 400 });
             }
 
-            logger.info('📦 Batch Re-analyzing documents:', documentIds);
+            logger.info('ðŸ“¦ Batch Re-analyzing documents:', documentIds);
 
             // Fetch documents
             const docs = await prisma.document.findMany({
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
         const document = await prisma.document.findUnique({ where: { id: documentId } });
         if (!document) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
 
-        logger.info('🔄 Re-analyze API called - CaseId:', caseId, 'Doc:', document.fileName, 'Type:', document.type);
+        logger.info('ðŸ”„ Re-analyze API called - CaseId:', caseId, 'Doc:', document.fileName, 'Type:', document.type);
 
         const filePath = join(process.cwd(), 'storage', 'uploads', document.fileUrl.replace('/uploads/', ''));
         if (!existsSync(filePath)) return NextResponse.json({ error: 'Physical file not found' }, { status: 404 });
@@ -157,7 +158,7 @@ export async function POST(request: Request) {
             const { extractOnly } = body;
 
             if (extractOnly) {
-                logger.info('🤖 Re-analyzing Combined PDF (Extraction Only)...');
+                logger.info('ðŸ¤– Re-analyzing Combined PDF (Extraction Only)...');
                 const { analyzeCombinedDocument } = await import('@zenowethu/shared-lib/src/openai');
                 const analysis = await analyzeCombinedDocument(base64Pdf);
                 fullAnalysis = analysis;
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
                 resultMessage = 'Successfully re-extracted data from Combined PDF';
 
             } else {
-                logger.info('🤖 Starting AI re-extraction & SPLIT for Combined PDF...');
+                logger.info('ðŸ¤– Starting AI re-extraction & SPLIT for Combined PDF...');
                 const extraction = await extractDocumentsFromCombinedPdf(base64Pdf, undefined, undefined, clientIdNumber);
                 fullAnalysis = extraction.analysis;
 
@@ -236,7 +237,7 @@ export async function POST(request: Request) {
             }
 
         } else if (['ID', 'POA', 'CREDIT_REPORT', 'ZENOWETHU_POA', 'PAYSLIP', 'BANK_STATEMENT'].includes(document.type)) {
-            logger.info(`🔍 Re-analyzing single ${document.type}...`);
+            logger.info(`ðŸ” Re-analyzing single ${document.type}...`);
             const result = await analyzeDocument(base64Pdf, document.type as any, 'application/pdf', undefined, undefined, clientIdNumber);
             const analysis = result.data;
 
@@ -278,7 +279,7 @@ export async function POST(request: Request) {
         });
 
     } catch (error) {
-        logger.error('❌ Re-analysis error:', error);
+        logger.error('âŒ Re-analysis error:', error);
 
         // Log to file for debugging
         try {
@@ -325,16 +326,45 @@ async function updateClientData(caseId: string, fullAnalysis: any, idVerificatio
 
     const updateData: any = {};
 
+    // Identity fields are guarded: analysis may FILL an empty name/ID, but must
+    // never REPLACE one already on record. Without this, a document belonging to
+    // another consumer that reached this case would rewrite this client's own
+    // identity the moment someone pressed "Analyze".
+    const existingClient = await prisma.client.findUnique({
+        where: { id: caseRecord.clientId },
+        select: { idNumber: true, firstName: true, lastName: true },
+    });
+    const identityWarnings: string[] = [];
+    const isIdVerified = idVerification?.isVerified === true;
+
     if (fullAnalysis.id) {
-        if (fullAnalysis.id.names) updateData.firstName = fullAnalysis.id.names;
-        if (fullAnalysis.id.surname) updateData.lastName = fullAnalysis.id.surname;
-        // Only update ID if verified or if it's the only one found and looks like an ID
-        if (fullAnalysis.id.idNumber) updateData.idNumber = fullAnalysis.id.idNumber;
+        const firstNameDecision = resolveClientNameUpdate({
+            currentValue: existingClient?.firstName,
+            proposedValue: fullAnalysis.id.names,
+            isVerified: isIdVerified,
+        });
+        if (firstNameDecision.allowed) updateData.firstName = firstNameDecision.value;
+        if (firstNameDecision.warning) identityWarnings.push(firstNameDecision.warning);
+
+        const lastNameDecision = resolveClientNameUpdate({
+            currentValue: existingClient?.lastName,
+            proposedValue: fullAnalysis.id.surname,
+            isVerified: isIdVerified,
+        });
+        if (lastNameDecision.allowed) updateData.lastName = lastNameDecision.value;
+        if (lastNameDecision.warning) identityWarnings.push(lastNameDecision.warning);
     }
 
-    // Override ID if verification says so
-    if (idVerification?.bestId) {
-        updateData.idNumber = idVerification.bestId;
+    const idDecision = resolveClientIdNumberUpdate({
+        currentIdNumber: existingClient?.idNumber,
+        proposedIdNumber: idVerification?.bestId ?? fullAnalysis.id?.idNumber,
+        isVerified: isIdVerified,
+    });
+    if (idDecision.allowed) updateData.idNumber = idDecision.value;
+    if (idDecision.warning) identityWarnings.push(idDecision.warning);
+
+    if (identityWarnings.length > 0) {
+        logger.warn({ caseId, identityWarnings }, 'Blocked document analysis from overwriting client identity');
     }
 
     if (fullAnalysis.poa) {
@@ -370,13 +400,13 @@ async function updateClientData(caseId: string, fullAnalysis: any, idVerificatio
                 where: { id: caseRecord.clientId },
                 data: updateData
             });
-            logger.info('📝 Updated client data with re-analyzed info');
+            logger.info('ðŸ“ Updated client data with re-analyzed info');
         } catch (e: any) {
-            logger.error('❌ Failed to update client (likely unique constraint):', e.code, e.message);
+            logger.error('âŒ Failed to update client (likely unique constraint):', e.code, e.message);
 
             // If unique constraint error (P2002) on idNumber, retry WITHOUT idNumber
             if (e.code === 'P2002' && updateData.idNumber) {
-                logger.warn('⚠️ ID Number collision detected. Updating client metrics excluding ID Number.');
+                logger.warn('âš ï¸ ID Number collision detected. Updating client metrics excluding ID Number.');
                 const { idNumber, ...safeUpdateData } = updateData;
                 await prisma.client.update({
                     where: { id: caseRecord.clientId },
