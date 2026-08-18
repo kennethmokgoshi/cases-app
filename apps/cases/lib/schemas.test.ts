@@ -15,7 +15,9 @@ import {
     ClientCreateSchema,
     ClientUpdateSchema,
     CaseCreateSchema,
+    CasePatchSchema,
     CaseStatusSchema,
+    isProvisionalIdNumber,
     UserCreateSchema,
     ForgotPasswordSchema,
     ResetPasswordSchema,
@@ -64,7 +66,7 @@ describe('ClientCreateSchema', () => {
         expect(result.success).toBe(false);
     });
 
-    it('accepts null email', () => {
+    it('accepts null email at field level (CaseCreateSchema enforces the requirement)', () => {
         const result = ClientCreateSchema.safeParse({ ...valid, email: null });
         expect(result.success).toBe(true);
     });
@@ -78,7 +80,7 @@ describe('ClientCreateSchema', () => {
 // ─── CaseCreateSchema ─────────────────────────────────────────────────────────
 
 describe('CaseCreateSchema', () => {
-    const validClient = { firstName: 'Jane', lastName: 'Smith', idNumber: '9001015009087' };
+    const validClient = { firstName: 'Jane', lastName: 'Smith', idNumber: '9001015009087', email: 'jane@example.com' };
     const valid = { client: validClient, projectId: 'proj-123' };
 
     it('passes with minimal required fields', () => {
@@ -124,6 +126,88 @@ describe('CaseCreateSchema', () => {
     it('fails when partnerSplitPercent exceeds 100', () => {
         const result = CaseCreateSchema.safeParse({ ...valid, partnerSplitPercent: 150 });
         expect(result.success).toBe(false);
+    });
+
+    it('fails when the client has no email address', () => {
+        const { email, ...clientWithoutEmail } = validClient;
+        const result = CaseCreateSchema.safeParse({ client: clientWithoutEmail, projectId: 'proj-123' });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues.some(i => i.path.join('.') === 'client.email')).toBe(true);
+        }
+    });
+
+    it('fails when the client email is null', () => {
+        const result = CaseCreateSchema.safeParse({ client: { ...validClient, email: null }, projectId: 'proj-123' });
+        expect(result.success).toBe(false);
+    });
+
+    it('allows a provisional TEMP- shell through without an email', () => {
+        const result = CaseCreateSchema.safeParse({
+            client: { firstName: 'Temp', lastName: 'Processing', idNumber: 'TEMP-1712345678901' },
+            projectId: 'proj-123' });
+        expect(result.success).toBe(true);
+    });
+
+    it('allows a provisional MANUAL- shell through without an email', () => {
+        const result = CaseCreateSchema.safeParse({
+            client: { firstName: 'Manual', lastName: 'Entry', idNumber: 'MANUAL-1712345678901' },
+            projectId: 'proj-123' });
+        expect(result.success).toBe(true);
+    });
+
+    it('leaves the joint applicant email optional (main applicant is the notified party)', () => {
+        const result = CaseCreateSchema.safeParse({
+            ...valid,
+            jointClient: { firstName: 'Sam', lastName: 'Smith', idNumber: '9202025009087' } });
+        expect(result.success).toBe(true);
+    });
+
+    it('still rejects a malformed joint applicant email when one is supplied', () => {
+        const result = CaseCreateSchema.safeParse({
+            ...valid,
+            jointClient: { firstName: 'Sam', lastName: 'Smith', idNumber: '9202025009087', email: 'not-an-email' } });
+        expect(result.success).toBe(false);
+    });
+
+    it('does not treat a real ID number as provisional', () => {
+        expect(isProvisionalIdNumber('9001015009087')).toBe(false);
+        expect(isProvisionalIdNumber('TEMPORARY-1')).toBe(false);
+        expect(isProvisionalIdNumber(null)).toBe(false);
+        expect(isProvisionalIdNumber('TEMP-1712345678901')).toBe(true);
+        expect(isProvisionalIdNumber('MANUAL-1')).toBe(true);
+    });
+});
+
+// ─── CasePatchSchema ──────────────────────────────────────────────────────────
+
+describe('CasePatchSchema', () => {
+    it('allows a client patch that does not touch the email address', () => {
+        const result = CasePatchSchema.safeParse({ client: { phone: '0821234567' } });
+        expect(result.success).toBe(true);
+    });
+
+    it('allows a client patch that sets a valid email address', () => {
+        const result = CasePatchSchema.safeParse({ client: { email: 'jane@example.com' } });
+        expect(result.success).toBe(true);
+    });
+
+    it('refuses to blank out an email address with an empty string', () => {
+        const result = CasePatchSchema.safeParse({ client: { email: '' } });
+        expect(result.success).toBe(false);
+    });
+
+    it('refuses to blank out an email address with null', () => {
+        const result = CasePatchSchema.safeParse({ client: { email: null } });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues.some(i => i.path.join('.') === 'client.email')).toBe(true);
+        }
+    });
+
+    it('leaves case-level fields untouched by the email rule', () => {
+        const result = CasePatchSchema.safeParse({ status: 'IN_PROGRESS' });
+        expect(result.success).toBe(true);
     });
 });
 

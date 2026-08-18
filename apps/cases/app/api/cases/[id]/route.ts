@@ -3,7 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { createLogger, sendStatusChangeNotification, provisionConsumerForClient } from '@zenowethu/shared-lib';
 import { flagCaseIfFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag-db';
 import { auth } from '@zenowethu/shared-lib/src/auth';
-import { CasePatchSchema, parseBody } from '@/lib/schemas';
+import { CasePatchSchema, parseBody, isProvisionalIdNumber } from '@/lib/schemas';
 import { buildProjectDisplayName } from '@/lib/project-path';
 import { z } from 'zod';
 
@@ -327,6 +327,21 @@ export async function PATCH(
                 error: 'Case not found',
                 code: 'CASE_NOT_FOUND'
             }, { status: 404 });
+        }
+
+        // Turning a provisional shell (TEMP-/MANUAL- ID, created before the
+        // consumer details were known) into a real consumer is the moment the
+        // email address has to be captured.
+        if (
+            client?.idNumber &&
+            isProvisionalIdNumber(currentCase.client?.idNumber) &&
+            !isProvisionalIdNumber(client.idNumber) &&
+            !(client.email || currentCase.client?.email)
+        ) {
+            return NextResponse.json({
+                error: 'Email address is required',
+                code: 'MISSING_EMAIL'
+            }, { status: 400 });
         }
 
         // Check for duplicate ID Number

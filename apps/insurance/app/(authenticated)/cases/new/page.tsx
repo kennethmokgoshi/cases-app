@@ -72,6 +72,9 @@ export default function SmartStartPage() {
         setStep(2);
     };
 
+    // The case-create API rejects new clients without an email address: DHS
+    // consumer updates and case correspondence both depend on it.
+    const isNewClientEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClientData.email.trim());
     // --- PHASE 2 LOGIC ---
 
     const handleAnalyzeReport = async () => {
@@ -298,13 +301,18 @@ export default function SmartStartPage() {
                                         onChange={(e) => setNewClientData({ ...newClientData, lastName: e.target.value })}
                                         className="bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white"
                                     />
-                                    <input
-                                        type="email"
-                                        placeholder="Email Address"
-                                        value={newClientData.email}
-                                        onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })}
-                                        className="bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-white"
-                                    />
+                                    <div>
+                                        <input
+                                            type="email"
+                                            placeholder="Email Address *"
+                                            value={newClientData.email}
+                                            onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })}
+                                            className={`w-full bg-black/20 border rounded-lg px-4 py-2 text-white ${isNewClientEmailValid ? 'border-white/10' : 'border-red-500/70'}`}
+                                        />
+                                        {!isNewClientEmailValid && (
+                                            <div className="text-[10px] text-red-400 mt-1">A valid email address is required</div>
+                                        )}
+                                    </div>
                                     <input
                                         type="tel"
                                         placeholder="Phone Number"
@@ -316,7 +324,8 @@ export default function SmartStartPage() {
                                 <div className="mt-6 flex justify-end">
                                     <button
                                         onClick={handleContinueToPhase2}
-                                        className="px-8 py-3 bg-zeno-orange hover:bg-orange-400 text-black font-bold rounded-lg transition-colors"
+                                        disabled={!isNewClientEmailValid}
+                                        className="px-8 py-3 bg-zeno-orange hover:bg-orange-400 text-black font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Create Profile & Continue →
                                     </button>

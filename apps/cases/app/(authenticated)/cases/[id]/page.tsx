@@ -1575,6 +1575,17 @@ export default function CaseDetailPage() {
     // Save changes
     const saveChanges = async () => {
         if (!caseData) return;
+        // The consumer record cannot be updated without an email address on file:
+        // DHS consumer updates and case correspondence both depend on it.
+        const clientEmail = editForm.email?.trim();
+        if (!clientEmail) {
+            toast.error('Email address is required. Please capture the consumer\'s email address before saving.');
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+            toast.error('Please enter a valid email address, for example name@example.com.');
+            return;
+        }
         setSaving(true);
         try {
             const res = await fetch(`/api/cases/${params.id}`, {
@@ -1585,7 +1596,7 @@ export default function CaseDetailPage() {
                         firstName: editForm.firstName,
                         lastName: editForm.lastName,
                         idNumber: editForm.idNumber,
-                        email: editForm.email || null,
+                        email: clientEmail,
                         phone: editForm.phone || null,
                         alternativePhone: editForm.alternativePhone || null,
                         alternativePhone2: editForm.alternativePhone2 || null,
@@ -2887,14 +2898,17 @@ export default function CaseDetailPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-gray-500 uppercase">Email</label>
+                                        <label className="text-xs text-gray-500 uppercase">Email <span className="text-red-400">*</span></label>
                                         <input
                                             type="email"
                                             value={editForm.email}
                                             onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                                            className="w-full mt-1 px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white focus:border-zeno-cyan focus:outline-none"
+                                            className={`w-full mt-1 px-3 py-2 bg-zeno-navy border rounded-lg text-white focus:border-zeno-cyan focus:outline-none ${!editForm.email ? 'border-red-500/70' : 'border-white/10'}`}
                                             placeholder="client@email.com"
                                         />
+                                        {!editForm.email && (
+                                            <div className="text-[10px] text-red-400 mt-1">Email is required to update the consumer</div>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="text-xs text-gray-500 uppercase">Phone</label>

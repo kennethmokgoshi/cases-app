@@ -634,6 +634,19 @@ function NewCaseWithAIComponent() {
             toast.error('Please fill in Surname, Full Names, and ID Number');
             return;
         }
+        // Every consumer must have an email address on file — DHS consumer updates
+        // and all outbound case correspondence depend on it.
+        const manualEmail = formData.email?.trim();
+        if (!manualEmail || manualEmail === 'NA') {
+            setSubmitError({ title: '❌ Email Required', message: 'Please enter the client\'s email address before creating the case.', code: 'MISSING_EMAIL' });
+            setShowErrorModal(true);
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manualEmail)) {
+            setSubmitError({ title: '❌ Invalid Email Address', message: 'Please enter a valid email address, for example name@example.com.', code: 'INVALID_EMAIL' });
+            setShowErrorModal(true);
+            return;
+        }
         setSubmitting(true);
         setSubmitError(null);
         try {
@@ -1768,14 +1781,17 @@ function NewCaseWithAIComponent() {
                                 />
                             </div>
                             <div className="md:col-span-2">
-                                <label className="block text-xs text-gray-400 mb-1">Email</label>
+                                <label className="block text-xs text-gray-400 mb-1">Email <span className="text-red-400">*</span></label>
                                 <input
                                     type="email"
                                     value={formData.email}
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     placeholder="email@example.com"
-                                    className="w-full px-3 py-2 bg-zeno-navy border border-white/10 rounded text-white focus:border-zeno-cyan focus:outline-none"
+                                    className={`w-full px-3 py-2 bg-zeno-navy border rounded text-white focus:border-zeno-cyan focus:outline-none ${!formData.email ? 'border-red-500/70' : 'border-white/10'}`}
                                 />
+                                {!formData.email && (
+                                    <div className="text-[10px] text-red-400 mt-1">Email is required</div>
+                                )}
                             </div>
                         </div>
 

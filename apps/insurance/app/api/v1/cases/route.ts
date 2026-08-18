@@ -132,6 +132,16 @@ export async function POST(request: Request) {
             return apiError('Client firstName, lastName, and idNumber are required', 400);
         }
 
+        // A consumer without an email address cannot be updated on DHS or receive
+        // any case correspondence, so referrals must carry one.
+        const clientEmail = typeof client.email === 'string' ? client.email.trim().toLowerCase() : '';
+        if (!clientEmail) {
+            return apiError('Client email is required', 400);
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+            return apiError('Client email is not a valid email address', 400);
+        }
+
         // Check if client exists or create new
         let existingClient = await prisma.client.findUnique({
             where: { idNumber: client.idNumber }
@@ -144,7 +154,7 @@ export async function POST(request: Request) {
                     lastName: client.lastName,
                     idNumber: client.idNumber,
                     phone: client.phone || null,
-                    email: client.email || null }
+                    email: clientEmail }
             });
         }
 
