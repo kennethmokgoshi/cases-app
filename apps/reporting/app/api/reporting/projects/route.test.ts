@@ -27,7 +27,7 @@ describe('Projects API Route', () => {
   })
 
   it('rejects unauthenticated requests', async () => {
-    vi.mocked(auth).mockResolvedValue(null)
+    vi.mocked(auth).mockResolvedValue(null as any)
     const req = new Request('http://localhost/api/reporting/projects')
     const res = await getProjects(req)
     expect(res.status).toEqual(401)
