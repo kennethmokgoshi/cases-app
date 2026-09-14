@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAiClientForTask } from '@zenowethu/shared-lib';
+import { getAiClientForTask, checkRateLimit, clientIpFromHeaders, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
+import { auth } from '@/auth';
 
+const logger = createLogger('crediva/api/ai-coach');
+
+// Every call here spends OpenAI credits, so this route must never be reachable
+// anonymously — an open endpoint becomes a public LLM proxy within days and gets
+// the provider account suspended for "abnormal use". The consumer identity comes
+// from the session, never from the request body.
 const MessageSchema = z.object({
     message: z.string().min(1).max(2000),
     language: z.string().optional().default('English'),
-    consumerId: z.string().optional(),
 });
+
+// Per-consumer and per-IP ceilings. Generous for a real person chatting, tight
+// enough that a scripted client cannot drain the AI budget.
+const USER_LIMIT = 30;
+const USER_WINDOW_MS = 10 * 60 * 1000;
+const IP_LIMIT = 60;
+const IP_WINDOW_MS = 10 * 60 * 1000;
 
 const SYSTEM_PROMPT = `You are Crediva AI, a South African credit coaching assistant built by Zenowethu.
 
@@ -45,16 +58,34 @@ Your role is to help South African consumers understand their credit rights and 
 
 export async function POST(req: NextRequest) {
     try {
+        const session = await auth();
+        const consumerId = session?.user?.id;
+        if (!consumerId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ip = clientIpFromHeaders(req.headers);
+        const userRate = checkRateLimit(`ai-coach:user:${consumerId}`, USER_LIMIT, USER_WINDOW_MS);
+        const ipRate = checkRateLimit(`ai-coach:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
+        if (!userRate.allowed || !ipRate.allowed) {
+            const retryAfter = Math.max(userRate.retryAfterSeconds, ipRate.retryAfterSeconds);
+            logger.warn({ consumerId, ip }, 'AI coach rate limit hit');
+            return NextResponse.json(
+                { error: 'You are sending messages too quickly. Please wait a few minutes and try again.' },
+                { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+            );
+        }
+
         const body = await req.json();
         const parsed = MessageSchema.safeParse(body);
         if (!parsed.success) {
             return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
         }
-        const { message, language, consumerId } = parsed.data;
+        const { message, language } = parsed.data;
 
-        // Optionally load consumer context if logged in
+        // Load the signed-in consumer's own context for personalised answers
         let consumerContext = '';
-        if (consumerId) {
+        {
             try {
                 const consumer = await prisma.consumerAccount.findUnique({
                     where: { id: consumerId },
@@ -96,7 +127,7 @@ ${accountSummary}
 Use this information to provide personalized advice. If the user has negative items or active disputes, reference them by name.`;
                 }
             } catch (err) {
-                 console.error('[AI Coach Context Error]', err);
+                logger.error({ err, consumerId }, 'Failed to load consumer context for AI coach');
             }
         }
 
@@ -119,8 +150,8 @@ Use this information to provide personalized advice. If the user has negative it
         const reply = response.choices[0]?.message?.content ?? 'I could not generate a response. Please try again.';
 
         return NextResponse.json({ reply, model: response.model });
-    } catch (error: any) {
-        console.error('AI Coach error:', error?.message);
+    } catch (error) {
+        logger.error({ err: error }, 'AI coach request failed');
         return NextResponse.json(
             { error: 'AI service unavailable. Please try again shortly.' },
             { status: 503 }

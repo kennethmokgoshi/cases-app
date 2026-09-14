@@ -106,7 +106,6 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 export default function AICoachPage() {
-  const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
@@ -143,11 +142,7 @@ I can see your credit profile and help you understand exactly what is affecting 
       const res = await fetch('/api/ai-coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: content, 
-          language,
-          consumerId: session?.user?.id
-        }),
+        body: JSON.stringify({ message: content, language }),
       });
       const data = await res.json();
       const responseText = res.ok
