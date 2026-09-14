@@ -442,6 +442,23 @@ export async function POST(request: Request) {
             }
         }
 
+        // Link the case to its partner branch record, so notifications can fall
+        // back to the branch when the consumer has no email or cell of their own.
+        // The free-text partnerBranch stays as the intake record either way.
+        let resolvedPartnerBranchId: string | null = null;
+        if (data.partnerName?.trim() && data.partnerBranch?.trim()) {
+            const branch = await prisma.partnerBranch.findFirst({
+                where: {
+                    name: { equals: data.partnerBranch.trim(), mode: 'insensitive' },
+                    partnerProject: { name: { equals: data.partnerName.trim(), mode: 'insensitive' } } },
+                select: { id: true },
+            });
+            resolvedPartnerBranchId = branch?.id ?? null;
+            if (!resolvedPartnerBranchId) {
+                logger.warn(`No partner branch record for "${data.partnerName} / ${data.partnerBranch}" — no fallback contact available for this case`);
+            }
+        }
+
         // 3. Create Case
         const newCase = await prisma.case.create({
             data: {
@@ -456,6 +473,7 @@ export async function POST(request: Request) {
                 acquisitionType: data.acquisitionType,
                 partnerName: data.partnerName,
                 partnerBranch: data.partnerBranch,
+                partnerBranchRef: resolvedPartnerBranchId ? { connect: { id: resolvedPartnerBranchId } } : undefined,
                 partnerSplitPercent: data.partnerSplitPercent,
                 createdBy: session?.user?.id ? { connect: { id: session.user.id } } : undefined,
                 client: { connect: { id: client.id } },

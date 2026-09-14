@@ -7,7 +7,7 @@ import fs from 'fs';
 import { join } from 'path';
 import { getDHSCredentials } from '../integrations';
 import { getBrowser, loginToDHS, delay, DHS_CONFIG } from './browser';
-import { extractConsumerInfo, getDeclineReason } from './extraction';
+import { extractConsumerInfo, getDeclineDetails } from './extraction';
 import type { DHSTransferStatus, DHSDebtCounsellorInfo, DHSTransferCheckResult } from './types';
 import { logger } from '../logger';
 
@@ -690,13 +690,16 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
         // Extract consumer info if found
         const consumer = hasResults ? await extractConsumerInfo(page) : undefined;
 
-        // If declined, get the reason (with timeout protection)
+        // If declined, get the reason and the date DHS recorded the decline
+        // (with timeout protection)
         let declineReason: string | undefined;
+        let declinedAt: Date | undefined;
+        let declinePerformedBy: string | undefined;
         if (status === 'DECLINED') {
             try {
                 logger.info('Attempting to get decline reason with 25s timeout...');
-                declineReason = await Promise.race([
-                    getDeclineReason(page),
+                const details = await Promise.race([
+                    getDeclineDetails(page),
                     new Promise<undefined>((resolve) =>
                         setTimeout(() => {
                             logger.info('Decline reason extraction timed out after 25s');
@@ -704,6 +707,9 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
                         }, 25000)
                     )
                 ]);
+                declineReason = details?.reason;
+                declinedAt = details?.declinedAt;
+                declinePerformedBy = details?.performedBy;
                 logger.info('Decline reason extraction completed:', declineReason ? 'success' : 'failed/timeout');
             } catch (error) {
                 logger.error('Error getting decline reason:', error);
@@ -720,6 +726,8 @@ export async function checkTransferStatus(idNumber: string): Promise<DHSTransfer
             consumer,
             debtCounsellor,
             declineReason,
+            declinedAt,
+            declinePerformedBy,
             message: combinedStatus || `Status: ${status} `,
             screenshot: screenshotPath
         };

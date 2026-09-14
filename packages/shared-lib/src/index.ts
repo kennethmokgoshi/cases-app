@@ -51,6 +51,10 @@ export * from './demo-data';
 // Referrer Commission
 export * from './referrer-commission';
 
+// B2B partner branches — pure contact-fallback logic. The Prisma-backed lookup
+// lives in './partners/branch-contact-service' and is deep-imported by servers.
+export * from './partners/branch-contact';
+
 // Automation
 // Note: Node-only (uses prisma) — import directly when needed in server contexts
 // export * from './automation/overdue-scan';

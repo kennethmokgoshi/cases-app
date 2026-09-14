@@ -19,6 +19,7 @@ vi.mock('@zenowethu/database', () => ({
 
 vi.mock('../logger', () => ({
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+    createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
 }));
 
 vi.mock('../integrations', () => ({

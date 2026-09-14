@@ -75,6 +75,48 @@ export interface EmailProvider {
     send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult>;
 }
 
+/**
+ * Fetch the bytes for URL-only attachments so byte-oriented providers (SMTP,
+ * Resend) can attach them. Providers that send by reference (GHL) pass the URL
+ * straight through and never call this.
+ *
+ * A file that cannot be fetched is reported, not swallowed: these carry signed
+ * POAs and ID copies, and an email that claims to attach a mandate it silently
+ * dropped is worse than one that never went.
+ */
+export async function resolveUrlAttachments(
+    attachments: EmailAttachment[] | undefined,
+    providerLabel: string
+): Promise<{ resolved: { filename: string; content: Buffer | string; contentType?: string }[]; errors: string[] }> {
+    const resolved: { filename: string; content: Buffer | string; contentType?: string }[] = [];
+    const errors: string[] = [];
+
+    for (const a of (attachments ?? [])) {
+        if (a.url && (!a.content || a.content === '')) {
+            try {
+                const res = await fetch(a.url);
+                if (res.ok) {
+                    resolved.push({
+                        filename:    a.filename,
+                        content:     Buffer.from(await res.arrayBuffer()),
+                        contentType: a.contentType,
+                    });
+                } else {
+                    logger.warn(`[${providerLabel}] Could not fetch attachment (${res.status}): ${a.url}`);
+                    errors.push(`${a.filename} (HTTP ${res.status})`);
+                }
+            } catch (fetchErr: any) {
+                logger.warn(`[${providerLabel}] Fetch error for attachment ${a.url}:`, fetchErr);
+                errors.push(`${a.filename} (${fetchErr?.message || 'fetch failed'})`);
+            }
+        } else {
+            resolved.push({ filename: a.filename, content: a.content, contentType: a.contentType });
+        }
+    }
+
+    return { resolved, errors };
+}
+
 export interface SmsResult {
     success: boolean;
     messageId?: string;
@@ -89,6 +131,12 @@ export interface EmailResult {
     contactId?: string;
     error?: string;
     provider: string;
+    /**
+     * Attachments that could not be resolved and were therefore NOT sent. The
+     * email itself still delivered, so this is not a failure — but a mandate
+     * email whose POA silently dropped must never be reported as complete.
+     */
+    attachmentErrors?: string[];
 }
 
 // ===== MOCK PROVIDER (for development/testing) =====
@@ -229,8 +277,14 @@ export class ResendEmailProvider implements EmailProvider {
             if (options?.cc?.length) body.cc = options.cc;
             if (options?.bcc?.length) body.bcc = options.bcc;
 
-            if (options?.attachments?.length) {
-                body.attachments = options.attachments.map(a => ({
+            // Resend takes bytes, not references. URL-only attachments (how every
+            // POA/ID is passed) must be fetched first — mapping them straight
+            // through sent a zero-byte file named after the document.
+            const { resolved, errors: attachmentErrors } =
+                await resolveUrlAttachments(options?.attachments, 'Resend');
+
+            if (resolved.length) {
+                body.attachments = resolved.map(a => ({
                     filename: a.filename,
                     content:  Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
                 }));
@@ -249,7 +303,8 @@ export class ResendEmailProvider implements EmailProvider {
                 return {
                     success: true,
                     messageId: data.id,
-                    provider: this.name };
+                    provider: this.name,
+                    attachmentErrors: attachmentErrors.length ? attachmentErrors : undefined };
             }
 
             return {
@@ -294,27 +349,8 @@ export class SmtpEmailProvider implements EmailProvider {
     async send(to: string, subject: string, htmlBody: string, textBody?: string, options?: EmailOptions): Promise<EmailResult> {
         try {
             // For URL-only attachments (content is empty), fetch the file so SMTP can attach it.
-            const resolvedAttachments: { filename: string; content: Buffer | string; contentType?: string }[] = [];
-            for (const a of (options?.attachments ?? [])) {
-                if (a.url && (!a.content || a.content === '')) {
-                    try {
-                        const res = await fetch(a.url);
-                        if (res.ok) {
-                            resolvedAttachments.push({
-                                filename:    a.filename,
-                                content:     Buffer.from(await res.arrayBuffer()),
-                                contentType: a.contentType,
-                            });
-                        } else {
-                            logger.warn(`[SMTP] Could not fetch attachment (${res.status}): ${a.url}`);
-                        }
-                    } catch (fetchErr) {
-                        logger.warn(`[SMTP] Fetch error for attachment ${a.url}:`, fetchErr);
-                    }
-                } else {
-                    resolvedAttachments.push({ filename: a.filename, content: a.content, contentType: a.contentType });
-                }
-            }
+            const { resolved: resolvedAttachments, errors: attachmentErrors } =
+                await resolveUrlAttachments(options?.attachments, 'SMTP');
 
             // SMTP servers only allow sending from the authenticated mailbox. A caller-supplied
             // fromEmail that differs (e.g. updates@ when authenticated as notifications@) is
@@ -346,7 +382,8 @@ export class SmtpEmailProvider implements EmailProvider {
             return {
                 success: true,
                 messageId: info.messageId,
-                provider: this.name };
+                provider: this.name,
+                attachmentErrors: attachmentErrors.length ? attachmentErrors : undefined };
         } catch (error: any) {
             logger.error('SMTP Send Error:', error);
             return {

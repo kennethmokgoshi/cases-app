@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
-import { canAccessReferrer } from '@/lib/referrer-access';
+import { canAccessReferrer, getReferrerAccessLevel, checkMemberContactUpdate } from '@/lib/referrer-access';
+import { syncBranchReferrerContact } from '@zenowethu/shared-lib/src/partners/contact-sync';
 
 const logger = createLogger('api/admin/referrers/[id]');
 
@@ -87,18 +88,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 }
 
-// PATCH /api/admin/referrers/[id] — only Admin or Executive can edit referrers
+// PATCH /api/admin/referrers/[id]
+// Managers of the referrer's project (or an ancestor of it) edit everything.
+// Plain members may only fill in a blank email address or cell number.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
         const session = await auth();
         if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        if (!session.user.isAdmin && !session.user.isExecutive) {
-            return NextResponse.json({ error: 'Forbidden — only Admin or Executive can edit referrers' }, { status: 403 });
-        }
 
         const existing = await prisma.referrer.findUnique({ where: { id } });
         if (!existing) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
+
+        const accessLevel = await getReferrerAccessLevel(session.user, existing.projectId);
+        if (accessLevel === 'NONE') {
+            return NextResponse.json(
+                { error: 'Forbidden — you are not a member of this referrer' },
+                { status: 403 }
+            );
+        }
 
         const body = await request.json();
         const parsed = PatchSchema.safeParse(body);
@@ -107,6 +115,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
 
         const data = parsed.data;
+
+        // A plain member may only fill in blanks — everything else is manager-only
+        if (accessLevel === 'MEMBER') {
+            const denial = checkMemberContactUpdate(data as Record<string, unknown>, {
+                email: existing.email,
+                cellNumber: existing.cellNumber,
+            });
+            if (denial) {
+                return NextResponse.json({ error: denial }, { status: 403 });
+            }
+            logger.info(`Referrer ${id} contact details filled in by member ${session.user.id}`);
+        }
 
         // ID number must stay unique across referrers
         if (data.idNumber && data.idNumber !== existing.idNumber) {
@@ -202,7 +222,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             },
         });
 
-        return NextResponse.json(updated);
+        // A referrer that is a partner branch shares its contact details with
+        // the branch directory record — keep the two in step so the contact
+        // fallback works no matter which side staff filled in.
+        const sync = await syncBranchReferrerContact({ referrerId: id });
+
+        return NextResponse.json({ ...updated, syncedToBranch: sync?.filled ?? [] });
     } catch (error) {
         logger.error('Error updating referrer:', error);
         return NextResponse.json({ error: 'Failed to update referrer' }, { status: 500 });
@@ -224,6 +249,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
             include: { _count: { select: { cases: true } } },
         });
         if (!existing) return NextResponse.json({ error: 'Referrer not found' }, { status: 404 });
+
+        // An Executive may still only act on referrers they can see
+        if (!(await canAccessReferrer(session.user, existing.projectId))) {
+            return NextResponse.json(
+                { error: 'Forbidden — you are not a member of this referrer' },
+                { status: 403 }
+            );
+        }
 
         if (existing._count.cases > 0) {
             return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { commissionVisibilityWhere } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/commissions');
 
@@ -19,7 +20,12 @@ export async function GET(request: Request) {
         const page = Math.max(1, Number(searchParams.get('page') ?? 1));
         const PAGE_SIZE = 50;
 
-        const where: any = { isEligible: true };
+        // Membership scoping: admins see every commission; everyone else only
+        // sees commissions for referrers whose sub-project they belong to.
+        const where: Record<string, unknown> = {
+            isEligible: true,
+            ...(await commissionVisibilityWhere(session.user)),
+        };
         if (status === 'UNPAID') where.isPaid = false;
         else if (status === 'PAID') where.isPaid = true;
 

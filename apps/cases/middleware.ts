@@ -104,11 +104,18 @@ export default auth((req) => {
         // Restrict /admin access
         if (isLoggedIn && pathname.startsWith('/admin')) {
             const isAdmin = req.auth?.user?.isAdmin === true
-            // Exception: the Debt Counsellors directory is viewable by ALL staff
-            // (per operations spec) — its edit APIs enforce isAdmin server-side.
+            // Exceptions: pages the sidebar offers to ALL staff. Their own APIs
+            // enforce permissions server-side, so the middleware guard here would
+            // only break the link, not protect anything:
+            //   - Debt Counsellors directory — edit APIs enforce isAdmin.
+            //   - Referrers — GET /api/admin/referrers is scoped to the referrer
+            //     sub-projects the user is a member of, financial columns are
+            //     gated on manager+, and create/update/delete are gated separately.
             // (Credit Providers lives at /credit-providers, outside /admin entirely,
             // for the same reason — see that route for details.)
-            const isStaffViewable = pathname.startsWith('/admin/debt-counsellors')
+            const isStaffViewable =
+                pathname.startsWith('/admin/debt-counsellors') ||
+                pathname.startsWith('/admin/referrers')
             if (!isAdmin && !isStaffViewable) {
                 return NextResponse.redirect(new URL('/', req.url))
             }

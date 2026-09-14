@@ -6,8 +6,18 @@ import { canAccessReferrer } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers/[id]/members');
 
+export const PROJECT_MEMBER_ROLES = ['MEMBER', 'MANAGER'] as const;
+
+// `members` carries a per-project role for each user; `userIds` is the older
+// shape and keeps whatever role each retained member already had.
 const PutSchema = z.object({
-    userIds: z.array(z.string().min(1)).max(100),
+    userIds: z.array(z.string().min(1)).max(100).optional(),
+    members: z
+        .array(z.object({ userId: z.string().min(1), role: z.enum(PROJECT_MEMBER_ROLES) }))
+        .max(100)
+        .optional(),
+}).refine((d) => d.userIds !== undefined || d.members !== undefined, {
+    message: 'Provide either members or userIds',
 });
 
 function isAdminLevel(session: { user: { isAdmin?: boolean; isExecutive?: boolean; isSeniorManager?: boolean; role?: string } }) {
@@ -80,7 +90,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (!parsed.success) {
             return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 422 });
         }
-        const userIds = Array.from(new Set(parsed.data.userIds));
+        // Roles supplied explicitly win; otherwise each retained member keeps
+        // the role they already had (see the transaction below).
+        const requestedRoles = new Map<string, string>(
+            (parsed.data.members ?? []).map((m) => [m.userId, m.role])
+        );
+        const userIds = Array.from(
+            new Set(parsed.data.members?.map((m) => m.userId) ?? parsed.data.userIds ?? [])
+        );
 
         // Only internal staff accounts can be referrer members
         const users = await prisma.user.findMany({
@@ -108,8 +125,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                     data: userIds.map((userId) => ({
                         projectId,
                         userId,
-                        // Preserve the role of retained members; new ones join as MEMBER
-                        role: existingRoles.get(userId) ?? 'MEMBER',
+                        // Explicit role wins; retained members keep theirs; new ones join as MEMBER
+                        role: requestedRoles.get(userId) ?? existingRoles.get(userId) ?? 'MEMBER',
                     })),
                 });
             }
@@ -123,7 +140,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             });
         });
 
-        logger.info(`Referrer ${id} (${referrer.firstName} ${referrer.lastName}) members updated by ${session.user.id}: ${userIds.length} member(s)`);
+        const managerCount = members.filter((m) => m.role === 'MANAGER').length;
+        logger.info(`Referrer ${id} (${referrer.firstName} ${referrer.lastName}) members updated by ${session.user.id}: ${userIds.length} member(s), ${managerCount} manager(s)`);
         return NextResponse.json({ members });
     } catch (error) {
         logger.error('Error updating referrer members:', error);

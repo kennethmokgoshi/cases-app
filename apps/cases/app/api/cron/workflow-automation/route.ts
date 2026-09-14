@@ -318,7 +318,7 @@ export async function POST(request: Request) {
                         }
 
                         await setNextUpdate(c.id, 3, adminId);
-                        await addSystemComment(c.id, `[AUTO] Invoice Requested DC: No invoice found. Follow-up sent to DC (${c.dcEmail || 'no email'})${c.client.email ? ` — consumer CC'd` : ''}. Next update +3 working days.`, adminId);
+                        await addSystemComment(c.id, `[AUTO] Invoice Requested DC: No invoice found. Follow-up sent to DC (${c.dcEmail || 'no email'}) with signed POA + ID attached${c.client.email ? ` — consumer notified separately` : ''}. Next update +3 working days.`, adminId);
                         if (emailSent) actioned++;
                     }
                 } catch (err) {

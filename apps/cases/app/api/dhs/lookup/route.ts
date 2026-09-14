@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, renderTemplate, auth } from '@zenowethu/shared-lib';
-import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, handleDhsAccepted, isManageConsumersEligible, runDrrDocumentReadiness, getConsumerSuspensionIndicator, unsuspendConsumerServices } from '@zenowethu/shared-lib/src/dhs';
+import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, resolveDeclineDetectedAt, handleDhsAccepted, isManageConsumersEligible, runDrrDocumentReadiness, getConsumerSuspensionIndicator, unsuspendConsumerServices } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
 import path, { join } from 'path';
@@ -141,6 +141,9 @@ export async function POST(request: Request) {
                 const updateData: any = {};
                 const comments: string[] = [];
                 let notifyManager = false;
+                // Resolved once in the DECLINED branch below and reused when the
+                // decline handler runs, so both write the same decline date.
+                let declineDetectedAt: Date | undefined;
 
                 // Detect if this file has been requested via DHS before
                 const wasPreviouslyRequestedViaDHS =
@@ -246,12 +249,29 @@ export async function POST(request: Request) {
                         updateData.declineReason = result.declineReason || null;
                         updateData.nextUpdate = addWorkingDays(new Date(), 3);
 
+                        // "Last Decline" must be the date the DC declined on DHS
+                        // (from the decline page's "Transaction performed by … @ …"
+                        // footer), not the day we happened to run this check.
+                        declineDetectedAt = resolveDeclineDetectedAt({
+                            dhsDeclinedAt: result.declinedAt,
+                            storedLastDetectedAt: caseData.declineLastDetectedAt,
+                            storedReason: caseData.declineReason,
+                            incomingReason: result.declineReason || '',
+                        });
+                        updateData.declineLastDetectedAt = declineDetectedAt;
+                        if (!caseData.declineFirstDetectedAt) {
+                            updateData.declineFirstDetectedAt = declineDetectedAt;
+                        }
+
                         // Keep a simple initial status for the DB write below;
                         // handleDHSDecline will refine it once it classifies the reason.
                         updateData.status = 'DECLINED_VIA_DHS';
 
+                        const declinedOnLabel = result.declinedAt
+                            ? ` Declined on DHS ${result.declinedAt.toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}${result.declinePerformedBy ? ` by ${result.declinePerformedBy}` : ''}.`
+                            : '';
                         const reasonText = result.declineReason
-                            ? `DHS Check: Declined. Reason: ${result.declineReason}`
+                            ? `DHS Check: Declined.${declinedOnLabel} Reason: ${result.declineReason}`
                             : 'DHS Check: Declined. Could not retrieve reason.';
                         comments.push(reasonText);
                         logger.info('Comments array now has', comments.length, 'items');
@@ -321,6 +341,7 @@ export async function POST(request: Request) {
                         const declineResult = await handleDHSDecline({
                             caseId,
                             declineReason: result.declineReason,
+                            declinedAt: declineDetectedAt,
                             triggeredByUserId: actingUserId,
                         });
                         logger.info('[DHS Lookup] Decline handler result:', {

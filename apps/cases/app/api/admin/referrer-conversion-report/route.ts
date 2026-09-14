@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { referrerVisibilityWhere } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrer-conversion-report');
 
@@ -33,6 +34,8 @@ export async function GET(request: Request) {
         const referrers = await prisma.referrer.findMany({
             where: {
                 notes: { contains: 'Converted from Client' },
+                // Non-admins only see referrers whose sub-project they belong to.
+                ...(await referrerVisibilityWhere(session.user)),
             },
             orderBy: { createdAt: 'desc' },
             include: {

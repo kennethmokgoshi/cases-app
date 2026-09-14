@@ -68,6 +68,15 @@ export interface DHSTransferCheckResult {
     consumer?: DHSConsumerInfo;
     debtCounsellor?: DHSDebtCounsellorInfo;
     declineReason?: string;
+    /**
+     * When the current DC actually declined the transfer, taken from the DHS
+     * decline page's "Transaction performed by … @ …" footer. Undefined when the
+     * footer was missing or unparseable — callers then fall back to their own
+     * timestamp rather than guessing.
+     */
+    declinedAt?: Date;
+    /** DC-side user who performed the decline, from the same footer. */
+    declinePerformedBy?: string;
     message?: string;
 }
 

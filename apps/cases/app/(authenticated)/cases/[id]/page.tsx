@@ -658,9 +658,18 @@ export default function CaseDetailPage() {
         }
     }, [caseData]);
 
-    const fetchCase = useCallback(async () => {
+    /**
+     * Reload the case.
+     *
+     * `silent` skips the full-page loading screen. Background refreshes fired
+     * from inside a modal must use it — flipping `loading` unmounts the whole
+     * page, including any open modal, which throws away the result the user
+     * just produced (e.g. the POA send/save confirmation).
+     */
+    const fetchCase = useCallback(async (options?: { silent?: boolean }) => {
         if (!params.id) return;
-        setLoading(true);
+        const silent = options?.silent === true;
+        if (!silent) setLoading(true);
         setFetchError(null);
         try {
             const response = await fetch(`/api/cases/${params.id}`);
@@ -680,7 +689,7 @@ export default function CaseDetailPage() {
             log.error({ err: error }, 'Error fetching case:', error);
             setFetchError('Failed to load case details due to a network or connection error.');
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, [params.id]);
 
@@ -1048,7 +1057,18 @@ export default function CaseDetailPage() {
             const result = await res.json();
 
             if (res.ok) {
-                toast.success(result.message || 'Notification sent successfully!');
+                // The request is sent on the consumer's behalf, so it carries their
+                // signed POA and ID. Say so — and warn loudly when one is missing,
+                // because a DC will not act on a request with no proof of mandate.
+                if (result.missingMandate?.length) {
+                    toast.warning('Sent, but the mandate is incomplete', {
+                        description: result.mandateSummary,
+                    });
+                } else {
+                    toast.success(result.message || 'Notification sent successfully!', {
+                        description: result.mandateSummary,
+                    });
+                }
                 setActivityUpdate(prev => prev + 1);
             } else {
                 toast.error(`Failed: ${result.error || 'Unknown error'}`);
@@ -2175,7 +2195,7 @@ export default function CaseDetailPage() {
                     <p className="text-red-300 text-sm">{fetchError || 'Case not found or could not be loaded.'}</p>
                     <div className="flex items-center justify-center gap-4 pt-2">
                         <button
-                            onClick={fetchCase}
+                            onClick={() => { void fetchCase(); }}
                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-lg"
                         >
                             🔄 Retry Loading
@@ -5589,7 +5609,7 @@ export default function CaseDetailPage() {
                     services={caseData.services}
                     dcName={caseData.debtCounsellorName}
                     dcNcrdcNo={caseData.ncrdcNo}
-                    onSaved={fetchCase}
+                    onSaved={() => { void fetchCase({ silent: true }); }}
                 />
             )}
 
@@ -5719,6 +5739,29 @@ export default function CaseDetailPage() {
                                     Status is &quot;{caseData.dcOperatingStatus}&quot; — confirm before sending.
                                 </p>
                             )}
+
+                            {(() => {
+                                // The request is made on the consumer's behalf, so their
+                                // signed POA and ID always go with it. Show what will
+                                // actually attach before staff commit to sending.
+                                const hasPoa = caseData.documents?.some(d =>
+                                    ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY', 'CONSENT_FORM'].includes(d.type)
+                                );
+                                const hasId = caseData.documents?.some(d =>
+                                    ['ID', 'ID_DOCUMENT'].includes(d.type)
+                                );
+                                return hasPoa && hasId ? (
+                                    <p className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-3 py-2">
+                                        Signed POA and ID copy will be attached as proof of mandate.
+                                    </p>
+                                ) : (
+                                    <p className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
+                                        {!hasPoa && !hasId
+                                            ? 'No signed POA or ID copy on this case — the DC will receive no proof of mandate.'
+                                            : `Only the ${hasPoa ? 'signed POA' : 'ID copy'} will be attached — the ${hasPoa ? 'ID copy' : 'signed POA'} is missing from this case.`}
+                                    </p>
+                                );
+                            })()}
 
                             <p className="text-[10px] text-gray-500">
                                 Email will be sent to: <span className="text-zeno-cyan font-mono">{caseData.preferredDcEmail || caseData.lastKnownEmail || caseData.dcEmail}</span>

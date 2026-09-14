@@ -1,8 +1,9 @@
 /**
  * Debt Counsellor contact-book & outcome-history utilities.
  *
- * email-priority.ts  — 5-slot priority email list (promote / bounce / best)
- * outcome-events.ts  — durable DHS accept/decline event recording
+ * email-priority.ts         — 5-slot priority email list (promote / bounce / best)
+ * outcome-events.ts         — durable DHS accept/decline event recording
+ * dc-request-notification.ts — staff "Request File" / "Request Invoice" sends
  */
 
 export {
@@ -28,4 +29,10 @@ export type { FlaggedDcResult } from './counsellor-flag';
 export {
     flagCaseIfFlaggedDC,
 } from './counsellor-flag-db';
+
+export {
+    sendDcRequestNotification,
+    pickDebtCounsellorEmail,
+} from './dc-request-notification';
+export type { DcRequestType, DcRequestResult, DcRequestFailure } from './dc-request-notification';
 

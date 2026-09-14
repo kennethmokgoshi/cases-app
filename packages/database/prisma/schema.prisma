@@ -34,6 +34,58 @@ model Project {
   referrer        Referrer?
   b2bPartnerUsers User[]             @relation("B2BPartnerUsers")
   resources       DocumentResource[] @relation("DocumentResourceToProject")
+  partnerBranches PartnerBranch[]    @relation("PartnerBranchPartner")
+  branchProfile   PartnerBranch?     @relation("PartnerBranchProject")
+}
+
+/// Contact directory for a B2B partner's branches (e.g. every Letsatsi branch).
+///
+/// Branches already exist in the Project tree as children of the partner's
+/// ACQUISITION_SOURCE project, but Project carries no contact information. This
+/// model is the contactable record: it hangs off the same partner project and
+/// optionally links 1:1 to the branch's Project folder so case filing and the
+/// contact directory stay in step.
+///
+/// Its operational purpose is the fallback contact chain — when a consumer has
+/// no email address or cell number of their own, outbound communication for
+/// their case falls back to the referring branch. See
+/// `resolveCaseContact()` in @zenowethu/shared-lib.
+model PartnerBranch {
+  id               String  @id @default(cuid())
+  /// The partner this branch belongs to — e.g. the "Letsatsi" project.
+  partnerProjectId String
+  /// The branch's own folder in the Project tree, when one exists.
+  projectId        String? @unique
+  name             String
+  /// Optional partner-side branch code (their internal reference).
+  code             String?
+
+  // ─── Contact details (the fallback chain's source of truth) ───────────────
+  contactPerson  String?
+  email          String?
+  phone          String?
+  alternatePhone String?
+  whatsappNumber String?
+
+  // ─── Physical address ─────────────────────────────────────────────────────
+  addressLine String?
+  city        String?
+  province    String?
+  postalCode  String?
+
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  partnerProject Project  @relation("PartnerBranchPartner", fields: [partnerProjectId], references: [id], onDelete: Cascade)
+  project        Project? @relation("PartnerBranchProject", fields: [projectId], references: [id], onDelete: SetNull)
+  cases          Case[]
+
+  @@unique([partnerProjectId, name])
+  @@index([partnerProjectId])
+  @@index([isActive])
+  @@index([name])
 }
 
 model ProjectMember {
@@ -264,7 +316,10 @@ model Case {
   jointClientId           String?
   acquisitionType         String                     @default("B2C")
   partnerName             String?
+  /// Free-text branch name, kept as the historical record of what was captured
+  /// at intake. `partnerBranchId` is the resolved link — prefer it when present.
   partnerBranch           String?
+  partnerBranchId         String?
   r350Status              String                     @default("NOT_APPLICABLE") // NOT_APPLICABLE | PENDING | PAID_R350 | FILE_PAID | TOLD_R350 | WAITING_R350 | WAIVED
   r350PaidDate            DateTime?
   r350PaidRef             String?
@@ -409,6 +464,7 @@ model Case {
   creditTransfersTo       CreditTransfer[]         @relation("CreditTransferTo")
   quarantinedDocuments    QuarantinedDocument[]    @relation("QuarantineIntendedCase")
   quarantineReassignments QuarantinedDocument[]    @relation("QuarantineReassignedCase")
+  partnerBranchRef        PartnerBranch?           @relation(fields: [partnerBranchId], references: [id], onDelete: SetNull)
 
   debtCounsellordId String?
   debtCounsellor    DebtCounsellor? @relation(fields: [debtCounsellordId], references: [id])
@@ -421,6 +477,7 @@ model Case {
   @@index([isAdminOnly])
   @@index([deletedAt])
   @@index([debtCounsellordId])
+  @@index([partnerBranchId])
 }
 
 model DebtCounsellor {

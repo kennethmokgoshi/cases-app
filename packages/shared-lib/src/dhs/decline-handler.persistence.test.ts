@@ -207,10 +207,11 @@ describe('handleDHSDecline OUTSTANDING_FEES automated dc invoice request', () =>
         expect(firstCall[1]).toBe('EMAIL');
         expect(firstCall[2]).toBe('dc@example.co.za');
         expect(firstCall[5]?.cc).toEqual(['john@example.com']);
-        // POA + ID must be attached — they serve as proof of consent to act for the consumer.
+        // POA + ID must be attached — they serve as proof of consent to act for
+        // the consumer. POA leads, matching the order named in the email body.
         expect(firstCall[5]?.attachments).toEqual([
-            'https://cases.zenowethu.co.za/uploads/case1/id.pdf',
             'https://cases.zenowethu.co.za/uploads/case1/poa.pdf',
+            'https://cases.zenowethu.co.za/uploads/case1/id.pdf',
         ]);
 
         // Verify second email call (to client)
@@ -218,11 +219,11 @@ describe('handleDHSDecline OUTSTANDING_FEES automated dc invoice request', () =>
         expect(secondCall[1]).toBe('EMAIL');
         expect(secondCall[2]).toBe('john@example.com');
 
-        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (POA + ID attached) (client CC\'d)');
+        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (client CC\'d) — signed POA + ID copy attached');
         expect(result.actionsPerformed).toContain('Outstanding fees email sent to consumer (john@example.com)');
     });
 
-    it('sends the DC email without an attachments note when no POA/ID is on file yet', async () => {
+    it('still sends the DC email when no POA/ID is on file yet, and says so', async () => {
         db.case.findUnique.mockResolvedValue({
             ...baseCase,
             documents: [],
@@ -242,7 +243,7 @@ describe('handleDHSDecline OUTSTANDING_FEES automated dc invoice request', () =>
 
         const firstCall = sendMsg.mock.calls[0];
         expect(firstCall[5]?.attachments).toEqual([]);
-        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (client CC\'d)');
+        expect(result.actionsPerformed).toContain('Invoice request emailed to DC at dc@example.co.za (client CC\'d) — No signed POA or ID copy on file — nothing attached');
     });
 
     it('emails client only and logs warning when DC email is missing', async () => {
@@ -271,5 +272,82 @@ describe('handleDHSDecline OUTSTANDING_FEES automated dc invoice request', () =>
             'No DC email address available to request invoice. Please set the preferred DC email on this case.'
         );
         expect(result.actionsPerformed).toContain('Outstanding fees email sent to consumer (john@example.com)');
+    });
+});
+
+describe('handleDHSDecline decline date persistence', () => {
+    const docsReason = 'Please send transfer documents to transfers@example.co.za';
+
+    it('stores the DHS transaction date as the last decline, not the date of the check', async () => {
+        const dhsDeclinedAt = new Date('2026-09-04T12:02:07.000Z'); // 14:02:07 SAST
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        await handleDHSDecline({
+            caseId: 'case1',
+            declineReason: docsReason,
+            declinedAt: dhsDeclinedAt,
+            triggeredByUserId: 'staff1',
+        });
+
+        const updates = db.case.update.mock.calls.map(([args]) => args.data);
+        expect(updates.length).toBeGreaterThan(0);
+        for (const data of updates) {
+            if (data.declineLastDetectedAt) {
+                expect(data.declineLastDetectedAt).toEqual(dhsDeclinedAt);
+            }
+        }
+        // First decline on this file → first detected is the same DHS date.
+        expect(
+            updates.some((data: Record<string, unknown>) => data.declineFirstDetectedAt === dhsDeclinedAt)
+        ).toBe(true);
+    });
+
+    it('keeps the stored decline date when the same decline is re-checked without a DHS date', async () => {
+        const alreadyRecorded = new Date('2026-09-04T12:02:07.000Z');
+        db.case.findUnique.mockResolvedValue({
+            ...baseCase,
+            declineReason: docsReason,
+            declineFirstDetectedAt: new Date('2026-06-24T12:04:00.000Z'),
+            declineLastDetectedAt: alreadyRecorded,
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        await handleDHSDecline({
+            caseId: 'case1',
+            declineReason: docsReason,
+            triggeredByUserId: 'staff1',
+        });
+
+        const stamped = db.case.update.mock.calls
+            .map(([args]) => args.data.declineLastDetectedAt)
+            .filter(Boolean);
+        expect(stamped.length).toBeGreaterThan(0);
+        for (const value of stamped) {
+            expect(value).toEqual(alreadyRecorded);
+        }
+    });
+
+    it('falls back to now for a decline reason it has not seen before', async () => {
+        db.case.findUnique.mockResolvedValue({
+            ...baseCase,
+            declineReason: 'An older, different decline reason',
+            declineLastDetectedAt: new Date('2026-06-24T12:04:00.000Z'),
+        });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+
+        const before = Date.now();
+        await handleDHSDecline({
+            caseId: 'case1',
+            declineReason: docsReason,
+            triggeredByUserId: 'staff1',
+        });
+
+        const stamped = db.case.update.mock.calls
+            .map(([args]) => args.data.declineLastDetectedAt)
+            .filter(Boolean) as Date[];
+        expect(stamped.length).toBeGreaterThan(0);
+        for (const value of stamped) {
+            expect(value.getTime()).toBeGreaterThanOrEqual(before);
+        }
     });
 });

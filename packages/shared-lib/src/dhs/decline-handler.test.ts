@@ -18,6 +18,7 @@ import {
     formatDhsDeclineDate,
     getBasePeriodForCategory,
     resolveDcIdentity,
+    resolveDeclineDetectedAt,
 } from './decline-handler';
 
 describe('classifyDeclineReason', () => {
@@ -340,7 +341,7 @@ describe('consumer decline email copy', () => {
             fileNumber: 'ZDM-2026-1005-BZP',
             dcName: 'Gasant Essack',
             declineReason: 'outstanding fees of R1500',
-            hasAttachments: false,
+            attachedLabel: null,
         });
 
         expect(body).toContain('Dear Gasant Essack,');
@@ -359,7 +360,7 @@ describe('consumer decline email copy', () => {
             fileNumber: 'ZDM-2026-1005-BZP',
             dcName: 'Gasant Essack',
             declineReason: 'outstanding fees of R1500',
-            hasAttachments: true,
+            attachedLabel: 'signed Power of Attorney and identity document',
         });
 
         expect(body).toContain('proof of our authority to act on the consumer\'s behalf');
@@ -398,5 +399,69 @@ describe('resolveDcIdentity', () => {
             dcTradingName: null,
             debtCounsellor: null,
         })).toEqual({ dcName: 'Debt Counsellor', dcFirmName: null });
+    });
+});
+
+describe('resolveDeclineDetectedAt', () => {
+    const dhsDate = new Date('2026-09-04T12:02:07.000Z');
+    const stored = new Date('2026-06-24T12:04:00.000Z');
+    const now = new Date('2026-09-09T10:00:00.000Z');
+    const reason = 'Transfer Under Review: kindly allow 3-7 business days.';
+
+    it('prefers the DHS transaction date above everything else', () => {
+        expect(
+            resolveDeclineDetectedAt({
+                dhsDeclinedAt: dhsDate,
+                storedLastDetectedAt: stored,
+                storedReason: reason,
+                incomingReason: reason,
+                now,
+            })
+        ).toEqual(dhsDate);
+    });
+
+    it('keeps the stored date when the same decline is handled again', () => {
+        expect(
+            resolveDeclineDetectedAt({
+                storedLastDetectedAt: stored,
+                storedReason: `  ${reason.toUpperCase()}  `,
+                incomingReason: reason,
+                now,
+            })
+        ).toEqual(stored);
+    });
+
+    it('uses now when the decline reason has changed', () => {
+        expect(
+            resolveDeclineDetectedAt({
+                storedLastDetectedAt: stored,
+                storedReason: 'A completely different earlier decline',
+                incomingReason: reason,
+                now,
+            })
+        ).toEqual(now);
+    });
+
+    it('uses now when nothing has been recorded yet', () => {
+        expect(
+            resolveDeclineDetectedAt({
+                storedLastDetectedAt: null,
+                storedReason: null,
+                incomingReason: reason,
+                now,
+            })
+        ).toEqual(now);
+    });
+
+    it('ignores an invalid DHS date and falls through', () => {
+        expect(
+            resolveDeclineDetectedAt({
+                dhsDeclinedAt: new Date('not a date'),
+                storedLastDetectedAt: stored,
+                storedReason: reason,
+                incomingReason: reason,
+                now,
+            })
+        ).toEqual(stored);
     });
 });

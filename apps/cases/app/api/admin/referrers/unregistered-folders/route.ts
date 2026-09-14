@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { hasFullReferrerVisibility, getVisibleReferrerProjectIds } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers/unregistered-folders');
 
@@ -24,6 +25,12 @@ export async function GET() {
         if (!session.user.isAdmin && !session.user.isExecutive && !session.user.isSeniorManager && session.user.role !== 'MANAGER') {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
+
+        // Membership scoping: admins see every unregistered folder; everyone
+        // else only sees folders inside a project they belong to. null = admin.
+        const visibleProjectIds = hasFullReferrerVisibility(session.user)
+            ? null
+            : await getVisibleReferrerProjectIds(session.user.id);
 
         // Get all projectIds already linked to Referrer records
         const linked = await prisma.referrer.findMany({
@@ -51,7 +58,10 @@ export async function GET() {
         const unregistered = await prisma.project.findMany({
             where: {
                 parentId: { in: rootIds },
-                id: { notIn: [...linkedIds] },
+                id: {
+                    notIn: [...linkedIds],
+                    ...(visibleProjectIds !== null ? { in: visibleProjectIds } : {}),
+                },
                 type: { in: ['FOLDER', 'REFERRER'] },
             },
             select: {

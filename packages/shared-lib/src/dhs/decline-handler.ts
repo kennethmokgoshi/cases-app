@@ -21,6 +21,11 @@ import { promoteDcEmail, getBestDcEmail } from '../dc/email-priority';
 import { recordDhsOutcome } from '../dc/outcome-events';
 import { findPriorDocsEmail, decideDocsResend } from './decline-dedup';
 import { classifyDeclineReasonSmart, type ClassificationSource } from './decline-classifier';
+import {
+    buildMandateAttachments,
+    mandateAttachedLabel,
+    describeMandateOutcome,
+} from '../documents/mandate-attachments';
 
 export type DeclineCategory =
     | 'SEND_DOCS'
@@ -293,6 +298,47 @@ export function calculateNextUpdate(basePeriod: number, declineFirstDetectedAt: 
     return addWorkingDays(now, remainingDays);
 }
 
+/**
+ * Work out WHEN this decline actually happened, so "Last Decline" reflects the
+ * DHS transaction date rather than the day a staff member happened to press
+ * "Check Request Status".
+ *
+ * Order of trust:
+ *   1. The timestamp scraped from the DHS decline page footer — authoritative.
+ *   2. The date already stored on the case, when the decline reason has not
+ *      changed. Re-checking or re-handling the SAME decline must never move the
+ *      date forward.
+ *   3. Now — a decline we have not seen before and DHS gave us no timestamp for.
+ */
+export function resolveDeclineDetectedAt(params: {
+    dhsDeclinedAt?: Date | null;
+    storedLastDetectedAt?: Date | null;
+    storedReason?: string | null;
+    incomingReason: string;
+    now?: Date;
+}): Date {
+    const { dhsDeclinedAt, storedLastDetectedAt, storedReason, incomingReason } = params;
+    const now = params.now ?? new Date();
+
+    if (dhsDeclinedAt && !Number.isNaN(dhsDeclinedAt.getTime())) {
+        return dhsDeclinedAt;
+    }
+
+    const normalise = (value: string | null | undefined): string =>
+        (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+    if (
+        storedLastDetectedAt &&
+        !Number.isNaN(storedLastDetectedAt.getTime()) &&
+        normalise(storedReason) &&
+        normalise(storedReason) === normalise(incomingReason)
+    ) {
+        return storedLastDetectedAt;
+    }
+
+    return now;
+}
+
 export function formatDhsDeclineDate(value: Date | string | null | undefined): string {
     if (!value) return 'not recorded';
     const date = value instanceof Date ? value : new Date(value);
@@ -319,6 +365,13 @@ export async function handleDHSDecline(params: {
     caseId: string;
     declineReason: string;
     triggeredByUserId?: string;
+    /**
+     * The date DHS recorded the decline, scraped from the decline page's
+     * "Transaction performed by … @ …" footer. When supplied it is what gets
+     * stored as declineLastDetectedAt — the date the file was declined, not the
+     * date we checked. See resolveDeclineDetectedAt() for the fallbacks.
+     */
+    declinedAt?: Date;
     /**
      * Bypass the "already emailed the docs for this decline" guard and send the
      * document email regardless. Set by the staff "Resend anyway" action.
@@ -445,10 +498,17 @@ export async function handleDHSDecline(params: {
             null;
         const { dcName, dcFirmName } = resolveDcIdentity(caseData);
 
-        // Attachment URLs for POA + ID documents
-        const docAttachments = caseData.documents
-            .filter(d => ['ID', 'POA', 'ZENOWETHU_POA'].includes(d.type))
-            .map(d => `${baseUrl}${d.fileUrl}`);
+        // The consumer's signed POA + ID copy. Every email we send a DC on their
+        // behalf carries these — see documents/mandate-attachments for which
+        // document types qualify and how a MISMATCH copy is kept out.
+        const mandate = buildMandateAttachments(caseData.documents, baseUrl);
+        const docAttachments = mandate.attachments;
+        if (!mandate.complete) {
+            log.warn(
+                { missing: mandate.missing, category },
+                `[DHS Decline Handler] Incomplete mandate for DC email: ${mandate.summary}`
+            );
+        }
 
         // ── Category handlers ────────────────────────────────────────────────
 
@@ -470,11 +530,20 @@ export async function handleDHSDecline(params: {
         };
 
         const clientCc = caseData.client.email ? [caseData.client.email] : [];
+        // handledAt = when WE ran this handler (used for the resend/overdue maths).
+        // declinedAt = when the DC actually declined on DHS (what we store and show).
         const handledAt = new Date();
+        const declinedAt = resolveDeclineDetectedAt({
+            dhsDeclinedAt: params.declinedAt,
+            storedLastDetectedAt: caseData.declineLastDetectedAt,
+            storedReason: caseData.declineReason,
+            incomingReason: declineReason,
+            now: handledAt,
+        });
         const transferRequestedDate = formatDhsDeclineDate(
             caseData.dhsApplicationDate ?? caseData.statusEntryDate ?? caseData.createdAt
         );
-        const declineRecordedDate = formatDhsDeclineDate(handledAt);
+        const declineRecordedDate = formatDhsDeclineDate(declinedAt);
 
         // Calculate nextUpdate based on category and time elapsed since first decline
         const basePeriod = getBasePeriodForCategory(category, declineReason);
@@ -527,11 +596,11 @@ export async function handleDHSDecline(params: {
             const updateData: any = {
                 status: 'REJECTED_EMAIL_DOCS',
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: handledAt,
+                declineLastDetectedAt: declinedAt,
             };
             // Set first detection time if this is the first decline
             if (!caseData.declineFirstDetectedAt) {
-                updateData.declineFirstDetectedAt = new Date();
+                updateData.declineFirstDetectedAt = declinedAt;
             }
             await safeUpdateCase(caseId, updateData, triggeredByUserId, false); // false = don't double-set declineLastDetectedAt
             result.statusUpdatedTo = 'REJECTED_EMAIL_DOCS';
@@ -593,15 +662,17 @@ export async function handleDHSDecline(params: {
                 if (emailResult.emailSuccess) {
                     const withNCR = ncrCertUrl ? ' (including NCR Certificate)' : '';
                     const ccNote = clientCc.length ? ` (client CC'd on ${clientCc[0]})` : '';
-                    result.actionsPerformed.push(`Documents emailed to DC at ${dcEmail}${withNCR}${ccNote}`);
+                    result.actionsPerformed.push(
+                        `Documents emailed to DC at ${dcEmail}${withNCR}${ccNote} — ${describeMandateOutcome(mandate, emailResult.attachmentErrors)}`
+                    );
                     const updateData: any = {
                         status: 'DOCUMENTS_EMAILED',
                         lastKnownEmail: dcEmail,
                         nextUpdate: addWorkingDays(new Date(), 5),
-                        declineLastDetectedAt: handledAt,
+                        declineLastDetectedAt: declinedAt,
                     };
                     if (!caseData.declineFirstDetectedAt) {
-                        updateData.declineFirstDetectedAt = new Date();
+                        updateData.declineFirstDetectedAt = declinedAt;
                     }
                     await safeUpdateCase(
                         caseId,
@@ -653,10 +724,10 @@ export async function handleDHSDecline(params: {
             const updateData: any = {
                 status: 'REJECTED_NOT_CONSENT',
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: handledAt,
+                declineLastDetectedAt: declinedAt,
             };
             if (!caseData.declineFirstDetectedAt) {
-                updateData.declineFirstDetectedAt = new Date();
+                updateData.declineFirstDetectedAt = declinedAt;
             }
             await safeUpdateCase(
                 caseId,
@@ -695,10 +766,10 @@ export async function handleDHSDecline(params: {
                 const updateData: any = {
                     status: 'CONSUMER_CONTACTED_DC',
                     nextUpdate: nextUpdateDate,
-                    declineLastDetectedAt: handledAt,
+                    declineLastDetectedAt: declinedAt,
                 };
                 if (!caseData.declineFirstDetectedAt) {
-                    updateData.declineFirstDetectedAt = new Date();
+                    updateData.declineFirstDetectedAt = declinedAt;
                 }
                 await safeUpdateCase(
                     caseId,
@@ -720,10 +791,10 @@ export async function handleDHSDecline(params: {
             const updateData: any = {
                 status: 'REJECTED_OWES_FEES',
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: handledAt,
+                declineLastDetectedAt: declinedAt,
             };
             if (!caseData.declineFirstDetectedAt) {
-                updateData.declineFirstDetectedAt = new Date();
+                updateData.declineFirstDetectedAt = declinedAt;
             }
 
             const feesEmailBody = buildOutstandingFeesEmail({
@@ -746,7 +817,7 @@ export async function handleDHSDecline(params: {
                     fileNumber,
                     dcName,
                     declineReason,
-                    hasAttachments: docAttachments.length > 0,
+                    attachedLabel: mandateAttachedLabel(mandate),
                 });
                 const dcInvoiceSubject = `Request for Invoice/Statement – ${clientName} (ID: ${idNumber})`;
 
@@ -761,8 +832,9 @@ export async function handleDHSDecline(params: {
 
                 if (dcEmailResult.emailSuccess) {
                     result.emailSent = true;
-                    const withPoa = docAttachments.length > 0 ? ' (POA + ID attached)' : '';
-                    result.actionsPerformed.push(`Invoice request emailed to DC at ${dcEmail}${withPoa} (client CC'd)`);
+                    result.actionsPerformed.push(
+                        `Invoice request emailed to DC at ${dcEmail} (client CC'd) — ${describeMandateOutcome(mandate, dcEmailResult.attachmentErrors)}`
+                    );
                     updateData.lastKnownEmail = dcEmail;
                 } else {
                     result.errors.push(...dcEmailResult.errors);
@@ -874,7 +946,9 @@ export async function handleDHSDecline(params: {
                 result.emailSent = emailResult.emailSuccess;
                 if (emailResult.emailSuccess) {
                     const ccNote = clientCc.length ? ` (client CC'd on ${clientCc[0]})` : '';
-                    result.actionsPerformed.push(`Attorney email sent to ${attorneyEmail}${ccNote}`);
+                    result.actionsPerformed.push(
+                        `Attorney email sent to ${attorneyEmail}${ccNote} — ${describeMandateOutcome(mandate, emailResult.attachmentErrors)}`
+                    );
                     // Separate plain-language client email + SMS
                     if (caseData.client.email) {
                         const r = await sendManualMessage(
@@ -908,10 +982,10 @@ export async function handleDHSDecline(params: {
         else if (category === 'RESUBMIT_LATER') {
             const updateData: any = {
                 nextUpdate: nextUpdateDate,
-                declineLastDetectedAt: handledAt,
+                declineLastDetectedAt: declinedAt,
             };
             if (!caseData.declineFirstDetectedAt) {
-                updateData.declineFirstDetectedAt = new Date();
+                updateData.declineFirstDetectedAt = declinedAt;
             }
             await safeUpdateCase(
                 caseId,
@@ -1249,10 +1323,11 @@ function buildRequestInvoiceEmail(p: {
     fileNumber: string;
     dcName: string;
     declineReason: string;
-    hasAttachments: boolean;
+    /** Exactly what is attached, e.g. "signed Power of Attorney and identity document". */
+    attachedLabel: string | null;
 }): string {
-    const poaLine = p.hasAttachments
-        ? `\n\nFor your reference and as proof of our authority to act on the consumer's behalf, please find attached our client's signed Power of Attorney and identity document.`
+    const poaLine = p.attachedLabel
+        ? `\n\nFor your reference and as proof of our authority to act on the consumer's behalf, please find attached our client's ${p.attachedLabel}.`
         : '';
     return `Dear ${p.dcName},
 

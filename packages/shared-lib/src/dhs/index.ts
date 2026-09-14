@@ -7,7 +7,7 @@
  * Modules:
  *   types.ts      — TypeScript interfaces & type aliases
  *   browser.ts    — Puppeteer singleton, closeBrowser, loginToDHS
- *   extraction.ts — extractConsumerInfo, getDeclineReason
+ *   extraction.ts — extractConsumerInfo, getDeclineDetails, parseDeclineTransactionFooter
  *   counsellor.ts — getDebtCounsellorInfo
  *   status.ts     — checkTransferStatus
  *   transfer.ts   — requestTransfer
@@ -22,7 +22,7 @@ export { requestTransfer } from './transfer';
 export { searchConsumer, scrapeDetailedConsumerInfo } from './search';
 export { lookupDCFromNCR, resolveDCEmail } from './ncr-lookup';
 export type { NCRDCLookupResult, DCEmailResolution } from './ncr-lookup';
-export { handleDHSDecline, classifyDeclineReason, extractEmailFromReason } from './decline-handler';
+export { handleDHSDecline, classifyDeclineReason, extractEmailFromReason, resolveDeclineDetectedAt } from './decline-handler';
 export type { DeclineCategory, DeclineHandlerResult } from './decline-handler';
 export { classifyDeclineReasonSmart } from './decline-classifier';
 export type { SmartDeclineClassification, ClassificationSource } from './decline-classifier';

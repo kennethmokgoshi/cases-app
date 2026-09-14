@@ -11,6 +11,13 @@ import { addWorkingDays } from '../statuses/workingDays';
 import { sendManualMessage } from '../notifications/service';
 import { GhlService } from '../integrations/ghl-service';
 import { getStatusByCode } from '../statuses/statuses';
+import {
+    buildMandateAttachments,
+    mandateAttachedLabel,
+    withAuthorityLine,
+    MANDATE_ID_TYPES,
+    MANDATE_POA_TYPES,
+} from '../documents/mandate-attachments';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +40,14 @@ export interface OverdueCase {
         phone: string | null;
         whatsappNumber: string | null;
     };
-    documents: Array<{ type: string; fileName: string; fileUrl: string; uploadedAt: Date }>;
+    documents: Array<{
+        type: string;
+        fileName: string;
+        fileUrl: string;
+        uploadedAt: Date;
+        verificationStatus?: string | null;
+        isAdminOnly?: boolean | null;
+    }>;
 }
 
 // ─── Query Helpers ────────────────────────────────────────────────────────────
@@ -58,7 +72,16 @@ export async function getAllCasesByStatus(status: string, take = 200): Promise<O
                 },
             },
             documents: {
-                select: { type: true, fileName: true, fileUrl: true, uploadedAt: true },
+                select: {
+                    type: true,
+                    fileName: true,
+                    fileUrl: true,
+                    uploadedAt: true,
+                    // Needed to pick the best POA/ID copy for DC emails and to
+                    // keep a MISMATCH document out of them.
+                    verificationStatus: true,
+                    isAdminOnly: true,
+                },
             },
         },
         orderBy: { createdAt: 'asc' },
@@ -91,7 +114,16 @@ export async function getOverdueCases(status: string, take = 50): Promise<Overdu
                 },
             },
             documents: {
-                select: { type: true, fileName: true, fileUrl: true, uploadedAt: true },
+                select: {
+                    type: true,
+                    fileName: true,
+                    fileUrl: true,
+                    uploadedAt: true,
+                    // Needed to pick the best POA/ID copy for DC emails and to
+                    // keep a MISMATCH document out of them.
+                    verificationStatus: true,
+                    isAdminOnly: true,
+                },
             },
         },
         orderBy: { nextUpdate: 'asc' },
@@ -129,7 +161,16 @@ export async function getOverdueLetsatsiCompleted(): Promise<OverdueCase[]> {
                 },
             },
             documents: {
-                select: { type: true, fileName: true, fileUrl: true, uploadedAt: true },
+                select: {
+                    type: true,
+                    fileName: true,
+                    fileUrl: true,
+                    uploadedAt: true,
+                    // Needed to pick the best POA/ID copy for DC emails and to
+                    // keep a MISMATCH document out of them.
+                    verificationStatus: true,
+                    isAdminOnly: true,
+                },
             },
         },
         orderBy: { nextUpdate: 'asc' },
@@ -322,7 +363,21 @@ export async function sendDCEmail(
         return false;
     }
     try {
-        await sendManualMessage(caseId, 'EMAIL', dcEmail, body, subject);
+        // Automated follow-ups are still sent on the consumer's behalf, so they
+        // carry the same signed POA + ID copy a staff-initiated request does.
+        const mandate = buildMandateAttachments(c.documents);
+        if (!mandate.complete) {
+            logger.warn(
+                `[WorkflowEngine] DC email for ${c.fileNumber} has an incomplete mandate: ${mandate.summary}`
+            );
+        }
+        // The authority sentence is added here rather than in each caller's body,
+        // so it can never claim a document that did not actually attach.
+        const bodyWithMandate = withAuthorityLine(body, mandateAttachedLabel(mandate));
+
+        await sendManualMessage(caseId, 'EMAIL', dcEmail, bodyWithMandate, subject, {
+            attachments: mandate.attachments,
+        });
         return true;
     } catch (err) {
         logger.error(`[WorkflowEngine] sendDCEmail failed for ${caseId}:`, err);
@@ -386,9 +441,12 @@ export function resolveDocPath(fileUrl: string): string {
  * more granular labels (ID_DOCUMENT, POWER_OF_ATTORNEY, CONSENT_FORM) than the
  * staff-facing upload surfaces (ID, POA, ZENOWETHU_POA) — both sets must be
  * recognized here or referral cases never clear NOT_REQUESTED_VIA_DHS.
+ *
+ * Defined once in documents/mandate-attachments and re-exported here: DHS upload
+ * and DC email attachment must never disagree about what a POA is.
  */
-export const ID_DOCUMENT_TYPES = ['ID', 'ID_DOCUMENT'];
-export const POA_DOCUMENT_TYPES = ['POA', 'ZENOWETHU_POA', 'POWER_OF_ATTORNEY', 'CONSENT_FORM'];
+export const ID_DOCUMENT_TYPES = MANDATE_ID_TYPES;
+export const POA_DOCUMENT_TYPES = MANDATE_POA_TYPES;
 
 /**
  * Check if a case has both ID and POA documents with resolvable file paths.

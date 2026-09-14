@@ -38,6 +38,8 @@ type Referrer = {
     clientDiscountPercent: number | null;
     commissionType: string;
     fixedCommissionAmount: number | null;
+    /** What this user may do with this referrer, decided by their project role. */
+    accessLevel: 'MEMBER' | 'MANAGER';
 };
 
 type StaffUser = {
@@ -112,6 +114,10 @@ export default function ReferrersPage() {
     const [formError, setFormError] = useState('');
 
     const [deleteTarget, setDeleteTarget] = useState<Referrer | null>(null);
+    // Plain members can only fill in a blank email/cell — separate, smaller flow
+    const [contactTarget, setContactTarget] = useState<Referrer | null>(null);
+    const [contactForm, setContactForm] = useState({ email: '', cellNumber: '' });
+    const [contactSaving, setContactSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
     const [detailTarget, setDetailTarget] = useState<Referrer | null>(null);
@@ -344,6 +350,43 @@ export default function ReferrersPage() {
         }
     }
 
+    function openAddContacts(r: Referrer) {
+        setContactTarget(r);
+        setContactForm({ email: '', cellNumber: '' });
+    }
+
+    // Members may only fill blanks, so only the missing fields are ever sent
+    async function handleSaveContacts() {
+        if (!contactTarget) return;
+        const payload: { email?: string; cellNumber?: string } = {};
+        if (!contactTarget.email && contactForm.email.trim()) payload.email = contactForm.email.trim();
+        if (!contactTarget.cellNumber && contactForm.cellNumber.trim()) payload.cellNumber = contactForm.cellNumber.trim();
+        if (Object.keys(payload).length === 0) {
+            toast.error('Enter an email address or cell number first');
+            return;
+        }
+        setContactSaving(true);
+        try {
+            const res = await fetch(`/api/admin/referrers/${contactTarget.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const json = await res.json();
+            if (!res.ok) {
+                toast.error(json.error ?? 'Could not save contact details');
+                return;
+            }
+            toast.success('Contact details added');
+            setContactTarget(null);
+            fetchReferrers();
+        } catch {
+            toast.error('Network error while saving contact details');
+        } finally {
+            setContactSaving(false);
+        }
+    }
+
     async function handleDelete() {
         if (!deleteTarget) return;
         setDeleting(true);
@@ -498,7 +541,13 @@ export default function ReferrersPage() {
                         {loading ? (
                             <tr><td colSpan={canViewFinancials ? 10 : 9} className="py-12 text-center text-gray-400">Loading...</td></tr>
                         ) : referrers.length === 0 ? (
-                            <tr><td colSpan={canViewFinancials ? 10 : 9} className="py-12 text-center text-gray-400">No referrers found</td></tr>
+                            <tr><td colSpan={canViewFinancials ? 10 : 9} className="py-12 text-center text-gray-400">
+                                {/* Non-admins only see referrers whose sub-project they are a member of,
+                                    so an unfiltered empty list means "no memberships", not "none exist". */}
+                                {!session?.user?.isAdmin && !search && !isActiveFilter
+                                    ? 'No referrers found — you only see referrers whose sub-project you are a member of. Ask an administrator to add you.'
+                                    : 'No referrers found'}
+                            </td></tr>
                         ) : referrers.map((r) => (
                             <tr key={r.id} className="border-b border-zeno-blue/20 hover:bg-zeno-blue/20 transition-colors">
                                 <td className="py-3 px-4">
@@ -577,12 +626,18 @@ export default function ReferrersPage() {
                                                 Commission
                                             </Link>
                                         )}
-                                        {canManage && (
+                                        {/* Full edit needs a MANAGER role on this project or an
+                                            ancestor; plain members can only fill in blanks. */}
+                                        {r.accessLevel === 'MANAGER' ? (
                                             <button onClick={() => openEdit(r)} className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-white/5">
                                                 Edit
                                             </button>
+                                        ) : (!r.email || !r.cellNumber) && (
+                                            <button onClick={() => openAddContacts(r)} className="text-zeno-cyan hover:text-zeno-cyan/80 text-xs transition-colors px-2 py-1 rounded hover:bg-zeno-cyan/10">
+                                                Add contact
+                                            </button>
                                         )}
-                                        {canManage && (
+                                        {canManage && r.accessLevel === 'MANAGER' && (
                                             <button onClick={() => setDeleteTarget(r)} className="text-red-400 hover:text-red-300 text-xs transition-colors px-2 py-1 rounded hover:bg-red-500/10">
                                                 Delete
                                             </button>
@@ -958,6 +1013,54 @@ export default function ReferrersPage() {
                 </div>
             )}
 
+            {/* Add contact details — members may only fill blanks */}
+            {contactTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-zeno-dark border border-zeno-blue/40 rounded-xl w-full max-w-md p-6">
+                        <h2 className="text-lg font-bold text-white mb-1">Add Contact Details</h2>
+                        <p className="text-gray-400 text-sm mb-4">
+                            Adding contact details for <strong className="text-white">{contactTarget.firstName} {contactTarget.lastName}</strong>. Details already captured can only be changed by a manager of this project.
+                        </p>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1 block">Email Address</label>
+                                {contactTarget.email ? (
+                                    <p className="text-gray-400 text-sm bg-zeno-blue/20 border border-zeno-blue/40 rounded-lg px-3 py-2">{contactTarget.email} <span className="text-gray-500">— already captured</span></p>
+                                ) : (
+                                    <input
+                                        type="email"
+                                        value={contactForm.email}
+                                        onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                                        placeholder="referrer@example.com"
+                                        className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zeno-cyan/50"
+                                    />
+                                )}
+                            </div>
+                            <div>
+                                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1 block">Cell Number</label>
+                                {contactTarget.cellNumber ? (
+                                    <p className="text-gray-400 text-sm bg-zeno-blue/20 border border-zeno-blue/40 rounded-lg px-3 py-2">{contactTarget.cellNumber} <span className="text-gray-500">— already captured</span></p>
+                                ) : (
+                                    <input
+                                        type="tel"
+                                        value={contactForm.cellNumber}
+                                        onChange={(e) => setContactForm({ ...contactForm, cellNumber: e.target.value })}
+                                        placeholder="082 123 4567"
+                                        className="w-full bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zeno-cyan/50"
+                                    />
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button onClick={() => setContactTarget(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                            <button onClick={handleSaveContacts} disabled={contactSaving} className="bg-zeno-cyan text-zeno-dark font-semibold px-4 py-2 rounded-lg hover:bg-zeno-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm">
+                                {contactSaving ? 'Saving…' : 'Save Contact Details'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Delete confirmation */}
             {deleteTarget && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -1083,11 +1186,22 @@ export default function ReferrersPage() {
                                 <p className="text-gray-400 text-xs mt-1">Total cases: <strong className="text-white">{detailTarget._count.cases}</strong></p>
                             </DetailSection>
                         </div>
-                        {canManage && (
+                        {detailTarget.accessLevel === 'MANAGER' ? (
                             <div className="px-6 pb-6">
                                 <button onClick={() => { setDetailTarget(null); openEdit(detailTarget); }} className="w-full border border-zeno-cyan/40 text-zeno-cyan rounded-lg py-2 text-sm hover:bg-zeno-cyan/10 transition-colors">
                                     Edit Referrer
                                 </button>
+                            </div>
+                        ) : (!detailTarget.email || !detailTarget.cellNumber) ? (
+                            <div className="px-6 pb-6">
+                                <button onClick={() => { const t = detailTarget; setDetailTarget(null); openAddContacts(t); }} className="w-full border border-zeno-cyan/40 text-zeno-cyan rounded-lg py-2 text-sm hover:bg-zeno-cyan/10 transition-colors">
+                                    Add Contact Details
+                                </button>
+                                <p className="text-gray-500 text-xs mt-2 text-center">You are a member of this referrer — you can add missing contact details, but only a manager of this project can edit it.</p>
+                            </div>
+                        ) : (
+                            <div className="px-6 pb-6">
+                                <p className="text-gray-500 text-xs text-center">Only a manager of this project can edit this referrer.</p>
                             </div>
                         )}
                     </div>

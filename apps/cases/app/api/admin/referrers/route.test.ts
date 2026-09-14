@@ -119,6 +119,37 @@ describe('GET /api/admin/referrers', () => {
         expect(json.meta.totalPaid).toBe(0);
     });
 
+    it('reports each row as MEMBER when the user only has a MEMBER membership', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.projectMember.findMany).mockResolvedValueOnce([
+            { projectId: 'proj-1', role: 'MEMBER' },
+        ] as never);
+        vi.mocked(prisma.project.findMany).mockResolvedValueOnce([{ id: 'proj-1', parentId: null }] as never);
+        vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([sampleReferrer] as never);
+        vi.mocked(prisma.referrer.count).mockResolvedValue(1);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma.referrerCommission.groupBy as any).mockResolvedValue([]);
+        const json = await (await GET(makeReq('http://localhost/api/admin/referrers'))).json();
+        expect(json.referrers[0].accessLevel).toBe('MEMBER');
+    });
+
+    it('reports MANAGER for a referrer nested under a project the user manages', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.projectMember.findMany).mockResolvedValueOnce([
+            { projectId: 'parent-1', role: 'MANAGER' },
+        ] as never);
+        vi.mocked(prisma.project.findMany).mockResolvedValueOnce([
+            { id: 'parent-1', parentId: null },
+            { id: 'proj-1', parentId: 'parent-1' },
+        ] as never);
+        vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([sampleReferrer] as never);
+        vi.mocked(prisma.referrer.count).mockResolvedValue(1);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma.referrerCommission.groupBy as any).mockResolvedValue([]);
+        const json = await (await GET(makeReq('http://localhost/api/admin/referrers'))).json();
+        expect(json.referrers[0].accessLevel).toBe('MANAGER');
+    });
+
     it('returns paginated list for admin', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findMany).mockResolvedValueOnce([sampleReferrer] as never);
@@ -129,6 +160,7 @@ describe('GET /api/admin/referrers', () => {
         expect(res.status).toBe(200);
         const json = await res.json();
         expect(json.referrers).toHaveLength(1);
+        expect(json.referrers[0].accessLevel).toBe('MANAGER');
         expect(json.meta.total).toBe(1);
     });
 
@@ -391,16 +423,73 @@ describe('GET /api/admin/referrers/[id]', () => {
 describe('PATCH /api/admin/referrers/[id]', () => {
     beforeEach(() => vi.clearAllMocks());
 
-    it('returns 403 for member', async () => {
+    // Editing rights come from the ProjectMember role on the referrer's
+    // sub-project (or an ancestor), not from the user's global staff title.
+    function mockProjectRole(role: string | null, projects = [{ id: 'proj-1', parentId: null }]) {
+        vi.mocked(prisma.projectMember.findMany).mockResolvedValueOnce(
+            (role ? [{ projectId: projects[0].id, role }] : []) as never
+        );
+        if (role) vi.mocked(prisma.project.findMany).mockResolvedValueOnce(projects as never);
+    }
+
+    it('returns 403 for a user who is not a member of the referrer sub-project', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        mockProjectRole(null);
         const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(403);
     });
 
-    it('returns 403 for manager — only admin/executive can edit', async () => {
-        vi.mocked(auth).mockResolvedValueOnce(mockManager as never);
+    it('lets a plain member fill in a blank cell number', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({ ...sampleReferrer, cellNumber: null } as never);
+        mockProjectRole('MEMBER');
+        vi.mocked(prisma.referrer.update).mockResolvedValueOnce({ ...sampleReferrer } as never);
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { cellNumber: '0829876543' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(200);
+    });
+
+    it('blocks a plain member from changing a contact detail that is already set', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        mockProjectRole('MEMBER');
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { email: 'new@example.com' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(403);
+        expect(vi.mocked(prisma.referrer.update)).not.toHaveBeenCalled();
+    });
+
+    it('blocks a plain member from editing anything other than contact details', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        mockProjectRole('MEMBER');
         const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-1' }) });
         expect(res.status).toBe(403);
+        expect(vi.mocked(prisma.referrer.update)).not.toHaveBeenCalled();
+    });
+
+    it('lets a MANAGER of the sub-project edit any field', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        mockProjectRole('MANAGER');
+        vi.mocked(prisma.referrer.update).mockResolvedValueOnce({ ...sampleReferrer, notes: 'test' } as never);
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(200);
+    });
+
+    it('lets a MANAGER of a parent project edit a referrer nested below it', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockMember as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        // MANAGER of "Letsatsi" (parent-1); the referrer sits on proj-1 beneath it
+        vi.mocked(prisma.projectMember.findMany).mockResolvedValueOnce([
+            { projectId: 'parent-1', role: 'MANAGER' },
+        ] as never);
+        vi.mocked(prisma.project.findMany).mockResolvedValueOnce([
+            { id: 'parent-1', parentId: null },
+            { id: 'proj-1', parentId: 'parent-1' },
+        ] as never);
+        vi.mocked(prisma.referrer.update).mockResolvedValueOnce({ ...sampleReferrer, notes: 'test' } as never);
+        const res = await PATCH(makeIdReq('ref-1', 'PATCH', { notes: 'test' }), { params: Promise.resolve({ id: 'ref-1' }) });
+        expect(res.status).toBe(200);
     });
 
     it('allows admin to add an ID number to an existing referrer', async () => {

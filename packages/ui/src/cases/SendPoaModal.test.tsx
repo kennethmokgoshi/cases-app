@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { interpretPoaResponse } from './SendPoaModal';
+import { interpretPoaResponse, poaToastMessage } from './SendPoaModal';
 
 describe('interpretPoaResponse', () => {
     it('reports a successful email send', () => {
@@ -80,5 +80,37 @@ describe('interpretPoaResponse', () => {
         expect(result.ok).toBe(false);
         expect(result.message).toBe('Your staff profile is incomplete.');
         expect(result.missingFields).toEqual(['ID Number', 'Residential Address']);
+    });
+});
+
+describe('poaToastMessage', () => {
+    it('names both outcomes for a send-and-save run', () => {
+        const result = interpretPoaResponse(true, {
+            success: true,
+            sentTo: ['Lutendo Madzunya'],
+            savedDocuments: [{ name: 'Lutendo Madzunya', fileName: 'POA.pdf', fileUrl: '/x.pdf' }],
+        }, 'EMAIL');
+
+        expect(poaToastMessage(result, 'EMAIL')).toBe(
+            'POA emailed to Lutendo Madzunya and saved to Documents',
+        );
+    });
+
+    it('names the channel for a WhatsApp send', () => {
+        const result = interpretPoaResponse(true, {
+            success: true,
+            sentTo: ['Lutendo Madzunya'],
+        }, 'WHATSAPP');
+
+        expect(poaToastMessage(result, 'WHATSAPP')).toBe('POA sent via WhatsApp to Lutendo Madzunya');
+    });
+
+    it('reports a save-only run without claiming a send', () => {
+        const result = interpretPoaResponse(true, {
+            success: true,
+            savedDocuments: [{ name: 'Lutendo Madzunya', fileName: 'POA.pdf', fileUrl: '/x.pdf' }],
+        }, 'EMAIL');
+
+        expect(poaToastMessage(result, 'EMAIL')).toBe('POA saved to Documents for Lutendo Madzunya');
     });
 });

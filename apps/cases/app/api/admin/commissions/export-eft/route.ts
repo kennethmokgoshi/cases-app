@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { commissionVisibilityWhere } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/commissions/export-eft');
 
@@ -28,7 +29,12 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const idsParam = searchParams.get('commissionIds');
 
-        const where: any = { isEligible: true, isPaid: false };
+        // Scoped to the referrers this user may see — the EFT file carries banking details.
+        const where: Record<string, unknown> = {
+            isEligible: true,
+            isPaid: false,
+            ...(await commissionVisibilityWhere(session.user)),
+        };
         if (idsParam) {
             where.id = { in: idsParam.split(',').map(s => s.trim()).filter(Boolean) };
         }

@@ -36,6 +36,7 @@ import {
     resolveDcIdentity,
 } from './decline-handler';
 import { getBestDcEmail } from '../dc/email-priority';
+import { buildMandateAttachments, mandateAttachedLabel } from '../documents/mandate-attachments';
 
 export interface PreviewMessage {
     channel: 'EMAIL' | 'SMS' | 'WHATSAPP';
@@ -141,9 +142,15 @@ export async function previewDHSDecline(params: {
         null;
     const { dcName, dcFirmName } = resolveDcIdentity(caseData);
 
-    const docAttachments = caseData.documents
-        .filter(d => ['ID', 'POA', 'ZENOWETHU_POA'].includes(d.type))
-        .map(d => `${baseUrl}${d.fileUrl}`);
+    // Same resolver the live handler uses, so the preview lists exactly the
+    // attachments the DC would receive.
+    const mandate = buildMandateAttachments(caseData.documents, baseUrl);
+    const docAttachments = mandate.attachments;
+    if (!mandate.complete) {
+        preview.notes.push(
+            `Mandate documents: ${mandate.summary}. Every DC email is sent on the consumer's behalf and should carry both.`
+        );
+    }
 
     const clientCc = caseData.client.email ? [caseData.client.email] : [];
     const transferRequestedDate = formatDhsDeclineDate(
@@ -246,7 +253,7 @@ export async function previewDHSDecline(params: {
                     fileNumber,
                     dcName,
                     declineReason,
-                    hasAttachments: docAttachments.length > 0,
+                    attachedLabel: mandateAttachedLabel(mandate),
                 }),
                 attachments: docAttachments,
             });

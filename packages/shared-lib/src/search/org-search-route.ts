@@ -34,8 +34,28 @@ export type OrgSearchResult = {
     };
 };
 
-export async function searchOrgEntities(query: string | undefined): Promise<OrgSearchResult[]> {
+/**
+ * Referrer visibility for the caller. `visibleReferrerProjectIds` is the list of
+ * project IDs whose referrers the viewer may see; `null` means unrestricted
+ * (admin). Resolved by the consuming app, which owns the membership rules.
+ */
+export type OrgSearchScope = {
+    visibleReferrerProjectIds: string[] | null;
+};
+
+export async function searchOrgEntities(
+    query: string | undefined,
+    scope?: OrgSearchScope
+): Promise<OrgSearchResult[]> {
     const q = query?.trim();
+
+    // Non-admins only get referrers whose sub-project they are a member of. An
+    // empty list matches nothing, which is the correct result for a user with
+    // no referrer memberships.
+    const referrerScope =
+        scope && scope.visibleReferrerProjectIds !== null
+            ? { projectId: { in: scope.visibleReferrerProjectIds } }
+            : {};
 
     const [projects, referrers] = await Promise.all([
         // Search Projects
@@ -69,7 +89,7 @@ export async function searchOrgEntities(query: string | undefined): Promise<OrgS
         // Search Referrers
         !q
             ? prisma.referrer.findMany({
-                where: { isActive: true },
+                where: { isActive: true, ...referrerScope },
                 take: 6,
                 include: {
                     project: { select: { id: true, name: true } },
@@ -79,6 +99,7 @@ export async function searchOrgEntities(query: string | undefined): Promise<OrgS
             })
             : prisma.referrer.findMany({
                 where: {
+                    ...referrerScope,
                     OR: [
                         { firstName: { contains: q, mode: 'insensitive' } },
                         { lastName: { contains: q, mode: 'insensitive' } },
@@ -173,7 +194,15 @@ export async function searchOrgEntities(query: string | undefined): Promise<OrgS
     return results;
 }
 
-export function createOrgSearchRoute() {
+export type OrgSearchRouteOptions = {
+    /**
+     * Resolves the referrer visibility scope for the signed-in user. Omit to
+     * leave results unscoped (every referrer is searchable).
+     */
+    resolveReferrerScope?: (user: { id: string; isAdmin?: boolean }) => Promise<string[] | null>;
+};
+
+export function createOrgSearchRoute(options: OrgSearchRouteOptions = {}) {
     async function GET(request: Request) {
         try {
             const session = await auth();
@@ -188,7 +217,13 @@ export function createOrgSearchRoute() {
                 return NextResponse.json([]);
             }
 
-            return NextResponse.json(await searchOrgEntities(query));
+            const visibleReferrerProjectIds = options.resolveReferrerScope
+                ? await options.resolveReferrerScope(session.user as { id: string; isAdmin?: boolean })
+                : null;
+
+            return NextResponse.json(
+                await searchOrgEntities(query, { visibleReferrerProjectIds })
+            );
         } catch (error) {
             logger.error('Error searching projects & referrers:', error);
             return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

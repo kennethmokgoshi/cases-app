@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
+import { canAccessReferrer } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers/register-from-project');
 
@@ -48,6 +49,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
 
+        // Non-admins may only register folders inside a project they belong to
+        if (!(await canAccessReferrer(session.user, projectId))) {
+            return NextResponse.json(
+                { error: 'Forbidden — you are not a member of this project' },
+                { status: 403 }
+            );
+        }
+
         // Check it doesn't already have a Referrer record
         const existing = await prisma.referrer.findUnique({ where: { projectId } });
         if (existing) {
@@ -61,6 +70,10 @@ export async function POST(request: Request) {
         if (parentReferrerId) {
             const parent = await prisma.referrer.findUnique({ where: { id: parentReferrerId } });
             if (!parent) {
+                return NextResponse.json({ error: 'Parent referrer not found' }, { status: 404 });
+            }
+            // Do not let a non-member nest under a referrer they cannot see
+            if (!(await canAccessReferrer(session.user, parent.projectId))) {
                 return NextResponse.json({ error: 'Parent referrer not found' }, { status: 404 });
             }
         }

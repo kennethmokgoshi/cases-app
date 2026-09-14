@@ -140,6 +140,8 @@ export default function ReferrerDetailPage() {
     const [members, setMembers] = useState<Member[]>([]);
     const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
     const [selectedUserId, setSelectedUserId] = useState('');
+    // Project role the next added member joins with
+    const [selectedRole, setSelectedRole] = useState<'MEMBER' | 'MANAGER'>('MEMBER');
     const [memberSaving, setMemberSaving] = useState(false);
     const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
 
@@ -193,13 +195,13 @@ export default function ReferrerDetailPage() {
         })();
     }, [canManageMembers]);
 
-    async function saveMembers(userIds: string[], successMessage: string) {
+    async function saveMembers(members: { userId: string; role: string }[], successMessage: string) {
         setMemberSaving(true);
         try {
             const res = await fetch(`/api/admin/referrers/${referrerId}/members`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userIds }),
+                body: JSON.stringify({ members }),
             });
             const json = await res.json();
             if (!res.ok) {
@@ -215,17 +217,33 @@ export default function ReferrerDetailPage() {
         }
     }
 
+    const memberPayload = () => members.map((m) => ({ userId: m.userId, role: m.role }));
+
     async function handleAddMember() {
         if (!selectedUserId) return;
-        const userIds = [...members.map((m) => m.userId), selectedUserId];
-        await saveMembers(userIds, 'Member added');
+        await saveMembers(
+            [...memberPayload(), { userId: selectedUserId, role: selectedRole }],
+            selectedRole === 'MANAGER' ? 'Manager added' : 'Member added'
+        );
         setSelectedUserId('');
+        setSelectedRole('MEMBER');
     }
 
     async function handleRemoveMember(member: Member) {
-        const userIds = members.filter((m) => m.userId !== member.userId).map((m) => m.userId);
-        await saveMembers(userIds, 'Member removed');
+        await saveMembers(
+            memberPayload().filter((m) => m.userId !== member.userId),
+            'Member removed'
+        );
         setRemoveTarget(null);
+    }
+
+    // A manager of this sub-project can edit the referrer and everything below
+    // it; a plain member can only fill in a blank email or cell number.
+    async function handleChangeRole(member: Member, role: 'MEMBER' | 'MANAGER') {
+        await saveMembers(
+            memberPayload().map((m) => (m.userId === member.userId ? { ...m, role } : m)),
+            role === 'MANAGER' ? 'Promoted to manager' : 'Changed to member'
+        );
     }
 
     function openEdit(c: Commission) {
@@ -440,7 +458,10 @@ export default function ReferrerDetailPage() {
                 <div className="px-5 py-3 border-b border-zeno-blue/40 flex items-center justify-between">
                     <div>
                         <h2 className="text-sm font-semibold text-white">Team Members</h2>
-                        <p className="text-xs text-gray-400 mt-0.5">Only members (and admins) can see this referrer and its commissions.</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            Only members (and admins) can see this referrer and its commissions.
+                            Managers can edit it and every sub-project beneath it; members can only fill in a blank email or cell number.
+                        </p>
                     </div>
                     <span className="text-xs text-gray-400">{members.length} member{members.length === 1 ? '' : 's'}</span>
                 </div>
@@ -456,7 +477,20 @@ export default function ReferrerDetailPage() {
                                         <p className="text-gray-500 text-xs">{m.user.email}</p>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-300">{m.role}</span>
+                                        {canManageMembers ? (
+                                            <select
+                                                value={m.role}
+                                                onChange={(e) => handleChangeRole(m, e.target.value as 'MEMBER' | 'MANAGER')}
+                                                disabled={memberSaving}
+                                                aria-label="Project role"
+                                                className="text-xs bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-2 py-1 text-white focus:outline-none focus:border-zeno-cyan/50 disabled:opacity-50"
+                                            >
+                                                <option value="MEMBER">Member — add contacts only</option>
+                                                <option value="MANAGER">Manager — full edit</option>
+                                            </select>
+                                        ) : (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-300">{m.role}</span>
+                                        )}
                                         {canManageMembers && (
                                             <button
                                                 onClick={() => setRemoveTarget(m)}
@@ -487,6 +521,15 @@ export default function ReferrerDetailPage() {
                                             {u.firstName} {u.lastName} — {u.email}
                                         </option>
                                     ))}
+                            </select>
+                            <select
+                                value={selectedRole}
+                                onChange={(e) => setSelectedRole(e.target.value as 'MEMBER' | 'MANAGER')}
+                                aria-label="Project role for the new member"
+                                className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zeno-cyan/50"
+                            >
+                                <option value="MEMBER">Member</option>
+                                <option value="MANAGER">Manager</option>
                             </select>
                             <button
                                 onClick={handleAddMember}

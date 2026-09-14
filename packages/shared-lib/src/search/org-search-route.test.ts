@@ -123,3 +123,45 @@ describe('searchOrgEntities', () => {
         expect(res.status).toBe(401);
     });
 });
+
+describe('referrer visibility scoping', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        projectFindManyMock.mockResolvedValue([]);
+        referrerFindManyMock.mockResolvedValue([]);
+    });
+
+    it('leaves the referrer query unscoped when the scope is unrestricted', async () => {
+        await searchOrgEntities('William', { visibleReferrerProjectIds: null });
+        expect(referrerFindManyMock.mock.calls[0][0].where.projectId).toBeUndefined();
+    });
+
+    it('restricts referrers to the given project IDs', async () => {
+        await searchOrgEntities('William', { visibleReferrerProjectIds: ['proj-a'] });
+        expect(referrerFindManyMock.mock.calls[0][0].where.projectId).toEqual({ in: ['proj-a'] });
+    });
+
+    it('restricts the browse (no query) listing too', async () => {
+        await searchOrgEntities(undefined, { visibleReferrerProjectIds: ['proj-a'] });
+        expect(referrerFindManyMock.mock.calls[0][0].where).toEqual({
+            isActive: true,
+            projectId: { in: ['proj-a'] },
+        });
+    });
+
+    it('matches nothing for a user with no referrer memberships', async () => {
+        await searchOrgEntities('William', { visibleReferrerProjectIds: [] });
+        expect(referrerFindManyMock.mock.calls[0][0].where.projectId).toEqual({ in: [] });
+    });
+
+    it('route resolves the scope from the signed-in user', async () => {
+        authMock.mockResolvedValue({ user: { id: 'user-1', isAdmin: false } });
+        const resolveReferrerScope = vi.fn().mockResolvedValue(['proj-a']);
+        const { GET } = createOrgSearchRoute({ resolveReferrerScope });
+
+        await GET(new Request('http://localhost/api/projects/search?q=William'));
+
+        expect(resolveReferrerScope).toHaveBeenCalledWith({ id: 'user-1', isAdmin: false });
+        expect(referrerFindManyMock.mock.calls[0][0].where.projectId).toEqual({ in: ['proj-a'] });
+    });
+});

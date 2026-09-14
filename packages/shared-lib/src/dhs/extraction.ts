@@ -76,7 +76,79 @@ function mapCellsToConsumer(cells: string[]): DHSConsumerInfo | undefined {
 }
 
 /**
- * Get decline reason by navigating directly to dhs_ConsumerTransferDeclineComments.aspx.
+ * A DHS decline, as recorded on dhs_ConsumerTransferDeclineComments.aspx.
+ *
+ * The page footer carries the transaction line that says WHEN the current DC
+ * actually declined the transfer — e.g.
+ *   "Transaction performed by Benay Sager  @ 2026-09-04 14:02:07 PM"
+ * That timestamp is the real decline date. Without it we can only record the day
+ * we happened to run the check, which makes a months-old decline look like it
+ * happened today.
+ */
+export interface DHSDeclineDetails {
+    /** The decline reason text shown to the requesting DC. */
+    reason: string;
+    /** Name of the DC-side user who performed the decline, when the footer carries it. */
+    performedBy?: string;
+    /** When DHS recorded the decline (parsed from the footer, read as SAST). */
+    declinedAt?: Date;
+}
+
+/** DHS renders all timestamps in South African Standard Time (UTC+02:00). */
+const SAST_OFFSET_HOURS = 2;
+
+/**
+ * Parse the "Transaction performed by <name> @ <timestamp>" footer of a DHS
+ * decline page.
+ *
+ * DHS writes the clock in 24-hour form but still appends AM/PM ("14:02:07 PM"),
+ * so the meridiem is only honoured when the hour is genuinely a 12-hour value.
+ * The timestamp is stamped as SAST so the stored instant is correct regardless
+ * of the server's own timezone.
+ */
+export function parseDeclineTransactionFooter(
+    footer: string | null | undefined
+): { performedBy?: string; declinedAt?: Date } {
+    if (!footer) return {};
+
+    const match = footer.match(
+        /Transaction\s+performed\s+by\s*:?\s*(.*?)\s*@\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i
+    );
+    if (!match) return {};
+
+    const [, rawName, year, month, day, rawHour, minute, second, meridiem] = match;
+
+    let hour = parseInt(rawHour, 10);
+    const upper = (meridiem || '').toUpperCase();
+    // Only a real 12-hour reading gets shifted — "14:02 PM" is already 24-hour.
+    if (upper === 'PM' && hour < 12) hour += 12;
+    if (upper === 'AM' && hour === 12) hour = 0;
+
+    const declinedAt = new Date(
+        Date.UTC(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            hour - SAST_OFFSET_HOURS,
+            parseInt(minute, 10),
+            second ? parseInt(second, 10) : 0
+        )
+    );
+
+    const performedBy = (rawName || '').replace(/\s+/g, ' ').trim() || undefined;
+
+    // Reject anything nonsensical rather than poisoning the case record: a bad
+    // parse must fall back to "now", never to a date DHS could not have written.
+    if (Number.isNaN(declinedAt.getTime())) return { performedBy };
+    if (declinedAt.getUTCFullYear() < 2000) return { performedBy };
+    if (declinedAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) return { performedBy };
+
+    return { performedBy, declinedAt };
+}
+
+/**
+ * Get the decline reason and its transaction footer by navigating directly to
+ * dhs_ConsumerTransferDeclineComments.aspx.
  *
  * The DHS "Declined (Click to View Reason)" element is a <div> with an onclick:
  *   ShowUserManagementPage('dhs_ConsumerTransferDeclineComments.aspx?id=XXXXX&pg=0', '...')
@@ -84,7 +156,7 @@ function mapCellsToConsumer(cells: string[]): DHSConsumerInfo | undefined {
  * Instead of trying to interact with a modal popup, we extract the URL from the onclick
  * attribute and navigate to the page directly — much more reliable.
  */
-export async function getDeclineReason(page: Page): Promise<string | undefined> {
+export async function getDeclineDetails(page: Page): Promise<DHSDeclineDetails | undefined> {
     try {
         logger.info('=== Attempting to extract decline reason ===');
 
@@ -113,43 +185,78 @@ export async function getDeclineReason(page: Page): Promise<string | undefined> 
         await page.goto(fullUrl, { waitUntil: 'load', timeout: 60000 });
         await delay(1500);
 
-        // Step 3: Scrape the reason from the page
-        const reason = await page.evaluate(`(function() {
+        // Step 3: Scrape the reason AND the "Transaction performed by ... @ ..." footer
+        const scraped = (await page.evaluate(`(function() {
+            var reason = null;
             // Try known DHS class for reason text rows
             var blueRows = Array.from(document.querySelectorAll('.txt_blue_cgothic_13 td, .txt_blue_cgothic_13'));
             for (var i = 0; i < blueRows.length; i++) {
                 var t = (blueRows[i].innerText || blueRows[i].textContent || '').trim();
-                if (t.length > 3) return t;
+                if (t.length > 3) { reason = t; break; }
             }
-            // Fallback: most content-rich short table cell that's not a header/footer
-            var best = '';
-            var cells = Array.from(document.querySelectorAll('td'));
-            for (var j = 0; j < cells.length; j++) {
-                var ct = (cells[j].innerText || cells[j].textContent || '').trim();
-                var lower = ct.toLowerCase();
-                if (ct.length > best.length &&
-                    ct.length < 500 &&
-                    !lower.includes('national credit regulator') &&
-                    !lower.includes('debt help system') &&
-                    !lower.includes('welcome') &&
-                    !lower.includes('transaction performed by') &&
-                    !lower.includes('view consumer transfer')) {
-                    best = ct;
+            if (!reason) {
+                // Fallback: most content-rich short table cell that's not a header/footer
+                var best = '';
+                var cells = Array.from(document.querySelectorAll('td'));
+                for (var j = 0; j < cells.length; j++) {
+                    var ct = (cells[j].innerText || cells[j].textContent || '').trim();
+                    var lower = ct.toLowerCase();
+                    if (ct.length > best.length &&
+                        ct.length < 500 &&
+                        !lower.includes('national credit regulator') &&
+                        !lower.includes('debt help system') &&
+                        !lower.includes('welcome') &&
+                        !lower.includes('transaction performed by') &&
+                        !lower.includes('view consumer transfer')) {
+                        best = ct;
+                    }
+                }
+                reason = best || null;
+            }
+
+            // The footer sits in its own element — take the SMALLEST element that
+            // contains it so we capture the transaction line, not the whole page.
+            var footer = '';
+            var candidates = Array.from(document.querySelectorAll('td, div, span, p'));
+            for (var k = 0; k < candidates.length; k++) {
+                var ft = (candidates[k].innerText || candidates[k].textContent || '').trim();
+                if (ft.indexOf('Transaction performed by') !== -1 && ft.length < 400) {
+                    if (!footer || ft.length < footer.length) footer = ft;
                 }
             }
-            return best || null;
-        })()`);
 
-        if (reason && (reason as string).length > 3) {
-            const cleaned = (reason as string).replace(/\s+/g, ' ').trim();
-            logger.info('✅ Decline reason extracted:', cleaned);
-            return cleaned;
+            return { reason: reason, footer: footer || null };
+        })()`)) as { reason: string | null; footer: string | null } | null;
+
+        if (!scraped || !scraped.reason || scraped.reason.length <= 3) {
+            logger.info('❌ Could not extract reason from decline page');
+            return undefined;
         }
 
-        logger.info('❌ Could not extract reason from decline page');
-        return undefined;
+        const cleaned = scraped.reason.replace(/\s+/g, ' ').trim();
+        const { performedBy, declinedAt } = parseDeclineTransactionFooter(scraped.footer);
+
+        logger.info('✅ Decline reason extracted:', cleaned);
+        if (declinedAt) {
+            logger.info(
+                `✅ Decline transaction footer parsed — performed by ${performedBy || 'unknown'} at ${declinedAt.toISOString()}`
+            );
+        } else {
+            logger.info('⚠️ No usable "Transaction performed by ... @ ..." footer on the decline page');
+        }
+
+        return { reason: cleaned, performedBy, declinedAt };
     } catch (error) {
         logger.error('Error getting decline reason:', error);
         return undefined;
     }
+}
+
+/**
+ * Backwards-compatible wrapper returning the reason text only.
+ * Prefer getDeclineDetails() wherever the decline date matters.
+ */
+export async function getDeclineReason(page: Page): Promise<string | undefined> {
+    const details = await getDeclineDetails(page);
+    return details?.reason;
 }

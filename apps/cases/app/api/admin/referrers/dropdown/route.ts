@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { hasFullReferrerVisibility, getVisibleReferrerProjectIds } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/referrers/dropdown');
 
@@ -16,10 +17,12 @@ export type ReferrerDropdownItem = {
 
 /**
  * GET /api/admin/referrers/dropdown
- * Returns all referrers + REFERRER-type sub-projects without a linked Referrer record,
+ * Returns referrers + REFERRER-type sub-projects without a linked Referrer record,
  * sorted A–Z for use in dropdowns across the app.
  *
- * Accessible to Admin, Executive, Senior Manager, Manager, and all Staff.
+ * Accessible to Admin, Executive, Senior Manager, Manager, and all Staff, but
+ * scoped the same way as the referrer registry: admins see every referrer,
+ * everyone else only sees referrers whose sub-project they are a member of.
  */
 export async function GET() {
     try {
@@ -28,8 +31,14 @@ export async function GET() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // null = unrestricted (admin); otherwise the project IDs this user may see.
+        const visibleProjectIds = hasFullReferrerVisibility(session.user)
+            ? null
+            : await getVisibleReferrerProjectIds(session.user.id);
+
         // 1. Full Referrer records — always include contact fields for downstream notifications
         const referrers = await prisma.referrer.findMany({
+            where: visibleProjectIds !== null ? { projectId: { in: visibleProjectIds } } : {},
             select: {
                 id: true,
                 firstName: true,
@@ -42,13 +51,22 @@ export async function GET() {
             orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
         });
 
-        const linkedProjectIds = new Set(referrers.map(r => r.projectId).filter(Boolean));
+        // Every linked project, not just the visible ones — an out-of-scope
+        // referrer's project must not resurface as an "orphan" placeholder.
+        const allLinked = await prisma.referrer.findMany({
+            where: { projectId: { not: null } },
+            select: { projectId: true },
+        });
+        const linkedProjectIds = new Set(allLinked.map(r => r.projectId).filter(Boolean) as string[]);
 
         // 2. REFERRER-type sub-projects with no linked Referrer record yet
         const orphanSubProjects = await prisma.project.findMany({
             where: {
                 type: 'REFERRER',
-                id: { notIn: [...linkedProjectIds] as string[] },
+                id: {
+                    notIn: [...linkedProjectIds],
+                    ...(visibleProjectIds !== null ? { in: visibleProjectIds } : {}),
+                },
             },
             select: { id: true, name: true },
             orderBy: { name: 'asc' },

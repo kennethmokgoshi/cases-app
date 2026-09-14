@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,6 +92,135 @@ export function interpretPoaResponse(
     };
 }
 
+/**
+ * Short headline for the toast that fires when a POA run finishes.
+ *
+ * The in-modal banner carries the detail; this is the bit that has to read at
+ * a glance, so it names the outcome only.
+ */
+export function poaToastMessage(result: PoaResultView, channel: PoaChannel): string {
+    const via = channel === 'EMAIL' ? 'emailed' : 'sent via WhatsApp';
+    if (result.sent.length > 0 && result.saved.length > 0) {
+        return `POA ${via} to ${result.sent.join(' & ')} and saved to Documents`;
+    }
+    if (result.sent.length > 0) {
+        return `POA ${via} to ${result.sent.join(' & ')}`;
+    }
+    return `POA saved to Documents for ${result.saved.map(d => d.name).join(' & ')}`;
+}
+
+// ---------------------------------------------------------------------------
+// Result banner
+// ---------------------------------------------------------------------------
+
+/**
+ * Outcome of a POA run. Rendered at the top of the modal body — a run that
+ * finished must never look like a run that never happened.
+ */
+function PoaResultBanner({
+    error,
+    success,
+    missingFields,
+    failures,
+    successDetails,
+}: {
+    error:          string;
+    success:        string;
+    missingFields:  string[];
+    failures:       DeliveryFailure[];
+    successDetails: { sent: string[]; saved: SavedDocument[]; skipped: string[] };
+}) {
+    if (!error && !success) return null;
+
+    return (
+        <>
+            {/* Error / incomplete profile warning */}
+            {error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+                    <p className="text-sm text-red-400 font-medium">{error}</p>
+                    {missingFields.length > 0 && (
+                        <div className="mt-2">
+                            <p className="text-xs text-red-300 mb-1">Missing fields in your staff profile:</p>
+                            <ul className="text-xs text-red-300 space-y-0.5">
+                                {missingFields.map(f => <li key={f}>• {f}</li>)}
+                            </ul>
+                            <a
+                                href="/account"
+                                className="inline-block mt-2 text-xs text-amber-400 underline hover:text-amber-300"
+                            >
+                                Go to Account Settings to update your profile →
+                            </a>
+                        </div>
+                    )}
+                    {failures.length > 0 && (
+                        <ul className="mt-2 text-xs text-red-300 space-y-0.5">
+                            {failures.map(f => <li key={f.name}>• {f.name}: {f.reason}</li>)}
+                        </ul>
+                    )}
+                    {successDetails.skipped.length > 0 && (
+                        <p className="text-xs text-red-300 mt-2">
+                            {successDetails.skipped.join(', ')} {successDetails.skipped.length === 1 ? 'has' : 'have'} no contact details for this channel.
+                        </p>
+                    )}
+                    <p className="text-xs text-red-300/80 mt-2">
+                        Nothing was delivered. You can retry, or switch to <strong>Save only</strong> to file the POA
+                        under Documents and share it manually.
+                    </p>
+                </div>
+            )}
+
+            {/* Success */}
+            {success && (
+                <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
+                    <p className="text-sm text-green-400 font-medium">{success}</p>
+
+                    {successDetails.saved.length > 0 && (
+                        <div className="mt-2">
+                            <p className="text-xs text-green-300 mb-1">Filed under Documents:</p>
+                            <ul className="text-xs space-y-0.5">
+                                {successDetails.saved.map(doc => (
+                                    <li key={doc.fileUrl}>
+                                        <a
+                                            href={doc.fileUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-300 underline hover:text-blue-200"
+                                        >
+                                            {doc.fileName}
+                                        </a>
+                                        <span className="text-green-300/70"> — {doc.name}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {failures.length > 0 && (
+                        <div className="mt-2">
+                            <p className="text-xs text-amber-300 mb-1">Not everything succeeded:</p>
+                            <ul className="text-xs text-amber-200 space-y-0.5">
+                                {failures.map(f => <li key={f.name}>• {f.name}: {f.reason}</li>)}
+                            </ul>
+                        </div>
+                    )}
+
+                    {successDetails.skipped.length > 0 && (
+                        <p className="text-xs text-amber-300 mt-2">
+                            Note: {successDetails.skipped.join(', ')} {successDetails.skipped.length === 1 ? 'was' : 'were'} skipped (no contact info for this channel).
+                        </p>
+                    )}
+
+                    {successDetails.sent.length > 0 && (
+                        <p className="text-xs text-green-300 mt-1">
+                            Each recipient will sign and return their document. Once received, upload it under Documents.
+                        </p>
+                    )}
+                </div>
+            )}
+        </>
+    );
+}
+
 interface SendPoaModalProps {
     isOpen:     boolean;
     onClose:    () => void;
@@ -138,6 +268,13 @@ export function SendPoaModal({
     const [missingFields, setMissingFields] = useState<string[]>([]);
     const [failures,   setFailures]   = useState<DeliveryFailure[]>([]);
     const [successDetails, setSuccessDetails] = useState<{ sent: string[]; saved: SavedDocument[]; skipped: string[] }>({ sent: [], saved: [], skipped: [] });
+    const bodyRef = useRef<HTMLDivElement>(null);
+
+    // The result banner sits at the top of the body — scroll it back into view
+    // so a run that finishes after the user has scrolled is still visible.
+    useEffect(() => {
+        if (success || error) bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [success, error]);
 
     if (!isOpen) return null;
 
@@ -197,10 +334,12 @@ export function SendPoaModal({
             if (!result.ok) {
                 setMissingFields(result.missingFields);
                 setError(result.message);
+                toast.error(result.message);
                 return;
             }
 
             setSuccess(result.message);
+            toast.success(poaToastMessage(result, channel));
             if (result.saved.length > 0) onSaved?.();
         } catch {
             setError('Network error. Please check your connection and try again.');
@@ -233,7 +372,7 @@ export function SendPoaModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-navy-900">
@@ -252,313 +391,253 @@ export function SendPoaModal({
                 </div>
 
                 {/* Body */}
-                <div className="px-6 py-5 space-y-5">
+                <div ref={bodyRef} className="px-6 py-5 space-y-5 flex-1 min-h-0 overflow-y-auto">
 
-                    {/* POA Type */}
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                            POA Type
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setPoaType('STANDARD')}
-                                className={`rounded-xl border px-4 py-3 text-left transition-all ${
-                                    poaType === 'STANDARD'
-                                        ? 'border-blue-500 bg-blue-500/10 text-white'
-                                        : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
-                                }`}
-                            >
-                                <div className="font-semibold text-sm">Standard ZDM POA</div>
-                                <div className="text-xs mt-0.5 opacity-70">Credit bureau & debt counselling</div>
-                            </button>
+                    {/* Result — kept at the top so it is never below the fold */}
+                    <PoaResultBanner
+                        error={error}
+                        success={success}
+                        missingFields={missingFields}
+                        failures={failures}
+                        successDetails={successDetails}
+                    />
 
-                            <button
-                                type="button"
-                                onClick={() => setPoaType('WESBANK')}
-                                className={`rounded-xl border px-4 py-3 text-left transition-all ${
-                                    poaType === 'WESBANK'
-                                        ? 'border-amber-500 bg-amber-500/10 text-white'
-                                        : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
-                                }`}
-                            >
-                                <div className="font-semibold text-sm">Wesbank POA</div>
-                                <div className="text-xs mt-0.5 opacity-70">Specific to Wesbank account dealings</div>
-                            </button>
-                        </div>
-
-                        {poaType === 'WESBANK' && (
-                            <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
-                                <span className="text-amber-400 mt-0.5">⚠</span>
-                                <p className="text-xs text-amber-300">
-                                    The Wesbank POA includes your staff details as the Authorised Agent.
-                                    Ensure your <strong>ID Number</strong> and <strong>Residential Address</strong> are
-                                    set in <a href="/account" className="underline hover:text-amber-200">Account Settings</a> before sending.
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* DRR — DC details missing warning */}
-                    {isDRR && poaType === 'STANDARD' && (
-                        <div className={`rounded-xl border px-4 py-3 ${dcMissing ? 'border-amber-500/40 bg-amber-500/10' : 'border-green-500/30 bg-green-500/10'}`}>
-                            <div className="flex items-start gap-2">
-                                <span className={`text-lg leading-none mt-0.5 ${dcMissing ? 'text-amber-400' : 'text-green-400'}`}>
-                                    {dcMissing ? '⚠' : '✓'}
-                                </span>
-                                <div>
-                                    <p className={`text-xs font-semibold mb-1 ${dcMissing ? 'text-amber-300' : 'text-green-300'}`}>
-                                        {dcMissing
-                                            ? 'Debt Review Flag Removal — DC details required'
-                                            : 'Debt Review Flag Removal — DC details on file'}
-                                    </p>
-                                    {dcMissing ? (
-                                        <>
-                                            <p className="text-xs text-amber-200 leading-relaxed">
-                                                This case is a <strong>Debt Review Flag Removal</strong>. Section 4 of the Standard POA
-                                                must include the current debt counsellor&apos;s name and NCRDC number so the consumer can authorise
-                                                the transfer.
-                                            </p>
-                                            <p className="text-xs text-amber-200 mt-1.5 leading-relaxed">
-                                                Please run <strong>DHS Auto-Fill</strong> on this case first (use the DHS Lookup button),
-                                                then return here to send the POA.
-                                            </p>
-                                        </>
-                                    ) : (
-                                        <p className="text-xs text-green-200">
-                                            DC: <strong>{dcName}</strong> &nbsp;·&nbsp; NCRDC: <strong>{dcNcrdcNo}</strong>
-                                            <br />Section 4 will be pre-filled automatically.
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* What to do with it */}
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                            What should we do with it?
-                        </label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {modeOptions.map(opt => (
-                                <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => setMode(opt.value)}
-                                    className={`rounded-xl border px-3 py-3 text-left transition-all ${
-                                        mode === opt.value
-                                            ? 'border-blue-500 bg-blue-500/10 text-white'
-                                            : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
-                                    }`}
-                                >
-                                    <div className="font-semibold text-xs">{opt.label}</div>
-                                    <div className="text-[11px] mt-0.5 opacity-70 leading-tight">{opt.hint}</div>
-                                </button>
-                            ))}
-                        </div>
-                        {wantsSave && (
-                            <p className="mt-2 text-xs text-gray-400">
-                                A copy is filed under <strong className="text-gray-300">Documents</strong> as a Zenowethu POA,
-                                ready to download, print or hand over.
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Delivery Channel */}
-                    {wantsSend && (
+                    {!success && (
+                        <>
+                        {/* POA Type */}
                         <div>
                             <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                                Send Via
+                                POA Type
                             </label>
                             <div className="grid grid-cols-2 gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setChannel('EMAIL')}
-                                    disabled={!clientEmail}
-                                    className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                                        channel === 'EMAIL'
+                                    onClick={() => setPoaType('STANDARD')}
+                                    className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                                        poaType === 'STANDARD'
                                             ? 'border-blue-500 bg-blue-500/10 text-white'
                                             : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
                                     }`}
                                 >
-                                    <div className="font-semibold text-sm">Email</div>
-                                    <div className="text-xs mt-0.5 opacity-70 truncate">
-                                        {clientEmail ?? 'No email on file'}
-                                    </div>
+                                    <div className="font-semibold text-sm">Standard ZDM POA</div>
+                                    <div className="text-xs mt-0.5 opacity-70">Credit bureau & debt counselling</div>
                                 </button>
 
                                 <button
                                     type="button"
-                                    onClick={() => setChannel('WHATSAPP')}
-                                    disabled={!clientPhone}
-                                    className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                                        channel === 'WHATSAPP'
-                                            ? 'border-green-500 bg-green-500/10 text-white'
+                                    onClick={() => setPoaType('WESBANK')}
+                                    className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                                        poaType === 'WESBANK'
+                                            ? 'border-amber-500 bg-amber-500/10 text-white'
                                             : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
                                     }`}
                                 >
-                                    <div className="font-semibold text-sm">WhatsApp</div>
-                                    <div className="text-xs mt-0.5 opacity-70">
-                                        {clientPhone ?? 'No phone on file'}
-                                    </div>
+                                    <div className="font-semibold text-sm">Wesbank POA</div>
+                                    <div className="text-xs mt-0.5 opacity-70">Specific to Wesbank account dealings</div>
                                 </button>
                             </div>
-                        </div>
-                    )}
 
-                    {/* Recipients */}
-                    <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
-                        <p className="text-xs font-semibold text-gray-300 mb-3">
-                            {wantsSend
-                                ? `Will be sent via ${channelLabel}:`
-                                : 'A personalised POA will be generated for:'}
-                        </p>
-                        <div className="space-y-2">
-                            {/* Primary Client */}
-                            <div className="flex items-start gap-2">
-                                <span className="text-green-400 text-sm mt-0.5">✓</span>
-                                <div>
-                                    <p className="text-xs font-medium text-white">{clientName}</p>
-                                    {wantsSend && (
-                                        <p className="text-xs text-gray-400">
-                                            {channel === 'EMAIL' ? clientEmail || '(no email on file)' : clientPhone || '(no phone on file)'}
+                            {poaType === 'WESBANK' && (
+                                <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+                                    <span className="text-amber-400 mt-0.5">⚠</span>
+                                    <p className="text-xs text-amber-300">
+                                        The Wesbank POA includes your staff details as the Authorised Agent.
+                                        Ensure your <strong>ID Number</strong> and <strong>Residential Address</strong> are
+                                        set in <a href="/account" className="underline hover:text-amber-200">Account Settings</a> before sending.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* DRR — DC details missing warning */}
+                        {isDRR && poaType === 'STANDARD' && (
+                            <div className={`rounded-xl border px-4 py-3 ${dcMissing ? 'border-amber-500/40 bg-amber-500/10' : 'border-green-500/30 bg-green-500/10'}`}>
+                                <div className="flex items-start gap-2">
+                                    <span className={`text-lg leading-none mt-0.5 ${dcMissing ? 'text-amber-400' : 'text-green-400'}`}>
+                                        {dcMissing ? '⚠' : '✓'}
+                                    </span>
+                                    <div>
+                                        <p className={`text-xs font-semibold mb-1 ${dcMissing ? 'text-amber-300' : 'text-green-300'}`}>
+                                            {dcMissing
+                                                ? 'Debt Review Flag Removal — DC details required'
+                                                : 'Debt Review Flag Removal — DC details on file'}
                                         </p>
-                                    )}
+                                        {dcMissing ? (
+                                            <>
+                                                <p className="text-xs text-amber-200 leading-relaxed">
+                                                    This case is a <strong>Debt Review Flag Removal</strong>. Section 4 of the Standard POA
+                                                    must include the current debt counsellor&apos;s name and NCRDC number so the consumer can authorise
+                                                    the transfer.
+                                                </p>
+                                                <p className="text-xs text-amber-200 mt-1.5 leading-relaxed">
+                                                    Please run <strong>DHS Auto-Fill</strong> on this case first (use the DHS Lookup button),
+                                                    then return here to send the POA.
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p className="text-xs text-green-200">
+                                                DC: <strong>{dcName}</strong> &nbsp;·&nbsp; NCRDC: <strong>{dcNcrdcNo}</strong>
+                                                <br />Section 4 will be pre-filled automatically.
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Joint Client */}
-                            {jointClientName && (
-                                <div className="flex items-start gap-2">
-                                    {(!wantsSend || (channel === 'EMAIL' ? jointClientEmail : jointClientPhone)) ? (
-                                        <>
-                                            <span className="text-green-400 text-sm mt-0.5">✓</span>
-                                            <div>
-                                                <p className="text-xs font-medium text-white">{jointClientName}</p>
-                                                {wantsSend && (
-                                                    <p className="text-xs text-gray-400">
-                                                        {channel === 'EMAIL' ? jointClientEmail : jointClientPhone}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-amber-400 text-sm mt-0.5">⚠</span>
-                                            <div>
-                                                <p className="text-xs font-medium text-amber-300">{jointClientName}</p>
-                                                <p className="text-xs text-amber-200">
-                                                    No {channel === 'EMAIL' ? 'email' : 'phone'} on file — update the client record, or use “Save only”
-                                                </p>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                        <div className="mt-3 pt-3 border-t border-white/10">
-                            <p className="text-xs text-gray-400">
-                                {wantsSend
-                                    ? 'Each recipient gets a personalised PDF with their details pre-filled. They can sign online or manually.'
-                                    : 'Each PDF is pre-filled with that person’s details, ready for a manual signature.'}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* No contact details at all */}
-                    {noContactOnFile && (
-                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                            <p className="text-xs text-amber-200">
-                                This client has no email or phone number on file. Choose <strong>Save only</strong> to
-                                generate the POA and file it under Documents instead.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Error / incomplete profile warning */}
-                    {error && (
-                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
-                            <p className="text-sm text-red-400 font-medium">{error}</p>
-                            {missingFields.length > 0 && (
-                                <div className="mt-2">
-                                    <p className="text-xs text-red-300 mb-1">Missing fields in your staff profile:</p>
-                                    <ul className="text-xs text-red-300 space-y-0.5">
-                                        {missingFields.map(f => <li key={f}>• {f}</li>)}
-                                    </ul>
-                                    <a
-                                        href="/account"
-                                        className="inline-block mt-2 text-xs text-amber-400 underline hover:text-amber-300"
+                        {/* What to do with it */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                                What should we do with it?
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {modeOptions.map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => setMode(opt.value)}
+                                        className={`rounded-xl border px-3 py-3 text-left transition-all ${
+                                            mode === opt.value
+                                                ? 'border-blue-500 bg-blue-500/10 text-white'
+                                                : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                                        }`}
                                     >
-                                        Go to Account Settings to update your profile →
-                                    </a>
-                                </div>
-                            )}
-                            {failures.length > 0 && (
-                                <ul className="mt-2 text-xs text-red-300 space-y-0.5">
-                                    {failures.map(f => <li key={f.name}>• {f.name}: {f.reason}</li>)}
-                                </ul>
-                            )}
-                            {successDetails.skipped.length > 0 && (
-                                <p className="text-xs text-red-300 mt-2">
-                                    {successDetails.skipped.join(', ')} {successDetails.skipped.length === 1 ? 'has' : 'have'} no contact details for this channel.
+                                        <div className="font-semibold text-xs">{opt.label}</div>
+                                        <div className="text-[11px] mt-0.5 opacity-70 leading-tight">{opt.hint}</div>
+                                    </button>
+                                ))}
+                            </div>
+                            {wantsSave && (
+                                <p className="mt-2 text-xs text-gray-400">
+                                    A copy is filed under <strong className="text-gray-300">Documents</strong> as a Zenowethu POA,
+                                    ready to download, print or hand over.
                                 </p>
                             )}
-                            <p className="text-xs text-red-300/80 mt-2">
-                                Nothing was delivered. You can retry, or switch to <strong>Save only</strong> to file the POA
-                                under Documents and share it manually.
+                        </div>
+
+                        {/* Delivery Channel */}
+                        {wantsSend && (
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                                    Send Via
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setChannel('EMAIL')}
+                                        disabled={!clientEmail}
+                                        className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                                            channel === 'EMAIL'
+                                                ? 'border-blue-500 bg-blue-500/10 text-white'
+                                                : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                                        }`}
+                                    >
+                                        <div className="font-semibold text-sm">Email</div>
+                                        <div className="text-xs mt-0.5 opacity-70 truncate">
+                                            {clientEmail ?? 'No email on file'}
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setChannel('WHATSAPP')}
+                                        disabled={!clientPhone}
+                                        className={`rounded-xl border px-4 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                                            channel === 'WHATSAPP'
+                                                ? 'border-green-500 bg-green-500/10 text-white'
+                                                : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                                        }`}
+                                    >
+                                        <div className="font-semibold text-sm">WhatsApp</div>
+                                        <div className="text-xs mt-0.5 opacity-70">
+                                            {clientPhone ?? 'No phone on file'}
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Recipients */}
+                        <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                            <p className="text-xs font-semibold text-gray-300 mb-3">
+                                {wantsSend
+                                    ? `Will be sent via ${channelLabel}:`
+                                    : 'A personalised POA will be generated for:'}
                             </p>
+                            <div className="space-y-2">
+                                {/* Primary Client */}
+                                <div className="flex items-start gap-2">
+                                    <span className="text-green-400 text-sm mt-0.5">✓</span>
+                                    <div>
+                                        <p className="text-xs font-medium text-white">{clientName}</p>
+                                        {wantsSend && (
+                                            <p className="text-xs text-gray-400">
+                                                {channel === 'EMAIL' ? clientEmail || '(no email on file)' : clientPhone || '(no phone on file)'}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Joint Client */}
+                                {jointClientName && (
+                                    <div className="flex items-start gap-2">
+                                        {(!wantsSend || (channel === 'EMAIL' ? jointClientEmail : jointClientPhone)) ? (
+                                            <>
+                                                <span className="text-green-400 text-sm mt-0.5">✓</span>
+                                                <div>
+                                                    <p className="text-xs font-medium text-white">{jointClientName}</p>
+                                                    {wantsSend && (
+                                                        <p className="text-xs text-gray-400">
+                                                            {channel === 'EMAIL' ? jointClientEmail : jointClientPhone}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="text-amber-400 text-sm mt-0.5">⚠</span>
+                                                <div>
+                                                    <p className="text-xs font-medium text-amber-300">{jointClientName}</p>
+                                                    <p className="text-xs text-amber-200">
+                                                        No {channel === 'EMAIL' ? 'email' : 'phone'} on file — update the client record, or use “Save only”
+                                                    </p>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-white/10">
+                                <p className="text-xs text-gray-400">
+                                    {wantsSend
+                                        ? 'Each recipient gets a personalised PDF with their details pre-filled. They can sign online or manually.'
+                                        : 'Each PDF is pre-filled with that person’s details, ready for a manual signature.'}
+                                </p>
+                            </div>
                         </div>
+
+                        {/* No contact details at all */}
+                        {noContactOnFile && (
+                            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                                <p className="text-xs text-amber-200">
+                                    This client has no email or phone number on file. Choose <strong>Save only</strong> to
+                                    generate the POA and file it under Documents instead.
+                                </p>
+                            </div>
+                        )}
+                        </>
                     )}
 
-                    {/* Success */}
                     {success && (
-                        <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
-                            <p className="text-sm text-green-400 font-medium">{success}</p>
-
-                            {successDetails.saved.length > 0 && (
-                                <div className="mt-2">
-                                    <p className="text-xs text-green-300 mb-1">Filed under Documents:</p>
-                                    <ul className="text-xs space-y-0.5">
-                                        {successDetails.saved.map(doc => (
-                                            <li key={doc.fileUrl}>
-                                                <a
-                                                    href={doc.fileUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-blue-300 underline hover:text-blue-200"
-                                                >
-                                                    {doc.fileName}
-                                                </a>
-                                                <span className="text-green-300/70"> — {doc.name}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-
-                            {failures.length > 0 && (
-                                <div className="mt-2">
-                                    <p className="text-xs text-amber-300 mb-1">Not everything succeeded:</p>
-                                    <ul className="text-xs text-amber-200 space-y-0.5">
-                                        {failures.map(f => <li key={f.name}>• {f.name}: {f.reason}</li>)}
-                                    </ul>
-                                </div>
-                            )}
-
-                            {successDetails.skipped.length > 0 && (
-                                <p className="text-xs text-amber-300 mt-2">
-                                    Note: {successDetails.skipped.join(', ')} {successDetails.skipped.length === 1 ? 'was' : 'were'} skipped (no contact info for this channel).
-                                </p>
-                            )}
-
-                            {successDetails.sent.length > 0 && (
-                                <p className="text-xs text-green-300 mt-1">
-                                    Each recipient will sign and return their document. Once received, upload it under Documents.
-                                </p>
-                            )}
-                        </div>
+                        <button
+                            type="button"
+                            onClick={resetResults}
+                            className="text-xs text-gray-400 hover:text-white underline"
+                        >
+                            Send another POA for this case
+                        </button>
                     )}
+
                 </div>
 
                 {/* Footer */}

@@ -171,6 +171,51 @@ describe('PUT /api/admin/referrers/[id]/members', () => {
         expect(json.members).toEqual([]);
     });
 
+    it('assigns the role each member was given', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+            { id: 'u2', userType: 'STAFF' },
+            { id: 'u9', userType: 'STAFF' },
+        ] as never);
+        txMock.projectMember.findMany
+            .mockResolvedValueOnce([{ userId: 'u2', role: 'MEMBER' }])
+            .mockResolvedValueOnce(sampleMembers);
+        const res = await PUT(
+            makeReq('PUT', {
+                members: [
+                    { userId: 'u2', role: 'MANAGER' },
+                    { userId: 'u9', role: 'MEMBER' },
+                ],
+            }),
+            routeParams
+        );
+        expect(res.status).toBe(200);
+        const [createArgs] = txMock.projectMember.createMany.mock.calls;
+        // An explicit role wins over the one the member already had
+        expect(createArgs[0].data).toEqual([
+            { projectId: 'proj-1', userId: 'u2', role: 'MANAGER' },
+            { projectId: 'proj-1', userId: 'u9', role: 'MEMBER' },
+        ]);
+    });
+
+    it('rejects an unknown project role', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        const res = await PUT(
+            makeReq('PUT', { members: [{ userId: 'u2', role: 'SUPERVISOR' }] }),
+            routeParams
+        );
+        expect(res.status).toBe(422);
+    });
+
+    it('returns 422 when neither members nor userIds is supplied', async () => {
+        vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
+        vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce(sampleReferrer as never);
+        const res = await PUT(makeReq('PUT', {}), routeParams);
+        expect(res.status).toBe(422);
+    });
+
     it('returns 422 when referrer has no linked project', async () => {
         vi.mocked(auth).mockResolvedValueOnce(mockAdmin as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({ ...sampleReferrer, projectId: null } as never);

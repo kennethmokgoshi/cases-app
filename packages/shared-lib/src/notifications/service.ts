@@ -36,6 +36,9 @@ import { getGHLCredentials, getSMTPCredentials, isGhlEnabled } from '../integrat
 import { logger } from '../logger';
 import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
+import { resolveCaseContact } from '../partners/branch-contact-service';
+import { describeContactFallback } from '../partners/branch-contact';
+import { withAuthorityLine } from '../documents/mandate-attachments';
 
 // Configuration — default all channels to ENABLED; set to 'false' to explicitly disable
 const SMS_ENABLED = process.env.SMS_ENABLED !== 'false';
@@ -227,6 +230,18 @@ export interface NotificationPayload {
     creditBureauEmails?: string[];
     creditProviderContacts?: CreditProviderContact[];
     dcCcEmails?: string[];
+    /**
+     * Public URLs attached to the debt-counsellor email. Every DC-facing send
+     * made on a consumer's behalf carries their signed POA and ID copy — build
+     * these with resolveMandateAttachments() rather than by hand.
+     */
+    attachments?: string[];
+    /**
+     * How those attachments are named in the email body, e.g. "signed Power of
+     * Attorney and identity document" (mandateAttachedLabel()). Omit and the
+     * body makes no claim about attachments.
+     */
+    attachmentsLabel?: string | null;
 }
 
 export interface FileRequestResult {
@@ -245,6 +260,12 @@ export interface NotificationResult {
     telegramMessageId?: string;
     errors: string[];
     contactId?: string;
+    /**
+     * Attachments the provider could not deliver. The email still went out, so
+     * this is not a send failure — but a mandate email whose POA never attached
+     * must not be reported to staff as if it did.
+     */
+    attachmentErrors?: string[];
 }
 
 export async function sendStatusChangeNotification(
@@ -289,7 +310,49 @@ export async function sendStatusChangeNotification(
         projectUrl: payload.projectUrl || '',
         partnerUserName: payload.partnerUserName || payload.senderName || 'Partner' };
 
-    return sendNotificationByTemplate(template, variables, payload);
+    return sendNotificationByTemplate(template, variables, await withFallbackContact(payload));
+}
+
+/**
+ * Fill in missing consumer contact details from the referring partner branch,
+ * then from the referrer.
+ *
+ * B2B consumers frequently have no email address or cell number of their own.
+ * Every send funnels through here, so the fallback is applied once rather than
+ * at each of the ~30 call sites that build a payload from `client`.
+ *
+ * Channels the consumer already has are left untouched, and a payload that
+ * needs nothing skips the database entirely.
+ */
+async function withFallbackContact(payload: NotificationPayload): Promise<NotificationPayload> {
+    const missingEmail = !payload.clientEmail?.trim();
+    const missingPhone = !payload.clientPhone?.trim();
+    const missingWhatsApp = !payload.clientWhatsApp?.trim();
+
+    if (!missingEmail && !missingPhone && !missingWhatsApp) return payload;
+    if (!payload.caseId) return payload;
+
+    try {
+        const resolved = await resolveCaseContact(payload.caseId);
+        if (!resolved.usedFallback) return payload;
+
+        logger.info(
+            `📮 Contact fallback for case ${payload.caseId}: ${describeContactFallback(resolved)}`
+        );
+
+        const fellBack = (source: string) => source === 'BRANCH' || source === 'REFERRER';
+
+        return {
+            ...payload,
+            clientEmail: missingEmail && fellBack(resolved.emailSource) ? resolved.email : payload.clientEmail,
+            clientPhone: missingPhone && fellBack(resolved.phoneSource) ? resolved.phone : payload.clientPhone,
+            clientWhatsApp:
+                missingWhatsApp && fellBack(resolved.whatsappSource) ? resolved.whatsapp : payload.clientWhatsApp };
+    } catch (error) {
+        // A fallback lookup must never block a send that would otherwise work.
+        logger.error(`Contact fallback failed for case ${payload.caseId}: ${(error as Error).message}`);
+        return payload;
+    }
 }
 
 /**
@@ -353,6 +416,7 @@ export async function sendManualMessage(
             result.emailMessageId = res.messageId;
             result.contactId = (res as any).contactId;
             if (res.error) result.errors.push(res.error);
+            if (res.attachmentErrors?.length) result.attachmentErrors = res.attachmentErrors;
             result.logId = await logNotification({
                 caseId, channel, recipient, recipientType: 'CLIENT', statusCode: 'MANUAL', message: subject || message,
                 success: res.success, messageId: res.messageId, error: res.error, provider: res.provider, senderId
@@ -550,7 +614,12 @@ async function sendNotificationByTemplate(
     // 5. Send to Debt Counsellor
     if (payload.dcEmail) {
         const emailSubject = renderTemplate(template.emailSubject, variables);
-        const emailBody = renderTemplate(template.emailTemplate, variables);
+        // Templates carry no attachment wording of their own — the sentence is
+        // added only when a mandate document is actually going with the email.
+        const emailBody = withAuthorityLine(
+            renderTemplate(template.emailTemplate, variables),
+            payload.attachments?.length ? (payload.attachmentsLabel ?? null) : null
+        );
         const htmlBody = emailBody.replace(/\n/g, '<br>');
         const dcCcEmails = payload.dcCcEmails?.filter(Boolean);
 
@@ -563,12 +632,23 @@ async function sendNotificationByTemplate(
                 companyName: COMPANY_NAME
             });
 
+            // The consumer's signed POA and ID travel with every request we make
+            // on their behalf — the DC has no other proof of our mandate.
+            const dcAttachments = payload.attachments?.length
+                ? payload.attachments.map(url => ({
+                    filename: url.split('/').pop()?.split('?')[0] || 'document',
+                    content:  '' as string,
+                    url,
+                  }))
+                : undefined;
+
             const emailResult = await emailProvider.send(
                 payload.dcEmail,
                 emailSubject,
                 brandedHtml,
                 emailBody,
                 addBccToOptions({
+                    attachments: dcAttachments,
                     cc: dcCcEmails?.length ? dcCcEmails : undefined,
                     bcc: ['notifications@zenowethu.co.za'],
                 })
@@ -576,6 +656,9 @@ async function sendNotificationByTemplate(
 
             result.emailSuccess = emailResult.success;
             result.emailMessageId = emailResult.messageId;
+            if (emailResult.attachmentErrors?.length) {
+                result.attachmentErrors = emailResult.attachmentErrors;
+            }
 
             if (!emailResult.success && emailResult.error) {
                 result.errors.push(`Email failed: ${emailResult.error}`);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { commissionVisibilityWhere } from '@/lib/referrer-access';
 
 const logger = createLogger('api/admin/commissions/export');
 
@@ -17,7 +18,11 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const status = searchParams.get('status') || 'UNPAID'; // UNPAID, PAID, ALL
 
-        const where: any = { isEligible: true };
+        // Scoped to the referrers this user may see — the CSV carries banking details.
+        const where: Record<string, unknown> = {
+            isEligible: true,
+            ...(await commissionVisibilityWhere(session.user)),
+        };
         if (status === 'UNPAID') where.isPaid = false;
         else if (status === 'PAID') where.isPaid = true;
 

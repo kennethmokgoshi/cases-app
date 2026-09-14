@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
-import { hasFullReferrerVisibility, getVisibleReferrerProjectIds } from '@/lib/referrer-access';
+import { hasFullReferrerVisibility, getReferrerProjectAccess, canAccessReferrer } from '@/lib/referrer-access';
 import { provisionReferrerPortalUser } from '@/lib/referrer-portal-access';
 
 const logger = createLogger('api/admin/referrers');
@@ -66,11 +66,13 @@ export async function GET(request: Request) {
         const canViewFinancials = session.user.isAdmin || session.user.isExecutive || session.user.isSeniorManager || session.user.role === 'MANAGER';
 
         // Membership scoping: admins see every referrer; everyone else only
-        // sees referrers whose sub-project they are a member of.
-        // null = unrestricted (admin).
-        const visibleProjectIds = hasFullReferrerVisibility(session.user)
+        // sees referrers whose sub-project they are a member of. The same walk
+        // yields which of those they may fully edit (a MANAGER membership on
+        // the sub-project or an ancestor). null = unrestricted (admin).
+        const access = hasFullReferrerVisibility(session.user)
             ? null
-            : await getVisibleReferrerProjectIds(session.user.id);
+            : await getReferrerProjectAccess(session.user.id);
+        const visibleProjectIds = access ? Array.from(access.viewable) : null;
 
         const where: Record<string, unknown> = {};
         if (visibleProjectIds !== null) {
@@ -137,7 +139,13 @@ export async function GET(request: Request) {
         const enrichedReferrers = referrers.map(r => {
             const outstanding = canViewFinancials ? (pageCommissions.find(c => c.referrerId === r.id && !c.isPaid)?._sum.commissionAmount?.toNumber() || 0) : 0;
             const paid = canViewFinancials ? (pageCommissions.find(c => c.referrerId === r.id && c.isPaid)?._sum.commissionAmount?.toNumber() || 0) : 0;
-            return { ...r, outstandingCommission: outstanding, paidCommission: paid };
+            // MANAGER = full edit; MEMBER = may only fill in a blank email/cell
+            const accessLevel = !access
+                ? 'MANAGER'
+                : r.projectId && access.manageable.has(r.projectId)
+                    ? 'MANAGER'
+                    : 'MEMBER';
+            return { ...r, outstandingCommission: outstanding, paidCommission: paid, accessLevel };
         });
 
         const totalOutstanding = canViewFinancials ? (globalCommissions.find(c => !c.isPaid)?._sum.commissionAmount?.toNumber() || 0) : 0;
@@ -220,6 +228,11 @@ export async function POST(request: Request) {
                 select: { id: true, projectId: true, firstName: true, lastName: true },
             });
             if (!parent) {
+                return NextResponse.json({ error: 'Parent referrer not found' }, { status: 404 });
+            }
+            // A non-member must not be able to nest under — or confirm the
+            // existence of — a referrer outside their scope.
+            if (!(await canAccessReferrer(session.user, parent.projectId))) {
                 return NextResponse.json({ error: 'Parent referrer not found' }, { status: 404 });
             }
             parentProjectId = parent.projectId ?? null;

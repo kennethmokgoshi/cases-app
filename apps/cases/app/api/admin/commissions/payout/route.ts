@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
+import { commissionVisibilityWhere } from '@/lib/referrer-access';
 import { z } from 'zod';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
                 id: { in: commissionIds },
                 isEligible: true,
                 isPaid: false,
+                // Never pay out a referrer this user cannot see.
+                ...(await commissionVisibilityWhere(session.user)),
             },
             include: { referrer: true },
         });
