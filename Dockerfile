@@ -11,7 +11,7 @@
 ARG APP=cases
 
 # ── deps stage ───────────────────────────────────────────────────────────────
-FROM node:20-bullseye AS deps
+FROM node:20-bookworm AS deps
 RUN apt-get update && apt-get install -y openssl libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm — pin to exact version matching packageManager in package.json
@@ -50,7 +50,7 @@ COPY apps/reporting/package.json ./apps/reporting/
 RUN pnpm install --frozen-lockfile
 
 # ── builder stage ─────────────────────────────────────────────────────────────
-FROM node:20-bullseye AS builder
+FROM node:20-bookworm AS builder
 
 ARG CACHE_BUST=20260725042600
 ARG APP=cases
@@ -98,7 +98,7 @@ RUN cd packages/database && npx prisma generate
 RUN cd apps/${APP} && pnpm run build
 
 # ── runner stage ──────────────────────────────────────────────────────────────
-FROM node:20-bullseye AS runner
+FROM node:20-bookworm AS runner
 
 ARG APP=cases
 # Promote the build ARG to a runtime ENV — the CMD below runs at container
@@ -117,7 +117,7 @@ ENV AUTH_TRUST_HOST=true
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install Chromium and necessary dependencies for Puppeteer on Bullseye
+# Install Chromium and necessary dependencies for Puppeteer on Bookworm (Debian 12 — bullseye reached EOL 2026-08-31 and its packages are being pulled from deb.debian.org)
 RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     chromium \
     fonts-liberation \

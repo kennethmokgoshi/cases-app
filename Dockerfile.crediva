@@ -2,7 +2,7 @@
 ARG APP=crediva
 
 # ── deps stage ───────────────────────────────────────────────────────────────
-FROM node:20-bullseye AS deps
+FROM node:20-bookworm AS deps
 RUN apt-get update && apt-get install -y openssl libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -30,7 +30,7 @@ COPY apps/crediva/package.json ./apps/crediva/
 RUN pnpm install --frozen-lockfile
 
 # ── builder stage ─────────────────────────────────────────────────────────────
-FROM node:20-bullseye AS builder
+FROM node:20-bookworm AS builder
 
 ARG CACHE_BUST=20260220000000
 ARG APP=crediva
@@ -69,7 +69,7 @@ RUN cd packages/database && npx prisma generate
 RUN pnpm --filter crediva build
 
 # ── runner stage ──────────────────────────────────────────────────────────────
-FROM node:20-bullseye AS runner
+FROM node:20-bookworm AS runner
 
 WORKDIR /app
 
