@@ -175,6 +175,9 @@ export default auth((req) => {
     return response;
 });
 
+// /api/documents/upload used to be excluded here, which left it reachable
+// without a session (it writes into case files and triggers paid AI analysis).
+// Every caller is an authenticated page, so it is covered like every other API.
 export const config = {
-    matcher: ['/((?!_next/static|_next/image|favicon.ico|uploads|api/documents/upload).*)']
+    matcher: ['/((?!_next/static|_next/image|favicon.ico|uploads).*)']
 };
