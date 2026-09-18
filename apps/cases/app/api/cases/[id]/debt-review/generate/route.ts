@@ -16,6 +16,8 @@ import { generateAffordabilityAssessment, type AffordabilityAssessmentData } fro
 import { generateConsumerInfoRecord, type ConsumerInfoRecordData } from '@/lib/consumer-info-record-pdf';
 import { computeAffordabilityForCase } from '@/lib/affordability-check';
 import { generateCourtDoc, type CourtDocType, type CourtDocInput } from '@zenowethu/shared-lib/src/court-docs';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { formatCompanyAddress, formatNcaContact } from '@zenowethu/shared-lib';
 import { generateForm19, type Form19Data } from '@/lib/form19-pdf';
 import { generateForm172C, type Form172CData } from '@/lib/form17-2c-pdf';
 import { generateSection7172Statement, type Section7172StatementData } from '@/lib/section71-72-statement-pdf';
@@ -172,20 +174,15 @@ export async function POST(request: Request, { params }: RouteContext) {
             return NextResponse.json({ error: 'Case not found' }, { status: 404 });
         }
 
-        // ── Load DC settings from SystemSettings ──────────────────────────────
-        const dcSettings = await prisma.systemSettings.findMany({
-            where: { category: 'dc_profile' },
-            select: { key: true, value: true },
-        });
-        const dcMap: Record<string, string> = {};
-        for (const s of dcSettings) dcMap[s.key] = s.value;
-
+        // ── Issuing debt counsellor — from the tenant's company profile ───────
+        const company = await getCompanyProfile();
+        const ncaContact = formatNcaContact(company);
         const dc = {
-            ncrdc:   dcMap['dc_ncrdc_no']  || process.env.DHS_USERNAME || 'NCRDC3693',
-            name:    dcMap['dc_name']       || 'Zenowethu Debt Management',
-            address: dcMap['dc_address']    || 'Suite 2 Second floor Central House 17 Central Road, Mabopane, 0199, South Africa',
-            phone:   dcMap['dc_phone']      || '+27817477616 / +27813109585',
-            email:   dcMap['dc_email']      || 'debtreview@zenowethu.co.za',
+            ncrdc:   company.ncrdcNumber ?? '',
+            name:    company.tradingName,
+            address: `${formatCompanyAddress(company)}, South Africa`,
+            phone:   ncaContact.phone,
+            email:   ncaContact.email,
         };
 
         const client = caseRecord.client;
@@ -256,6 +253,7 @@ export async function POST(request: Request, { params }: RouteContext) {
                       })
                     : undefined,
                 generatedBy: session.user.email ?? undefined,
+                company,
             };
             pdfBytes = await generateCourtDoc(documentType as CourtDocType, courtInput);
         } else if (documentType === 'FORM_16') {

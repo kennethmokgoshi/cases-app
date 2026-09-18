@@ -4,6 +4,7 @@ import { auth } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
 import { generateCourtDoc, CourtDocType, COURT_DOC_LABELS } from '@zenowethu/shared-lib/src/court-docs';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { SmtpEmailProvider, ResendEmailProvider, getSMTPCredentials } from '@zenowethu/shared-lib';
 
 const logger = createLogger('court-docs-api');
@@ -129,6 +130,7 @@ export async function POST(
         jointClientIdNumber:  joint?.idNumber ?? undefined,
         creditAccounts:       creditAccounts.length > 0 ? creditAccounts : undefined,
         generatedBy:          `${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim() || session.user.email,
+        company:              await getCompanyProfile(),
     };
 
     // ── Generate PDF ──────────────────────────────────────────────────────────

@@ -16,12 +16,14 @@
  * fixed timeline; the consent requirement is framed under POPIA.
  */
 
-import { ACCEPTED_SIGNATURE, buildCredoLoginSection, type CredoLoginDetails } from './accepted-email';
+import { buildAcceptedSignature, buildCredoLoginSection, type CredoLoginDetails } from './accepted-email';
+import type { CompanyProfile } from '../company/profile';
 
 export const CONSENT_REMINDER_SUBJECT = (fileNumber: string): string =>
     `Reminder: Your Consent Is Needed to Continue Your Debt Review Removal (File: ${fileNumber})`;
 
 export function buildConsentReminderEmail(p: {
+    company: CompanyProfile;
     clientFirstName: string;
     fileNumber: string;
     /** Link the consumer clicks to consent to debt review removal (existing token reused). */
@@ -33,7 +35,7 @@ export function buildConsentReminderEmail(p: {
 
     return `Dear ${firstName},
 
-We hope this message finds you well. We recently confirmed that your debt review file is now with Zenowethu Debt Management, and we wrote to you asking for your consent to begin removing the debt review flag from your credit profile.
+We hope this message finds you well. We recently confirmed that your debt review file is now with ${p.company.tradingName}, and we wrote to you asking for your consent to begin removing the debt review flag from your credit profile.
 
 We have not yet received your consent, so we are gently reminding you: without it, the debt review flag removal process cannot continue, and your file remains on hold.
 
@@ -65,5 +67,5 @@ Thank you — we look forward to continuing with your file.
 
 Yours sincerely,
 
-${ACCEPTED_SIGNATURE}`;
+${buildAcceptedSignature(p.company)}`;
 }

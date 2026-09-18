@@ -1,19 +1,32 @@
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage, RGB } from 'pdf-lib';
 import { logger } from '../logger';
+import { type CompanyProfile, formatCompanyAddress } from '../company/profile';
 
 // ---------------------------------------------------------------------------
-// Zenowethu Company Details (NCA-compliant letterhead)
+// Company details (NCA-compliant letterhead) — from the tenant's profile
 // ---------------------------------------------------------------------------
 
-const ZENOWETHU = {
-    name: 'Zenowethu Debt Management (PTY) LTD',
-    regNo: '2013/121120/07',
-    ncrdc: 'NCRDC3693',
-    dcasa: '0863',
-    address: 'Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199',
-    phone: '081 747 7616',
-    email: 'notifications@zenowethu.co.za',
-};
+interface FirmDetails {
+    name: string;
+    regNo: string;
+    ncrdc: string;
+    dcasa: string;
+    address: string;
+    phone: string;
+    email: string;
+}
+
+function firmDetails(company: CompanyProfile): FirmDetails {
+    return {
+        name: company.legalName,
+        regNo: company.registrationNumber ?? '—',
+        ncrdc: company.ncrdcNumber ?? '—',
+        dcasa: company.dcasaNumber ?? '—',
+        address: formatCompanyAddress(company),
+        phone: company.phone,
+        email: company.email,
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Colour palette
@@ -39,6 +52,8 @@ export type DisputeLetterType =
     | 'PRESCRIBED_DEBT_NOTICE';      // F — Prescribed debt notice
 
 export interface DisputeLetterInput {
+    /** The firm issuing the letter — resolve via getCompanyProfile() in the route. */
+    company: CompanyProfile;
     // Client
     clientFullName: string;
     clientIdNumber: string;
@@ -100,16 +115,16 @@ function todayFormatted(): string {
 // Draw letterhead
 // ---------------------------------------------------------------------------
 
-function drawLetterhead(page: PDFPage, boldFont: PDFFont, regularFont: PDFFont): number {
+function drawLetterhead(page: PDFPage, boldFont: PDFFont, regularFont: PDFFont, firm: FirmDetails): number {
     // Teal header bar
     page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 72, width: PAGE_WIDTH, height: 72, color: TEAL });
 
     // Company name
-    page.drawText(ZENOWETHU.name, { x: MARGIN, y: PAGE_HEIGHT - 30, size: 13, font: boldFont, color: WHITE });
-    page.drawText(`NCR Reg: ${ZENOWETHU.ncrdc}  |  DCASA: ${ZENOWETHU.dcasa}  |  Co. Reg: ${ZENOWETHU.regNo}`, {
+    page.drawText(firm.name, { x: MARGIN, y: PAGE_HEIGHT - 30, size: 13, font: boldFont, color: WHITE });
+    page.drawText(`NCR Reg: ${firm.ncrdc}  |  DCASA: ${firm.dcasa}  |  Co. Reg: ${firm.regNo}`, {
         x: MARGIN, y: PAGE_HEIGHT - 46, size: 7.5, font: regularFont, color: WHITE,
     });
-    page.drawText(`${ZENOWETHU.address}  |  ${ZENOWETHU.phone}  |  ${ZENOWETHU.email}`, {
+    page.drawText(`${firm.address}  |  ${firm.phone}  |  ${firm.email}`, {
         x: MARGIN, y: PAGE_HEIGHT - 60, size: 7, font: regularFont, color: WHITE,
     });
 
@@ -213,14 +228,15 @@ function drawAddressBlock(
     ref: string,
     y: number,
     regularFont: PDFFont,
-    boldFont: PDFFont
+    boldFont: PDFFont,
+    firm: FirmDetails,
 ): number {
     // Sender address (left column)
-    page.drawText(ZENOWETHU.name, { x: MARGIN, y, size: 8.5, font: boldFont, color: DARK });
+    page.drawText(firm.name, { x: MARGIN, y, size: 8.5, font: boldFont, color: DARK });
     y -= 13;
-    page.drawText(ZENOWETHU.address, { x: MARGIN, y, size: 8, font: regularFont, color: MID });
+    page.drawText(firm.address, { x: MARGIN, y, size: 8, font: regularFont, color: MID });
     y -= 12;
-    page.drawText(`Tel: ${ZENOWETHU.phone}  |  Email: ${ZENOWETHU.email}`, { x: MARGIN, y, size: 8, font: regularFont, color: MID });
+    page.drawText(`Tel: ${firm.phone}  |  Email: ${firm.email}`, { x: MARGIN, y, size: 8, font: regularFont, color: MID });
 
     // Date + ref on right
     const rightX = MARGIN + CONTENT_WIDTH / 2;
@@ -246,7 +262,7 @@ function drawAddressBlock(
 // Signature block
 // ---------------------------------------------------------------------------
 
-function drawSignatureBlock(page: PDFPage, consultantName: string, consultantTitle: string, y: number, regularFont: PDFFont, boldFont: PDFFont): number {
+function drawSignatureBlock(page: PDFPage, consultantName: string, consultantTitle: string, y: number, regularFont: PDFFont, boldFont: PDFFont, firm: FirmDetails): number {
     y -= 8;
     page.drawText('Yours faithfully,', { x: MARGIN, y, size: 9.5, font: regularFont, color: DARK });
     y -= 40; // space for physical signature
@@ -256,9 +272,9 @@ function drawSignatureBlock(page: PDFPage, consultantName: string, consultantTit
     y -= 12;
     page.drawText(consultantTitle, { x: MARGIN, y, size: 8.5, font: regularFont, color: MID });
     y -= 12;
-    page.drawText(ZENOWETHU.name, { x: MARGIN, y, size: 8.5, font: regularFont, color: MID });
+    page.drawText(firm.name, { x: MARGIN, y, size: 8.5, font: regularFont, color: MID });
     y -= 12;
-    page.drawText(`NCR Reg: ${ZENOWETHU.ncrdc}`, { x: MARGIN, y, size: 8, font: regularFont, color: MID });
+    page.drawText(`NCR Reg: ${firm.ncrdc}`, { x: MARGIN, y, size: 8, font: regularFont, color: MID });
     return y;
 }
 
@@ -282,6 +298,7 @@ function drawAttachmentList(page: PDFPage, attachments: string[], y: number, reg
 // ---------------------------------------------------------------------------
 
 async function generateCreditBureauDisputeLetter(input: DisputeLetterInput): Promise<Uint8Array> {
+    const firm = firmDetails(input.company);
     const pdfDoc = await PDFDocument.create();
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -291,7 +308,7 @@ async function generateCreditBureauDisputeLetter(input: DisputeLetterInput): Pro
     const date = todayFormatted();
     const bureau = input.bureauName || 'The Credit Bureau';
 
-    let y = drawLetterhead(page, boldFont, regularFont);
+    let y = drawLetterhead(page, boldFont, regularFont, firm);
     y -= 10;
 
     y = drawAddressBlock(
@@ -301,8 +318,7 @@ async function generateCreditBureauDisputeLetter(input: DisputeLetterInput): Pro
         ref,
         y,
         regularFont,
-        boldFont
-    );
+        boldFont, firm);
 
     // Subject
     page.drawText(`RE: FORMAL CREDIT BUREAU DISPUTE — ${input.clientFullName} — ID: ${input.clientIdNumber}`, {
@@ -368,19 +384,19 @@ async function generateCreditBureauDisputeLetter(input: DisputeLetterInput): Pro
 
     // POPIA note
     y = drawTextBlock(page,
-        `Please note that all information contained herein is provided subject to the Protection of Personal Information Act 4 of 2013 (POPIA). A valid Power of Attorney authorising Zenowethu Debt Management (PTY) LTD to act on behalf of the above-named consumer is on file and available on request.`,
+        `Please note that all information contained herein is provided subject to the Protection of Personal Information Act 4 of 2013 (POPIA). A valid Power of Attorney authorising ${firm.name} to act on behalf of the above-named consumer is on file and available on request.`,
         MARGIN, y, CONTENT_WIDTH, boldFont, regularFont, { size: 8.5, color: MID });
     y -= 16;
 
     y = drawSignatureBlock(page,
         input.consultantName || 'Authorised Consultant',
         input.consultantTitle || 'Credit Repair Consultant',
-        y, regularFont, boldFont);
+        y, regularFont, boldFont, firm);
     y -= 10;
 
     drawAttachmentList(page, [
         'Certified copy of South African Identity Document',
-        'Signed Power of Attorney (Zenowethu template)',
+        `Signed Power of Attorney (${input.company.shortName} template)`,
         'Recent Proof of Residence (not older than 3 months)',
         `Credit Bureau Report reflecting disputed listing (${input.bureauName || 'Bureau'})`,
     ], y, regularFont, boldFont);
@@ -395,6 +411,7 @@ async function generateCreditBureauDisputeLetter(input: DisputeLetterInput): Pro
 // ---------------------------------------------------------------------------
 
 async function generateCreditProviderDisputeLetter(input: DisputeLetterInput): Promise<Uint8Array> {
+    const firm = firmDetails(input.company);
     const pdfDoc = await PDFDocument.create();
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -403,7 +420,7 @@ async function generateCreditProviderDisputeLetter(input: DisputeLetterInput): P
     const ref = input.referenceNumber || newRef();
     const date = todayFormatted();
 
-    let y = drawLetterhead(page, boldFont, regularFont);
+    let y = drawLetterhead(page, boldFont, regularFont, firm);
     y -= 10;
 
     y = drawAddressBlock(
@@ -413,8 +430,7 @@ async function generateCreditProviderDisputeLetter(input: DisputeLetterInput): P
         ref,
         y,
         regularFont,
-        boldFont
-    );
+        boldFont, firm);
 
     page.drawText(`RE: FORMAL DISPUTE — NCA SECTION 72 — ${input.clientFullName} — ACCT: ${input.accountNumber}`, {
         x: MARGIN, y, size: 10, font: boldFont, color: DARK,
@@ -473,7 +489,7 @@ async function generateCreditProviderDisputeLetter(input: DisputeLetterInput): P
     y = drawSignatureBlock(page,
         input.consultantName || 'Authorised Consultant',
         input.consultantTitle || 'Credit Repair Consultant',
-        y, regularFont, boldFont);
+        y, regularFont, boldFont, firm);
     y -= 10;
 
     drawAttachmentList(page, [
@@ -491,6 +507,7 @@ async function generateCreditProviderDisputeLetter(input: DisputeLetterInput): P
 // ---------------------------------------------------------------------------
 
 async function generateSection129Demand(input: DisputeLetterInput): Promise<Uint8Array> {
+    const firm = firmDetails(input.company);
     const pdfDoc = await PDFDocument.create();
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -498,14 +515,13 @@ async function generateSection129Demand(input: DisputeLetterInput): Promise<Uint
     const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     const ref = input.referenceNumber || newRef();
 
-    let y = drawLetterhead(page, boldFont, regularFont);
+    let y = drawLetterhead(page, boldFont, regularFont, firm);
     y -= 10;
 
     y = drawAddressBlock(
         page,
         [input.creditorName, 'Legal / Compliance Department', 'South Africa'],
-        todayFormatted(), ref, y, regularFont, boldFont
-    );
+        todayFormatted(), ref, y, regularFont, boldFont, firm);
 
     page.drawText(`RE: SECTION 129 COMPLIANCE DEMAND — NCA 34 OF 2005 — ACCT: ${input.accountNumber}`, {
         x: MARGIN, y, size: 10, font: boldFont, color: DARK,
@@ -560,7 +576,7 @@ async function generateSection129Demand(input: DisputeLetterInput): Promise<Uint
     y = drawSignatureBlock(page,
         input.consultantName || 'Authorised Consultant',
         input.consultantTitle || 'Credit Repair Consultant',
-        y, regularFont, boldFont);
+        y, regularFont, boldFont, firm);
 
     drawFooter(page, regularFont, 1, 1);
     return pdfDoc.save();
@@ -571,6 +587,7 @@ async function generateSection129Demand(input: DisputeLetterInput): Promise<Uint
 // ---------------------------------------------------------------------------
 
 async function generateSettlementLetter(input: DisputeLetterInput): Promise<Uint8Array> {
+    const firm = firmDetails(input.company);
     const pdfDoc = await PDFDocument.create();
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -582,14 +599,13 @@ async function generateSettlementLetter(input: DisputeLetterInput): Promise<Uint
     const offerPercent = input.settlementOfferPercent || 40;
     const settlementAmount = input.settlementAmount || Math.round(outstandingBalance * offerPercent / 100);
 
-    let y = drawLetterhead(page, boldFont, regularFont);
+    let y = drawLetterhead(page, boldFont, regularFont, firm);
     y -= 10;
 
     y = drawAddressBlock(
         page,
         [input.creditorName, 'Settlements / Collections Department', 'South Africa'],
-        todayFormatted(), ref, y, regularFont, boldFont
-    );
+        todayFormatted(), ref, y, regularFont, boldFont, firm);
 
     page.drawText(`RE: FULL & FINAL SETTLEMENT OFFER — ${input.clientFullName} — ACCT: ${input.accountNumber}`, {
         x: MARGIN, y, size: 10, font: boldFont, color: DARK,
@@ -633,14 +649,14 @@ async function generateSettlementLetter(input: DisputeLetterInput): Promise<Uint
     y -= 10;
 
     y = drawTextBlock(page,
-        `Acceptance of this offer must be confirmed in writing to Zenowethu Debt Management (PTY) LTD within 10 business days. Kindly acknowledge receipt of this letter and provide banking details for payment by return.`,
+        `Acceptance of this offer must be confirmed in writing to ${firm.name} within 10 business days. Kindly acknowledge receipt of this letter and provide banking details for payment by return.`,
         MARGIN, y, CONTENT_WIDTH, boldFont, regularFont, { size: 9 });
     y -= 16;
 
     y = drawSignatureBlock(page,
         input.consultantName || 'Authorised Consultant',
         input.consultantTitle || 'Credit Repair Consultant',
-        y, regularFont, boldFont);
+        y, regularFont, boldFont, firm);
 
     drawFooter(page, regularFont, 1, 1);
     return pdfDoc.save();
@@ -651,6 +667,7 @@ async function generateSettlementLetter(input: DisputeLetterInput): Promise<Uint
 // ---------------------------------------------------------------------------
 
 async function generatePaidUpRequestLetter(input: DisputeLetterInput): Promise<Uint8Array> {
+    const firm = firmDetails(input.company);
     const pdfDoc = await PDFDocument.create();
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -658,14 +675,13 @@ async function generatePaidUpRequestLetter(input: DisputeLetterInput): Promise<U
     const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     const ref = input.referenceNumber || newRef();
 
-    let y = drawLetterhead(page, boldFont, regularFont);
+    let y = drawLetterhead(page, boldFont, regularFont, firm);
     y -= 10;
 
     y = drawAddressBlock(
         page,
         [input.creditorName, 'Client Services / Administration', 'South Africa'],
-        todayFormatted(), ref, y, regularFont, boldFont
-    );
+        todayFormatted(), ref, y, regularFont, boldFont, firm);
 
     page.drawText(`RE: REQUEST FOR PAID-UP LETTER — ${input.clientFullName} — ACCT: ${input.accountNumber}`, {
         x: MARGIN, y, size: 10, font: boldFont, color: DARK,
@@ -713,7 +729,7 @@ async function generatePaidUpRequestLetter(input: DisputeLetterInput): Promise<U
     y = drawSignatureBlock(page,
         input.consultantName || 'Authorised Consultant',
         input.consultantTitle || 'Credit Repair Consultant',
-        y, regularFont, boldFont);
+        y, regularFont, boldFont, firm);
     y -= 10;
 
     drawAttachmentList(page, [
@@ -731,6 +747,7 @@ async function generatePaidUpRequestLetter(input: DisputeLetterInput): Promise<U
 // ---------------------------------------------------------------------------
 
 async function generatePrescribedDebtNotice(input: DisputeLetterInput): Promise<Uint8Array> {
+    const firm = firmDetails(input.company);
     const pdfDoc = await PDFDocument.create();
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -738,14 +755,13 @@ async function generatePrescribedDebtNotice(input: DisputeLetterInput): Promise<
     const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     const ref = input.referenceNumber || newRef();
 
-    let y = drawLetterhead(page, boldFont, regularFont);
+    let y = drawLetterhead(page, boldFont, regularFont, firm);
     y -= 10;
 
     y = drawAddressBlock(
         page,
         [input.creditorName, 'Collections / Legal Department', 'South Africa'],
-        todayFormatted(), ref, y, regularFont, boldFont
-    );
+        todayFormatted(), ref, y, regularFont, boldFont, firm);
 
     page.drawText(`RE: NOTICE OF PRESCRIPTION — PRESCRIPTION ACT 68 OF 1969 — ACCT: ${input.accountNumber}`, {
         x: MARGIN, y, size: 10, font: boldFont, color: RED,
@@ -803,7 +819,7 @@ async function generatePrescribedDebtNotice(input: DisputeLetterInput): Promise<
     y = drawSignatureBlock(page,
         input.consultantName || 'Authorised Consultant',
         input.consultantTitle || 'Credit Repair Consultant',
-        y, regularFont, boldFont);
+        y, regularFont, boldFont, firm);
 
     drawFooter(page, regularFont, 1, 1);
     return pdfDoc.save();
@@ -869,6 +885,7 @@ export async function generateAllDisputeLetters(
         cellNumber?: string;
     },
     bureauName: string,
+    company: CompanyProfile,
     consultantName?: string
 ): Promise<Array<{ referenceNumber: string; type: DisputeLetterType; creditor: string; pdfBytes: Uint8Array }>> {
     const results: Array<{ referenceNumber: string; type: DisputeLetterType; creditor: string; pdfBytes: Uint8Array }> = [];
@@ -877,6 +894,7 @@ export async function generateAllDisputeLetters(
         if (listing.classification === 'VALID') continue;
 
         const base: DisputeLetterInput = {
+            company,
             clientFullName: clientInfo.fullName,
             clientIdNumber: clientInfo.idNumber,
             clientAddress: clientInfo.address,

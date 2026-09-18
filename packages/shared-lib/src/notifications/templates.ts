@@ -1,3 +1,5 @@
+import { type CompanyProfile, ZENOWETHU_COMPANY_PROFILE, formatRegistrationStrip, formatCompanyAddress, formatCompanyLegalLine, getPlatformConfig } from '../company/profile';
+
 // Notification Templates for Credit Repair Status Changes
 // Each template has SMS (short) and Email (detailed) versions
 
@@ -18,7 +20,11 @@ export interface NotificationTemplate {
 // {clientName} - Client's full name
 // {fileNumber} - Case file number
 // {status} - Current status name
-// {companyName} - Zenowethu or white-label name
+// {companyName} - The tenant firm's trading name (or white-label name)
+// {companyShortName} - The firm's short brand name
+// {companyNcrdc} - The firm's NCRDC number (blank for non-DC firms)
+// {companyWithNcrdc} - e.g. "Zenowethu Debt Management (NCRDC3693)"
+// {platformName} - The platform/product name used in system notifications
 // {partnerName} - B2B partner name
 // {deadline} - SLA deadline date
 // {amount} - Fee amount where applicable
@@ -34,29 +40,29 @@ const TEMPLATES: NotificationTemplate[] = [
     {
         statusCode: 'NEW_LEAD_B2B',
         statusName: 'New Lead',
-        smsTemplate: `Hi {clientName}, we have received your application for {services}. Zenowethu Debt Management will contact you within 7 Working days. Ref: {fileNumber}`,
+        smsTemplate: `Hi {clientName}, we have received your application for {services}. {companyName} will contact you within 7 Working days. Ref: {fileNumber}`,
         emailSubject: 'Welcome to {mainSource} - Application Received',
         emailTemplate: `Dear {clientName},
 
 Hi This is {partnerUserName} from {mainSource} Head Office
 
-This email serves to confirm that your application for **{services}** has been successfully referred to our trusted service partner, **Zenowethu Debt Management**.
+This email serves to confirm that your application for **{services}** has been successfully referred to our trusted service partner, **{companyName}**.
 
-Zenowethu provides specialized credit repair services and will be handling your detailed case assessment and resolution.
+{companyShortName} provides specialized credit repair services and will be handling your detailed case assessment and resolution.
 
 **Case Details:**
 • Reference Number: {fileNumber}
 • Service Requested: {services}
 
-The Zenowethu team has received your file and is currently reviewing it. They will contact you directly within 7 working days if any further information is required.
+The {companyShortName} team has received your file and is currently reviewing it. They will contact you directly within 7 working days if any further information is required.
 
-If you have any immediate questions, you may contact them at 081 747 7616.
+If you have any immediate questions, you may contact them at {phone}.
 
 Kind Regards,
 {partnerUserName}
 {mainSource}
 
-(In partnership with Zenowethu Debt Management)`,
+(In partnership with {companyName})`,
         sendToClient: true,
         sendToPartner: true,
         isUrgent: false },
@@ -349,7 +355,7 @@ Kind regards,
 
 I hope this message finds you well. Thank you so much for the work you have already put into managing the debt review matter for {clientName} (ID: {idNumber}) — we genuinely appreciate the effort and dedication that goes into supporting consumers through this process.
 
-We are writing to kindly request the transfer of the complete consumer file to Zenowethu Debt Management (NCRDC3693), as the consumer has approached us to continue with their debt review matter.
+We are writing to kindly request the transfer of the complete consumer file to {companyWithNcrdc}, as the consumer has approached us to continue with their debt review matter.
 
 Please could you assist us by providing the following documents at your earliest convenience:
 
@@ -566,7 +572,7 @@ Kind regards,
         statusName: 'New Website Lead',
         smsTemplate: `New website lead: {clientName} | {service} | {phone}`,
         emailSubject: 'New Website Lead — {clientName} ({service})',
-        emailTemplate: `A new lead has been submitted via the Zenowethu website assessment form.
+        emailTemplate: `A new lead has been submitted via the {companyShortName} website assessment form.
 
 Name:    {clientName}
 Service: {service}
@@ -601,7 +607,7 @@ Please review the case and ensure all follow-up actions are taken promptly.
 Case Link: {caseUrl}
 
 Regards,
-Zenowethu System`,
+{platformName} System`,
         sendToClient: false,
         sendToPartner: false,
         isUrgent: true },
@@ -623,7 +629,7 @@ Please log in and review the case at your earliest convenience.
 Case Link: {caseUrl}
 
 Regards,
-Zenowethu System`,
+{platformName} System`,
         sendToClient: false,
         sendToPartner: false,
         isUrgent: false },
@@ -646,7 +652,7 @@ Please review the case and take the appropriate action.
 Case Link: {caseUrl}
 
 Regards,
-Zenowethu System`,
+{platformName} System`,
         sendToClient: false,
         sendToPartner: false,
         isUrgent: false },
@@ -668,7 +674,7 @@ Please request fresh documents from the client.
 Case Link: {caseUrl}
 
 Regards,
-Zenowethu System`,
+{platformName} System`,
         sendToClient: false,
         sendToPartner: false,
         isUrgent: false },
@@ -691,7 +697,7 @@ Please follow up with the client or update the payment status.
 Case Link: {caseUrl}
 
 Regards,
-Zenowethu System`,
+{platformName} System`,
         sendToClient: false,
         sendToPartner: false,
         isUrgent: false },
@@ -728,8 +734,14 @@ export interface EmailLayoutOptions {
         url: string;
     };
     hideFooter?: boolean;
+    /** Overrides the display name in the footer; defaults to the profile's trading name. */
     companyName?: string;
     logoUrl?: string;
+    /**
+     * The firm the email is from. Server callers resolve it with getCompanyProfile().
+     * Defaults to the Zenowethu profile until multi-tenancy supplies the request's tenant.
+     */
+    company?: CompanyProfile;
 }
 
 const BRAND_NAVY = '#0d3870';
@@ -737,11 +749,13 @@ const BRAND_ORANGE = '#d9701a';
 const BRAND_GRAY = '#f4f7f9';
 
 /**
- * Wraps raw content in a professional, branded Zenowethu HTML layout.
+ * Wraps raw content in a professional, branded HTML layout for the tenant firm.
  * Optimized for mobile and desktop email clients.
  */
 export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOptions = {}): string {
-    const companyName = options.companyName || 'Zenowethu Debt Management and Insurance';
+    const company = options.company ?? ZENOWETHU_COMPANY_PROFILE;
+    const companyName = options.companyName || company.tradingName;
+    const watermarkUrl = `${getPlatformConfig().url.replace(/\/+$/, '')}/branding/watermark.jpg`;
     const title = options.title || companyName;
     const previewText = options.previewText || '';
     
@@ -802,13 +816,13 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                                     </td>
                                     <td style="padding-left: 20px;" valign="middle">
                                         <div style="color: #ffffff; font-size: 26px; font-weight: bold; font-family: Arial, sans-serif; line-height: 1.1; letter-spacing: 1px;">
-                                            ZENOWETHU
+                                            ${company.shortName.toUpperCase()}
                                         </div>
-                                        <div style="color: #ffffff; font-size: 13px; font-weight: 500; margin-top: 5px; font-family: Arial, sans-serif; letter-spacing: 0.3px;">
-                                            Debt Management | Insurance | Financial Services
-                                        </div>
+                                        ${company.tagline ? `<div style="color: #ffffff; font-size: 13px; font-weight: 500; margin-top: 5px; font-family: Arial, sans-serif; letter-spacing: 0.3px;">
+                                            ${company.tagline}
+                                        </div>` : ''}
                                         <div style="color: rgba(255,255,255,0.7); font-size: 10px; margin-top: 8px; font-family: Arial, sans-serif; letter-spacing: 0.5px;">
-                                            NCRDC3693 | DCASA 0863 | 081 747 7616
+                                            ${formatRegistrationStrip(company)}
                                         </div>
                                     </td>
                                 </tr>
@@ -821,10 +835,10 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                     </tr>
                     <!-- Main Body with Watermark -->
                     <tr>
-                        <td class="content" style="background-image: url('https://cases.zenowethu.co.za/branding/watermark.jpg'); background-repeat: no-repeat; background-position: center; background-size: contain;">
+                        <td class="content" style="background-image: url('${watermarkUrl}'); background-repeat: no-repeat; background-position: center; background-size: contain;">
                             <!--[if gte mso 9]>
                             <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:400px;">
-                                <v:fill type="frame" src="https://cases.zenowethu.co.za/branding/watermark.jpg" color="#ffffff" />
+                                <v:fill type="frame" src="${watermarkUrl}" color="#ffffff" />
                                 <v:textbox inset="0,0,0,0">
                             <![endif]-->
                             <div style="position: relative; z-index: 1;">
@@ -842,13 +856,13 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                     <tr>
                         <td class="footer">
                             <p style="margin: 0 0 10px 0; font-weight: bold; color: ${BRAND_NAVY}; font-size: 14px;">${companyName}</p>
-                            <p style="margin: 0 0 5px 0;">Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199</p>
-                            <p style="margin: 0 0 5px 0;">Tel: 081 747 7616 | Email: <a href="mailto:notifications@zenowethu.co.za">notifications@zenowethu.co.za</a></p>
-                            <p style="margin: 0 0 20px 0;">Web: <a href="https://www.zenowethu.co.za">www.zenowethu.co.za</a></p>
+                            <p style="margin: 0 0 5px 0;">${formatCompanyAddress(company)}</p>
+                            <p style="margin: 0 0 5px 0;">Tel: ${company.phone} | Email: <a href="mailto:${company.email}">${company.email}</a></p>
+                            <p style="margin: 0 0 20px 0;">Web: <a href="${company.websiteUrl}">${company.website}</a></p>
                             
                             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eeeeee; font-size: 10px; line-height: 1.4; text-align: justify;">
-                                <p style="margin: 0;"><strong>Confidentiality & POPIA Notice:</strong> This email and any attachments are confidential and intended solely for the addressee. Zenowethu Debt Management (PTY) LTD is committed to protecting your personal information in accordance with the Protection of Personal Information Act (POPIA). If you have received this email in error, please notify the sender immediately and delete it from your system.</p>
-                                <p style="margin: 10px 0 0 0; text-align: center;">Zenowethu Debt Management (PTY) LTD | Reg No: 2013/121120/07 | NCRDC3693</p>
+                                <p style="margin: 0;"><strong>Confidentiality & POPIA Notice:</strong> This email and any attachments are confidential and intended solely for the addressee. ${company.legalName} is committed to protecting your personal information in accordance with the Protection of Personal Information Act (POPIA). If you have received this email in error, please notify the sender immediately and delete it from your system.</p>
+                                <p style="margin: 10px 0 0 0; text-align: center;">${formatCompanyLegalLine(company)}</p>
                             </div>
                         </td>
                     </tr>

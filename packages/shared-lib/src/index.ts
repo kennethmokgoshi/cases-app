@@ -12,6 +12,11 @@ export * from './statuses';
 // import { ... } from '@zenowethu/shared-lib/src/openai'
 // import { ... } from '@zenowethu/shared-lib/src/xds'
 
+// Company (tenant) identity + platform (operator) config — pure formatters and
+// Zenowethu defaults. The Prisma resolver `getCompanyProfile()` is deep-imported
+// from './company/company-profile-service' by server code only.
+export * from './company';
+
 export * from './notifications';
 // NOTE: './dc' (DC priority emails + outcome events) is NOT exported here — it
 // imports @zenowethu/database (Prisma), which must never reach client bundles.

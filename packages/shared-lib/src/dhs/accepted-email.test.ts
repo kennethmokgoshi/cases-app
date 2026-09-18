@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT } from './accepted-email';
+import { ZENOWETHU_COMPANY_PROFILE } from '../company/profile';
 
 describe('buildAcceptedViaDhsEmail', () => {
     const email = buildAcceptedViaDhsEmail({
+        company: ZENOWETHU_COMPANY_PROFILE,
         clientFirstName: 'Thabo',
         fileNumber: 'ZDM-2026-096',
         consentLink: 'https://cases.zenowethu.co.za/consent/debt-review-removal/abc123',
@@ -34,6 +36,7 @@ describe('buildAcceptedViaDhsEmail', () => {
 
     it('explains the Crediva consent link uses ID verification, not login', () => {
         const e = buildAcceptedViaDhsEmail({
+        company: ZENOWETHU_COMPANY_PROFILE,
             clientFirstName: 'Sipho',
             fileNumber: 'ZDM-2026-1009',
             consentLink: 'https://crediva.zenowethu.co.za/consent/tok123',
@@ -76,6 +79,7 @@ describe('buildAcceptedViaDhsEmail', () => {
 
     it('falls back to a generic phrase when the previous DC is unknown', () => {
         const e = buildAcceptedViaDhsEmail({
+        company: ZENOWETHU_COMPANY_PROFILE,
             clientFirstName: 'Sipho',
             fileNumber: 'ZDM-2026-1009',
             consentLink: 'https://x/y',
@@ -87,6 +91,7 @@ describe('buildAcceptedViaDhsEmail', () => {
 
     it('trims a padded first name', () => {
         const e = buildAcceptedViaDhsEmail({
+        company: ZENOWETHU_COMPANY_PROFILE,
             clientFirstName: 'SIPHO PHILLIPH ',
             fileNumber: 'ZDM-2026-1009',
             consentLink: 'https://x/y',

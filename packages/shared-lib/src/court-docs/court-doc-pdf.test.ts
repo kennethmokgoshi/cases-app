@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { generateCourtDoc, COURT_DOC_LABELS, COURT_DOC_DESCRIPTIONS, type CourtDocInput } from './court-doc-pdf';
+import { ZENOWETHU_COMPANY_PROFILE } from '../company/profile';
 
 describe('Court Documents PDF Generator', () => {
   const mockInput: CourtDocInput = {
+    company: ZENOWETHU_COMPANY_PROFILE,
     fileNumber: 'ZEN-2026-001',
     courtName: 'High Court of South Africa',
     courtCaseNumber: '12345/2026',
@@ -85,6 +87,7 @@ describe('Court Documents PDF Generator', () => {
 
   it('should handle minimal input (no optional fields)', async () => {
     const minimalInput: CourtDocInput = {
+    company: ZENOWETHU_COMPANY_PROFILE,
       fileNumber: 'ZEN-2026-MIN',
       clientFullName: 'Jane Smith',
       clientIdNumber: '9876543210987',
@@ -96,6 +99,7 @@ describe('Court Documents PDF Generator', () => {
 
   it('should handle joint client', async () => {
     const jointInput: CourtDocInput = {
+    company: ZENOWETHU_COMPANY_PROFILE,
       ...mockInput,
       jointClientFullName: 'Mary Doe',
       jointClientIdNumber: '1111111111111',
@@ -131,6 +135,7 @@ describe('Court Documents PDF Generator', () => {
 
   it('should generate valid PDFs with prescribed accounts', async () => {
     const prescribedInput: CourtDocInput = {
+    company: ZENOWETHU_COMPANY_PROFILE,
       ...mockInput,
       creditAccounts: [
         {

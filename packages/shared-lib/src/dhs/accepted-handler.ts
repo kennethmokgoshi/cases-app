@@ -26,6 +26,7 @@ import { addWorkingDays } from '../statuses/workingDays';
 import { buildAcceptedViaDhsEmail, ACCEPTED_VIA_DHS_SUBJECT, type CredoLoginDetails } from './accepted-email';
 import { buildConsentReminderEmail, CONSENT_REMINDER_SUBJECT } from './consent-reminder-email';
 import { createDrrConsentRequest, buildConsentLink, buildCredoConsentLink } from './consent-service';
+import { getCompanyProfile } from '../company/company-profile-service';
 import {
     provisionConsumerForClient,
     createPasswordResetTokenForConsumer,
@@ -268,12 +269,14 @@ export async function handleDhsAccepted(params: {
 
         let subject: string;
         let body: string;
+        const company = await getCompanyProfile();
         if (forceResend) {
             // Resend / Manage Consumers nudge: the consumer already received the
             // acceptance news — send the consent REMINDER instead, which tells
             // them plainly that flag removal cannot continue without consent.
             subject = CONSENT_REMINDER_SUBJECT(caseData.fileNumber);
             body = buildConsentReminderEmail({
+                company,
                 clientFirstName: caseData.client.firstName,
                 fileNumber: caseData.fileNumber,
                 consentLink: result.consentLink,
@@ -299,6 +302,7 @@ export async function handleDhsAccepted(params: {
 
             subject = ACCEPTED_VIA_DHS_SUBJECT(caseData.fileNumber);
             body = buildAcceptedViaDhsEmail({
+                company,
                 clientFirstName: caseData.client.firstName,
                 fileNumber: caseData.fileNumber,
                 consentLink: result.consentLink,
@@ -331,7 +335,7 @@ export async function handleDhsAccepted(params: {
                 triggeredByUserId,
                 forceResend
                     ? `[SYSTEM] Consent REMINDER ${existing ? 'RE-SENT' : 'sent'} to consumer (${caseData.client.email}) — the email reminds them that the debt review flag removal cannot continue until they consent. ${existing ? 'The existing secure link remains valid.' : 'A new secure consent link was issued.'} Still awaiting consumer consent before flag removal proceeds.`
-                    : `[SYSTEM] DHS Accepted: Transfer accepted — file is now with Zenowethu Debt Management. Acceptance + debt-review-removal consent email sent to consumer (${caseData.client.email}). Status → Ready to Consent. Next update +${CONSENT_FOLLOWUP_DAYS} working days. Awaiting consumer consent via the secure link before flag removal proceeds.`
+                    : `[SYSTEM] DHS Accepted: Transfer accepted — file is now with ${company.tradingName}. Acceptance + debt-review-removal consent email sent to consumer (${caseData.client.email}). Status → Ready to Consent. Next update +${CONSENT_FOLLOWUP_DAYS} working days. Awaiting consumer consent via the secure link before flag removal proceeds.`
             );
         } else {
             // Roll back a NEWLY created consent request so the next status check

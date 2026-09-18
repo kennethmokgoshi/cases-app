@@ -3,9 +3,10 @@ import { z } from "zod";
 import { prisma } from "@zenowethu/database";
 import { auth } from "@/auth";
 import { createLogger } from "@zenowethu/shared-lib";
+import { getCompanyProfile } from "@zenowethu/shared-lib/src/company/company-profile-service";
 import {
     recordDrrConsent,
-    DRR_CONSENT_TEXT,
+    getDrrConsentText,
     formatConsentConsumerDisplayName,
     getDrrConsentVerificationState,
     verifyDrrConsentIdentity,
@@ -68,7 +69,7 @@ async function resolveOwnership(token: string, consumerId: string): Promise<Owne
     if (!matchesById) {
         return {
             consent: null,
-            error: "This consent request is not linked to your profile. Please contact us on 081 747 7616 if you believe this is a mistake.",
+            error: `This consent request is not linked to your profile. Please contact us on ${(await getCompanyProfile()).phone} if you believe this is a mistake.`,
             status: 403,
         };
     }
@@ -98,6 +99,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
         const c = ownership.consent;
         const consumerDisplayName = formatConsentConsumerDisplayName(c.client);
+        const currentConsentText = await getDrrConsentText();
         return NextResponse.json({
             token: c.token,
             status: c.status,
@@ -105,7 +107,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
             consumerFirstName: consumerDisplayName,
             consumerDisplayName,
             fileNumber: c.case?.fileNumber ?? null,
-            consentText: c.status === "PENDING" ? DRR_CONSENT_TEXT : c.consentText ?? DRR_CONSENT_TEXT,
+            consentText: c.status === "PENDING" ? currentConsentText : c.consentText ?? currentConsentText,
             consentedAt: c.consentedAt,
         });
     } catch (error) {
@@ -165,7 +167,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             success: true,
             alreadyConsented: result.alreadyConsented,
             message:
-                "Thank you. Your approval has been recorded and Zenowethu Debt Management is confirmed as the team authorised to continue working on your file.",
+                `Thank you. Your approval has been recorded and ${(await getCompanyProfile()).tradingName} is confirmed as the team authorised to continue working on your file.`,
         });
     } catch (error) {
         logger.error("[CREDO_CONSENT] POST error", error);

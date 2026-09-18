@@ -34,6 +34,8 @@ import {
 } from './templates';
 import { getGHLCredentials, getSMTPCredentials, isGhlEnabled } from '../integrations';
 import { logger } from '../logger';
+import { getCompanyProfile } from '../company/company-profile-service';
+import { type CompanyProfile, formatCompanyWithNcrdc, getPlatformConfig } from '../company/profile';
 import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
 import { resolveCaseContact } from '../partners/branch-contact-service';
@@ -46,8 +48,17 @@ const EMAIL_ENABLED = process.env.EMAIL_ENABLED !== 'false';
 const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED !== 'false';
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED === 'true'; // Telegram off by default (no provider configured)
 
-const COMPANY_NAME = process.env.COMPANY_NAME || 'Zenowethu Debt Management';
-const COMPANY_PHONE = process.env.COMPANY_PHONE || '081 747 7616';
+/** Template variables that describe the sending firm and the platform. */
+function companyVariables(company: CompanyProfile): Record<string, string> {
+    return {
+        companyName: company.tradingName,
+        companyShortName: company.shortName,
+        companyNcrdc: company.ncrdcNumber ?? '',
+        companyWithNcrdc: formatCompanyWithNcrdc(company),
+        phone: company.phone,
+        platformName: getPlatformConfig().name,
+    };
+}
 const VIRTUAL_ASSISTANT_NAME = process.env.VIRTUAL_ASSISTANT_NAME || 'Thandi';
 
 // Helper: blind-copy the monitoring mailbox on every outbound email so staff can
@@ -293,16 +304,16 @@ export async function sendStatusChangeNotification(
         return result;
     }
 
+    const company = await getCompanyProfile();
     const variables: Record<string, string> = {
         clientName: payload.clientName,
         fileNumber: payload.fileNumber,
         status: template.statusName,
-        companyName: COMPANY_NAME,
-        phone: COMPANY_PHONE,
+        ...companyVariables(company),
         partnerName: payload.partnerName || '',
         virtualAssistantName: VIRTUAL_ASSISTANT_NAME,
         services: payload.services || '',
-        mainSource: payload.mainSource || payload.partnerName || COMPANY_NAME,
+        mainSource: payload.mainSource || payload.partnerName || company.tradingName,
         dcName: payload.dcName || 'Debt Counsellor',
         idNumber: payload.idNumber || '',
         caseUrl: payload.caseUrl || '',
@@ -468,6 +479,7 @@ async function sendNotificationByTemplate(
         whatsappSuccess: false,
         telegramSuccess: false,
         errors: [] };
+    const company = await getCompanyProfile();
     if (template.sendToClient && payload.clientPhone) {
         const smsMessage = renderTemplate(template.smsTemplate, variables);
 
@@ -512,7 +524,7 @@ async function sendNotificationByTemplate(
             const brandedHtml = renderBrandedEmail(htmlBody, {
                 title: emailSubject,
                 previewText: emailBody.substring(0, 100) + '...',
-                companyName: COMPANY_NAME
+                company
             });
 
             const emailResult = await emailProvider.send(
@@ -629,7 +641,7 @@ async function sendNotificationByTemplate(
             const brandedHtml = renderBrandedEmail(htmlBody, {
                 title: emailSubject,
                 previewText: emailBody.substring(0, 100) + '...',
-                companyName: COMPANY_NAME
+                company
             });
 
             // The consumer's signed POA and ID travel with every request we make
@@ -749,6 +761,7 @@ export async function sendFileRequestEmails(payload: {
     useAiDraft?: boolean;
     allAccounts?: DraftingAccount[];  // full account list used for bureau AI drafts
 }): Promise<FileRequestResult> {
+    const company = await getCompanyProfile();
     const bureauTemplate = getTemplateByStatus('REQUEST_FILE_CREDIT_BUREAU');
     const providerTemplate = getTemplateByStatus('REQUEST_FILE_CREDIT_PROVIDER');
 
@@ -761,9 +774,8 @@ export async function sendFileRequestEmails(payload: {
         clientName: payload.clientName,
         idNumber: payload.idNumber,
         fileNumber: payload.fileNumber,
-        companyName: COMPANY_NAME,
-        phone: COMPANY_PHONE,
-        senderName: payload.senderName || COMPANY_NAME,
+        ...companyVariables(company),
+        senderName: payload.senderName || company.tradingName,
         accountNumbers: '',
     };
 
@@ -789,8 +801,8 @@ export async function sendFileRequestEmails(payload: {
                 documentType: 'BUREAU_FILE_REQUEST',
                 accounts:     payload.allAccounts,
                 senderName:   payload.senderName,
-                companyName:  COMPANY_NAME,
-                companyPhone: COMPANY_PHONE,
+                companyName:  company.tradingName,
+                companyPhone: company.phone,
             });
             bureauSubject     = draft.subject;
             bureauBody        = draft.content;
@@ -814,7 +826,7 @@ export async function sendFileRequestEmails(payload: {
             const brandedHtml = renderBrandedEmail(bureauBody.replace(/\n/g, '<br>'), {
                 title: bureauSubject,
                 previewText: bureauBody.substring(0, 100) + '...',
-                companyName: COMPANY_NAME
+                company
             });
 
             const res = await emailProvider.send(bureauEmail, bureauSubject, brandedHtml, bureauBody, addBccToOptions({}));
@@ -863,8 +875,8 @@ export async function sendFileRequestEmails(payload: {
                     documentType: 'PROVIDER_FILE_REQUEST',
                     accounts:     providerAccounts,
                     senderName:   payload.senderName,
-                    companyName:  COMPANY_NAME,
-                    companyPhone: COMPANY_PHONE,
+                    companyName:  company.tradingName,
+                    companyPhone: company.phone,
                 });
                 subject     = draft.subject;
                 body        = draft.content;
@@ -890,7 +902,7 @@ export async function sendFileRequestEmails(payload: {
         const brandedHtml = renderBrandedEmail(body.replace(/\n/g, '<br>'), {
             title: subject,
             previewText: body.substring(0, 100) + '...',
-            companyName: COMPANY_NAME
+            company
         });
 
         const res = await emailProvider.send(cp.email, subject, brandedHtml, body, addBccToOptions({}));
@@ -940,6 +952,7 @@ export async function sendDrrRequestEmails(payload: {
     creditProviderContacts: CreditProviderContact[];
     allAccounts?: DraftingAccount[];
 }): Promise<FileRequestResult & { dcSent: boolean }> {
+    const company = await getCompanyProfile();
     const emailProvider = await getEmailProvider();
     const clientParts = payload.clientName.split(' ');
     const draftingClient = {
@@ -961,8 +974,8 @@ export async function sendDrrRequestEmails(payload: {
                 matter: { type: 'Debt Review Removal', creditorName: payload.dcName || 'Debt Counsellor' },
                 documentType: 'DC_DRR_FILE_REQUEST',
                 senderName: payload.senderName,
-                companyName: COMPANY_NAME,
-                companyPhone: COMPANY_PHONE,
+                companyName: company.tradingName,
+                companyPhone: company.phone,
             });
 
             const res = await emailProvider.send(payload.dcEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
@@ -998,8 +1011,8 @@ export async function sendDrrRequestEmails(payload: {
                 documentType: 'BUREAU_FILE_REQUEST',
                 accounts: payload.allAccounts,
                 senderName: payload.senderName,
-                companyName: COMPANY_NAME,
-                companyPhone: COMPANY_PHONE,
+                companyName: company.tradingName,
+                companyPhone: company.phone,
             });
 
             const res = await emailProvider.send(bureauEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
@@ -1041,8 +1054,8 @@ export async function sendDrrRequestEmails(payload: {
                 documentType: 'PROVIDER_FILE_REQUEST',
                 accounts: providerAccounts,
                 senderName: payload.senderName,
-                companyName: COMPANY_NAME,
-                companyPhone: COMPANY_PHONE,
+                companyName: company.tradingName,
+                companyPhone: company.phone,
             });
 
             const res = await emailProvider.send(cp.email, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
@@ -1153,10 +1166,10 @@ export async function sendInternalNotification(entry: {
     const APP_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
     const caseUrl = entry.caseId ? `${APP_URL}/cases/${entry.caseId}` : '';
 
+    const company = await getCompanyProfile();
     const variables = {
         ...entry.variables,
-        companyName: COMPANY_NAME,
-        phone: COMPANY_PHONE,
+        ...companyVariables(company),
         caseUrl: caseUrl };
 
     let recipients: { email: string; phone?: string | null; type: any }[] = [];

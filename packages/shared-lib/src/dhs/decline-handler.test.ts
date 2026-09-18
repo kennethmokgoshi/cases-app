@@ -20,6 +20,7 @@ import {
     resolveDcIdentity,
     resolveDeclineDetectedAt,
 } from './decline-handler';
+import { ZENOWETHU_COMPANY_PROFILE } from '../company/profile';
 
 describe('classifyDeclineReason', () => {
     // SEND_DOCS
@@ -265,6 +266,7 @@ describe('consumer decline email copy', () => {
 
     it('summarises transfer date, decline date, reason, and solution for SEND_DOCS declines', () => {
         const body = buildSendDocsClientEmail({
+            company: ZENOWETHU_COMPANY_PROFILE,
             clientFirstName: 'Maria',
             dcName: 'YMA Consulting',
             dcFirmName: null,
@@ -284,6 +286,7 @@ describe('consumer decline email copy', () => {
 
     it('names the DC and their firm for fees declines, showing the reason exactly once', () => {
         const body = buildOutstandingFeesEmail({
+            company: ZENOWETHU_COMPANY_PROFILE,
             clientFirstName: 'Nombulelo',
             dcName: 'Gasant Essack',
             dcFirmName: 'Creditore Debt Counselling',
@@ -305,6 +308,7 @@ describe('consumer decline email copy', () => {
 
     it('shows the decline reason only once in the resubmit (temporary delay) email', () => {
         const body = buildResubmitClientEmail({
+            company: ZENOWETHU_COMPANY_PROFILE,
             clientFirstName: 'Nokuphiwa',
             dcName: 'Debt Counsellor',
             dcFirmName: null,
@@ -321,6 +325,7 @@ describe('consumer decline email copy', () => {
 
     it('omits the firm phrase when no trading name is available', () => {
         const body = buildOutstandingFeesEmail({
+            company: ZENOWETHU_COMPANY_PROFILE,
             clientFirstName: 'Nombulelo',
             dcName: 'Gasant Essack',
             dcFirmName: null,
@@ -336,6 +341,7 @@ describe('consumer decline email copy', () => {
 
     it('formats the request invoice email to the DC correctly', () => {
         const body = buildRequestInvoiceEmail({
+            company: ZENOWETHU_COMPANY_PROFILE,
             clientName: 'Nombulelo Dlamini',
             idNumber: '8501015009087',
             fileNumber: 'ZDM-2026-1005-BZP',
@@ -355,6 +361,7 @@ describe('consumer decline email copy', () => {
 
     it('mentions the attached POA + ID when documents are available', () => {
         const body = buildRequestInvoiceEmail({
+            company: ZENOWETHU_COMPANY_PROFILE,
             clientName: 'Nombulelo Dlamini',
             idNumber: '8501015009087',
             fileNumber: 'ZDM-2026-1005-BZP',

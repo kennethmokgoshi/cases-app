@@ -36,6 +36,7 @@ import {
     resolveDcIdentity,
 } from './decline-handler';
 import { getBestDcEmail } from '../dc/email-priority';
+import { getCompanyProfile } from '../company/company-profile-service';
 import { buildMandateAttachments, mandateAttachedLabel } from '../documents/mandate-attachments';
 
 export interface PreviewMessage {
@@ -77,6 +78,7 @@ export async function previewDHSDecline(params: {
     declineReason: string;
 }): Promise<DeclinePreview> {
     const { caseId, declineReason } = params;
+    const company = await getCompanyProfile();
 
     const caseData = await prisma.case.findUnique({
         where: { id: caseId },
@@ -173,7 +175,7 @@ export async function previewDHSDecline(params: {
     if (category === 'SEND_DOCS' || category === 'SEND_DOCS_WITH_NCR') {
         preview.statusWouldUpdateTo = 'DOCUMENTS_EMAILED';
         const ncrLine = category === 'SEND_DOCS_WITH_NCR'
-            ? '\n• NCR Certificate of Registration (NCRDC3693)'
+            ? `\n• NCR Certificate of Registration (${company.ncrdcNumber ?? ''})`
             : '';
         if (category === 'SEND_DOCS_WITH_NCR') {
             preview.notes.push('Would also attach the NCR Certificate from admin resources (if present).');
@@ -187,7 +189,7 @@ export async function previewDHSDecline(params: {
                 to: dcEmail,
                 cc: clientCc,
                 subject: `Re: DHS Transfer Request – ${clientName} (ID: ${idNumber})`,
-                body: buildSendDocsEmail({ clientName, idNumber, fileNumber, dcName, declineReason, ncrLine }),
+                body: buildSendDocsEmail({ company, clientName, idNumber, fileNumber, dcName, declineReason, ncrLine }),
                 attachments: docAttachments,
             });
             if (caseData.client.email) {
@@ -196,6 +198,7 @@ export async function previewDHSDecline(params: {
                     to: caseData.client.email,
                     subject: `Update: DHS Transfer Declined (File: ${fileNumber})`,
                     body: buildSendDocsClientEmail({
+                        company,
                         clientFirstName,
                         dcName,
                         dcFirmName,
@@ -224,6 +227,7 @@ export async function previewDHSDecline(params: {
                 to: caseData.client.email,
                 subject: `Action Required: Please Contact Your Debt Counsellor – ${clientName}`,
                 body: buildConsumerConsentEmail({
+                        company,
                     clientFirstName,
                     dcName,
                     dcFirmName,
@@ -248,6 +252,7 @@ export async function previewDHSDecline(params: {
                 cc: clientCc,
                 subject: `Request for Invoice/Statement – ${clientName} (ID: ${idNumber})`,
                 body: buildRequestInvoiceEmail({
+                        company,
                     clientName,
                     idNumber,
                     fileNumber,
@@ -263,6 +268,7 @@ export async function previewDHSDecline(params: {
                     to: caseData.client.email,
                     subject: `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`,
                     body: buildOutstandingFeesEmail({
+                        company,
                         clientFirstName,
                         dcName,
                         dcFirmName,
@@ -283,6 +289,7 @@ export async function previewDHSDecline(params: {
                     to: caseData.client.email,
                     subject: `Outstanding Fees – Your Debt Review Transfer (File: ${fileNumber})`,
                     body: buildOutstandingFeesEmail({
+                        company,
                         clientFirstName,
                         dcName,
                         dcFirmName,
@@ -307,7 +314,7 @@ export async function previewDHSDecline(params: {
                 to: extractedEmail,
                 cc: clientCc,
                 subject: `Debt Review Transfer Request – ${clientName} (ID: ${idNumber})`,
-                body: buildAttorneyEmail({ clientName, idNumber, fileNumber, dcName, declineReason }),
+                body: buildAttorneyEmail({ company, clientName, idNumber, fileNumber, dcName, declineReason }),
                 attachments: docAttachments,
             });
             if (caseData.client.email) {
@@ -316,6 +323,7 @@ export async function previewDHSDecline(params: {
                     to: caseData.client.email,
                     subject: `Update on Your Debt Review Transfer – ${clientName}`,
                     body: buildAttorneyClientEmail({
+                        company,
                         clientFirstName,
                         dcName,
                         dcFirmName,
@@ -335,6 +343,7 @@ export async function previewDHSDecline(params: {
                     to: caseData.client.email,
                     subject: `Update on Your Debt Review Transfer – ${clientName}`,
                     body: buildAttorneyClientEmail({
+                        company,
                         clientFirstName,
                         dcName,
                         dcFirmName,
@@ -360,6 +369,7 @@ export async function previewDHSDecline(params: {
                 to: caseData.client.email,
                 subject: `Update on Your Debt Review Transfer (File: ${fileNumber})`,
                 body: buildResubmitClientEmail({
+                        company,
                     clientFirstName,
                     dcName,
                     dcFirmName,

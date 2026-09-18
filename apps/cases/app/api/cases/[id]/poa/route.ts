@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '@zenowethu/database';
 import { auth, createLogger, renderBrandedEmail, touchCaseAction } from '@zenowethu/shared-lib';
 import { generateStandardPoa, generateWesbankPoa } from '@zenowethu/shared-lib/src/poa/poa-generator';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { createPoaSigningToken } from '@zenowethu/shared-lib/src/poa/signing-service';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { GhlService } from '@zenowethu/shared-lib/src/integrations/ghl-service';
@@ -198,10 +199,13 @@ export async function POST(
             }
         }
 
+        const company = await getCompanyProfile();
+
         /** Build the personalised POA PDF for one recipient. */
         const buildPoaFor = async (recipient: Recipient): Promise<Buffer> => {
             if (type === 'STANDARD') {
                 return generateStandardPoa({
+                    company,
                     fullName:    recipient.name,
                     idNumber:    recipient.idNumber,
                     dateOfBirth: recipient.idNumber ? idToDateOfBirth(recipient.idNumber) : '',
@@ -216,6 +220,7 @@ export async function POST(
                 });
             }
             return generateWesbankPoa({
+                company,
                 clientFullName: recipient.name,
                 clientIdNumber: recipient.idNumber,
                 clientAddress:  recipient.clientObj.address ?? '',
@@ -301,8 +306,8 @@ export async function POST(
                     fromName: session.user.name || undefined,
                     subject: type === 'WESBANK'
                         ? `Wesbank Power of Attorney — Please Sign Online | ${recipient.name}`
-                        : `Power of Attorney — Sign Online | Zenowethu Debt Management`,
-                    html: buildEmailHtml(recipient.name, type, downloadUrl, signUrl),
+                        : `Power of Attorney — Sign Online | ${company.tradingName}`,
+                    html: buildEmailHtml(recipient.name, type, downloadUrl, signUrl, company.tradingName),
                     attachments: [{
                         filename:    fileName,
                         content:     pdfBuffer,
@@ -329,7 +334,7 @@ export async function POST(
                     continue;
                 }
 
-                const waMessage = buildWhatsAppMessage(recipient.name, downloadUrl, signUrl, type);
+                const waMessage = buildWhatsAppMessage(recipient.name, downloadUrl, signUrl, type, company.tradingName);
 
                 try {
                     await GhlService.sendMessage(caseId, 'WHATSAPP', waMessage);
@@ -466,12 +471,12 @@ async function logActivity(caseId: string, userId: string, type: string, channel
     });
 }
 
-function buildEmailHtml(clientName: string, type: string, downloadUrl: string, signUrl: string): string {
+function buildEmailHtml(clientName: string, type: string, downloadUrl: string, signUrl: string, companyName: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
 
     const content = `
         <p>Dear <strong>${clientName}</strong>,</p>
-        <p>Your personalised <strong>${docLabel}</strong> from Zenowethu Debt Management is ready and waiting for your signature.</p>
+        <p>Your personalised <strong>${docLabel}</strong> from ${companyName} is ready and waiting for your signature.</p>
 
         <div style="background-color: #e8f5e9; border-left: 4px solid #2e7d32; padding: 20px; border-radius: 4px; margin: 25px 0;">
             <strong style="color: #1b5e20; display: block; margin-bottom: 10px;">✅ Easiest option — Sign Online (recommended):</strong>
@@ -492,7 +497,7 @@ function buildEmailHtml(clientName: string, type: string, downloadUrl: string, s
 
         <p style="font-size: 12px; color: #888;">Your digital signature is legally binding under the Electronic Communications and Transactions Act (ECTA, Act 25 of 2002). Your IP address and timestamp will be recorded.</p>
         <p>Questions? Call us at <strong>081 747 7616</strong> or reply to this email.</p>
-        <p>Kind regards,<br/><strong>Zenowethu Debt Management Team</strong></p>
+        <p>Kind regards,<br/><strong>${companyName} Team</strong></p>
     `;
 
     return renderBrandedEmail(content, {
@@ -505,12 +510,12 @@ function buildEmailHtml(clientName: string, type: string, downloadUrl: string, s
     });
 }
 
-function buildWhatsAppMessage(clientName: string, downloadUrl: string, signUrl: string, type: string): string {
+function buildWhatsAppMessage(clientName: string, downloadUrl: string, signUrl: string, type: string, companyName: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
     const firstName = clientName.split(' ')[0];
     return `Hello ${firstName},
 
-Zenowethu Debt Management has sent you a *${docLabel}* — ready for your signature. 📝
+${companyName} has sent you a *${docLabel}* — ready for your signature. 📝
 
 ✅ *Sign Online (easiest — takes 1 min):*
 ${signUrl}
@@ -526,5 +531,5 @@ Questions? Call us: *081 747 7616*
 
 _Your signature is legally valid under the Electronic Communications and Transactions Act (ECTA)._
 
-— Zenowethu Debt Management`;
+— ${companyName}`;
 }

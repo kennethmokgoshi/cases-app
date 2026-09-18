@@ -27,8 +27,13 @@ vi.mock('@zenowethu/shared-lib/src/dhs/consent-service', () => ({
         const surname = client?.lastName?.trim() ?? '';
         return [firstGivenName, surname].filter(Boolean).join(' ') || null;
     },
-    DRR_CONSENT_TEXT: 'CONSENT TEXT',
+    getDrrConsentText: vi.fn().mockResolvedValue('CONSENT TEXT'),
 }));
+
+vi.mock('@zenowethu/shared-lib/src/company/company-profile-service', async () => {
+    const { ZENOWETHU_COMPANY_PROFILE } = await import('@zenowethu/shared-lib/src/company/profile');
+    return { getCompanyProfile: vi.fn().mockResolvedValue(ZENOWETHU_COMPANY_PROFILE) };
+});
 
 import { GET, POST } from './route';
 import { POST as VERIFY } from './verify/route';
