@@ -17,7 +17,7 @@ import { generateConsumerInfoRecord, type ConsumerInfoRecordData } from '@/lib/c
 import { computeAffordabilityForCase } from '@/lib/affordability-check';
 import { generateCourtDoc, type CourtDocType, type CourtDocInput } from '@zenowethu/shared-lib/src/court-docs';
 import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
-import { formatCompanyAddress, formatNcaContact } from '@zenowethu/shared-lib';
+import { formatCompanyAddress, formatNcaContact } from '@zenowethu/shared-lib/src/company/profile';
 import { generateForm19, type Form19Data } from '@/lib/form19-pdf';
 import { generateForm172C, type Form172CData } from '@/lib/form17-2c-pdf';
 import { generateSection7172Statement, type Section7172StatementData } from '@/lib/section71-72-statement-pdf';

@@ -1,33 +1,38 @@
+/**
+ * Legacy "Portal DC Profile" endpoint — kept for the DHS import page.
+ *
+ * It is now a thin adapter over the company profile
+ * (`/api/admin/settings/company-profile`), so the NCRDC number, debt
+ * counsellor name and trading name have a single source of truth.
+ */
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { auth, createLogger } from '@zenowethu/shared-lib';
-import { prisma } from '@zenowethu/database';
+import { getCompanyProfile, saveCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 
 const logger = createLogger('api/admin/settings/dc-profile');
 
-const KEYS = ['dc_ncrdcNo', 'dc_name', 'dc_organisation'] as const;
+const DcProfileSchema = z.object({
+    ncrdcNo: z.string().trim().min(1, 'NCRDC number is required').max(50),
+    dcName: z.string().trim().min(1, 'Debt counsellor name is required').max(200),
+    dcOrganisation: z.string().trim().min(1, 'Organisation name is required').max(200),
+});
 
 export async function GET() {
     try {
         const session = await auth();
-        if (!session?.user?.isAdmin && !(session?.user as any)?.isExecutive) {
+        if (!session?.user?.isAdmin && !session?.user?.isExecutive) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const rows = await prisma.systemSettings.findMany({
-            where: { category: 'dc_profile' },
-            select: { key: true, value: true }
+        const company = await getCompanyProfile();
+        return NextResponse.json({
+            settings: {
+                dc_ncrdcNo: company.ncrdcNumber ?? '',
+                dc_name: company.debtCounsellorName ?? '',
+                dc_organisation: company.tradingName,
+            },
         });
-
-        const settings: Record<string, string> = {
-            dc_ncrdcNo: 'NCRDC3693',
-            dc_name: 'Aaron Nzotho',
-            dc_organisation: 'Zenowethu Debt Management',
-        };
-        for (const row of rows) {
-            settings[row.key] = row.value;
-        }
-
-        return NextResponse.json({ settings });
     } catch (error) {
         logger.error('Error fetching DC profile settings:', error);
         return NextResponse.json({ error: 'Failed to fetch DC profile' }, { status: 500 });
@@ -41,26 +46,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const body = await request.json();
-        const { ncrdcNo, dcName, dcOrganisation } = body;
-
-        if (!ncrdcNo?.trim() || !dcName?.trim() || !dcOrganisation?.trim()) {
-            return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
+        const parsed = DcProfileSchema.safeParse(await request.json().catch(() => null));
+        if (!parsed.success) {
+            return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'All fields are required' }, { status: 400 });
         }
 
-        const upserts = [
-            { key: 'dc_ncrdcNo', value: ncrdcNo.trim(), description: 'Portal DC NCRDC registration number' },
-            { key: 'dc_name', value: dcName.trim(), description: 'Portal DC full name' },
-            { key: 'dc_organisation', value: dcOrganisation.trim(), description: 'Portal DC trading / organisation name' },
-        ];
-
-        for (const u of upserts) {
-            await prisma.systemSettings.upsert({
-                where: { key: u.key },
-                update: { value: u.value, updatedAt: new Date() },
-                create: { key: u.key, value: u.value, category: 'dc_profile', description: u.description, isEncrypted: false },
-            });
-        }
+        const { ncrdcNo, dcName, dcOrganisation } = parsed.data;
+        await saveCompanyProfile({ ncrdcNumber: ncrdcNo, debtCounsellorName: dcName, tradingName: dcOrganisation });
 
         logger.info(`✅ DC profile updated: ${ncrdcNo} — ${dcName}, ${dcOrganisation}`);
         return NextResponse.json({ success: true });

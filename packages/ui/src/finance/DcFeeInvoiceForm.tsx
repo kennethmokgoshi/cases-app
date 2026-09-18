@@ -12,7 +12,7 @@
  * both apps' dark themes.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DC_FEE_REASONS,
   dcFeeReasonLabel,
@@ -32,7 +32,7 @@ interface LineRow {
 export interface DcFeeInvoiceFormProps {
   /** When set, the invoice is created against this case and logged on its timeline. */
   caseId?: string;
-  /** Optional link to the Zenowethu consumer record (standalone / client-picker flows). */
+  /** Optional link to the consumer record (standalone / client-picker flows). */
   clientId?: string;
   // Prefill — all optional.
   dcName?: string | null;
@@ -43,6 +43,8 @@ export interface DcFeeInvoiceFormProps {
   clientIdNumber?: string | null;
   /** Shows an ✕ in the header and is called when the user is done. */
   onClose?: () => void;
+  /** The firm's VAT number, shown next to the VAT toggle. Omit when the firm is not VAT-registered. */
+  vatNumber?: string | null;
 }
 
 const fmtZAR = (n: number) =>
@@ -53,6 +55,16 @@ const inputCls =
 
 export function DcFeeInvoiceForm(props: DcFeeInvoiceFormProps) {
   const { caseId, clientId, onClose } = props;
+  const [vatNumber, setVatNumber] = useState<string | null>(props.vatNumber ?? null);
+  useEffect(() => {
+    if (props.vatNumber !== undefined) return;
+    let cancelled = false;
+    fetch('/api/company-profile')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d?.profile) setVatNumber(d.profile.vatNumber ?? null); })
+      .catch(() => { /* label simply omits the VAT number */ });
+    return () => { cancelled = true; };
+  }, [props.vatNumber]);
 
   const [documentType, setDocumentType] = useState<'INVOICE' | 'QUOTE'>('INVOICE');
   const docLabel = dcFeeDocLabel(documentType);
@@ -310,7 +322,7 @@ export function DcFeeInvoiceForm(props: DcFeeInvoiceFormProps) {
           <section className="bg-black/20 rounded-lg p-4 space-y-2">
             <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
               <input type="checkbox" checked={applyVat} onChange={(e) => setApplyVat(e.target.checked)} className="accent-cyan-500" />
-              Apply 15% VAT (Zenowethu VAT 4590307072)
+              Apply 15% VAT{vatNumber ? ` (VAT ${vatNumber})` : ''}
             </label>
             <div className="flex justify-between text-xs text-gray-400"><span>Subtotal</span><span>{fmtZAR(totals.subtotal)}</span></div>
             <div className="flex justify-between text-xs text-gray-400"><span>VAT ({Math.round(totals.vatRate * 100)}%)</span><span>{fmtZAR(totals.vatAmount)}</span></div>

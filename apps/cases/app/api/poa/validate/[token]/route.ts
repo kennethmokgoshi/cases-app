@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { resolveSigningToken } from '@zenowethu/shared-lib/src/poa/signing-service';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { toFirmSummary } from '@zenowethu/shared-lib/src/company/profile';
 
 /**
  * GET /api/poa/validate/[token]
@@ -15,10 +17,11 @@ export async function GET(
     const { token } = await params;
 
     const resolved = await resolveSigningToken(token);
+    const firm = toFirmSummary(await getCompanyProfile());
 
     if ('error' in resolved) {
       return NextResponse.json(
-        { error: resolved.error },
+        { error: resolved.error, firm },
         { status: resolved.status },
       );
     }
@@ -40,6 +43,7 @@ export async function GET(
       poaType: record.poaType,
       channel: record.channel,
       expiryHours: Math.max(expiryHours, 0),
+      firm,
     });
 
   } catch (error) {

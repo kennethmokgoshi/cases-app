@@ -1,10 +1,12 @@
 import { logger } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service'
 import { auth } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 
 export async function POST(request: Request) {
+  const company = await getCompanyProfile()
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
 
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
     <strong>${new Date(invoice.dueAt).toLocaleDateString('en-ZA')}</strong> and remains unpaid.</p>
     <p>Please arrange payment at your earliest convenience to avoid further action.</p>
     <p style="font-size: 12px; color: #999; margin-top: 32px;">
-      Zenowethu Debt Management — automated payment reminder
+      ${company.tradingName} — automated payment reminder
     </p>
   </div>
 </div>` })

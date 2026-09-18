@@ -307,7 +307,7 @@ export async function POST(
                     subject: type === 'WESBANK'
                         ? `Wesbank Power of Attorney — Please Sign Online | ${recipient.name}`
                         : `Power of Attorney — Sign Online | ${company.tradingName}`,
-                    html: buildEmailHtml(recipient.name, type, downloadUrl, signUrl, company.tradingName),
+                    html: buildEmailHtml(recipient.name, type, downloadUrl, signUrl, company.tradingName, company.phone),
                     attachments: [{
                         filename:    fileName,
                         content:     pdfBuffer,
@@ -334,7 +334,7 @@ export async function POST(
                     continue;
                 }
 
-                const waMessage = buildWhatsAppMessage(recipient.name, downloadUrl, signUrl, type, company.tradingName);
+                const waMessage = buildWhatsAppMessage(recipient.name, downloadUrl, signUrl, type, company.tradingName, company.phone);
 
                 try {
                     await GhlService.sendMessage(caseId, 'WHATSAPP', waMessage);
@@ -471,7 +471,7 @@ async function logActivity(caseId: string, userId: string, type: string, channel
     });
 }
 
-function buildEmailHtml(clientName: string, type: string, downloadUrl: string, signUrl: string, companyName: string): string {
+function buildEmailHtml(clientName: string, type: string, downloadUrl: string, signUrl: string, companyName: string, companyPhone: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
 
     const content = `
@@ -496,7 +496,7 @@ function buildEmailHtml(clientName: string, type: string, downloadUrl: string, s
         </div>
 
         <p style="font-size: 12px; color: #888;">Your digital signature is legally binding under the Electronic Communications and Transactions Act (ECTA, Act 25 of 2002). Your IP address and timestamp will be recorded.</p>
-        <p>Questions? Call us at <strong>081 747 7616</strong> or reply to this email.</p>
+        <p>Questions? Call us at <strong>${companyPhone}</strong> or reply to this email.</p>
         <p>Kind regards,<br/><strong>${companyName} Team</strong></p>
     `;
 
@@ -510,7 +510,7 @@ function buildEmailHtml(clientName: string, type: string, downloadUrl: string, s
     });
 }
 
-function buildWhatsAppMessage(clientName: string, downloadUrl: string, signUrl: string, type: string, companyName: string): string {
+function buildWhatsAppMessage(clientName: string, downloadUrl: string, signUrl: string, type: string, companyName: string, companyPhone: string): string {
     const docLabel = type === 'WESBANK' ? 'Wesbank Power of Attorney' : 'Power of Attorney';
     const firstName = clientName.split(' ')[0];
     return `Hello ${firstName},
@@ -527,7 +527,7 @@ _Link valid for 72 hours._
 📄 *Or download the PDF manually:*
 ${downloadUrl}
 
-Questions? Call us: *081 747 7616*
+Questions? Call us: *${companyPhone}*
 
 _Your signature is legally valid under the Electronic Communications and Transactions Act (ECTA)._
 

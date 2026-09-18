@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service'
 import { prisma } from '@zenowethu/database'
 import { generateMandatePdf } from '@/lib/mandate-pdf'
 import nodemailer from 'nodemailer'
@@ -66,6 +67,7 @@ export async function POST(
 
     // 3. Setup Mailer
     const smtp = await getSMTPCredentials()
+    const company = await getCompanyProfile()
     const transporter = nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port,
@@ -78,9 +80,9 @@ export async function POST(
 
     // 4. Send Email
     await transporter.sendMail({
-      from: `"Zenowethu Debt Management" <${smtp.fromEmail || smtp.username}>`,
+      from: `"${company.tradingName}" <${smtp.fromEmail || smtp.username}>`,
       to,
-      subject: subject || 'Debit Order Mandate - Zenowethu',
+      subject: subject || `Debit Order Mandate - ${company.shortName}`,
       text: `Please find attached the Debit Order Mandate for ${caseData.client.firstName} ${caseData.client.lastName}${caseData.jointClient ? ` & ${caseData.jointClient.firstName} ${caseData.jointClient.lastName}` : ''}.`,
       attachments: [
         {

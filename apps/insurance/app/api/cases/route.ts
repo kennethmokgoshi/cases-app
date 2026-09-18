@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { calculateSlaDeadline, logger, CaseCreateSchema, parseBody } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { sendStatusChangeNotification } from '@zenowethu/shared-lib';
 
 import { auth } from '@zenowethu/shared-lib';
@@ -475,10 +476,11 @@ export async function POST(request: Request) {
             }
         }
 
-        let mainSource = newCase.partnerName || 'Zenowethu Debt Management';
+        const company = await getCompanyProfile();
+        let mainSource = newCase.partnerName || company.tradingName;
 
         // 1. Try to get source from User's Organization (Best for B2B)
-        if (newCase.acquisitionType === 'B2B' && newCase.createdBy && newCase.createdBy.organization && newCase.createdBy.organization !== 'Zenowethu') {
+        if (newCase.acquisitionType === 'B2B' && newCase.createdBy && newCase.createdBy.organization && newCase.createdBy.organization !== company.shortName) {
             mainSource = newCase.createdBy.organization;
         } else {
             // 2. Fallback: Deduce from project hierarchy
@@ -530,8 +532,8 @@ export async function POST(request: Request) {
                 isB2B: newCase.acquisitionType === 'B2B',
                 services: servicesText,
                 mainSource: mainSource,
-                senderName: (newCase.acquisitionType === 'B2B') ? `${mainSource} (via Zenowethu)` : 'Zenowethu Debt Management',
-                senderEmail: 'updates@zenowethu.co.za' }).then(result => {
+                senderName: (newCase.acquisitionType === 'B2B') ? `${mainSource} (via ${company.shortName})` : company.tradingName,
+                senderEmail: company.email }).then(result => {
                 if (result.errors.length > 0) {
                     logger.warn(`⚠️ Welcome notification errors for ${newCase.id}:`, result.errors);
                 } else {

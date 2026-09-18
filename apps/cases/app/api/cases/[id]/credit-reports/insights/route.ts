@@ -3,6 +3,7 @@ import { prisma } from '@zenowethu/database';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { CREDIT_REPORT_DOC_TYPES } from '@/lib/credit-account-sync';
 import { buildCreditReportInsights, type CreditReportExtractedData } from '@/lib/credit-report-insights';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 
 const logger = createLogger('api/cases/[id]/credit-reports/insights');
 
@@ -33,6 +34,8 @@ export async function GET(
         const analyzedDocs = creditReportDocs.filter(d => d.extractedData);
         const unanalyzedDocs = creditReportDocs.filter(d => !d.extractedData);
 
+        const company = await getCompanyProfile();
+        const own = { ncrdcNo: company.ncrdcNumber, name: company.shortName };
         const reports = analyzedDocs.map(doc => {
             let data: CreditReportExtractedData = {};
             try {
@@ -46,12 +49,13 @@ export async function GET(
                 type: doc.type,
                 analyzedAt: doc.analyzedAt,
                 data,
-                insights: buildCreditReportInsights(data),
+                insights: buildCreditReportInsights(data, own),
             };
         });
 
         return NextResponse.json({
             reports,
+            own,
             unanalyzedReports: unanalyzedDocs.map(d => ({ id: d.id, fileName: d.fileName, type: d.type })),
             hasCreditReports: creditReportDocs.length > 0,
         });

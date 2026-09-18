@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import MailboxSettings from '@/components/MailboxSettings';
+import CompanyProfileSection from './CompanyProfileSection';
 
 // Client-side logger
 const logger = {
@@ -120,9 +121,6 @@ export default function SettingsPage() {
     const [smtpTesting, setSmtpTesting] = useState(false);
     const [smtpTestResult, setSmtpTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-    // DC Profile state
-    const [dcProfile, setDcProfile] = useState({ ncrdcNo: '', dcName: '', dcOrganisation: '' });
-    const [dcProfileSaving, setDcProfileSaving] = useState(false);
 
     // Letterhead state
     const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
@@ -150,7 +148,7 @@ export default function SettingsPage() {
     const fetchSettings = async () => {
         setLoading(true);
         try {
-            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings(), fetchBureauSettings(), fetchDcProfile(), fetchXdsSettings(), fetchSmtpSettings()]);
+            await Promise.all([fetchDHSSettings(), fetchGHLSettings(), fetchMaxDcSettings(), fetchLetterheadSettings(), fetchBureauSettings(), fetchXdsSettings(), fetchSmtpSettings()]);
         } catch (error) {
             logger.error('Error fetching settings:', error);
         } finally {
@@ -229,21 +227,6 @@ export default function SettingsPage() {
         }
     };
 
-    const fetchDcProfile = async () => {
-        try {
-            const res = await fetch('/api/admin/settings/dc-profile');
-            if (res.ok) {
-                const data = await res.json();
-                setDcProfile({
-                    ncrdcNo: data.settings.dc_ncrdcNo || '',
-                    dcName: data.settings.dc_name || '',
-                    dcOrganisation: data.settings.dc_organisation || '',
-                });
-            }
-        } catch (error) {
-            logger.error('Error fetching DC profile:', error);
-        }
-    };
 
     const fetchXdsSettings = async () => {
         try {
@@ -479,27 +462,6 @@ export default function SettingsPage() {
         }
     };
 
-    const handleSaveDcProfile = async () => {
-        setDcProfileSaving(true);
-        setMessage(null);
-        try {
-            const res = await fetch('/api/admin/settings/dc-profile', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ncrdcNo: dcProfile.ncrdcNo, dcName: dcProfile.dcName, dcOrganisation: dcProfile.dcOrganisation }),
-            });
-            if (res.ok) {
-                setMessage({ type: 'success', text: 'DC profile saved successfully!' });
-            } else {
-                const data = await res.json();
-                setMessage({ type: 'error', text: data.error || 'Failed to save DC profile' });
-            }
-        } catch {
-            setMessage({ type: 'error', text: 'An error occurred while saving DC profile' });
-        } finally {
-            setDcProfileSaving(false);
-        }
-    };
 
     const fetchDHSSettings = async () => {
         try {
@@ -829,67 +791,9 @@ export default function SettingsPage() {
             )}
 
             <div className="space-y-8">
-                {/* DC Profile Section */}
-                {(session?.user?.isAdmin || (session?.user as any)?.isExecutive) && (
-                    <section className="bg-zeno-blue/30 border border-zeno-blue/50 rounded-xl p-6">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-2xl">
-                                🪪
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-3">
-                                    <h2 className="text-xl font-bold text-white">Portal DC Profile</h2>
-                                    <span className="px-2 py-0.5 text-xs font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40 rounded-full">
-                                        Admin only
-                                    </span>
-                                </div>
-                                <p className="text-gray-400 text-sm mt-0.5">
-                                    The debt counsellor who owns this portal. Used as the default DC on DHS imports when "My own NCRDC" is selected.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1">NCRDC Number</label>
-                                <input
-                                    type="text"
-                                    value={dcProfile.ncrdcNo}
-                                    onChange={(e) => setDcProfile((p) => ({ ...p, ncrdcNo: e.target.value }))}
-                                    placeholder="NCRDC3693"
-                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-zeno-orange"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1">Debt Counsellor Name</label>
-                                <input
-                                    type="text"
-                                    value={dcProfile.dcName}
-                                    onChange={(e) => setDcProfile((p) => ({ ...p, dcName: e.target.value }))}
-                                    placeholder="Aaron Nzotho"
-                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-zeno-orange"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1">Organisation / Trading Name</label>
-                                <input
-                                    type="text"
-                                    value={dcProfile.dcOrganisation}
-                                    onChange={(e) => setDcProfile((p) => ({ ...p, dcOrganisation: e.target.value }))}
-                                    placeholder="Zenowethu Debt Management"
-                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-zeno-orange"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex justify-end">
-                            <button
-                                onClick={handleSaveDcProfile}
-                                disabled={dcProfileSaving}
-                                className="px-5 py-2 bg-zeno-orange text-white text-sm font-bold rounded-lg hover:bg-orange-500 transition-colors disabled:opacity-50"
-                            >
-                                {dcProfileSaving ? 'Saving...' : 'Save DC Profile'}
-                            </button>
-                        </div>
-                    </section>
+                {/* Company Profile — replaces the old "Portal DC Profile" block */}
+                {(session?.user?.isAdmin || session?.user?.isExecutive) && (
+                    <CompanyProfileSection canEdit={!!session?.user?.isAdmin} />
                 )}
 
                 {/* Letterhead Section — ADMIN and EXECUTIVE only */}
@@ -1014,7 +918,7 @@ export default function SettingsPage() {
                                 value={dhsSettings.dhs_username}
                                 onChange={(e) => setDhsSettings({ ...dhsSettings, dhs_username: e.target.value })}
                                 className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
-                                placeholder="e.g., NCRDC3693"
+                                placeholder="Your NCRDC number, e.g. NCRDC1234"
                             />
                         </div>
 

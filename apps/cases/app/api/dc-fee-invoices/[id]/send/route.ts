@@ -9,6 +9,8 @@
  */
 
 import { auth, logger, renderBrandedEmail } from '@zenowethu/shared-lib';
+import { formatSignatureBlock, type CompanyProfile } from '@zenowethu/shared-lib/src/company/profile';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { prisma } from '@zenowethu/database';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -25,7 +27,8 @@ function buildEmailHtml(
   total: number,
   dcName: string,
   documentType: 'INVOICE' | 'QUOTE',
-  message?: string,
+  message: string | undefined,
+  company: CompanyProfile,
 ): string {
   const totalFormatted = new Intl.NumberFormat('en-ZA', {
     style: 'currency',
@@ -53,14 +56,14 @@ function buildEmailHtml(
         <p style="margin: 5px 0 0; font-size: 28px; font-weight: bold; color: #0d3870;">${totalFormatted}</p>
     </div>
     <p style="margin-top: 20px; font-size: 14px; color: #666;">
-        Zenowethu Debt Management | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190<br/>
-        Tel: +27 81 747 7616 | Cell: 082 363 8207 | notifications@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
+        ${formatSignatureBlock(company).replace(/\n/g, '<br/>')}
     </p>
   `;
 
   return renderBrandedEmail(content, {
     title: `${docLabel} ${invoiceNumber}`,
-    previewText: `${docLabel} ${invoiceNumber} for outstanding fees from Zenowethu.`,
+    previewText: `${docLabel} ${invoiceNumber} for outstanding fees from ${company.shortName}.`,
+    company,
   });
 }
 
@@ -107,12 +110,13 @@ export async function POST(
 
     const total = Number(invoice.total);
     const docLabel = invoice.documentType === 'QUOTE' ? 'Quotation' : 'Invoice';
+    const company = await getCompanyProfile();
     const emailResult = await sendEmailWithAttachments({
       to,
       fromName: session.user.name || undefined,
       fromEmail: session.user.email || undefined,
-      subject: `${docLabel} ${invoice.invoiceNumber} — Outstanding Fees | Zenowethu Debt Management`,
-      html: buildEmailHtml(invoice.invoiceNumber, total, invoice.dcName ?? 'Debt Counsellor', invoice.documentType, parsed.data.message),
+      subject: `${docLabel} ${invoice.invoiceNumber} — Outstanding Fees | ${company.tradingName}`,
+      html: buildEmailHtml(invoice.invoiceNumber, total, invoice.dcName ?? 'Debt Counsellor', invoice.documentType, parsed.data.message, company),
       attachments: [
         {
           filename: `${invoice.invoiceNumber}.pdf`,

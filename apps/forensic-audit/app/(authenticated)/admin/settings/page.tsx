@@ -297,7 +297,7 @@ export default function SettingsPage() {
                                 value={dhsSettings.dhs_username}
                                 onChange={(e) => setDhsSettings({ ...dhsSettings, dhs_username: e.target.value })}
                                 className="w-full px-4 py-3 bg-zeno-dark/50 border border-zeno-blue/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-zeno-cyan transition-colors"
-                                placeholder="e.g., NCRDC3693"
+                                placeholder="Your NCRDC number, e.g. NCRDC1234"
                             />
                         </div>
 

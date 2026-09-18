@@ -11,6 +11,8 @@ import { createLogger, sendManualMessage, GhlService, getTemplateByStatus, rende
 import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scrapeDetailedConsumerInfo, lookupDCFromNCR, handleDHSDecline, resolveDeclineDetectedAt, handleDhsAccepted, isManageConsumersEligible, runDrrDocumentReadiness, getConsumerSuspensionIndicator, unsuspendConsumerServices } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { formatCompanyWithNcrdc, getPlatformConfig } from '@zenowethu/shared-lib/src/company/profile';
 import path, { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -28,6 +30,7 @@ const getFilePath = (fileUrl: string) => {
 export async function POST(request: Request) {
     try {
         const session = await auth();
+        const company = await getCompanyProfile();
         // Attribution: Use session user or fallback to first admin
         const actingUserId = session?.user?.id || (await prisma.user.findFirst({ where: { isAdmin: true } }))?.id;
         const attribution = actingUserId ? { connect: { id: actingUserId } } : undefined;
@@ -123,8 +126,8 @@ export async function POST(request: Request) {
             // 1. debtCounsellor populated from scrape → use ncrRegistrationNo
             // 2. debtCounsellor null (DC popup click failed) → fall back to case's stored ncrdcNo
             {
-                const dcSettings = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
-                const ownNcrdc = (dcSettings.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                
+                const ownNcrdc = (company.ncrdcNumber || process.env.DHS_USERNAME || '').trim().toUpperCase();
                 const scrapedDC = result.debtCounsellor?.ncrRegistrationNo?.trim().toUpperCase() || '';
                 const storedDC = (caseData?.ncrdcNo || '').trim().toUpperCase();
                 const effectiveDC = scrapedDC || storedDC;
@@ -463,8 +466,8 @@ export async function POST(request: Request) {
                     }
 
                     // === ZDM Client check: if scraped DC is already our own NCRDC, consumer is with us ===
-                    const dcSettingsAf = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
-                    const ownNcrdcAf = (dcSettingsAf.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                    
+                    const ownNcrdcAf = (company.ncrdcNumber || process.env.DHS_USERNAME || '').trim().toUpperCase();
                     const isZdmClient = !!data.ncrdcNo && data.ncrdcNo.trim().toUpperCase() === ownNcrdcAf;
 
                     if (isZdmClient) {
@@ -499,7 +502,7 @@ export async function POST(request: Request) {
                                 data: {
                                     caseId,
                                     userId: actingUserId || '',
-                                    content: `[SYSTEM] DHS Check: Consumer is already registered under Zenowethu Debt Management (${ownNcrdcAf}) on DHS. Status set to ZDM Client — no transfer request needed.`
+                                    content: `[SYSTEM] DHS Check: Consumer is already registered under ${company.tradingName} (${ownNcrdcAf}) on DHS. Status set to ZDM Client — no transfer request needed.`
                                 }
                             });
                         } else if (data.declineReason) {
@@ -520,7 +523,7 @@ export async function POST(request: Request) {
                         filledFields,
                         emptyFields,
                         message: isZdmClient
-                            ? `ZDM Client — this consumer is already registered under Zenowethu Debt Management (${ownNcrdcAf}) on DHS.`
+                            ? `ZDM Client — this consumer is already registered under ${company.tradingName} (${ownNcrdcAf}) on DHS.`
                             : emptyFields.length > 0
                                 ? `Partial auto-fill: ${filledFields.length} of ${filledFields.length + emptyFields.length} fields populated.`
                                 : 'DHS Information Auto-filled successfully.',
@@ -537,8 +540,8 @@ export async function POST(request: Request) {
                 const dc = result.debtCounsellor;
 
                 // === ZDM Client check: if scraped DC is already our own NCRDC, consumer is with us ===
-                const dcSettingsSr = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
-                const ownNcrdcSr = (dcSettingsSr.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                
+                const ownNcrdcSr = (company.ncrdcNumber || process.env.DHS_USERNAME || '').trim().toUpperCase();
                 const scrapedNcrdcSr = (dc?.ncrRegistrationNo || consumer.debtCounsellor || '').trim().toUpperCase();
                 const isZdmClientSr = !!scrapedNcrdcSr && scrapedNcrdcSr === ownNcrdcSr;
 
@@ -575,7 +578,7 @@ export async function POST(request: Request) {
                         data: {
                             caseId,
                             userId: actingUserId || '',
-                            content: `[SYSTEM] DHS Check: Consumer is already registered under Zenowethu Debt Management (${ownNcrdcSr}) on DHS. Status set to ZDM Client — no transfer request needed.`
+                            content: `[SYSTEM] DHS Check: Consumer is already registered under ${company.tradingName} (${ownNcrdcSr}) on DHS. Status set to ZDM Client — no transfer request needed.`
                         }
                     });
                 } else if (result.declineReason) {
@@ -591,7 +594,7 @@ export async function POST(request: Request) {
                 // Attach isZdmClient to result so UI can react
                 result.isZdmClient = isZdmClientSr;
                 if (isZdmClientSr) {
-                    result.message = `ZDM Client — this consumer is already registered under Zenowethu Debt Management (${ownNcrdcSr}) on DHS.`;
+                    result.message = `ZDM Client — this consumer is already registered under ${company.tradingName} (${ownNcrdcSr}) on DHS.`;
                 }
 
                 logger.info(`[DHS API] Updated case ${caseId} with DHS info`);
@@ -930,15 +933,19 @@ export async function POST(request: Request) {
                     clientName,
                     idNumber:    caseData.client.idNumber,
                     fileNumber:  caseData.fileNumber,
-                    companyName: process.env.COMPANY_NAME || 'Zenowethu Debt Management',
-                    phone:       process.env.COMPANY_PHONE || '081 747 7616',
+                    companyName: company.tradingName,
+                    companyShortName: company.shortName,
+                    companyNcrdc: company.ncrdcNumber ?? '',
+                    companyWithNcrdc: formatCompanyWithNcrdc(company),
+                    phone:       company.phone,
+                    platformName: getPlatformConfig().name,
                 };
                 const emailSubject = dcTemplate
                     ? renderTemplate(dcTemplate.emailSubject, templateVars)
                     : `File Transfer Request: ${clientName} (ID: ${caseData.client.idNumber}) — Documents Required`;
                 const emailBody = dcTemplate
                     ? renderTemplate(dcTemplate.emailTemplate, templateVars)
-                    : `Dear Debt Counsellor,\n\nWe request the consumer file for ${clientName} (ID: ${caseData.client.idNumber}).\n\nRegards,\nZenowethu Debt Management`;
+                    : `Dear Debt Counsellor,\n\nWe request the consumer file for ${clientName} (ID: ${caseData.client.idNumber}).\n\nRegards,\n${company.tradingName}`;
 
                 // Collect ID/POA document URLs to attach — DC sees the actual signed documents
                 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://cases.zenowethu.co.za';
@@ -978,7 +985,7 @@ export async function POST(request: Request) {
                     });
 
                     // Notify the client via WhatsApp or SMS (non-critical)
-                    const clientMsg = `Hi ${caseData.client.firstName}, your file transfer request has been submitted to DHS and we have formally notified your Debt Counsellor. We will update you as soon as we receive a response. — Zenowethu Debt Management`;
+                    const clientMsg = `Hi ${caseData.client.firstName}, your file transfer request has been submitted to DHS and we have formally notified your Debt Counsellor. We will update you as soon as we receive a response. — ${company.tradingName}`;
                     const notifChannel: 'WHATSAPP' | 'SMS' | null =
                         caseData.client.whatsappNumber ? 'WHATSAPP' :
                         caseData.client.phone ? 'SMS' : null;

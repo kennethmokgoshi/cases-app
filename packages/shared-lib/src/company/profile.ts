@@ -191,6 +191,25 @@ export function formatNcaContact(profile: CompanyProfile): { email: string; phon
     };
 }
 
+/** Public summary safe to send to unauthenticated consumer pages (consent, POA signing). */
+export interface FirmSummary {
+    name: string;
+    shortName: string;
+    ncrdc: string | null;
+    phone: string;
+    email: string;
+}
+
+export function toFirmSummary(profile: CompanyProfile): FirmSummary {
+    return {
+        name: profile.tradingName,
+        shortName: profile.shortName,
+        ncrdc: profile.ncrdcNumber,
+        phone: profile.phone,
+        email: profile.email,
+    };
+}
+
 /** True when the firm holds an NCR debt-counsellor registration (and may therefore act on DHS). */
 export function isRegisteredDebtCounsellor(profile: CompanyProfile): boolean {
     return !!profile.ncrdcNumber && profile.ncrdcNumber.trim().length > 0;

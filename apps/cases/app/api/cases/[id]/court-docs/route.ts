@@ -8,7 +8,6 @@ import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-pro
 import { SmtpEmailProvider, ResendEmailProvider, getSMTPCredentials } from '@zenowethu/shared-lib';
 
 const logger = createLogger('court-docs-api');
-const FIRM_NAME = 'Zenowethu Debt Management (PTY) LTD';
 
 const GenerateSchema = z.object({
     docType: z.enum([
@@ -117,6 +116,7 @@ export async function POST(
         };
     });
 
+    const company = await getCompanyProfile();
     const input = {
         fileNumber:           caseData.fileNumber,
         courtName:            courtName,
@@ -130,7 +130,7 @@ export async function POST(
         jointClientIdNumber:  joint?.idNumber ?? undefined,
         creditAccounts:       creditAccounts.length > 0 ? creditAccounts : undefined,
         generatedBy:          `${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim() || session.user.email,
-        company:              await getCompanyProfile(),
+        company,
     };
 
     // ── Generate PDF ──────────────────────────────────────────────────────────
@@ -149,8 +149,8 @@ export async function POST(
         const docLabel   = COURT_DOC_LABELS[docType as CourtDocType];
         const filename   = `${docType.toLowerCase().replace(/_/g, '-')}-${caseData.fileNumber}.pdf`;
         const subject    = `${docLabel} — File ${caseData.fileNumber}`;
-        const htmlBody   = `<p>Dear ${input.clientFullName},</p><p>Please find attached the <strong>${docLabel}</strong> for your debt review removal matter (File: ${caseData.fileNumber}).</p><p>Please review the document and contact us if you have any queries.</p><p>Kind regards,<br>${FIRM_NAME}</p>`;
-        const textBody   = `Dear ${input.clientFullName},\n\nPlease find attached the ${docLabel} for file ${caseData.fileNumber}.\n\nKind regards,\n${FIRM_NAME}`;
+        const htmlBody   = `<p>Dear ${input.clientFullName},</p><p>Please find attached the <strong>${docLabel}</strong> for your debt review removal matter (File: ${caseData.fileNumber}).</p><p>Please review the document and contact us if you have any queries.</p><p>Kind regards,<br>${company.legalName}</p>`;
+        const textBody   = `Dear ${input.clientFullName},\n\nPlease find attached the ${docLabel} for file ${caseData.fileNumber}.\n\nKind regards,\n${company.legalName}`;
         const attachment = { filename, content: Buffer.from(pdfBytes), contentType: 'application/pdf' as const };
 
         // Use SMTP if configured, otherwise Resend

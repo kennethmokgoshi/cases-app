@@ -44,10 +44,11 @@ type Stats = { total: number; matched: number; unmatched: number; statusChanged:
 type SortField = 'ncr_ref' | 'surname' | 'status_code' | 'currentDhsStatus' | 'selectedAction';
 type SortDir = 'asc' | 'desc';
 
+/** Filled from the company profile on mount — never a hard-coded firm. */
 const DEFAULT_DC: DcOwner = {
-    ncrdcNo: 'NCRDC3693',
-    debtCounsellorName: 'Aaron Nzotho',
-    dcTradingName: 'Zenowethu Debt Management',
+    ncrdcNo: '',
+    debtCounsellorName: '',
+    dcTradingName: '',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

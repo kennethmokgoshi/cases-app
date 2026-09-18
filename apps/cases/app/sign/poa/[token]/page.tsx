@@ -22,6 +22,7 @@ export default function SignPoaPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [poaData, setPoaData] = useState<PoaData | null>(null);
+  const [firm, setFirm] = useState<{ name: string; shortName: string; phone: string } | null>(null);
 
   // Validate token on mount
   useEffect(() => {
@@ -29,6 +30,7 @@ export default function SignPoaPage() {
       try {
         const res = await fetch(`/api/poa/validate/${token}`, { method: 'GET' });
         const data = await res.json();
+        if (data?.firm) setFirm(data.firm);
 
         if (!res.ok) {
           setError(data.error || 'Invalid or expired signing link.');
@@ -121,7 +123,7 @@ export default function SignPoaPage() {
             <h2 className="text-lg font-semibold text-red-400 mb-2">Signing Link Invalid</h2>
             <p className="text-sm text-red-300 mb-4">{error}</p>
             <p className="text-xs text-red-400">
-              Please contact Zenowethu Debt Management at <strong>081 747 7616</strong> to request a new signing link.
+              Please contact {firm?.name ?? 'us'}{firm?.phone ? <> at <strong>{firm.phone}</strong></> : null} to request a new signing link.
             </p>
           </div>
         </div>
@@ -235,7 +237,7 @@ export default function SignPoaPage() {
             <div className="text-xs text-gray-500 space-y-1">
               <p>• Link valid for 72 hours</p>
               <p>• Each link can only be signed once</p>
-              <p>• Questions? Call us at 081 747 7616</p>
+              {firm?.phone && <p>• Questions? Call us at {firm.phone}</p>}
             </div>
           </div>
         </div>

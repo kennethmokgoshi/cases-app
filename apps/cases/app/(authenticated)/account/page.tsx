@@ -296,7 +296,7 @@ export default function AccountSettings() {
                             Banking Details — Admin Fee Payouts
                         </h2>
                         <p className="text-xs text-gray-500 mb-6">
-                            Used only for the R350 admin fee invoice on cases you create. Leave blank to use Zenowethu&apos;s default banking details.
+                            Used only for the R350 admin fee invoice on cases you create. Leave blank to use the company&apos;s default banking details.
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

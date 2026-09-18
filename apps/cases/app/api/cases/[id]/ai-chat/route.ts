@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, createLogger } from '@zenowethu/shared-lib';
+import { formatSignatureBlock, type CompanyProfile } from '@zenowethu/shared-lib/src/company/profile';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { getAiClientChainForTask, describeAiError } from '@zenowethu/shared-lib/src/ai/provider-client';
 import type OpenAI from 'openai';
 import { z } from 'zod';
@@ -16,7 +18,7 @@ const BodySchema = z.object({
     ).min(1).max(50),
 });
 
-const SYSTEM_PROMPT = (c: CaseCtx) => `You are an expert AI assistant for Zenowethu Debt Management (PTY) LTD — a South African debt counselling firm registered as NCRDC3693 under the National Credit Regulator.
+const SYSTEM_PROMPT = (c: CaseCtx, company: CompanyProfile) => `You are an expert AI assistant for ${company.legalName} — a South African ${company.ncrdcNumber ? `debt counselling firm registered as ${company.ncrdcNumber} under the National Credit Regulator` : 'credit repair firm'}.
 
 You are embedded in the case management system. You help staff with tasks such as:
 - Drafting professional email, SMS, or WhatsApp replies
@@ -26,15 +28,10 @@ You are embedded in the case management system. You help staff with tasks such a
 - Answering questions about debt review law, DHS processes, credit bureaus, or NCA procedures
 - Drafting Form 16 notices, rejection letters, or client communications
 
-When drafting emails or letters, always write in a professional, warm, and legally careful tone. Never promise specific legal outcomes. Use the Zenowethu brand signature when appropriate.
+When drafting emails or letters, always write in a professional, warm, and legally careful tone. Never promise specific legal outcomes. Use the ${company.shortName} brand signature when appropriate.
 
 STANDARD SIGNATURE:
-Zenowethu Debt Management
-NCRDC3693
-Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
-Tel: +27 81 747 7616 | Cell: 082 363 8207
-notifications@zenowethu.co.za | www.zenowethu.co.za
-Member of DCASA
+${formatSignatureBlock(company)}
 
 ═══════════════════════════════════════
 CURRENT CASE CONTEXT
@@ -207,7 +204,7 @@ export async function POST(
     };
 
     const chatMessages = [
-        { role: 'system' as const, content: SYSTEM_PROMPT(ctx) },
+        { role: 'system' as const, content: SYSTEM_PROMPT(ctx, await getCompanyProfile()) },
         ...parsed.data.messages,
     ];
 
