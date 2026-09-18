@@ -4,6 +4,7 @@ import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/
 import { createR350AdminFeeInvoice } from '@zenowethu/shared-lib/src/finance/r350-admin-fee-invoice';
 import { prisma } from '@zenowethu/database';
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { z } from 'zod';
 
@@ -159,10 +160,8 @@ export async function POST(
       total: Number(invoice.total),
       reference: invoice.reference ?? undefined,
       createdByName: invoice.createdBy ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}` : undefined,
-      bankName: bankingDetails.bankName,
-      bankAccountName: bankingDetails.accountHolder,
-      bankAccountNumber: bankingDetails.accountNumber,
-      branchCode: bankingDetails.branchCode,
+      bankingDetails,
+      company: await getCompanyProfile(),
     };
 
     const pdfBytes = await generateInvoicePdf(invoiceData);

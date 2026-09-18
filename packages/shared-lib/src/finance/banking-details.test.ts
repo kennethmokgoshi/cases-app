@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const staffBankingFindUniqueMock = vi.fn();
 const bankAccountFindFirstMock = vi.fn();
 
+vi.mock('../company/company-profile-service', async () => {
+  const { ZENOWETHU_COMPANY_PROFILE } = await import('../company/profile');
+  return { getCompanyProfile: vi.fn().mockResolvedValue(ZENOWETHU_COMPANY_PROFILE) };
+});
+
 vi.mock('@zenowethu/database', () => ({
   prisma: {
     staffBankingDetail: { findUnique: (...a: unknown[]) => staffBankingFindUniqueMock(...a) },
@@ -13,7 +18,6 @@ vi.mock('@zenowethu/database', () => ({
 import {
   resolveInvoiceBankingDetails,
   resolveStaffOrDefaultBankAssignment,
-  ZENOWETHU_FNB_FALLBACK,
 } from './banking-details';
 
 describe('resolveInvoiceBankingDetails', () => {
@@ -58,15 +62,20 @@ describe('resolveInvoiceBankingDetails', () => {
     const result = await resolveInvoiceBankingDetails({ bankAccount: null, personalBankingUserId: 'user-1' });
 
     expect(bankAccountFindFirstMock).toHaveBeenCalledWith({ where: { isDefault: true, isActive: true } });
-    expect(result.accountNumber).toBe('62867268635');
+    expect(result?.accountNumber).toBe('62867268635');
   });
 
-  it('falls back to the hardcoded FNB details when no default BankAccount exists yet', async () => {
+  it('falls back to the company profile bank details when no default BankAccount exists yet', async () => {
     bankAccountFindFirstMock.mockResolvedValue(null);
 
     const result = await resolveInvoiceBankingDetails({ bankAccount: null, personalBankingUserId: null });
 
-    expect(result).toEqual(ZENOWETHU_FNB_FALLBACK);
+    expect(result).toEqual({
+      bankName: 'FNB',
+      accountHolder: 'Zenowethu Trading Debt Management (PTY) LTD',
+      accountNumber: '62867268635',
+      branchCode: '250655',
+    });
   });
 });
 

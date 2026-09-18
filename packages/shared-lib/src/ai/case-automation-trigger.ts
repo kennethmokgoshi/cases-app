@@ -23,6 +23,7 @@
 
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
+import { getCompanyProfile } from '../company/company-profile-service';
 import { sendStatusChangeNotification } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
 import { scrapeDetailedConsumerInfo } from '../dhs/search';
@@ -136,9 +137,9 @@ export async function runCaseAutomationTrigger(
                 const d = dhsScrape.data;
                 const dcName = d.dcFullName || d.debtCounsellorName || d.ncrdcNo || 'Unknown DC';
 
-                // Check if the consumer is already with Zenowethu (ZDM_CLIENT)
-                const dcSettings = await prisma.systemSettings.findMany({ where: { category: 'dc_profile' } });
-                const ownNcrdc = (dcSettings.find(s => s.key === 'dc_ncrdcNo')?.value || process.env.DHS_USERNAME || 'NCRDC3693').trim().toUpperCase();
+                // Check if the consumer is already with our own DC profile (ZDM_CLIENT)
+                const company = await getCompanyProfile();
+                const ownNcrdc = (company.ncrdcNumber || process.env.DHS_USERNAME || '').trim().toUpperCase();
                 const scrapedNcrdc = (d.ncrdcNo || '').trim().toUpperCase();
                 const isZdmClient = !!scrapedNcrdc && scrapedNcrdc === ownNcrdc;
 
@@ -162,7 +163,7 @@ export async function runCaseAutomationTrigger(
                     await saveAIComment(caseId, adminId, {
                         service: serviceLabels,
                         triggeredBy,
-                        assessment: `DHS auto-check: consumer ID ${idNumber} is already registered under Zenowethu Debt Management (${ownNcrdc}) on DHS.`,
+                        assessment: `DHS auto-check: consumer ID ${idNumber} is already registered under ${company.tradingName} (${ownNcrdc}) on DHS.`,
                         action: `Status set to "ZDM Client" — this consumer is already our client. No transfer request needed.`
                     });
                     logger.info(`[CASE_AUTOMATION] ✅ ${caseData.fileNumber}: already our client (${ownNcrdc}) — ZDM_CLIENT`);

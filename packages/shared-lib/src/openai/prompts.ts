@@ -467,7 +467,7 @@ Return JSON format:
 
 Return ONLY valid JSON.`,
 
-    DHS_SUMMARY_REPORT: `You are a data extraction assistant for Zenowethu Debt Management (NCRDC3693).
+    DHS_SUMMARY_REPORT: `You are a data extraction assistant for a South African debt counselling firm.
 Your job is to extract structured consumer case data from a DHS Debt Counsellor Summary Report (XLS or PDF) and return it as clean JSON for case creation or update.
 
 ## FILE STRUCTURE (DHS XLS Format)

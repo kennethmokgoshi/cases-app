@@ -4,6 +4,7 @@ import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments'
 import { z } from 'zod'
 
@@ -120,10 +121,8 @@ export async function POST(
       notes:                invoice.notes     ?? undefined,
       reference:            invoice.reference ?? undefined,
       createdByName,
-      bankName:             bankingDetails.bankName,
-      bankAccountName:      bankingDetails.accountHolder,
-      bankAccountNumber:    bankingDetails.accountNumber,
-      branchCode:           bankingDetails.branchCode,
+      bankingDetails,
+      company: await getCompanyProfile(),
     }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)

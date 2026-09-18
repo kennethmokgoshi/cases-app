@@ -244,7 +244,7 @@ export const WORKFLOW_STATUSES: WorkflowStatus[] = [
         code: 'ZDM_CLIENT',
         name: 'ZDM Client',
         category: 'ADVANCED',
-        description: 'Consumer is already registered with Zenowethu Debt Management (NCRDC3693) on DHS — no transfer needed',
+        description: 'Consumer is already registered under our own debt counsellor profile on DHS — no transfer needed',
         slaEnabled: true,
         slaDays: 3,
         isOverdueState: false },

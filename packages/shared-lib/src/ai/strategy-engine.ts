@@ -3,6 +3,8 @@ import { getOpenAI } from '../openai/client';
 import { logger } from '../logger';
 
 export interface CaseStrategyRequest {
+    /** The firm running the case — from getCompanyProfile().tradingName. */
+    companyName: string;
     client: {
         firstName: string;
         lastName: string;
@@ -54,7 +56,7 @@ export interface CaseStrategyResponse {
 export async function generateCaseStrategy(request: CaseStrategyRequest): Promise<CaseStrategyResponse> {
     try {
         const prompt = `
-You are a Senior Legal Strategist for Zenowethu, a South African credit repair and legal services firm. 
+You are a Senior Legal Strategist for ${request.companyName}, a South African credit repair and legal services firm. 
 Your goal is to analyze a client's financial and legal situation and recommend the most effective strategy for debt clearance and credit repair.
 
 CLIENT DATA:
@@ -89,7 +91,7 @@ Output your recommendation in the following JSON format ONLY:
   "primaryPath": "Short title of strategy",
   "pathDescription": "Detailed overview of what this path entails",
   "reasoning": "Why this is the best option based on the data",
-  "recommendedStatus": "A logical next status code from the Zenowethu system (e.g., READY_COURT_DATE, DISPUTED, etc.)",
+  "recommendedStatus": "A logical next status code from the case management system (e.g., READY_COURT_DATE, DISPUTED, etc.)",
   "nextActions": ["Action 1", "Action 2"],
   "riskScore": 1-10,
   "successProbability": 0-100,

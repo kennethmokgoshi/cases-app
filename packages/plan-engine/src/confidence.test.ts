@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@zenowethu/database', () => ({ prisma: { document: { findMany: vi.fn() } } }));
-vi.mock('@zenowethu/shared-lib', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }));
+vi.mock('@zenowethu/shared-lib', () => ({
+    getPlatformConfig: () => ({ name: 'Zenowethu', url: 'https://cases.zenowethu.co.za', supportEmail: 'notifications@zenowethu.co.za' }), logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }));
 
 import { checkConfidence } from './confidence';
 import { prisma } from '@zenowethu/database';

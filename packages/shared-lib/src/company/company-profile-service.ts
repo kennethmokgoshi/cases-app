@@ -18,8 +18,10 @@
 
 import { z } from 'zod';
 import { prisma } from '@zenowethu/database';
-import { logger } from '../logger';
+import { createLogger } from '../logger';
 import { type CompanyProfile, ZENOWETHU_COMPANY_PROFILE } from './profile';
+
+const logger = createLogger('company-profile');
 
 export const COMPANY_PROFILE_CATEGORY = 'company_profile';
 const KEY_PREFIX = 'company_';

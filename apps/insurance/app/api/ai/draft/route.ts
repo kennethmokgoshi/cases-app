@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, draftLegalDocument, getAutonomyDecision, sendManualMessage } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 
 /**
  * POST /api/ai/draft
@@ -45,6 +46,7 @@ export async function POST(
         }
 
         // 2. Draft using AI Engine
+        const company = await getCompanyProfile();
         const draftingRequest = {
             client: {
                 firstName: caseRecord.client.firstName,
@@ -60,7 +62,9 @@ export async function POST(
                 creditorName: matter.creditorName,
                 accountNumber: matter.accountNumber
             },
-            documentType: documentType
+            documentType: documentType,
+            companyName: company.tradingName,
+            companyPhone: company.phone,
         };
 
         const draft = await draftLegalDocument(draftingRequest);

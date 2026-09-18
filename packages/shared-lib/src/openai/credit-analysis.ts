@@ -1,4 +1,6 @@
 import { getOpenAI } from './client';
+import { getCompanyProfile } from '../company/company-profile-service';
+import { formatCompanyWithNcrdc } from '../company/profile';
 import { logger } from '../logger';
 
 // ---------------------------------------------------------------------------
@@ -407,6 +409,7 @@ async function generateActionPlan(
     arrearsAccounts: ClassifiedArrearsAccount[],
     enquiryAnalysis: EnquiryAnalysis
 ): Promise<PriorityActionPlan> {
+    const company = await getCompanyProfile();
     const disputable = classifiedAdverse.filter((a) => a.classification === 'DISPUTABLE');
     const negotiable = classifiedAdverse.filter((a) => a.classification === 'NEGOTIABLE');
     const critical = arrearsAccounts.filter((a) => a.severity === 'CRITICAL');
@@ -428,7 +431,7 @@ async function generateActionPlan(
             model: 'gpt-4o',
             messages: [{
                 role: 'user',
-                content: `You are a South African credit repair consultant for Zenowethu Debt Management (NCRDC3693). Generate a structured priority action plan based on this credit analysis summary. Return ONLY valid JSON with no markdown.
+                content: `You are a South African credit repair consultant for ${formatCompanyWithNcrdc(company)}. Generate a structured priority action plan based on this credit analysis summary. Return ONLY valid JSON with no markdown.
 
 CREDIT ANALYSIS CONTEXT:
 ${JSON.stringify(context, null, 2)}

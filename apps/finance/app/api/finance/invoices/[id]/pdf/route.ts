@@ -4,6 +4,7 @@ import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem } from '@/lib/invoice-pdf'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { z } from 'zod'
 import fs from 'fs/promises'
 import path from 'path'
@@ -91,6 +92,7 @@ export async function GET(
         ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
         : undefined,
       bankingDetails,
+      company: await getCompanyProfile(),
     })
 
     // Cache to disk — TODO: replace with object storage in production

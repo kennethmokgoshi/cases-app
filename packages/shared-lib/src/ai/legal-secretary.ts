@@ -30,8 +30,9 @@ export interface DraftingRequest {
     // Extra context used by BUREAU_FILE_REQUEST and PROVIDER_FILE_REQUEST
     accounts?: DraftingAccount[];
     senderName?: string;
-    companyName?: string;
-    companyPhone?: string;
+    /** The firm the letter is from — from getCompanyProfile().tradingName. */
+    companyName: string;
+    companyPhone: string;
 }
 
 export interface DraftResponse {
@@ -47,8 +48,8 @@ export interface DraftResponse {
  */
 function buildPrompt(request: DraftingRequest): string {
     const clientFullName = `${request.client.firstName} ${request.client.lastName}`;
-    const company = request.companyName || 'Zenowethu Debt Management';
-    const phone = request.companyPhone || '081 747 7616';
+    const company = request.companyName;
+    const phone = request.companyPhone;
     const sender = request.senderName || company;
 
     if (request.documentType === 'DC_DRR_FILE_REQUEST') {
@@ -151,7 +152,7 @@ Output ONLY valid JSON in this format:
 
     // Original document types
     return `
-You are an expert Legal Secretary at Zenowethu. Your task is to draft a professional legal document for a South African credit repair case.
+You are an expert Legal Secretary at ${company}. Your task is to draft a professional legal document for a South African credit repair case.
 
 CLIENT: ${clientFullName} (ID: ${request.client.idNumber})
 ADDRESS: ${request.client.address || 'Not Provided'}
