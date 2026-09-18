@@ -3959,6 +3959,7 @@ Emails are sent fire-and-forget (`.catch()`) so comment creation never fails if 
 - [ ] **Phase 2** — per-org integrations, no-DHS mode, tenant domains (`{slug}.product.co.za` wildcard + custom-domain add-on)
   - Acceptance test: **Mokgoshi Empire onboarded from scratch** as the first new tenant (create org → admin → branding → own DHS/XDS/GHL/SMTP → seeded templates → first lead via public API → one file end-to-end) with zero Zenowethu leakage (NCRDC, banking, templates). Also create a **Demo org** with fake data for sales demos and website `zk_test_` keys.
 - [ ] **Phase 3** — platform-owner role/console, onboarding wizard, subscriptions (PayFast/Peach), usage metering, per-org export
+  - **AI decision (2026-09-18):** one platform-owned AI key (Mokgoshi Empire's OpenAI/OpenRouter/Anthropic), **charged per use**. No per-tenant or per-user AI keys. Requires: `AiUsage` ledger (organisationId, task, model, tokens in/out, unit cost, billable amount, caseId, triggeredBy) written by every AI call; per-org monthly cap + soft warning; usage panel in the tenant admin and platform console; billed as metered line items on the subscription invoice. BYOK can be a later Enterprise add-on, not in scope now.
 - Open decisions: product name/domain; which apps are in the product for other firms (Cases-only at launch recommended); pricing model
 
 - [x] **Production Hardening** — Standardized strict Content Security Policy (CSP) and enhanced API rate limiting across all 5 apps.
