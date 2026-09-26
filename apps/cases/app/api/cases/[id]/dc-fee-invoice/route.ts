@@ -10,6 +10,7 @@ import { auth } from '@zenowethu/shared-lib';
 import { dcFeeInvoiceInputSchema } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { createDcFeeInvoice } from '@zenowethu/shared-lib/src/finance/dc-fee-invoice-service';
+import { applyFeeDocumentStatus } from '@zenowethu/shared-lib/src/finance/fee-document-status';
 import { logger } from '@zenowethu/shared-lib';
 import { NextResponse } from 'next/server';
 
@@ -51,12 +52,27 @@ export async function POST(
       createdById: session.user.id,
     });
 
+    // Raising an invoice (not a quote) moves the case to "Fee Invoice Issued to
+    // Requesting DC" until it is sent. Never fails the invoice itself.
+    const statusChange = parsed.data.documentType === 'INVOICE'
+      ? await applyFeeDocumentStatus({
+          caseId: caseData.id,
+          docType: 'INVOICE_TO_DC',
+          event: 'UPLOADED',
+          userId: session.user.id,
+          notes: `Fee invoice ${invoice.invoiceNumber} raised for ${parsed.data.dcName}`,
+        }).catch((error) => {
+          logger.error('[dc-fee-invoice] status update failed', error);
+          return undefined;
+        })
+      : undefined;
+
     logger.info(
       `[dc-fee-invoice] ${invoice.invoiceNumber} raised for case ${id} → DC "${parsed.data.dcName}" by ${session.user.id}`,
     );
 
     return NextResponse.json(
-      { id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: Number(invoice.total) },
+      { id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: Number(invoice.total), statusChange },
       { status: 201 },
     );
   } catch (err) {

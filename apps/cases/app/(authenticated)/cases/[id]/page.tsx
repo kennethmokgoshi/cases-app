@@ -5231,7 +5231,7 @@ export default function CaseDetailPage() {
                             )}
                             {activeDetailTab === 'DOCUMENTS' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} />
+                                    <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} showFeeDocuments onCaseUpdated={() => fetchCase({ silent: true })} />
                                     <ConsumerPortalPanel caseId={caseData.id} />
                                 </div>
                             )}

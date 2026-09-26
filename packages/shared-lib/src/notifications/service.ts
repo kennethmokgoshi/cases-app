@@ -41,6 +41,7 @@ import type { DraftingAccount } from '../ai/legal-secretary';
 import { resolveCaseContact } from '../partners/branch-contact-service';
 import { describeContactFallback } from '../partners/branch-contact';
 import { withAuthorityLine } from '../documents/mandate-attachments';
+import { applyFeeDocumentStatus } from '../finance/fee-document-status';
 
 // Configuration — default all channels to ENABLED; set to 'false' to explicitly disable
 const SMS_ENABLED = process.env.SMS_ENABLED !== 'false';
@@ -380,6 +381,11 @@ export async function sendManualMessage(
         cc?: string[];
         attachments?: string[];  // public URLs — each provider resolves them appropriately
         senderId?: string;
+        /**
+         * Set when the email carries an invoice / proof of payment. Stored with a
+         * failed send so a later successful retry still moves the case status.
+         */
+        feeDocument?: { documentId: string; docType: string };
     }
 ): Promise<NotificationResult & { logId?: string }> {
     const senderId = options?.senderId;
@@ -1316,6 +1322,32 @@ export async function enqueueFailedNotification(data: {
     }
 }
 
+/**
+ * A retried invoice / proof-of-payment email that finally went out — with every
+ * attachment — moves the case to its "sent" status, exactly as the original
+ * send would have. Never fails the retry itself.
+ */
+async function applyFeeDocumentStatusAfterRetry(
+    caseId: string,
+    feeDocument: { documentId?: unknown; docType?: unknown } | undefined,
+    result: NotificationResult,
+): Promise<void> {
+    if (!feeDocument || typeof feeDocument.documentId !== 'string' || typeof feeDocument.docType !== 'string') return;
+    if (!result.emailSuccess || result.attachmentErrors?.length) return;
+    try {
+        await applyFeeDocumentStatus({
+            caseId,
+            docType: feeDocument.docType,
+            event: 'SENT',
+            documentId: feeDocument.documentId,
+            notes: 'Sent on retry after an earlier failure',
+            recordWhenUnchanged: true,
+        });
+    } catch (error) {
+        logger.error(`Fee document status after retry failed for case ${caseId}: ${(error as Error).message}`);
+    }
+}
+
 export async function executeNotificationRetry(queueId: string): Promise<NotificationResult> {
     const queueItem = await prisma.notificationQueue.findUnique({ where: { id: queueId } });
     if (!queueItem) throw new Error('Queue item not found');
@@ -1348,6 +1380,7 @@ export async function executeNotificationRetry(queueId: string): Promise<Notific
             );
             result.emailSuccess = res.success;
             if (res.error) result.errors.push(res.error);
+            if (res.attachmentErrors?.length) result.attachmentErrors = res.attachmentErrors;
         } else if (queueItem.channel === 'WHATSAPP') {
             const provider = await getWhatsAppProvider();
             const res = await provider.send(queueItem.recipient, queueItem.body);
@@ -1380,6 +1413,7 @@ export async function executeNotificationRetry(queueId: string): Promise<Notific
             success: true,
             provider: 'RETRY'
         });
+        await applyFeeDocumentStatusAfterRetry(queueItem.caseId, options?.feeDocument, result);
     } else {
         const newCount = queueItem.retryCount + 1;
         await prisma.notificationQueue.update({

@@ -1,6 +1,7 @@
 import { logger } from '@zenowethu/shared-lib'
 import { auth } from '@zenowethu/shared-lib'
 import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync'
+import { syncFeeInvoicePaidStatus } from '@zenowethu/shared-lib/src/finance/fee-document-status'
 import { prisma, Prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -123,6 +124,10 @@ export async function PATCH(
     // the case workflow (forward-only). Never fails the invoice update.
     if (input.status === 'PAID' && existing.type === 'INVOICE') {
       await checkQuoteFulfilmentSafe(existing.caseId, session.user.id)
+    }
+    // A DC fee / legal fee invoice marked PAID moves the case to its "paid" status.
+    if (input.status === 'PAID') {
+      await syncFeeInvoicePaidStatus({ invoiceId: id, userId: session.user.id })
     }
 
     return NextResponse.json(updated)

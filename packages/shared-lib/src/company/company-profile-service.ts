@@ -62,6 +62,7 @@ export const CompanyProfileInputSchema = z.object({
     bankAccountNumber: optionalText,
     bankBranchCode: optionalText,
     bankAccountType: optionalText,
+    legalFeeAmount: z.string().trim().regex(/^\d{1,7}(\.\d{1,2})?$/, 'Enter an amount in Rand, e.g. 1700').nullable().optional(),
 });
 export type CompanyProfileInput = z.infer<typeof CompanyProfileInputSchema>;
 
@@ -81,6 +82,12 @@ function readEnvFallbacks(env: NodeJS.ProcessEnv): Partial<Record<FlatKey, strin
     if (env.COMPANY_BANK_ACCOUNT) out.bankAccountNumber = env.COMPANY_BANK_ACCOUNT;
     if (env.COMPANY_BRANCH_CODE) out.bankBranchCode = env.COMPANY_BRANCH_CODE;
     return out;
+}
+
+function parseAmount(value: string | null): number | null {
+    if (!value) return null;
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
@@ -141,6 +148,7 @@ export function buildCompanyProfile(
         accentColor: req('accentColor', base.accentColor),
         logoUrl: pick('logoUrl', base.logoUrl),
         bank,
+        legalFeeAmount: parseAmount(pick('legalFeeAmount', null)) ?? base.legalFeeAmount,
     };
 }
 

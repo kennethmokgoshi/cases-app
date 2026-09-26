@@ -8,6 +8,12 @@ const mockDb = vi.hoisted(() => ({
 
 vi.mock('@zenowethu/database', () => ({ prisma: mockDb }));
 
+const mockReadOwnUpload = vi.hoisted(() => vi.fn());
+vi.mock('./upload-paths', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./upload-paths')>()),
+    readOwnUpload: mockReadOwnUpload,
+}));
+
 import {
     buildMandateAttachments,
     pickMandateDocument,
@@ -15,6 +21,7 @@ import {
     describeMandateOutcome,
     withAuthorityLine,
     resolveMandateAttachments,
+    loadMandateFiles,
     MANDATE_POA_TYPES,
     MANDATE_ID_TYPES,
     type MandateDocument,
@@ -246,5 +253,48 @@ describe('resolveMandateAttachments', () => {
         expect(result.complete).toBe(false);
         expect(result.missing).toEqual(['POA', 'ID']);
         expect(result.summary).toContain('lookup failed');
+    });
+});
+
+describe('loadMandateFiles', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('returns the POA and ID bytes read from disk', async () => {
+        mockDb.document.findMany.mockResolvedValue([
+            doc({ type: 'POA', fileName: 'poa.pdf', fileUrl: '/uploads/c/poa.pdf' }),
+            doc({ type: 'ID', fileName: 'id.jpg', fileUrl: '/uploads/c/id.jpg' }),
+        ]);
+        mockReadOwnUpload.mockImplementation(async (url: string) => Buffer.from(url));
+
+        const result = await loadMandateFiles('case-1');
+
+        expect(result.files.map(f => [f.filename, f.contentType])).toEqual([
+            ['poa.pdf', 'application/pdf'],
+            ['id.jpg', 'image/jpeg'],
+        ]);
+        expect(result.missing).toEqual([]);
+        expect(result.label).toBe('signed Power of Attorney and identity document');
+    });
+
+    it('treats an unreadable file as missing so the email never claims it', async () => {
+        mockDb.document.findMany.mockResolvedValue([
+            doc({ type: 'POA', fileUrl: '/uploads/c/poa.pdf' }),
+            doc({ type: 'ID', fileUrl: '/uploads/c/id.pdf' }),
+        ]);
+        mockReadOwnUpload.mockImplementation(async (url: string) => (url.includes('poa') ? Buffer.from('x') : null));
+
+        const result = await loadMandateFiles('case-1');
+
+        expect(result.files).toHaveLength(1);
+        expect(result.missing).toEqual(['ID']);
+        expect(result.label).toBe('signed Power of Attorney');
+        expect(result.summary).toContain('MISSING');
+    });
+
+    it('returns nothing to attach when the case has no mandate', async () => {
+        mockDb.document.findMany.mockResolvedValue([]);
+        const result = await loadMandateFiles('case-1');
+        expect(result).toMatchObject({ files: [], label: null, missing: ['POA', 'ID'] });
+        expect(mockReadOwnUpload).not.toHaveBeenCalled();
     });
 });

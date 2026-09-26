@@ -75,6 +75,9 @@ export interface CompanyProfile {
     logoUrl: string | null;
 
     bank: CompanyBankDetails | null;
+
+    /** Legal fee charged to a consumer (Rand, total — no VAT added). Staff may override per invoice. */
+    legalFeeAmount: number;
 }
 
 /**
@@ -116,6 +119,7 @@ export const ZENOWETHU_COMPANY_PROFILE: CompanyProfile = Object.freeze({
         branchCode: '250655',
         accountType: null,
     }),
+    legalFeeAmount: 1700,
 }) as CompanyProfile;
 
 // ─── Formatters ──────────────────────────────────────────────────────────────

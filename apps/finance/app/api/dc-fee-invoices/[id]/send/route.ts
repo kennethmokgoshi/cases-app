@@ -9,6 +9,8 @@
 import { auth, logger, renderBrandedEmail } from '@zenowethu/shared-lib'
 import { formatSignatureBlock, type CompanyProfile } from '@zenowethu/shared-lib/src/company/profile'
 import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service'
+import { loadMandateFiles, type MandateFiles } from '@zenowethu/shared-lib/src/documents/mandate-attachments'
+import { applyFeeDocumentStatus } from '@zenowethu/shared-lib/src/finance/fee-document-status'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -27,6 +29,7 @@ function buildEmailHtml(
   documentType: 'INVOICE' | 'QUOTE',
   message: string | undefined,
   company: CompanyProfile,
+  mandateLabel: string | null = null,
 ): string {
   const totalFormatted = new Intl.NumberFormat('en-ZA', {
     style: 'currency',
@@ -48,6 +51,12 @@ function buildEmailHtml(
       message
         ? `<p style="margin: 0 0 20px; color: #444; line-height: 1.6;">${message.replace(/\n/g, '<br/>')}</p>`
         : `<p style="margin: 0 0 20px; color: #444; line-height: 1.6;">${defaultBody}</p>`
+    }
+    ${
+      // Only claim documents that are actually attached.
+      mandateLabel
+        ? `<p style="margin: 0 0 20px; color: #444; line-height: 1.6;">For your reference and as proof of our authority to act on the consumer's behalf, please find attached our client's ${mandateLabel}.</p>`
+        : ''
     }
     <div style="background-color: #f4f7f9; border-radius: 8px; padding: 25px; margin: 25px 0; border: 1px solid #e1e8ed; display: inline-block; min-width: 200px;">
         <p style="margin: 0; font-size: 13px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">${totalLabel}</p>
@@ -110,18 +119,23 @@ export async function POST(
     const docLabel = invoice.documentType === 'QUOTE' ? 'Quotation' : 'Invoice'
 
     const company = await getCompanyProfile()
+    // Sent on the consumer's behalf — the signed POA and ID travel with it.
+    const mandate: MandateFiles = invoice.caseId
+      ? await loadMandateFiles(invoice.caseId)
+      : { files: [], label: null, summary: 'No case linked — no POA/ID attached', missing: ['POA', 'ID'] }
     const emailResult = await sendEmail({
       to,
       fromName: session.user.name || undefined,
       fromEmail: session.user.email || undefined,
       subject: `${docLabel} ${invoice.invoiceNumber} — Outstanding Fees | ${company.tradingName}`,
-      html: buildEmailHtml(invoice.invoiceNumber, total, invoice.dcName ?? 'Debt Counsellor', invoice.documentType, parsed.data.message, company),
+      html: buildEmailHtml(invoice.invoiceNumber, total, invoice.dcName ?? 'Debt Counsellor', invoice.documentType, parsed.data.message, company, mandate.label),
       attachments: [
         {
           filename: `${invoice.invoiceNumber}.pdf`,
           content: Buffer.from(bytes),
           contentType: 'application/pdf',
         },
+        ...mandate.files,
       ],
     })
 
@@ -135,8 +149,20 @@ export async function POST(
       data: { status: 'SENT', sentAt: new Date(), sentTo: to },
     })
 
+    // Same as the Cases send: an invoice (not a quote) moves the linked case to
+    // "Fee Invoice Sent to Requesting DC". Never fails the send itself.
+    if (invoice.caseId && invoice.documentType === 'INVOICE') {
+      await applyFeeDocumentStatus({
+        caseId: invoice.caseId,
+        docType: 'INVOICE_TO_DC',
+        event: 'SENT',
+        userId: session.user.id,
+        notes: `Fee invoice ${invoice.invoiceNumber} emailed to ${to}. ${mandate.summary}`,
+      }).catch((error) => logger.error('[dc-fee-invoice send] (finance) status update failed', error))
+    }
+
     logger.info(`[dc-fee-invoice send] (finance) ${invoice.invoiceNumber} sent to ${to} by ${session.user.id}`)
-    return NextResponse.json({ success: true, sentTo: to })
+    return NextResponse.json({ success: true, sentTo: to, mandateSummary: mandate.summary, missingMandate: mandate.missing })
   } catch (err) {
     logger.error('[POST /api/dc-fee-invoices/[id]/send] (finance)', err)
     return new NextResponse('Internal Server Error', { status: 500 })

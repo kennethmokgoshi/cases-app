@@ -1,6 +1,7 @@
 import { logger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
 import { checkQuoteFulfilmentSafe } from '@zenowethu/shared-lib/src/finance/quote-case-sync'
+import { syncFeeInvoicePaidStatus } from '@zenowethu/shared-lib/src/finance/fee-document-status'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -79,7 +80,8 @@ export async function POST(
     })
     if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    if (invoice.type !== 'INVOICE') {
+    // Our invoices to a requesting DC are invoices too; quotations never take payments.
+    if (invoice.type !== 'INVOICE' && invoice.type !== 'DC_FEE_INVOICE') {
       return NextResponse.json({ error: 'Payments can only be recorded against invoices, not quotations' }, { status: 409 })
     }
     if (invoice.status === 'CANCELLED') {
@@ -96,7 +98,7 @@ export async function POST(
           method:       input.method,
           reference:    input.reference ?? null,
           notes:        input.notes ?? null,
-          category:     'INVOICE_PAYMENT',
+          category:     invoice.type === 'DC_FEE_INVOICE' ? 'DC_FEE_RECOVERY' : 'INVOICE_PAYMENT',
           status:       'COMPLETED',
           invoiceId:    invoice.id,
           clientId:     invoice.clientId,
@@ -123,12 +125,15 @@ export async function POST(
     // Captured payments may now cover the case's accepted quote — advance the
     // case workflow (forward-only). Never fails the recorded payment.
     const quoteFulfilment = await checkQuoteFulfilmentSafe(invoice.caseId, session.user.id)
+    // A fully paid DC fee / legal fee invoice moves the case to its "paid" status.
+    const feeStatusChange = await syncFeeInvoicePaidStatus({ invoiceId: invoice.id, userId: session.user.id })
 
     return NextResponse.json({
       ...result,
       balanceDue: Math.max(0, Number(result.invoice.total) - result.amountPaid),
       overpaidBy: Math.max(0, result.amountPaid - Number(result.invoice.total)),
       quoteFulfilment,
+      feeStatusChange,
     }, { status: 201 })
   } catch (err) {
     logger.error('[POST /api/finance/invoices/[id]/payments]', err)

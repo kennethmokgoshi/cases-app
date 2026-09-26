@@ -6,8 +6,39 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import busboy from 'busboy';
 import { Readable } from 'stream';
+import { z } from 'zod';
+import { FEE_DOCUMENT_TYPES, isFeeDocumentType } from '@zenowethu/shared-lib';
+import { applyFeeDocumentStatus, type FeeStatusChangeResult } from '@zenowethu/shared-lib/src/finance/fee-document-status';
 
 const logger = createLogger('api/cases/[id]/documents');
+
+/**
+ * Invoice / proof-of-payment uploads move the case to the matching workflow
+ * status. A status failure must never fail the upload itself — the file is
+ * already saved — so it is logged and reported back as "not moved".
+ */
+async function feeStatusAfterUpload(
+    caseId: string,
+    documentId: string,
+    docType: string,
+    fileName: string,
+    userId: string,
+): Promise<FeeStatusChangeResult | undefined> {
+    if (!isFeeDocumentType(docType)) return undefined;
+    try {
+        return await applyFeeDocumentStatus({
+            caseId,
+            docType,
+            event: 'UPLOADED',
+            userId,
+            documentId,
+            notes: `Uploaded ${fileName}`,
+        });
+    } catch (error) {
+        logger.error({ error, caseId, docType }, 'Could not apply fee document status after upload');
+        return { moved: false, message: 'Uploaded, but the case status could not be updated' };
+    }
+}
 
 // GET - List all documents for a case
 export async function GET(
@@ -176,7 +207,8 @@ export async function POST(
                     data: { type: docType }
                 });
                 await touchCaseAction(caseId, 'DOCUMENT_UPDATE', { userId: session.user.id });
-                return NextResponse.json({ document: updated });
+                const statusChange = await feeStatusAfterUpload(caseId, updated.id, docType, file.name, session.user.id);
+                return NextResponse.json({ document: updated, statusChange });
             }
             logger.info(`♻️  Duplicate detected for ${file.name} (${fileSize} bytes). Skipping write/create.`);
             return NextResponse.json({ document: existingDoc });
@@ -236,9 +268,11 @@ export async function POST(
         }
 
         await touchCaseAction(caseId, 'DOCUMENT_UPLOAD', { userId: session.user.id });
+        // After touchCaseAction so the status SLA sets the next update date.
+        const statusChange = await feeStatusAfterUpload(caseId, document.id, docType, file.name, session.user.id);
 
         logger.info(`[UPLOAD_TRACE] ✅ SUCCESS in ${Date.now() - startTime}ms`);
-        return NextResponse.json({ document });
+        return NextResponse.json({ document, statusChange });
 
     } catch (error: any) {
         logger.error('❌ [UPLOAD_TRACE] CRITICAL FAILURE:', error);
@@ -334,6 +368,15 @@ export async function DELETE(
 }
 
 // PATCH - Update document type
+const DOCUMENT_TYPES = [
+    'ID', 'POA', 'CREDIT_REPORT', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_EXPERIAN',
+    'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'ZENOWETHU_POA',
+    'PAYSLIP', 'BANK_STATEMENT', 'PROOF_OF_RESIDENCE', 'COMBINED', 'OTHER',
+    ...FEE_DOCUMENT_TYPES.map(d => d.type),
+] as const;
+
+const PatchDocumentSchema = z.object({ type: z.enum(DOCUMENT_TYPES) });
+
 export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
@@ -344,23 +387,26 @@ export async function PATCH(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { id: caseId } = await params;
         const { searchParams } = new URL(request.url);
         const documentId = searchParams.get('documentId');
-        const body = await request.json();
-        const { type } = body;
-
-        if (!documentId || !type) {
+        if (!documentId) {
             return NextResponse.json({ error: 'Document ID and Type are required' }, { status: 400 });
         }
 
-        // Verify valid type
-        const validTypes = [
-            'ID', 'POA', 'CREDIT_REPORT', 'CREDIT_REPORT_TRANSUNION', 'CREDIT_REPORT_EXPERIAN',
-            'CREDIT_REPORT_XDS', 'CREDIT_REPORT_LIGHTSTONE', 'ZENOWETHU_POA',
-            'PAYSLIP', 'BANK_STATEMENT', 'PROOF_OF_RESIDENCE', 'COMBINED', 'OTHER'
-        ];
-        if (!validTypes.includes(type)) {
+        const parsed = PatchDocumentSchema.safeParse(await request.json().catch(() => null));
+        if (!parsed.success) {
             return NextResponse.json({ error: 'Invalid document type' }, { status: 400 });
+        }
+        const { type } = parsed.data;
+
+        // The document must belong to the case in the URL.
+        const existing = await prisma.document.findFirst({
+            where: { id: documentId, caseId },
+            select: { id: true, fileName: true },
+        });
+        if (!existing) {
+            return NextResponse.json({ error: 'Document not found' }, { status: 404 });
         }
 
         const document = await prisma.document.update({
@@ -369,12 +415,12 @@ export async function PATCH(
         });
 
         await touchCaseAction(document.caseId, 'DOCUMENT_UPDATE', { userId: session.user.id });
+        const statusChange = await feeStatusAfterUpload(caseId, document.id, type, existing.fileName, session.user.id);
 
-        return NextResponse.json({ document });
+        return NextResponse.json({ document, statusChange });
 
     } catch (error) {
         logger.error('Error updating document:', error);
         return NextResponse.json({ error: 'Failed to update document' }, { status: 500 });
     }
 }
-

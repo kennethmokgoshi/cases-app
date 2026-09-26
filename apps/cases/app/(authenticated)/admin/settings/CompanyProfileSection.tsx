@@ -44,6 +44,7 @@ type FormState = {
     bankAccountNumber: string;
     bankBranchCode: string;
     bankAccountType: string;
+    legalFeeAmount: string;
 };
 
 const EMPTY: FormState = {
@@ -54,6 +55,7 @@ const EMPTY: FormState = {
     phone: '', phoneInternational: '', cell: '', email: '', debtReviewEmail: '', debtReviewPhone: '',
     website: '', websiteUrl: '', primaryColor: '', accentColor: '', logoUrl: '',
     bankName: '', bankAccountHolder: '', bankAccountNumber: '', bankBranchCode: '', bankAccountType: '',
+    legalFeeAmount: '',
 };
 
 function fromProfile(p: CompanyProfile): FormState {
@@ -89,6 +91,7 @@ function fromProfile(p: CompanyProfile): FormState {
         bankAccountNumber: p.bank?.accountNumber ?? '',
         bankBranchCode: p.bank?.branchCode ?? '',
         bankAccountType: p.bank?.accountType ?? '',
+        legalFeeAmount: String(p.legalFeeAmount),
     };
 }
 
@@ -156,6 +159,13 @@ const GROUPS: Group[] = [
             { key: 'bankAccountNumber', label: 'Account number', placeholder: '62867268635' },
             { key: 'bankBranchCode', label: 'Branch code', placeholder: '250655' },
             { key: 'bankAccountType', label: 'Account type', placeholder: 'Business Cheque' },
+        ],
+    },
+    {
+        title: 'Fees',
+        hint: 'Default amount on a new legal fee invoice (Rand, charged as the total — no VAT added). Staff can change it per invoice.',
+        fields: [
+            { key: 'legalFeeAmount', label: 'Legal fee (R)', placeholder: '1700', type: 'number' },
         ],
     },
 ];

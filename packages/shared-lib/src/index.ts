@@ -50,6 +50,11 @@ export * from './finance/document-number';
 // imported directly by server routes — it is intentionally NOT re-exported here.
 export * from './finance/dc-fee-invoice';
 
+// Finance — invoice / proof-of-payment document types and the case statuses they
+// drive (browser-safe). The Prisma-backed transition lives in
+// './finance/fee-document-status' and is imported directly by server routes.
+export * from './finance/fee-document-workflow';
+
 // Demo Data
 export * from './demo-data';
 

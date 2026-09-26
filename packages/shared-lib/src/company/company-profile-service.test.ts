@@ -95,6 +95,13 @@ describe('getCompanyProfile', () => {
 });
 
 describe('buildCompanyProfile', () => {
+    it('defaults the legal fee to R1,700 and reads a saved amount', () => {
+        expect(buildCompanyProfile({}).legalFeeAmount).toBe(1700);
+        expect(buildCompanyProfile({ legalFeeAmount: '2500.50' }).legalFeeAmount).toBe(2500.5);
+        expect(buildCompanyProfile({ legalFeeAmount: 'abc' }).legalFeeAmount).toBe(1700);
+        expect(buildCompanyProfile({ legalFeeAmount: null }).legalFeeAmount).toBe(1700);
+    });
+
     it('drops the bank block when no account number remains', () => {
         const profile = buildCompanyProfile({ bankAccountNumber: null });
         expect(profile.bank).toBeNull();
@@ -134,6 +141,13 @@ describe('saveCompanyProfile', () => {
 });
 
 describe('CompanyProfileInputSchema', () => {
+    it('accepts a Rand legal fee and rejects anything else', () => {
+        expect(CompanyProfileInputSchema.safeParse({ legalFeeAmount: '1700' }).success).toBe(true);
+        expect(CompanyProfileInputSchema.safeParse({ legalFeeAmount: '1700.50' }).success).toBe(true);
+        expect(CompanyProfileInputSchema.safeParse({ legalFeeAmount: 'R1700' }).success).toBe(false);
+        expect(CompanyProfileInputSchema.safeParse({ legalFeeAmount: '-5' }).success).toBe(false);
+    });
+
     it('rejects a malformed director ID and colour, accepts a partial valid payload', () => {
         expect(CompanyProfileInputSchema.safeParse({ directorIdNumber: '123' }).success).toBe(false);
         expect(CompanyProfileInputSchema.safeParse({ primaryColor: 'navy' }).success).toBe(false);

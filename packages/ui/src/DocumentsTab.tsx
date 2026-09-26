@@ -4,6 +4,8 @@ import { confirm } from './providers/ConfirmProvider';
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { FEE_DOCUMENT_TYPES, formatStatus } from '@zenowethu/shared-lib';
+import { FeeDocumentsPanel } from './FeeDocumentsPanel';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -94,6 +96,10 @@ const DOC_TYPE_LABELS: Record<string, { label: string; color: string; icon: stri
     'CONSENT_FORM': { label: 'Consent Form', color: 'bg-teal-400/20 text-teal-200', icon: '✍️' },
     'AFFIDAVIT': { label: 'Affidavit', color: 'bg-orange-600/20 text-orange-300', icon: '📃' },
     'DHS_SUMMARY_REPORT': { label: 'DHS Summary Report', color: 'bg-cyan-600/20 text-cyan-300', icon: '🖥️' },
+    'INVOICE_TO_DC': { label: 'Our invoice to requesting DC', color: 'bg-amber-500/20 text-amber-300', icon: '🧾' },
+    'LEGAL_FEE_INVOICE': { label: 'Legal fee invoice (consumer)', color: 'bg-amber-600/20 text-amber-200', icon: '🧾' },
+    'DC_INVOICE_RECEIVED': { label: 'Invoice received from DC', color: 'bg-orange-500/20 text-orange-300', icon: '📥' },
+    'PROOF_OF_PAYMENT': { label: 'Proof of payment (consumer)', color: 'bg-lime-500/20 text-lime-300', icon: '💳' },
     'OTHER': { label: 'Other Document', color: 'bg-gray-500/20 text-gray-300', icon: '📄' } };
 
 const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: string }[] = [
@@ -103,7 +109,26 @@ const CREDIT_BUREAUS: { type: string; name: string; color: string; accent: strin
     { type: 'CREDIT_REPORT_LIGHTSTONE',name: 'Lightstone', color: 'border-pink-500/30 bg-pink-500/5', accent: 'text-pink-400' },
 ];
 
-export function DocumentsTab({ caseId, refreshTrigger }: { caseId: string; refreshTrigger?: number }) {
+type FeeStatusChange = { moved: boolean; toStatus?: string; message?: string };
+
+/** Append what happened to the case status after an invoice / proof-of-payment upload. */
+function withStatusChange(base: string, change?: FeeStatusChange): string {
+    if (!change) return base;
+    if (change.moved && change.toStatus) return `${base} — case status set to "${formatStatus(change.toStatus)}"`;
+    return change.message ? `${base} (${change.message})` : base;
+}
+
+export function DocumentsTab({ caseId, refreshTrigger, onCaseUpdated, showFeeDocuments = false }: {
+    caseId: string;
+    refreshTrigger?: number;
+    /**
+     * Show the invoice / proof-of-payment types and the Invoices & Payments panel.
+     * Only the Cases app has the fee-document API routes behind it.
+     */
+    showFeeDocuments?: boolean;
+    /** Called when an upload or send changed the case status, so the page can refresh it. */
+    onCaseUpdated?: () => void;
+}) {
     const { data: session } = useSession();
     const isAdmin = (session?.user as any)?.isAdmin === true;
     const [documents, setDocuments] = useState<Document[]>([]);
@@ -288,11 +313,12 @@ export function DocumentsTab({ caseId, refreshTrigger }: { caseId: string; refre
                 throw new Error(detail);
             }
 
-            const { document: uploadedDoc } = await res.json();
+            const { statusChange } = await res.json() as { statusChange?: FeeStatusChange };
 
-            setSuccess('Document uploaded successfully');
+            setSuccess(withStatusChange('Document uploaded successfully', statusChange));
 
             fetchDocuments();
+            if (statusChange?.moved) onCaseUpdated?.();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : 'Failed to upload document';
             setError(`Failed to upload document: ${msg}`);
@@ -660,8 +686,10 @@ export function DocumentsTab({ caseId, refreshTrigger }: { caseId: string; refre
 
             if (!res.ok) throw new Error('Failed to update document type');
 
-            setSuccess(`Document type updated to ${DOC_TYPE_LABELS[newType].label}`);
+            const { statusChange } = await res.json() as { statusChange?: FeeStatusChange };
+            setSuccess(withStatusChange(`Document type updated to ${DOC_TYPE_LABELS[newType]?.label ?? newType}`, statusChange));
             fetchDocuments();
+            if (statusChange?.moved) onCaseUpdated?.();
         } catch (e) {
             setError('Failed to update document type');
         }
@@ -934,6 +962,13 @@ export function DocumentsTab({ caseId, refreshTrigger }: { caseId: string; refre
                             <option value="COURT_ORDER" className="bg-zeno-navy text-white">Court Order</option>
                             <option value="DEBT_RESTRUCTURING_PROPOSAL" className="bg-zeno-navy text-white">Debt Restructuring Proposal</option>
                         </optgroup>
+                        {showFeeDocuments && (
+                            <optgroup label="Invoices & Payments" className="bg-zeno-navy text-gray-400">
+                                {FEE_DOCUMENT_TYPES.map((d) => (
+                                    <option key={d.type} value={d.type} className="bg-zeno-navy text-white">{d.label}</option>
+                                ))}
+                            </optgroup>
+                        )}
                         <option value="INSURANCE_POLICY" className="bg-zeno-navy text-white">Insurance Policy</option>
                         <option value="CONSENT_FORM" className="bg-zeno-navy text-white">Consent Form</option>
                         <option value="AFFIDAVIT" className="bg-zeno-navy text-white">Affidavit</option>
@@ -968,6 +1003,18 @@ export function DocumentsTab({ caseId, refreshTrigger }: { caseId: string; refre
                     </label>
                 )}
             </div>
+
+            {/* Invoices & proof of payment — send/forward, mark paid, legal fee invoice */}
+            {showFeeDocuments && (
+                <FeeDocumentsPanel
+                    caseId={caseId}
+                    documents={documents}
+                    onChanged={(statusMoved) => {
+                        fetchDocuments();
+                        if (statusMoved) onCaseUpdated?.();
+                    }}
+                />
+            )}
 
             {/* Documents List */}
             <div className="space-y-3">
