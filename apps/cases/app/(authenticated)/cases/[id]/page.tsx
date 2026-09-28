@@ -1829,7 +1829,7 @@ export default function CaseDetailPage() {
                     text: text
                 });
             } else {
-                setDhsMessage({ type: 'error', text: result.error || 'DHS search failed' });
+                setDhsMessage({ type: 'error', text: [result.error || 'DHS search failed', result.details].filter(Boolean).join(': ') });
             }
         } catch (error) {
             setDhsMessage({ type: 'error', text: 'Failed to connect to DHS' });
@@ -1894,7 +1894,7 @@ export default function CaseDetailPage() {
                     text: statusText
                 });
             } else {
-                setDhsMessage({ type: 'error', text: result.error || 'DHS status check failed' });
+                setDhsMessage({ type: 'error', text: [result.error || 'DHS status check failed', result.details].filter(Boolean).join(': ') });
             }
         } catch (error) {
             setDhsMessage({ type: 'error', text: 'Failed to connect to DHS' });

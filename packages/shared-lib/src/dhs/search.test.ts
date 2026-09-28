@@ -61,6 +61,8 @@ vi.mock('./counsellor', () => ({
 
 import { searchConsumer } from './search';
 import { getDebtCounsellorInfo } from './counsellor';
+import { loginToDHS } from './browser';
+import { getDHSCredentials } from '../integrations';
 
 describe('searchConsumer', () => {
     beforeEach(() => {
@@ -75,5 +77,26 @@ describe('searchConsumer', () => {
         expect(result.debtCounsellor?.fullName).toBe('Sebastien Alexanderson');
         expect(result.debtCounsellor?.ncrRegistrationNo).toBe('NCRDC3541');
         expect(getDebtCounsellorInfo).toHaveBeenCalled();
+    });
+
+    it('flags searchFailed (not a "not found") when the DHS login is rejected', async () => {
+        vi.mocked(loginToDHS).mockResolvedValueOnce(false);
+
+        const result = await searchConsumer('8805275493082');
+
+        expect(result.found).toBe(false);
+        expect(result.searchFailed).toBe(true);
+        expect(result.message).toContain('testuser');
+        expect(getDebtCounsellorInfo).not.toHaveBeenCalled();
+    });
+
+    it('flags searchFailed when credentials are missing instead of reporting "not found"', async () => {
+        vi.mocked(getDHSCredentials).mockRejectedValueOnce(new Error('DHS credentials are not configured.'));
+
+        const result = await searchConsumer('8805275493082');
+
+        expect(result.found).toBe(false);
+        expect(result.searchFailed).toBe(true);
+        expect(result.message).toContain('DHS credentials are not configured');
     });
 });

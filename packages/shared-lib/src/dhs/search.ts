@@ -20,6 +20,8 @@ export async function searchConsumer(idNumber: string): Promise<{
     consumer?: DHSConsumerInfo;
     debtCounsellor?: DHSDebtCounsellorInfo;
     message?: string;
+    /** True when the search did not complete (login rejected, missing credentials, portal error) — "not found" is not known. */
+    searchFailed?: boolean;
 }> {
     const browserInstance = await getBrowser();
     const page = await browserInstance.newPage();
@@ -32,7 +34,11 @@ export async function searchConsumer(idNumber: string): Promise<{
         // Login first
         const loggedIn = await loginToDHS(page, credentials);
         if (!loggedIn) {
-            return { found: false, message: 'Failed to login to DHS' };
+            return {
+                found: false,
+                searchFailed: true,
+                message: `Failed to login to DHS as ${credentials.username} — the portal rejected the credentials or timed out. Check the DHS username/password in Admin → Settings.`,
+            };
         }
 
         // Navigate to Request New Transfer page
@@ -216,7 +222,11 @@ export async function searchConsumer(idNumber: string): Promise<{
         return result;
     } catch (error) {
         logger.error('Error searching consumer:', error);
-        return { found: false, message: `Error: ${error} ` };
+        return {
+            found: false,
+            searchFailed: true,
+            message: `DHS search did not complete: ${error instanceof Error ? error.message : String(error)}`,
+        };
     } finally {
         await page.close();
     }

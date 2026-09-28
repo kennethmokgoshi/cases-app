@@ -531,6 +531,16 @@ export async function POST(request: Request) {
             // Search for consumer (for new transfer)
             result = await searchConsumer(idNumber);
 
+            // A failed login or portal error means the ID was never searched — do not mark the case NOT_LINKED.
+            if (result.searchFailed) {
+                logger.error(`[DHS search] ${result.message}`);
+                await closeBrowser();
+                return NextResponse.json(
+                    { success: false, error: 'DHS search failed', details: result.message },
+                    { status: 502 }
+                );
+            }
+
             // Auto-update case data if found
             if (result.found && result.consumer && caseId) {
                 const consumer = result.consumer;
