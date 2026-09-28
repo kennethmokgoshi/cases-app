@@ -133,7 +133,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
 RUN npm install -g prisma@5.22.0
 
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN adduser --system --uid 1001 --home /home/nextjs nextjs \
+    && mkdir -p /home/nextjs && chown nextjs:nodejs /home/nextjs
+ENV HOME=/home/nextjs
 
 COPY --from=builder /app/packages/database/prisma ./prisma
 

@@ -28,7 +28,17 @@ export async function getBrowser(): Promise<Browser> {
         const puppeteer = require('puppeteer');
         browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                // Docker /dev/shm is 64MB by default; Chromium crashes without this
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                // Avoids crashpad launch failure when HOME is not writable
+                '--disable-crash-reporter',
+                '--user-data-dir=/tmp/chromium-dhs',
+            ],
         });
     }
     return browser;

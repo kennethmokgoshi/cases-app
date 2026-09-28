@@ -431,6 +431,10 @@
 
 ---
 
+### Fixed: DHS Lookup Chromium Launch Crash in Production (2026-09-28)
+
+VPS diagnostics showed `/api/dhs/lookup` failing with `chrome_crashpad_handler: --database is required` — the `nextjs` container user had no writable HOME so Chromium could not create its user-data dir. Chromium works when `HOME=/tmp` is set. Fixed in `Dockerfile` (real home dir + `ENV HOME`) and hardened `packages/shared-lib/src/dhs/browser.ts` (executablePath, `--disable-dev-shm-usage`, `--disable-gpu`, `--disable-crash-reporter`, `--user-data-dir`). Needs a Dokploy redeploy of the cases app. VPS also confirmed: only cases, casesdb, reporting and credo are deployed — website/insurance/legal/finance/forensic have no Dokploy service yet.
+
 ### Fixed: POA "Send & Save" Silently Reset the Modal Instead of Confirming (2026-08-27)
 
 **Trigger:** user report — after choosing *Send & save* in the Power of Attorney modal, "it loads the screen as if the action to email and save POA was not done ... it should pop up with a message that says POA emailed / POA saved onto profile, not just reload the previous window as if nothing has happened."
