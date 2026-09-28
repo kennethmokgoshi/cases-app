@@ -431,6 +431,11 @@
 
 ---
 
+### Added: Dockerfile.website for Dokploy (site.zenowethu.co.za) (2026-09-28)
+
+`Dockerfile.website` (port 3006, standalone output, no Chromium) and `output: 'standalone'` in `apps/website/next.config.js`. Deploy steps in `DEPLOYMENT.md`. Not build-tested locally (no Docker daemon/node_modules in the session). Website content and branding are still hard-coded to Zenowethu — not yet multi-tenant.
+
+
 ### Fixed: DHS Lookup Chromium Launch Crash in Production (2026-09-28)
 
 VPS diagnostics showed `/api/dhs/lookup` failing with `chrome_crashpad_handler: --database is required` — the `nextjs` container user had no writable HOME so Chromium could not create its user-data dir. Chromium works when `HOME=/tmp` is set. Fixed in `Dockerfile` (real home dir + `ENV HOME`) and hardened `packages/shared-lib/src/dhs/browser.ts` (executablePath, `--disable-dev-shm-usage`, `--disable-gpu`, `--disable-crash-reporter`, `--user-data-dir`). Needs a Dokploy redeploy of the cases app. VPS also confirmed: only cases, casesdb, reporting and credo are deployed — website/insurance/legal/finance/forensic have no Dokploy service yet.

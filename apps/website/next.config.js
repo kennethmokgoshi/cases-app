@@ -1,3 +1,5 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 
 // Same header set as the authenticated apps, minus frame-ancestors strictness
@@ -19,6 +21,8 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@zenowethu/ui", "@zenowethu/shared-lib", "@zenowethu/database"],
   experimental: {
     // Enable performance optimizations

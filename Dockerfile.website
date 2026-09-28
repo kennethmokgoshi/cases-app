@@ -1,0 +1,83 @@
+# Website app (public site, port 3006) — build for Dokploy with Dockerfile.website
+# Serves site.zenowethu.co.za. No Chromium needed: the public site does not scrape.
+
+# ── deps stage ───────────────────────────────────────────────────────────────
+FROM node:20-bookworm AS deps
+RUN apt-get update && apt-get install -y openssl libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/database/package.json ./packages/database/
+COPY packages/shared-lib/package.json ./packages/shared-lib/
+COPY packages/plan-engine/package.json ./packages/plan-engine/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/config/package.json ./packages/config/
+COPY packages/eslint-config/package.json ./packages/eslint-config/
+COPY packages/tsconfig/package.json ./packages/tsconfig/
+
+COPY apps/cases/package.json ./apps/cases/
+COPY apps/insurance/package.json ./apps/insurance/
+COPY apps/legal/package.json ./apps/legal/
+COPY apps/forensic-audit/package.json ./apps/forensic-audit/
+COPY apps/finance/package.json ./apps/finance/
+COPY apps/crediva/package.json ./apps/crediva/
+COPY apps/website/package.json ./apps/website/
+COPY apps/reporting/package.json ./apps/reporting/
+
+RUN pnpm install --frozen-lockfile
+
+# ── builder stage ─────────────────────────────────────────────────────────────
+FROM node:20-bookworm AS builder
+RUN apt-get update && apt-get install -y openssl libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
+COPY --from=deps /app/packages/shared-lib/node_modules ./packages/shared-lib/node_modules
+COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
+COPY --from=deps /app/packages/config/node_modules ./packages/config/node_modules
+COPY --from=deps /app/apps/website/node_modules ./apps/website/node_modules
+
+COPY packages/ ./packages/
+COPY apps/website/ ./apps/website/
+COPY package.json pnpm-workspace.yaml turbo.json ./
+
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+RUN cd packages/database && npx prisma generate
+RUN pnpm --filter website build
+
+# ── runner stage ──────────────────────────────────────────────────────────────
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 --home /home/nextjs nextjs \
+    && mkdir -p /home/nextjs && chown nextjs:nodejs /home/nextjs
+
+# Standalone output keeps monorepo layout: server.js is at apps/website/server.js
+COPY --from=builder --chown=nextjs:nodejs /app/apps/website/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/website/.next/static ./apps/website/.next/static
+RUN mkdir -p apps/website/public && chown nextjs:nodejs apps/website/public
+
+USER nextjs
+
+EXPOSE 3006
+ENV PORT=3006
+ENV HOSTNAME="0.0.0.0"
+ENV HOME=/home/nextjs
+
+CMD ["node", "apps/website/server.js"]

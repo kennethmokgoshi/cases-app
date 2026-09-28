@@ -36,6 +36,7 @@ insurance.zenowethu.co.za → 213.199.57.111
 legal.zenowethu.co.za     → 213.199.57.111
 forensic.zenowethu.co.za  → 213.199.57.111
 finance.zenowethu.co.za  → 213.199.57.111
+site.zenowethu.co.za     → 213.199.57.111
 ```
 
 ## Deployment Steps
@@ -236,3 +237,14 @@ docker compose logs <service-name>  # Check logs
 docker compose build <service-name> # Rebuild
 docker compose restart <service-name> # Restart
 ```
+
+
+## Website (site.zenowethu.co.za) — Dokploy
+
+Interim public-site host until the apex `zenowethu.co.za` is pointed at it.
+
+1. DNS: add an `A` record `site` → `213.199.57.111`.
+2. Dokploy → new Application, repo `kennethmokgoshi/cases-app`, build type **Dockerfile**, Dockerfile path `Dockerfile.website`.
+3. Domain: `site.zenowethu.co.za`, container port **3006**, HTTPS on (Let's Encrypt).
+4. Environment (runtime): `DATABASE_URL` (same Postgres as Cases — the lead API writes to it), SMTP/notification vars used by `sendInternalNotification`.
+5. Build arg: `DATABASE_URL` (only needed for `prisma generate`).
