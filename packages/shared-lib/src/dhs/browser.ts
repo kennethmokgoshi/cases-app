@@ -28,7 +28,7 @@ export async function getBrowser(): Promise<Browser> {
         const puppeteer = require('puppeteer');
         browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
     }
     return browser;

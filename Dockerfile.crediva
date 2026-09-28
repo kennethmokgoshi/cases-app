@@ -88,7 +88,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
     && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Debian 12's `adduser --system` sets HOME to /nonexistent. Chromium (Puppeteer:
+# DHS, XDS, NCT, DCCP, PDF rendering) must write its profile + crashpad database
+# under HOME, and without it every launch dies with
+# "chrome_crashpad_handler: --database is required".
+RUN adduser --system --uid 1001 --home /home/nextjs nextjs \
+    && mkdir -p /home/nextjs \
+    && chown nextjs /home/nextjs
+ENV HOME=/home/nextjs
 
 COPY --from=builder /app/packages/database/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/apps/crediva/.next/standalone ./
