@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { createLogger } from '@zenowethu/shared-lib';
 import { handleTelegramMessage } from '@zenowethu/shared-lib/src/integrations/telegram-bot';
 import { TelegramBotProvider } from '@zenowethu/shared-lib/src/notifications/providers';
 
 const logger = createLogger('api/webhooks/telegram');
+
+function safeEqual(a: string, b: string): boolean {
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 /**
  * Telegram Bot webhook.
@@ -18,13 +25,12 @@ const logger = createLogger('api/webhooks/telegram');
  */
 export async function POST(request: Request) {
     try {
+        // Fail closed: with no secret configured the endpoint accepts nothing.
         const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-        if (secret) {
-            const provided = request.headers.get('x-telegram-bot-api-secret-token');
-            if (provided !== secret) {
-                logger.warn('[Telegram Webhook] Rejected — bad secret token');
-                return NextResponse.json({ ok: true }); // 200 so Telegram doesn't retry
-            }
+        const provided = request.headers.get('x-telegram-bot-api-secret-token');
+        if (!secret || !provided || !safeEqual(provided, secret)) {
+            logger.warn('[Telegram Webhook] Rejected — missing or bad secret token');
+            return NextResponse.json({ ok: true }); // 200 so Telegram doesn't retry
         }
 
         const token = process.env.TELEGRAM_BOT_TOKEN;

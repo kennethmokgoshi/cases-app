@@ -63,3 +63,8 @@ build_results*.txt
 build_log.txt
 pnpm_check.txt
 
+
+# Consumer / partner data exports — never commit (POPIA). Audit 2026-09-26.
+/Excel/
+/Invoices/
+**/DCCP_System_User_Information*.xlsx

@@ -23,6 +23,7 @@ import { decryptSecret } from '@zenowethu/shared-lib/src/security/encryption';
 import { isUsableMailboxPassword, usesSmtpPassword } from '@/lib/mailboxes';
 import { getSmtpUsernameIfConfigured } from '@/lib/mailbox-smtp';
 import { ingestAttachment, hashBuffer } from '@zenowethu/shared-lib/src/documents/ingest';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('cron/invoice-email-scan');
 
@@ -73,7 +74,7 @@ async function getSystemMailboxes(): Promise<SearchableMailbox[]> {
 
 export async function POST(request: Request) {
     const cronSecret = request.headers.get('x-cron-secret');
-    const isValidCron = cronSecret && cronSecret === process.env.CRON_SECRET;
+    const isValidCron = isValidCronSecret(cronSecret);
 
     if (!isValidCron) {
         const session = await auth();

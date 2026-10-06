@@ -4,11 +4,14 @@ import { prisma } from '@zenowethu/database'
 import { generateMandatePdf } from '@/lib/mandate-pdf'
 import nodemailer from 'nodemailer'
 import { getSMTPCredentials } from '@zenowethu/shared-lib'
+import { requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
   try {
     const { id } = await params
     const body = await req.json()

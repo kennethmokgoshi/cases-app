@@ -1,8 +1,17 @@
 import { auth } from '@zenowethu/shared-lib';
 import { prisma, type PrismaClient } from '@zenowethu/database';
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 
-export const REFERRER_PORTAL_DEFAULT_PASSWORD = 'Agent@1';
+// Unambiguous characters only (no 0/O, 1/l/I) — the password is read out / typed by a referrer.
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+
+/** Random one-time password for a newly provisioned referrer (replaces the old shared default). */
+export function generateTemporaryPassword(length = 12): string {
+    let out = '';
+    for (let i = 0; i < length; i++) out += PASSWORD_ALPHABET[randomInt(PASSWORD_ALPHABET.length)];
+    return out;
+}
 
 type ReferrerPortalUserSummary = {
     id: string;
@@ -120,7 +129,8 @@ export async function provisionReferrerPortalUser(
         };
     }
 
-    const hashedPassword = await bcrypt.hash(REFERRER_PORTAL_DEFAULT_PASSWORD, 10);
+    const temporaryPassword = generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
     const user = await db.user.create({
         data: {
             username: referrer.idNumber,
@@ -154,7 +164,7 @@ export async function provisionReferrerPortalUser(
         portalEnabled: true,
         referrerId: referrer.id,
         user,
-        defaultPassword: REFERRER_PORTAL_DEFAULT_PASSWORD,
+        defaultPassword: temporaryPassword,
         created: true,
     };
 }

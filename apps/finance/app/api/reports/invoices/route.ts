@@ -2,10 +2,13 @@ import { logger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
+import { requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 // Previously returned pending-R350 cases as invoice-like objects.
 // Now returns real Invoice records in the same JSON shape for backward compatibility.
 export async function GET(request: Request) {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
   const session = await auth()
   if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
 

@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
+import { requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 const logger = createLogger('api/b2b/partners');
 
 
 export async function GET() {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
     try {
         // Get all B2B acquisition source projects
         const b2bProjects = await prisma.project.findMany({

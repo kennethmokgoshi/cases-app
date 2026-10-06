@@ -60,14 +60,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }
 
           console.log('[Auth] Login successful for user:', user.id, 'role:', reportingRole)
+          // Same role flags as the shared staff login (packages/shared-lib/src/auth/auth.ts).
+          const role = user.role || 'MEMBER'
+          const isAdmin = role === 'ADMIN' || user.isAdmin === true
+          const isExecutive = isAdmin || role === 'EXECUTIVE'
+          const isSeniorManager = isExecutive || role === 'SENIOR_MANAGER'
+          const isManager = isSeniorManager || role === 'MANAGER'
           return {
             id: user.id,
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
-            role: user.role || 'MEMBER',
-            isAdmin: user.isAdmin || false,
+            organization: user.organization,
+            role,
+            isAdmin,
+            isExecutive,
+            isSeniorManager,
+            isManager,
             userType: user.userType,
+            b2bPartnerId: user.b2bPartnerId,
+            avatarUrl: user.avatarUrl,
             reportingRole,
           }
         } catch (error) {

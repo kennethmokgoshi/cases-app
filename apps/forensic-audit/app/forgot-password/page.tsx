@@ -2,12 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    warn: (...args: any[]) => console.warn('[WARN]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args),
-};
-
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
@@ -30,9 +24,6 @@ export default function ForgotPasswordPage() {
                     type: 'success',
                     text: 'If an account exists with this email, a reset link has been sent. Please check your inbox (and spam folder).'
                 });
-                if (data.debugToken) {
-                    logger.info('DEBUG: Reset Link -> ', `${window.location.origin}/reset-password?token=${data.debugToken}`);
-                }
             } else {
                 setMessage({ type: 'error', text: data.error || 'Something went wrong' });
             }

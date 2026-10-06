@@ -1,31 +1,35 @@
 import { LandingNav } from "../../components/LandingNav";
-import { Shield, Search, CheckCircle, Scale, FileText, Gavel } from "lucide-react";
+import { getSiteCompany } from "../../lib/company";
+import { professionalsLabel } from "../../lib/company-format";
+import { Shield, Search, Gavel } from "lucide-react";
 
 const services = [
   {
     title: "Debt Review Removal (17.W)",
-    description: "For consumers who have settled their debts or were placed under review incorrectly. We force the removal of the debt review flag from the NCR portal and all credit bureaus.",
+    description: "For consumers who have settled their debts or were placed under review incorrectly. We apply for the removal of the debt review flag and follow up with the NCR Debt Help System and the credit bureaus.",
     features: ["Form 17.W Generation", "DHS Portal Updates", "NCR Dispute Management"],
     icon: Shield,
     color: "text-brand-cyan"
   },
   {
     title: "Court Rescissions",
-    description: "If you have a court order for debt review, we handle the legal process to rescind that order, allowing you to re-enter the credit market with a clean slate.",
+    description: "If you have a court order for debt review, we work with attorneys on the legal process to apply for that order to be rescinded.",
     features: ["Legal Representation", "Court Order Rescission", "Attorney Collaboration"],
     icon: Gavel,
     color: "text-brand-gold"
   },
   {
     title: "Bureau Record Clearance",
-    description: "Removing adverse information like judgments, defaults, and late payments. We ensure your report matches your current financial reality.",
-    features: ["Judgment Removal", "Default Deletion", "Score Restoration"],
+    description: "Challenging incorrect or outdated adverse information such as judgments, defaults and late payments, so your report reflects your current financial reality.",
+    features: ["Judgment Disputes", "Default Disputes", "Credit Report Review"],
     icon: Search,
     color: "text-brand-cyan"
   }
 ];
 
-export default function Services() {
+export default async function Services() {
+  const company = await getSiteCompany();
+
   return (
     <div className="min-h-screen bg-brand-deep pt-32 pb-24 px-6">
       <LandingNav />
@@ -38,7 +42,7 @@ export default function Services() {
             How we <span className="text-gradient-cyan italic">Clear</span> your record.
           </h1>
           <p className="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed">
-            We use a combination of High-Tech Database Syncing and High-Touch Legal Advocacy to restore your creditworthiness.
+            We combine technology that tracks your case with {professionalsLabel(company)} who handle the paperwork.
           </p>
         </div>
 
@@ -67,7 +71,7 @@ export default function Services() {
                 href="/assessment" 
                 className="w-full py-5 bg-white/5 border border-white/10 rounded-2xl text-center font-black text-xs uppercase tracking-widest hover:bg-white hover:text-brand-dark transition-all"
               >
-                Apply for Removal
+                Start Free Assessment
               </a>
             </div>
           ))}
@@ -80,10 +84,10 @@ export default function Services() {
             
             <div className="grid md:grid-cols-4 gap-12">
               {[
-                { step: "01", title: "DHS Sync", desc: "We pull your records directly from the NCR portal." },
+                { step: "01", title: "Status Check", desc: "We confirm your debt review status on the NCR Debt Help System." },
                 { step: "02", title: "LOD Issued", desc: "Letters of Demand sent to non-compliant counsellors." },
                 { step: "03", title: "Legal Filing", desc: "17.W or Court Rescission documents submitted." },
-                { step: "04", title: "Bureau Update", desc: "Records cleared across all 4 major bureaus." }
+                { step: "04", title: "Bureau Update", desc: "We follow up with the credit bureaus to have your records updated." }
               ].map(p => (
                 <div key={p.step} className="relative">
                   <div className="text-6xl font-black text-white/5 absolute -top-10 -left-4 select-none">{p.step}</div>
@@ -94,6 +98,11 @@ export default function Services() {
             </div>
           </div>
         </div>
+
+        <p className="mt-16 text-xs text-slate-500 max-w-3xl mx-auto text-center leading-relaxed">
+          Outcomes depend on your individual circumstances and on decisions made by credit providers, credit bureaus
+          and the courts. We do not guarantee the removal of any listing or a specific credit score.
+        </p>
       </div>
     </div>
   );

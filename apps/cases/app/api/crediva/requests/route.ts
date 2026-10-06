@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@zenowethu/database";
+import { requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 export async function GET(req: NextRequest) {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
   try {
     // In a real app, check for staff/admin role
     

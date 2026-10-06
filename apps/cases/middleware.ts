@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import NextAuth from "next-auth"
 import { authConfig } from "@zenowethu/shared-lib/src/auth";
 import { logger } from "@zenowethu/shared-lib/src/logger";
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const { auth } = NextAuth(authConfig)
 
@@ -84,7 +85,7 @@ export default auth((req) => {
     // 1b. Allow cron routes with valid CRON_SECRET header (Dokploy / external schedulers)
     if (pathname.startsWith('/api/cron/')) {
         const incomingSecret = req.headers.get('x-cron-secret');
-        if (incomingSecret && incomingSecret === process.env.CRON_SECRET) {
+        if (isValidCronSecret(incomingSecret)) {
             return NextResponse.next();
         }
     }

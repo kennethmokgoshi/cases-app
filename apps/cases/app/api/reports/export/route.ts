@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import * as XLSX from 'xlsx';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 const logger = {
     info: (...args: any[]) => console.log('[INFO]', ...args),
@@ -119,6 +120,8 @@ async function pdfResponse(title: string, headers: string[], rows: string[][], f
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
     try {
         const { searchParams } = new URL(request.url);
         const type = searchParams.get('type') || 'cases';

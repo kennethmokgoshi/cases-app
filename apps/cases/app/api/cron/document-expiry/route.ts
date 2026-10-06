@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, createLogger, sendInternalNotification, findManagersForCase } from '@zenowethu/shared-lib';
 import { logAutomationRun } from '@zenowethu/shared-lib/src/automation/run-logger';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('cron/document-expiry');
 const EXPIRY_MONTHS = 3;
@@ -9,7 +10,7 @@ const SENSITIVE_TYPES = ['ID', 'PAYSLIP', 'BANK_STATEMENT', 'PROOF_OF_RESIDENCE'
 
 export async function POST(request: Request) {
     const cronSecret = request.headers.get('x-cron-secret');
-    const isValidCron = cronSecret && cronSecret === process.env.CRON_SECRET;
+    const isValidCron = isValidCronSecret(cronSecret);
 
     if (!isValidCron) {
         const session = await auth();

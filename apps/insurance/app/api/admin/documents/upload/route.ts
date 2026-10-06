@@ -4,6 +4,8 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import busboy from 'busboy';
 import { logger } from '@zenowethu/shared-lib';
+import { requireAdmin } from '@zenowethu/shared-lib/src/auth/route-guards';
+import { validateUpload } from '@zenowethu/shared-lib/src/documents/upload-validation';
 
 export const maxDuration = 60;
 
@@ -51,6 +53,8 @@ async function parseForm(request: Request) {
 }
 
 export async function POST(request: Request) {
+    const guard = await requireAdmin();
+    if (guard.response) return guard.response;
     try {
         const { files } = await parseForm(request);
 
@@ -59,6 +63,10 @@ export async function POST(request: Request) {
         }
 
         const file = files[0];
+        const check = validateUpload(file.name, file.buffer);
+        if (!check.ok) {
+            return NextResponse.json({ error: check.error }, { status: 400 });
+        }
         const uploadsDir = join(process.cwd(), 'public', 'uploads', 'resources');
 
         if (!existsSync(uploadsDir)) {

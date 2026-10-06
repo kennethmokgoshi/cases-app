@@ -13,4 +13,7 @@ allowBuilds:
   unrs-resolver: true
 
 overrides:
-  next-auth: ^5.0.0-beta.30
+  # One Next.js / next-auth everywhere, including packages that only declare a
+  # peer dependency — older copies carry RCE / auth-bypass CVEs (audit 2026-09-26).
+  next: 16.3.6
+  next-auth: 5.0.0-beta.32

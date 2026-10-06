@@ -4,6 +4,7 @@ import { unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { createLogger } from '@zenowethu/shared-lib';
+import { requireAdmin } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 const logger = createLogger('api/admin/documents/[id]');
 
@@ -12,6 +13,8 @@ export async function DELETE(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await requireAdmin();
+    if (guard.response) return guard.response;
     try {
         const { id } = await params;
 

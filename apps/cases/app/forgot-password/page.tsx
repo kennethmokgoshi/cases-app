@@ -3,12 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-// Client-side logger (avoid importing server-only modules from shared-lib)
-const logger = {
-    info: (...args: any[]) => console.log('[INFO]', ...args),
-    error: (...args: any[]) => console.error('[ERROR]', ...args)
-};
-
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
@@ -32,9 +26,6 @@ export default function ForgotPasswordPage() {
                     type: 'success',
                     text: 'If an account exists with this email, a reset link has been sent. Please check your inbox (and spam folder).'
                 });
-                if (data.debugToken) {
-                    logger.info({ msg: 'DEBUG: Reset Link', url: `${window.location.origin}/reset-password?token=${data.debugToken}` });
-                }
             } else {
                 setMessage({ type: 'error', text: data.error || 'Something went wrong' });
             }

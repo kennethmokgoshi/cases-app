@@ -1,7 +1,11 @@
-import { ShieldCheck, Target, Users, MapPin, Phone } from "lucide-react";
+import { ShieldCheck, Target, Users } from "lucide-react";
 import { LandingNav } from "../../components/LandingNav";
+import { getSiteCompany } from "../../lib/company";
+import { professionalsLabel } from "../../lib/company-format";
 
-export default function About() {
+export default async function About() {
+  const company = await getSiteCompany();
+
   return (
     <div className="min-h-screen bg-brand-deep pt-32 pb-24 px-6">
       <LandingNav />
@@ -18,30 +22,33 @@ export default function About() {
               for you.
             </h1>
             <p className="text-xl text-slate-400 leading-relaxed mb-10">
-              Zenowethu is a specialized debt management firm registered with the National Credit Regulator (NCRDC3693). We bridge the gap between consumers and the complex legal infrastructure of the South African credit market.
+              {company.tradingName} is a specialized debt management firm
+              {company.isRegisteredDebtCounsellor ? ` registered with the National Credit Regulator (${company.ncrdcNumber})` : ""}. We bridge the gap between consumers and the complex legal infrastructure of the South African credit market.
             </p>
             
             <div className="grid grid-cols-2 gap-8">
               <div className="p-6 glass rounded-2xl">
-                <h4 className="text-3xl font-black text-brand-cyan mb-1">081 747 7616</h4>
+                <h4 className="text-3xl font-black text-brand-cyan mb-1">{company.phone}</h4>
                 <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Direct Support</p>
               </div>
-              <div className="p-6 glass rounded-2xl">
-                <h4 className="text-3xl font-black text-brand-gold">NCRDC3693</h4>
-                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Registration No.</p>
-              </div>
+              {company.isRegisteredDebtCounsellor && (
+                <div className="p-6 glass rounded-2xl">
+                  <h4 className="text-3xl font-black text-brand-gold">{company.ncrdcNumber}</h4>
+                  <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Registration No.</p>
+                </div>
+              )}
             </div>
           </div>
           
           <div className="relative">
             <div className="absolute inset-0 bg-brand-cyan/10 blur-[100px] -z-10 rounded-full" />
             <div className="glass rounded-[60px] p-12 border-white/10">
-              <h3 className="text-3xl font-black mb-8 tracking-tight">The Zenowethu Pledge</h3>
+              <h3 className="text-3xl font-black mb-8 tracking-tight">The {company.shortName} Pledge</h3>
               <div className="space-y-10">
                 {[
-                  { icon: ShieldCheck, title: "Total POPIA Compliance", desc: "Your sensitive financial data is encrypted and protected under the highest security standards." },
-                  { icon: Target, title: "Real-Time Tracking", desc: "Access our client portal to see every legal filing and bureau update as they happen." },
-                  { icon: Users, title: "Expert Human Support", desc: "While we use AI for speed, our NCR-registered counsellors provide the final legal oversight." }
+                  { icon: ShieldCheck, title: "POPIA Compliant", desc: "Your personal and financial information is handled in line with POPIA and protected with industry-standard security." },
+                  { icon: Target, title: "Case Tracking", desc: "Follow the progress of your case, documents and updates through our client portal." },
+                  { icon: Users, title: "Expert Human Support", desc: `While we use AI for speed, our ${professionalsLabel(company)} provide the final oversight.` }
                 ].map(val => (
                   <div key={val.title} className="flex gap-6">
                     <div className="w-12 h-12 rounded-xl bg-brand-cyan/10 flex-shrink-0 flex items-center justify-center text-brand-cyan">

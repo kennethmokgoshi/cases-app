@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { logger } from '@zenowethu/shared-lib';
+import { auth, logger } from '@zenowethu/shared-lib';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 import { stepRegistry } from '@zenowethu/plan-engine/src/step-registry';
 
 export async function POST(request: Request) {
   try {
-    // 1. Verify cron secret if needed (assuming internal/Vercel cron, check header if required)
-    // const authHeader = request.headers.get('authorization');
-    // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
+    // 1. Only the scheduler (x-cron-secret) or an admin may run this job.
+    if (!isValidCronSecret(request.headers.get('x-cron-secret'))) {
+      const session = await auth();
+      if (!session?.user?.isAdmin) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
 
     logger.info('[DRR_TRIGGER] Starting AI Debt Review Removal File Request Trigger...');
 

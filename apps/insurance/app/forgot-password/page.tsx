@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { logger } from '@zenowethu/shared-lib/src/logger';
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
@@ -26,9 +25,6 @@ export default function ForgotPasswordPage() {
                     type: 'success',
                     text: 'If an account exists with this email, a reset link has been sent. Please check your inbox (and spam folder).'
                 });
-                if (data.debugToken) {
-                    logger.info('DEBUG: Reset Link -> ', `${window.location.origin}/reset-password?token=${data.debugToken}`);
-                }
             } else {
                 setMessage({ type: 'error', text: data.error || 'Something went wrong' });
             }

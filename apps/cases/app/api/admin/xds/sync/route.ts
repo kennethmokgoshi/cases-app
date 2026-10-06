@@ -20,6 +20,7 @@ import { createLogger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { runXdsSync } from '@zenowethu/shared-lib/src/xds/sync';
 import { prisma } from '@zenowethu/database';
+import { secretsMatch } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('api/admin/xds/sync');
 export const runtime = 'nodejs';
@@ -28,7 +29,7 @@ export const maxDuration = 600; // 10 minutes
 async function isAuthorised(request: Request): Promise<boolean> {
     const cronSecret = request.headers.get('x-cron-secret');
     const configuredSecret = process.env.XDS_CRON_SECRET;
-    if (configuredSecret && cronSecret === configuredSecret) return true;
+    if (secretsMatch(cronSecret, configuredSecret)) return true;
 
     const session = await auth();
     return !!(session?.user?.isAdmin || session?.user?.isExecutive);

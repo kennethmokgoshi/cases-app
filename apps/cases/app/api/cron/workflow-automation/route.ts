@@ -52,6 +52,7 @@ import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { sendManualMessage } from '@zenowethu/shared-lib/src/notifications/service';
 import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { formatCompanyWithNcrdc, formatSignatureBlock } from '@zenowethu/shared-lib/src/company/profile';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('cron/workflow-automation');
 const LETSATSI_REPORT_EMAIL = 'mmamy@letsatsifinance.co.za';
@@ -61,7 +62,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.zenowethu.co.za'
 
 export async function POST(request: Request) {
     const cronSecret = request.headers.get('x-cron-secret');
-    if (!cronSecret || cronSecret !== process.env.CRON_SECRET) {
+    if (!isValidCronSecret(cronSecret)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
