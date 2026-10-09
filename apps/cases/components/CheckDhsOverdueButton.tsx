@@ -53,6 +53,9 @@ interface BulkCheckResponse {
     results: BulkCheckResultItem[];
 }
 
+/** Files checked per click — keep in step with MAX_CASES_PER_RUN in the bulk-check route. */
+const BATCH_SIZE = 5;
+
 function bulkItemColor(item: BulkCheckResultItem): string {
     if (item.error) return 'text-red-400';
     if (item.newStatus === 'ACCEPTED_VIA_DHS') return 'text-emerald-400';
@@ -75,13 +78,13 @@ export default function CheckDhsOverdueButton() {
     const [error, setError] = useState<string | null>(null);
 
     const [bulkLoading, setBulkLoading] = useState(false);
-    const [bulkResult, setBulkResult] = useState<BulkCheckResponse | null>(null);
+    const [bulkItems, setBulkItems] = useState<Record<string, BulkCheckResultItem>>({});
     const [bulkError, setBulkError] = useState<string | null>(null);
 
     const runCheck = async () => {
         setLoading(true);
         setError(null);
-        setBulkResult(null);
+        setBulkItems({});
         setBulkError(null);
         try {
             const res = await fetch('/api/dashboard/dhs-overdue');
@@ -111,14 +114,14 @@ export default function CheckDhsOverdueButton() {
     };
 
     const runBulkCheck = async () => {
-        if (!result || result.cases.length === 0) return;
+        if (!result || nextBatch.length === 0) return;
         setBulkLoading(true);
         setBulkError(null);
         try {
             const res = await fetch('/api/dhs/bulk-check-status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ caseIds: result.cases.map((c) => c.id) }),
+                body: JSON.stringify({ caseIds: nextBatch.map((c) => c.id) }),
             });
             const data = await res.json();
             if (!res.ok) {
@@ -127,7 +130,10 @@ export default function CheckDhsOverdueButton() {
                 setBulkError(message);
                 return;
             }
-            setBulkResult(data);
+            setBulkItems((prev) => ({
+                ...prev,
+                ...Object.fromEntries((data.results as BulkCheckResultItem[]).map((r) => [r.caseId, r])),
+            }));
 
             const s = data.summary as BulkCheckResponse['summary'];
             const parts: string[] = [];
@@ -149,7 +155,10 @@ export default function CheckDhsOverdueButton() {
         }
     };
 
-    const bulkByCaseId = new Map((bulkResult?.results ?? []).map((r) => [r.caseId, r]));
+    // Work through the list BATCH_SIZE at a time; files already checked are not re-checked.
+    const pendingCases = (result?.cases ?? []).filter((c) => !bulkItems[c.id]);
+    const nextBatch = pendingCases.slice(0, BATCH_SIZE);
+    const checkedCount = (result?.cases.length ?? 0) - pendingCases.length;
 
     return (
         <>
@@ -199,14 +208,14 @@ export default function CheckDhsOverdueButton() {
                             <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between gap-3">
                                 <p className="text-[11px] text-white/40">
                                     {bulkLoading
-                                        ? 'Running DHS "Check Request Status" on each file below — this can take several minutes, please keep this open…'
-                                        : bulkResult
-                                            ? `Last run checked ${bulkResult.processed} file(s). You can run it again.`
-                                            : 'Runs the existing "Check Request Status" DHS check on every file below.'}
+                                        ? `Running DHS "Check Request Status" on ${nextBatch.length} file(s) — this can take a few minutes, please keep this open…`
+                                        : pendingCases.length === 0
+                                            ? `All ${result.cases.length} file(s) checked.`
+                                            : `Checks ${BATCH_SIZE} files at a time. ${checkedCount} of ${result.cases.length} checked. Accepted D3/D4 files get their legal fee invoice automatically.`}
                                 </p>
                                 <button
                                     onClick={runBulkCheck}
-                                    disabled={bulkLoading}
+                                    disabled={bulkLoading || pendingCases.length === 0}
                                     className="text-xs text-white bg-amber-600/80 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-wait px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 shrink-0"
                                 >
                                     {bulkLoading ? (
@@ -214,7 +223,7 @@ export default function CheckDhsOverdueButton() {
                                             <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                                             Checking…
                                         </>
-                                    ) : '🔎 Check Request Status on All'}
+                                    ) : `🔎 Check next ${nextBatch.length || BATCH_SIZE} files`}
                                 </button>
                             </div>
                         )}
@@ -230,7 +239,7 @@ export default function CheckDhsOverdueButton() {
                             {!error && result && result.cases.length > 0 && (
                                 <ul className="space-y-2">
                                     {result.cases.map((c) => {
-                                        const bulkItem = bulkByCaseId.get(c.id);
+                                        const bulkItem = bulkItems[c.id];
                                         return (
                                             <li key={c.id} className="text-xs bg-white/5 border border-white/10 rounded p-2.5">
                                                 <div className="flex items-center justify-between gap-2 mb-1">

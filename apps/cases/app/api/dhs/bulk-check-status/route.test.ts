@@ -110,8 +110,8 @@ describe('POST /api/dhs/bulk-check-status', () => {
         expect(dhsLookupPost).toHaveBeenCalledTimes(1);
     });
 
-    it('caps processing at 25 cases per run and reports the rest as skipped', async () => {
-        const eligible = Array.from({ length: 30 }, (_, i) => ({
+    it('caps processing at 5 cases per run and reports the rest as skipped', async () => {
+        const eligible = Array.from({ length: 8 }, (_, i) => ({
             id: `case-${i}`,
             fileNumber: `ZDM-${i}`,
             status: 'REQUESTED_VIA_DHS',
@@ -124,9 +124,29 @@ describe('POST /api/dhs/bulk-check-status', () => {
         const res = await POST(makeReq({ caseIds: eligible.map(c => c.id) }));
         const body = await res.json();
 
-        expect(body.processed).toBe(25);
-        expect(body.skipped).toBe(5);
-        expect(dhsLookupPost).toHaveBeenCalledTimes(25);
+        expect(body.processed).toBe(5);
+        expect(body.skipped).toBe(3);
+        expect(dhsLookupPost).toHaveBeenCalledTimes(5);
+        // Only the first five are checked — the rest wait for the next click.
+        expect(db.case.findUnique).toHaveBeenCalledTimes(5);
+    });
+
+    it('reports the accepted and legal fee invoice outcome in each file\'s result', async () => {
+        db.case.findMany.mockResolvedValue([
+            { id: 'case-1', fileNumber: 'ZDM-001', status: 'REQUESTED_VIA_DHS', client: { idNumber: '8001015009087', firstName: 'Jane', lastName: 'Doe' } },
+        ]);
+        vi.mocked(dhsLookupPost).mockResolvedValueOnce(okLookupResponse({
+            success: true, status: 'ACCEPTED', message: 'Status is Accepted.',
+            acceptedMessage: 'Acceptance + consent email sent to consumer.',
+            legalFeeMessage: 'Legal fee invoice INV-1 (R1700.00) created and emailed to the consumer.',
+        }));
+        db.case.findUnique.mockResolvedValueOnce({ status: 'ACCEPTED_VIA_DHS' });
+
+        const body = await (await POST(makeReq({ caseIds: ['case-1'] }))).json();
+
+        expect(body.results[0].outcome).toBe(
+            'Status is Accepted. Acceptance + consent email sent to consumer. Legal fee invoice INV-1 (R1700.00) created and emailed to the consumer.',
+        );
     });
 
     it('skips a case with no ID number on file without calling the lookup route, and counts it as an error', async () => {

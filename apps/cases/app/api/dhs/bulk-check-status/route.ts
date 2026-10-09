@@ -8,10 +8,10 @@ import { POST as dhsLookupPost } from '../lookup/route';
 
 const logger = createLogger('api/dhs/bulk-check-status');
 
-// Same cap the existing DHS_RECHECK cron uses for the same class of operation
-// (sequential Puppeteer DHS checks) — keeps a single click bounded to a
-// reasonable worst-case runtime instead of an unbounded batch.
-const MAX_CASES_PER_RUN = 25;
+// One click checks at most this many files. Each check can email the consumer
+// (acceptance + consent) and, for D3/D4 files, send the R1,700 legal fee
+// invoice, so staff work through the overdue list in small, reviewable batches.
+export const MAX_CASES_PER_RUN = 5;
 
 export interface BulkCheckStatusResult {
     caseId: string;
@@ -120,7 +120,11 @@ export async function POST(request: Request) {
                     clientName,
                     previousStatus: c.status,
                     newStatus,
-                    outcome: lookupJson?.message || `Status → ${newStatus}`,
+                    outcome: [
+                        lookupJson?.message || `Status → ${newStatus}`,
+                        lookupJson?.acceptedMessage,
+                        lookupJson?.legalFeeMessage,
+                    ].filter(Boolean).join(' '),
                 });
             } catch (err: any) {
                 logger.error(`[BulkCheckStatus] Error checking ${c.fileNumber}:`, err);

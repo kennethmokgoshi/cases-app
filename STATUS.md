@@ -440,6 +440,12 @@
 
 ---
 
+### Changed: "Check DHS Overdue" Button Now Checks 5 Files at a Time and Shows the Invoice Outcome (2026-10-09)
+
+The dashboard DHS Compliance card already listed overdue "Requested via DHS" files and ran the real Check Request Status on them (capped at 25). Because that check now also emails the consent link and, for D3/D4 files, sends the R1,700 legal fee invoice, it is now **5 files per click** (`MAX_CASES_PER_RUN = 5` in `apps/cases/app/api/dhs/bulk-check-status/route.ts`). The button ("Check next N files") works through the list in batches of 5 and never re-checks a file already done; each file's result line now includes the consent-email and legal-fee-invoice outcome. Tests: bulk route 7/7 (cap test updated, outcome test added); `tsc --noEmit` clean on cases. No migration, no new routes, no env vars. Redeploy cases.
+
+---
+
 ### Added: Automatic Legal Fee Invoice for D3/D4 Files Accepted via DHS (2026-10-09)
 
 **Why:** a consumer accepted via DHS with consumer status **D3 or D4** must go to court, which costs R1,700 (single or joint application alike). Staff had to remember to raise and send that invoice by hand; nothing connected the DHS check, the invoice, the Crediva portal, or the *Legal Fees Status* field.
