@@ -20,6 +20,8 @@ on:
     # Proves the scheduler fires and the endpoint answers. Scheduled runs are always dry
     # until the supervised test is approved (see the DRY default in the step below).
     - cron: '0 * * * *'
+    # ONE-TIME test slot (this minute/hour/day/month UTC; only fires again next year).
+    - cron: '46 15 09 10 *'
     # PRODUCTION (enable after approval, and flip the scheduled default to live):
     # Weekdays 04:00 UTC = 06:00 SAST, deliberately BEFORE the 07:00 overdue-scan.
     # - cron: '0 4 * * 1-5'
