@@ -439,6 +439,31 @@
 
 ---
 
+### Added: "Repossession Enquiry" Button — Ask a Vehicle Financer About Court Action (2026-10-07)
+
+**Why:** a consumer who has only approached us (no debt review application yet) may have a vehicle financer about to repossess. Staff need to find out in one click whether a s129 notice, summons, judgment or warrant exists, and to ask for a short pause, with the authority documents attached.
+
+**What it does:** new **Repossession Enquiry** button in the case page's *Individual Actions*. The modal asks staff to pick which credit account is the vehicle (likely vehicle accounts sorted first, auto-selected only when exactly one looks like vehicle finance), add vehicle make/model/year + registration (optional), and the financer's Legal/Collections email (pre-filled from `CreditProvider.email`, with a one-click attorney address and "remember this email for this financer"). Staff **preview** the letter, then send. Reply-by (default 5 business days) and pause (default 10) are editable.
+
+**Rules enforced server-side** (`packages/shared-lib/src/financer/repossession-enquiry.ts`):
+- Refuses to send unless the case has BOTH the signed POA and ID copy (`resolveMandateAttachments`) — 422 with the missing documents. (Unlike "DC: Request File", this does not send without them: a financer won't release account data without proof of authority.)
+- The chosen account must belong to the case.
+- Letter wording is deliberate: it says **no debt review application has been lodged**, never cites s88(3) or threatens an interdict (neither applies yet), and the pause is a *request*. Company details come from the Company Profile, nothing hard-coded.
+- Sent through `sendManualMessage` (failed sends enter the existing retry queue); every send writes an internal SYSTEM comment on the case timeline with financer, account, vehicle, dates and what was attached.
+
+**New files:** `packages/shared-lib/src/financer/{repossession-letter,repossession-enquiry,index}.ts`; `apps/cases/app/api/cases/[id]/repossession-enquiry/route.ts` (GET = modal data, POST `action: preview | send`, `requireStaff`, Zod); `apps/cases/app/(authenticated)/cases/[id]/RepossessionEnquiryModal.tsx`; button + modal wired in `cases/[id]/page.tsx`. **No migration, no new env vars.**
+
+**Tests:** 37 new — letter builder 13, service 15, route 9. shared-lib `financer/` 28/28, cases route 9/9. `tsc --noEmit` clean on the touched files in shared-lib and cases. **Not browser-verified** — the local dev server points at the live production DB and a send would email a real financer.
+
+**Still open:**
+- Reply-by date is only recorded in the timeline comment; there is no diarised follow-up task or overdue alert yet.
+- Business-day maths ignores SA public holidays (weekends only).
+- Other letters in the set (s88(3) debt-review notice, request statement of account, s127/s128 surrender/reinstatement) are drafted in conversation only, not built.
+- Vehicle details are typed per letter — no vehicle fields exist on the case/credit account schema.
+- Legal wording has not been reviewed by an attorney.
+
+---
+
 ### Added: Invoice & Proof-of-Payment Uploads Drive Case Workflow Status (2026-09-26)
 
 **Why:** staff had no way to file invoices or proof of payment on a case, and the case status never reflected where a fee settlement stood.
