@@ -141,6 +141,12 @@ export interface CohortOptions {
     service?: string | null;
     /** Overrides the fallback overdue window for statuses that carry no SLA. */
     overdueDays?: number;
+    /**
+     * Restrict the run to these file numbers (used for supervised test runs).
+     * Still intersected with the normal status + due rules, so a listed file that
+     * is not actually due is NOT checked.
+     */
+    fileNumbers?: readonly string[];
 }
 
 /**
@@ -185,6 +191,7 @@ export async function getRequestedViaDhsCohort(opts: CohortOptions = {}): Promis
             deletedAt: null,
             status: { in: [...statuses] },
             ...(service ? { services: { contains: service } } : {}),
+            ...(opts.fileNumbers?.length ? { fileNumber: { in: [...opts.fileNumbers] } } : {}),
             OR: isDueWhere(opts.overdueDays ?? FALLBACK_OVERDUE_DAYS),
         },
         select: {
