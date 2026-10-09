@@ -19,6 +19,11 @@ vi.mock('@zenowethu/database', () => ({
     },
 }));
 
+const syncLegalFeesStatus = vi.fn();
+vi.mock('./legal-fees-status-sync', () => ({
+    syncLegalFeesStatusAfterPayment: (...a: unknown[]) => syncLegalFeesStatus(...a),
+}));
+
 import { applyFeeDocumentStatus, feeDocumentLogTag, syncFeeInvoicePaidStatus } from './fee-document-status';
 
 describe('applyFeeDocumentStatus', () => {
@@ -74,6 +79,25 @@ describe('applyFeeDocumentStatus', () => {
         const result = await applyFeeDocumentStatus({ caseId: 'x', docType: 'PROOF_OF_PAYMENT', event: 'UPLOADED' });
         expect(result).toEqual({ moved: false, message: 'Case not found' });
         expect(caseUpdate).not.toHaveBeenCalled();
+    });
+});
+
+describe('applyFeeDocumentStatus — moveStatus: false', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('records the event on the timeline but never moves the case (automatic legal fee invoice)', async () => {
+        caseFindUnique.mockResolvedValue({ status: 'READY_TO_CONSENT' });
+
+        const result = await applyFeeDocumentStatus({
+            caseId: 'case-1', docType: 'LEGAL_FEE_INVOICE', event: 'SENT', documentId: 'doc-1',
+            notes: 'emailed', moveStatus: false, recordWhenUnchanged: true,
+        });
+
+        expect(result).toMatchObject({ moved: false });
+        expect(caseUpdate).not.toHaveBeenCalled();
+        expect(workflowLogCreate).toHaveBeenCalledWith({
+            data: expect.objectContaining({ action: 'FEE_DOCUMENT_SENT', fromStatus: 'READY_TO_CONSENT', toStatus: 'READY_TO_CONSENT', notes: '[doc:doc-1] emailed' }),
+        });
     });
 });
 
@@ -137,6 +161,7 @@ describe('syncFeeInvoicePaidStatus', () => {
         const result = await syncFeeInvoicePaidStatus({ invoiceId: 'inv-1', userId: 'u1' });
 
         expect(result).toMatchObject({ moved: true, toStatus: 'DC_FEE_PAID_READY_TRANSFER' });
+        expect(syncLegalFeesStatus).not.toHaveBeenCalled();
     });
 
     it('moves the case when a generated legal fee invoice is paid', async () => {
@@ -148,6 +173,8 @@ describe('syncFeeInvoicePaidStatus', () => {
 
         expect(result).toMatchObject({ moved: true, toStatus: 'LEGAL_FEE_PAID' });
         expect(documentFindFirst.mock.calls[0][0].where.extractedData).toEqual({ contains: '"feeInvoiceId":"inv-2"' });
+        // Paid in Finance → Legal Fees Status follows (Paying / Fees Paid Cash / Debited).
+        expect(syncLegalFeesStatus).toHaveBeenCalledWith({ caseId: 'case-1', invoiceId: 'inv-2' });
     });
 
     it('ignores ordinary invoices, unpaid invoices and invoices with no case', async () => {

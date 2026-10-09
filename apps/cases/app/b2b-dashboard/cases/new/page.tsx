@@ -787,6 +787,7 @@ function PartnerNewCaseComponent() {
                                 >
                                     <option value="">Select status...</option>
                                     <option value="No Legal Fees">No Legal Fees</option>
+                                    <option value="Not yet transferred">Not yet transferred</option>
                                     <option value="No Arrangement yet">No Arrangement yet</option>
                                     <option value="Arrangement in progress">Arrangement in progress</option>
                                     <option value="NPR Consent">NPR Consent</option>

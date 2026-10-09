@@ -18,6 +18,10 @@ vi.mock('../automation/automation-user', () => ({
     getAutomationUserId: vi.fn().mockResolvedValue('auto-user'),
 }));
 
+vi.mock('../finance/legal-fee-auto', () => ({
+    autoIssueLegalFeeInvoice: vi.fn(),
+}));
+
 vi.mock('../crediva/consumer-provisioning', () => ({
     provisionConsumerForClient: vi.fn(),
     createPasswordResetTokenForConsumer: vi.fn(),
@@ -29,7 +33,10 @@ import {
     provisionConsumerForClient,
     createPasswordResetTokenForConsumer,
 } from '../crediva/consumer-provisioning';
+import { autoIssueLegalFeeInvoice } from '../finance/legal-fee-auto';
 import { handleDhsAccepted, isManageConsumersEligible } from './accepted-handler';
+
+const autoLegalFee = autoIssueLegalFeeInvoice as unknown as ReturnType<typeof vi.fn>;
 
 const db = prisma as unknown as {
     case: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
@@ -64,6 +71,7 @@ beforeEach(() => {
     provision.mockResolvedValue({ consumerId: 'cons1', created: false, activationToken: null });
     db.consumerAccount.findUnique.mockResolvedValue({ password: 'hashed' });
     createResetToken.mockResolvedValue('fresh-token');
+    autoLegalFee.mockResolvedValue({ action: 'SKIPPED', emailSent: false, portalPublished: false, message: 'skipped', errors: [] });
 });
 
 describe('handleDhsAccepted', () => {
@@ -333,6 +341,52 @@ describe('handleDhsAccepted', () => {
         const r = await handleDhsAccepted({ caseId: 'missing' });
         expect(r.errors).toContain('Case not found');
         expect(r.emailSent).toBe(false);
+    });
+});
+
+describe('handleDhsAccepted — automatic legal fee invoice', () => {
+    it('raises the legal fee invoice after the consent email and reports it', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue(null);
+        db.debtReviewRemovalConsent.create.mockResolvedValue({ id: 'c1', token: 't', link: 'https://x/consent/t' });
+        sendMsg.mockResolvedValue({ emailSuccess: true, errors: [] });
+        autoLegalFee.mockResolvedValue({
+            action: 'INVOICED', invoiceNumber: 'INV-1', emailSent: true, portalPublished: true,
+            message: 'Legal fee invoice INV-1 (R1700.00) created and emailed to the consumer.', errors: [],
+        });
+
+        const result = await handleDhsAccepted({ caseId: 'case1', triggeredByUserId: 'staff-1' });
+
+        expect(autoLegalFee).toHaveBeenCalledWith({ caseId: 'case1', userId: 'staff-1' });
+        expect(sendMsg.mock.invocationCallOrder[0]).toBeLessThan(autoLegalFee.mock.invocationCallOrder[0]);
+        expect(result.legalFee?.action).toBe('INVOICED');
+        expect(result.actionsPerformed.join(' ')).toContain('INV-1');
+    });
+
+    it('still runs on a re-check where the consent email is skipped (already notified)', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue({
+            id: 'c1', token: 't', status: 'PENDING', channel: 'CREDO', expiresAt: new Date(Date.now() + 1e9),
+        });
+
+        const result = await handleDhsAccepted({ caseId: 'case1' });
+
+        expect(result.skipped).toBe(true);
+        expect(sendMsg).not.toHaveBeenCalled();
+        expect(autoLegalFee).toHaveBeenCalledWith({ caseId: 'case1', userId: null });
+    });
+
+    it('keeps invoice errors out of the consent-email errors so the staff toast stays accurate', async () => {
+        db.case.findUnique.mockResolvedValue(baseCase);
+        db.debtReviewRemovalConsent.findFirst.mockResolvedValue({
+            id: 'c1', token: 't', status: 'PENDING', channel: 'CREDO', expiresAt: new Date(Date.now() + 1e9),
+        });
+        autoLegalFee.mockResolvedValue({ action: 'SKIPPED', emailSent: false, portalPublished: false, message: 'x', errors: ['No default banking details found.'] });
+
+        const result = await handleDhsAccepted({ caseId: 'case1' });
+
+        expect(result.errors).toEqual([]);
+        expect(result.legalFee?.errors).toEqual(['No default banking details found.']);
     });
 });
 

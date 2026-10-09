@@ -38,6 +38,7 @@ import {
     type FeeDocumentType,
 } from './fee-document-workflow';
 import { applyFeeDocumentStatus, feeDocumentLogTag, type FeeStatusChangeResult } from './fee-document-status';
+import { syncLegalFeesStatusAfterPayment } from './legal-fees-status-sync';
 
 const logger = createLogger('finance/fee-document-service');
 
@@ -96,9 +97,13 @@ export async function sendFeeDocument(params: {
     caseId: string;
     documentId: string;
     note?: string | null;
-    userId: string;
+    /** The staff member, or null when sent by the automation. */
+    userId: string | null;
+    /** `false` logs the send but leaves the case's workflow status alone (automatic sends). */
+    moveStatus?: boolean;
 }): Promise<FeeDocumentActionResult> {
     const { caseId, documentId, note, userId } = params;
+    const moveStatus = params.moveStatus !== false;
 
     const loaded = await loadFeeDocument(caseId, documentId);
     if ('error' in loaded) return loaded.error;
@@ -157,9 +162,9 @@ export async function sendFeeDocument(params: {
 
     const result = await sendManualMessage(caseId, 'EMAIL', recipient, body, email.subject, {
         attachments,
-        senderId: userId,
+        senderId: userId ?? undefined,
         // Lets a queued retry move the status once it finally goes out.
-        feeDocument: { documentId: document.id, docType: document.type },
+        feeDocument: { documentId: document.id, docType: document.type, ...(moveStatus ? {} : { moveStatus: false }) },
     });
 
     if (!result.emailSuccess) {
@@ -199,6 +204,7 @@ export async function sendFeeDocument(params: {
         documentId,
         notes: `${info.sendLabel}: emailed ${document.fileName} to ${recipient}${mandateSummary ? `. ${mandateSummary}` : ''}`,
         recordWhenUnchanged: true,
+        moveStatus,
     });
 
     return { ok: true, recipient, statusChange, mandateSummary };
@@ -279,6 +285,11 @@ export async function markFeeDocumentPaid(params: {
         notes: `Payment of R${input.amount.toFixed(2)} recorded (${input.method}${input.reference ? `, ref ${input.reference}` : ''})`,
         recordWhenUnchanged: true,
     });
+
+    // Legal fee paid → Legal Fees Status: Paying / Fees Paid Cash / Debited.
+    if (document.type === 'LEGAL_FEE_INVOICE') {
+        await syncLegalFeesStatusAfterPayment({ caseId, invoiceId: feeInvoiceId });
+    }
 
     return { ok: true, statusChange, paymentId: payment.id };
 }

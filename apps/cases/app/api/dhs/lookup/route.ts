@@ -381,6 +381,12 @@ export async function POST(request: Request) {
                         (result as any).acceptedEmailSent = acceptedResult.emailSent;
                         (result as any).acceptedSkipped = acceptedResult.skipped;
                         (result as any).acceptedErrors = acceptedResult.errors;
+                        // Legal fee invoice (D3/D4): created + emailed automatically on acceptance.
+                        if (acceptedResult.legalFee && acceptedResult.legalFee.action !== 'SKIPPED') {
+                            Object.assign(result, { legalFeeMessage: acceptedResult.legalFee.message });
+                        } else if (acceptedResult.legalFee?.errors.length) {
+                            Object.assign(result, { legalFeeMessage: `Legal fee invoice: ${acceptedResult.legalFee.errors.join('; ')}` });
+                        }
                         (result as any).acceptedMessage = acceptedResult.errors.length
                             ? `Acceptance email issue: ${acceptedResult.errors.join(', ')}`
                             : acceptedResult.skipped

@@ -385,7 +385,7 @@ export async function sendManualMessage(
          * Set when the email carries an invoice / proof of payment. Stored with a
          * failed send so a later successful retry still moves the case status.
          */
-        feeDocument?: { documentId: string; docType: string };
+        feeDocument?: { documentId: string; docType: string; moveStatus?: boolean };
     }
 ): Promise<NotificationResult & { logId?: string }> {
     const senderId = options?.senderId;
@@ -1329,7 +1329,7 @@ export async function enqueueFailedNotification(data: {
  */
 async function applyFeeDocumentStatusAfterRetry(
     caseId: string,
-    feeDocument: { documentId?: unknown; docType?: unknown } | undefined,
+    feeDocument: { documentId?: unknown; docType?: unknown; moveStatus?: unknown } | undefined,
     result: NotificationResult,
 ): Promise<void> {
     if (!feeDocument || typeof feeDocument.documentId !== 'string' || typeof feeDocument.docType !== 'string') return;
@@ -1342,6 +1342,7 @@ async function applyFeeDocumentStatusAfterRetry(
             documentId: feeDocument.documentId,
             notes: 'Sent on retry after an earlier failure',
             recordWhenUnchanged: true,
+            moveStatus: feeDocument.moveStatus !== false,
         });
     } catch (error) {
         logger.error(`Fee document status after retry failed for case ${caseId}: ${(error as Error).message}`);

@@ -1885,6 +1885,10 @@ export default function CaseDetailPage() {
                     if (result.acceptedMessage) {
                         statusText += ` ${result.acceptedMessage}`;
                     }
+                    // D3/D4: the legal fee invoice is created + emailed automatically.
+                    if (result.legalFeeMessage) {
+                        statusText += ` ${result.legalFeeMessage}`;
+                    }
                 } else {
                     statusText = result.message || 'No transfer request found in DHS';
                 }
@@ -2554,6 +2558,7 @@ export default function CaseDetailPage() {
                                     >
                                         <option value="">Select status...</option>
                                         <option value="No Legal Fees">No Legal Fees</option>
+                                        <option value="Not yet transferred">Not yet transferred</option>
                                         <option value="No Arrangement yet">No Arrangement yet</option>
                                         <option value="Arrangement in progress">Arrangement in progress</option>
                                         <option value="NPR Consent">NPR Consent</option>

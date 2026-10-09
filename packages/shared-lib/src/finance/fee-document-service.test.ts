@@ -51,6 +51,11 @@ vi.mock('./fee-document-status', () => ({
     feeDocumentLogTag: (id: string) => `[doc:${id}]`,
 }));
 
+const syncLegalFeesStatus = vi.fn();
+vi.mock('./legal-fees-status-sync', () => ({
+    syncLegalFeesStatusAfterPayment: (...a: unknown[]) => syncLegalFeesStatus(...a),
+}));
+
 import {
     sendFeeDocument,
     markFeeDocumentPaid,
@@ -106,6 +111,17 @@ describe('sendFeeDocument', () => {
         expect(applyFeeDocumentStatus).toHaveBeenCalledWith(expect.objectContaining({
             docType: 'PROOF_OF_PAYMENT', event: 'SENT', documentId: 'doc-1', recordWhenUnchanged: true,
         }));
+    });
+
+    it('moveStatus: false logs the send but keeps the case workflow status, also on a queued retry', async () => {
+        documentFindFirst.mockResolvedValue(doc('LEGAL_FEE_INVOICE'));
+
+        await sendFeeDocument({ caseId: 'case-1', documentId: 'doc-1', userId: null, moveStatus: false });
+
+        expect(applyFeeDocumentStatus).toHaveBeenCalledWith(expect.objectContaining({ event: 'SENT', moveStatus: false }));
+        const options = sendManualMessage.mock.calls[0][5];
+        expect(options.feeDocument).toEqual({ documentId: 'doc-1', docType: 'LEGAL_FEE_INVOICE', moveStatus: false });
+        expect(options.senderId).toBeUndefined();
     });
 
     it('sends the DC invoice to the consumer without the mandate', async () => {
@@ -191,6 +207,14 @@ describe('markFeeDocumentPaid', () => {
         });
         expect(invoiceUpdate).toHaveBeenCalledWith({ where: { id: 'inv-1' }, data: { status: 'PAID' } });
         expect(applyFeeDocumentStatus).toHaveBeenCalledWith(expect.objectContaining({ event: 'PAID', docType: 'LEGAL_FEE_INVOICE' }));
+        // Legal Fees Status follows the payment (Paying / Fees Paid Cash / Debited).
+        expect(syncLegalFeesStatus).toHaveBeenCalledWith({ caseId: 'case-1', invoiceId: 'inv-1' });
+    });
+
+    it('does not touch Legal Fees Status for a DC fee payment', async () => {
+        documentFindFirst.mockResolvedValue(doc('INVOICE_TO_DC'));
+        await markFeeDocumentPaid({ caseId: 'case-1', documentId: 'doc-1', input, userId: 'u1' });
+        expect(syncLegalFeesStatus).not.toHaveBeenCalled();
     });
 
     it('marks a part-paid invoice as PARTIALLY_PAID', async () => {

@@ -32,6 +32,7 @@ import {
     createPasswordResetTokenForConsumer,
 } from '../crediva/consumer-provisioning';
 import { recordDhsOutcome } from '../dc/outcome-events';
+import { autoIssueLegalFeeInvoice, type AutoLegalFeeResult } from '../finance/legal-fee-auto';
 
 const logger = createLogger('dhs/accepted-handler');
 
@@ -103,6 +104,8 @@ export interface AcceptedHandlerResult {
     statusUpdatedTo: string | null;
     actionsPerformed: string[];
     errors: string[];
+    /** Outcome of the automatic legal fee invoice (D3/D4 files); absent when it did not run. */
+    legalFee?: AutoLegalFeeResult;
 }
 
 /**
@@ -112,7 +115,7 @@ export interface AcceptedHandlerResult {
  * Never throws: all failures are captured in `errors` so the caller (the DHS
  * status-check route / cron) can continue regardless.
  */
-export async function handleDhsAccepted(params: {
+async function runAcceptedHandler(params: {
     caseId: string;
     triggeredByUserId?: string;
     /**
@@ -364,6 +367,32 @@ export async function handleDhsAccepted(params: {
         );
         return result;
     }
+}
+
+/**
+ * Handle an "Accepted via DHS" transition: consent email first, then the legal
+ * fee invoice for D3/D4 files. Both steps self-dedupe, so this is safe to call
+ * on every status check — including re-checks where the consent email is
+ * skipped because the consumer was already notified.
+ *
+ * Never throws.
+ */
+export async function handleDhsAccepted(params: {
+    caseId: string;
+    triggeredByUserId?: string;
+    forceResend?: boolean;
+}): Promise<AcceptedHandlerResult> {
+    const result = await runAcceptedHandler(params);
+    // The consent email goes out first so the consumer meets the consent link
+    // before the invoice. The invoice never moves the case's workflow status.
+    result.legalFee = await autoIssueLegalFeeInvoice({
+        caseId: params.caseId,
+        userId: params.triggeredByUserId ?? null,
+    });
+    if (result.legalFee.action === 'INVOICED' || result.legalFee.action === 'RESENT') {
+        result.actionsPerformed.push(result.legalFee.message);
+    }
+    return result;
 }
 
 /**

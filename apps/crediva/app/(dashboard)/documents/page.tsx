@@ -4,7 +4,7 @@ import { confirm } from '@zenowethu/ui';
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
-type DocCategory = "ALL" | "IDENTITY" | "INCOME" | "BUREAU" | "LEGAL" | "CORRESPONDENCE";
+type DocCategory = "ALL" | "IDENTITY" | "INCOME" | "BUREAU" | "LEGAL" | "CORRESPONDENCE" | "INVOICE";
 
 interface CredoDoc {
   id: string;
@@ -32,6 +32,7 @@ const CATEGORIES: { key: DocCategory; label: string }[] = [
   { key: "BUREAU",         label: "Bureau Reports" },
   { key: "LEGAL",          label: "Legal"          },
   { key: "CORRESPONDENCE", label: "Correspondence" },
+  { key: "INVOICE",        label: "Invoices"       },
 ];
 
 const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
@@ -50,6 +51,10 @@ const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: React.R
   LEGAL: {
     color: "#C4953A", bg: "#F6EDD6",
     icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9.5 1.5H3a1 1 0 00-1 1v9a1 1 0 001 1h8a1 1 0 001-1V4.5L9.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M9.5 1.5v3H12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+  },
+  INVOICE: {
+    color: "#C4953A", bg: "#F6EDD6",
+    icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 1.5h8v11l-1.6-1-1.2 1-1.2-1-1.2 1-1.2-1L3 12.5v-11z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M5 5h4M5 7.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   },
   CORRESPONDENCE: {
     color: "#0B1D35", bg: "#E4EDF8",

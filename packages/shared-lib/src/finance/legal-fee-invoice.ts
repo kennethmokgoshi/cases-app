@@ -29,7 +29,8 @@ export async function createLegalFeeInvoice(params: {
     clientId: string;
     /** Consumer ID number — used as the payment reference. */
     reference: string;
-    createdById: string;
+    /** Null when the automation raised it with no user available. */
+    createdById: string | null;
     input: LegalFeeInvoiceInput;
 }) {
     const { caseId, clientId, reference, createdById, input } = params;

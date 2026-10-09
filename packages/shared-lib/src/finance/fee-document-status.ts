@@ -11,6 +11,7 @@
  */
 
 import { prisma } from '@zenowethu/database';
+import { syncLegalFeesStatusAfterPayment } from './legal-fees-status-sync';
 import { createLogger } from '../logger';
 import { getStatusByCode } from '../statuses/statuses';
 import { calculateSlaDeadline } from '../statuses/workflow';
@@ -48,8 +49,15 @@ export async function applyFeeDocumentStatus(params: {
      * and payments, which staff must always be able to see happened.
      */
     recordWhenUnchanged?: boolean;
+    /**
+     * `false` records the event on the timeline but never moves the workflow
+     * status — used by the automatic legal fee invoice, which must not pull a
+     * case out of "Ready to Consent". Defaults to true.
+     */
+    moveStatus?: boolean;
 }): Promise<FeeStatusChangeResult> {
     const { caseId, docType, event, userId, documentId, recordWhenUnchanged } = params;
+    const moveStatus = params.moveStatus !== false;
     const notes = [documentId ? feeDocumentLogTag(documentId) : null, params.notes ?? null]
         .filter(Boolean)
         .join(' ') || null;
@@ -62,8 +70,8 @@ export async function applyFeeDocumentStatus(params: {
 
     const decision = resolveFeeDocumentTransition({ docType, event, currentStatus: current.status });
     // `in` narrowing — this package compiles without strictNullChecks.
-    if ('reason' in decision) {
-        if (recordWhenUnchanged) {
+    if (!moveStatus || 'reason' in decision) {
+        if (recordWhenUnchanged || !moveStatus) {
             await prisma.workflowLog.create({
                 data: {
                     caseId,
@@ -79,7 +87,9 @@ export async function applyFeeDocumentStatus(params: {
             moved: false,
             fromStatus: current.status,
             toStatus: decision.toStatus,
-            message: describeFeeTransitionSkip(decision.reason),
+            message: 'reason' in decision
+                ? describeFeeTransitionSkip(decision.reason)
+                : 'Recorded on the timeline — workflow status left unchanged',
         };
     }
 
@@ -195,6 +205,10 @@ export async function syncFeeInvoicePaidStatus(params: {
             if (legalFeeDoc) docType = 'LEGAL_FEE_INVOICE';
         }
         if (!docType) return null;
+
+        if (docType === 'LEGAL_FEE_INVOICE') {
+            await syncLegalFeesStatusAfterPayment({ caseId: invoice.caseId, invoiceId: invoice.id });
+        }
 
         return await applyFeeDocumentStatus({
             caseId: invoice.caseId,
