@@ -22,7 +22,8 @@ export async function POST() {
 
         await logAutomationRun({
             type: 'DEBT_REVIEW_REMOVAL',
-            status: 'SUCCESS',
+            // Per-case errors mean some cases were never reported to staff — surface the run for review.
+            status: result.errors > 0 ? 'NEEDS_REVIEW' : 'SUCCESS',
             startedAt,
             logs: {
                 assessed: result.assessed,
@@ -30,6 +31,7 @@ export async function POST() {
                 needsDocs: result.needsDocs,
                 escalated: result.escalated,
                 noAction: result.noAction,
+                skippedRecent: result.skippedRecent,
                 errors: result.errors,
             },
         });
@@ -41,6 +43,7 @@ export async function POST() {
             needsDocs: result.needsDocs,
             escalated: result.escalated,
             noAction: result.noAction,
+            skippedRecent: result.skippedRecent,
             errors: result.errors,
         });
     } catch (error) {

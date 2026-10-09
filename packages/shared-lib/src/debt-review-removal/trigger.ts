@@ -14,7 +14,8 @@
  */
 
 import { prisma } from '@zenowethu/database';
-import { logger } from '../logger';
+import { createLogger } from '../logger';
+import { getAutomationUserId } from '../automation/automation-user';
 import {
     RemovalAssessment,
     RemovalPath,
@@ -26,6 +27,22 @@ import {
     DOC_TYPES,
 } from './removal-paths';
 
+const logger = createLogger('debt-review-removal');
+
+/**
+ * How long an unchanged outcome is left alone before staff are re-notified.
+ * The trigger does not move `nextUpdate`, so without this every cron run would
+ * re-notify every admin/manager about every eligible case.
+ */
+export const REMOVAL_NOTIFY_COOLDOWN_DAYS = 5;
+
+/** Comment activity types written by this trigger — used to find its previous outcome. */
+const TRIGGER_ACTIVITY_TYPES = [
+    'DEBT_REVIEW_REMOVAL_CHECK',
+    'DEBT_REVIEW_REMOVAL_ESCALATED',
+    'DEBT_REVIEW_REMOVAL_DOCS_REQUESTED',
+] as const;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface RemovalTriggerResult {
@@ -34,6 +51,8 @@ export interface RemovalTriggerResult {
     needsDocs: number;
     escalated: number;
     noAction: number;
+    /** Cases whose outcome is unchanged since staff were last notified (inside the cooldown). */
+    skippedRecent: number;
     errors: number;
     assessments: RemovalAssessment[];
 }
@@ -215,51 +234,102 @@ function evaluateD4Case(
 
 // ─── Notification helpers ─────────────────────────────────────────────────────
 
+/** Stable description of an assessment's outcome — changes when the action, path or missing docs change. */
+export function assessmentFingerprint(a: RemovalAssessment): string {
+    const path = a.recommendedPath ? `${a.recommendedPath.fromStatus}>${a.recommendedPath.toStatus}` : 'none';
+    return `${a.action}|${path}|${[...a.missingDocTypes].sort().join(',')}`;
+}
+
+/**
+ * True when the trigger already reported this exact outcome for the case inside
+ * the cooldown. A changed outcome (documents arrived, path became clear) is NOT
+ * suppressed, so staff hear about progress immediately. On a lookup failure we
+ * fail open — a duplicate notification beats a silently skipped case.
+ */
+export async function wasRecentlyReported(assessment: RemovalAssessment): Promise<boolean> {
+    const since = new Date();
+    since.setDate(since.getDate() - REMOVAL_NOTIFY_COOLDOWN_DAYS);
+    try {
+        const last = await prisma.caseComment.findFirst({
+            where: {
+                caseId: assessment.caseId,
+                activityType: { in: [...TRIGGER_ACTIVITY_TYPES] },
+                createdAt: { gte: since },
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { activityData: true },
+        });
+        if (!last?.activityData) return false;
+        const data = JSON.parse(last.activityData) as { fingerprint?: string };
+        return data.fingerprint === assessmentFingerprint(assessment);
+    } catch (err) {
+        logger.error(`[DebtReviewRemoval] Cooldown lookup failed for ${assessment.fileNumber} — treating as not reported:`, err);
+        return false;
+    }
+}
+
 async function getStaffNotificationTargets(): Promise<string[]> {
-    // Admins + internal managers only (not B2B partner managers)
+    // Admins + internal managers only (not B2B partner managers, not locked accounts)
     const users = await prisma.user.findMany({
         where: {
-            OR: [
-                { isAdmin: true },
-                { role: 'MANAGER' },
-            ],
+            OR: [{ isAdmin: true }, { role: 'MANAGER' }],
             userType: 'STAFF',
-            deletedAt: null,
-        } as any,
+            isLocked: false,
+        },
         select: { id: true },
     });
     return users.map(u => u.id);
 }
 
-async function getSystemUserId(): Promise<string> {
-    const admin = await prisma.user.findFirst({ where: { isAdmin: true } });
-    return admin?.id ?? 'system';
+async function notifyStaff(
+    userIds: string[],
+    notification: { title: string; message: string; caseId: string },
+): Promise<void> {
+    if (userIds.length === 0) return;
+    await prisma.inAppNotification.createMany({
+        data: userIds.map(userId => ({
+            userId,
+            type: 'DEBT_REVIEW_REMOVAL',
+            title: notification.title,
+            message: notification.message,
+            caseId: notification.caseId,
+            linkUrl: `/cases/${notification.caseId}`,
+        })),
+    });
 }
 
-async function notifyStaffToProcessRemoval(assessment: RemovalAssessment, systemUserId: string): Promise<void> {
+/** Documents the consumer/attorney must supply. */
+const CLIENT_SIDE_DOCS: readonly string[] = [
+    DOC_TYPES.PAID_UP_LETTERS,
+    DOC_TYPES.COURT_ORDER_GRANTED,
+    DOC_TYPES.NOTICE_OF_MOTION,
+    DOC_TYPES.FOUNDING_AFFIDAVIT,
+];
+
+/** Documents the Debt Counsellor prepares. Form 17.W is requested from the DC by the DRR file-request trigger. */
+const DC_SIDE_DOCS: readonly string[] = [
+    DOC_TYPES.CERTIFIED_FORM_19,
+    DOC_TYPES.FORM_17_2C,
+    DOC_TYPES.FORM_17W,
+    DOC_TYPES.FORM_16,
+    DOC_TYPES.FORM_17_2A,
+];
+
+const humanise = (docType: string): string => docType.replace(/_/g, ' ');
+
+function pathLabel(a: RemovalAssessment): string {
+    return a.recommendedPath ? `${a.recommendedPath.fromStatus} → ${a.recommendedPath.toStatus}` : 'none';
+}
+
+async function notifyStaffToProcessRemoval(assessment: RemovalAssessment, systemUserId: string | undefined): Promise<void> {
     const staffIds = await getStaffNotificationTargets();
     const path = assessment.recommendedPath!;
 
-    const title = assessment.readyForRemoval
-        ? `✅ Ready for DHS Removal: ${assessment.fileNumber}`
-        : `📋 Debt Review Removal: Docs Present — ${assessment.fileNumber}`;
-
-    const message = assessment.readyForRemoval
-        ? `${assessment.clientName} (${assessment.fileNumber}) — DHS status "${assessment.consumerDhsStatus}" is ready for removal. All required documents are present. Please proceed on the DHS portal to update status to "${path.toStatus}".`
-        : `${assessment.clientName} (${assessment.fileNumber}) — Debt review removal path detected: ${path.fromStatus} → ${path.toStatus}. ${assessment.missingDocTypes.length} document(s) still needed.`;
-
-    for (const userId of staffIds) {
-        await prisma.inAppNotification.create({
-            data: {
-                userId,
-                type: 'DEBT_REVIEW_REMOVAL',
-                title,
-                message,
-                caseId: assessment.caseId,
-                linkUrl: `/cases/${assessment.caseId}`,
-            },
-        });
-    }
+    await notifyStaff(staffIds, {
+        caseId: assessment.caseId,
+        title: `✅ Ready for DHS Removal: ${assessment.fileNumber}`,
+        message: `${assessment.clientName} (${assessment.fileNumber}) — DHS status "${assessment.consumerDhsStatus}" is ready for removal. All required documents are present. Please proceed on the DHS portal to update status to "${path.toStatus}".`,
+    });
 
     await prisma.caseComment.create({
         data: {
@@ -270,8 +340,9 @@ async function notifyStaffToProcessRemoval(assessment: RemovalAssessment, system
             isInternal: true,
             activityType: 'DEBT_REVIEW_REMOVAL_CHECK',
             activityData: JSON.stringify({
+                fingerprint: assessmentFingerprint(assessment),
                 consumerDhsStatus: assessment.consumerDhsStatus,
-                recommendedPath: `${path.fromStatus} → ${path.toStatus}`,
+                recommendedPath: pathLabel(assessment),
                 confidence: assessment.confidence,
                 requiredDocTypes: assessment.requiredDocTypes,
                 presentDocTypes: assessment.presentDocTypes,
@@ -282,32 +353,25 @@ async function notifyStaffToProcessRemoval(assessment: RemovalAssessment, system
     });
 }
 
-async function escalateToStaff(assessment: RemovalAssessment, systemUserId: Promise<string>): Promise<void> {
+async function escalateToStaff(assessment: RemovalAssessment, systemUserId: string | undefined): Promise<void> {
     const staffIds = await getStaffNotificationTargets();
-    const userId = await systemUserId;
 
-    for (const id of staffIds) {
-        await prisma.inAppNotification.create({
-            data: {
-                userId: id,
-                type: 'DEBT_REVIEW_REMOVAL',
-                title: `⚠️ Manual Review Required: ${assessment.fileNumber}`,
-                message: `${assessment.clientName} (${assessment.fileNumber}) — DHS status "${assessment.consumerDhsStatus}". ${assessment.actionReason}`,
-                caseId: assessment.caseId,
-                linkUrl: `/cases/${assessment.caseId}`,
-            },
-        });
-    }
+    await notifyStaff(staffIds, {
+        caseId: assessment.caseId,
+        title: `⚠️ Manual Review Required: ${assessment.fileNumber}`,
+        message: `${assessment.clientName} (${assessment.fileNumber}) — DHS status "${assessment.consumerDhsStatus}". ${assessment.actionReason}`,
+    });
 
     await prisma.caseComment.create({
         data: {
             caseId: assessment.caseId,
-            userId,
+            userId: systemUserId,
             content: `[Debt Review Removal] ESCALATED — ${assessment.actionReason}`,
             type: 'SYSTEM',
             isInternal: true,
             activityType: 'DEBT_REVIEW_REMOVAL_ESCALATED',
             activityData: JSON.stringify({
+                fingerprint: assessmentFingerprint(assessment),
                 consumerDhsStatus: assessment.consumerDhsStatus,
                 candidatePaths: assessment.candidatePaths.map(p => `${p.fromStatus} → ${p.toStatus}`),
                 confidence: assessment.confidence,
@@ -316,55 +380,39 @@ async function escalateToStaff(assessment: RemovalAssessment, systemUserId: Prom
     });
 }
 
-async function requestMissingDocuments(assessment: RemovalAssessment, systemUserId: string): Promise<void> {
-    const caseRecord = await prisma.case.findUnique({
-        where: { id: assessment.caseId },
-        include: { client: { select: { firstName: true, email: true, phone: true, whatsappNumber: true } } },
-    });
-    if (!caseRecord) return;
-
+/**
+ * Records what is missing and tells staff. Nothing is sent to the consumer or
+ * attorney automatically — these are legally sensitive court/DC documents, so a
+ * person makes the contact. Staff get ONE notification covering both the
+ * DC-side and client-side documents.
+ */
+async function requestMissingDocuments(assessment: RemovalAssessment, systemUserId: string | undefined): Promise<void> {
     const missing = assessment.missingDocTypes;
-    const docList = missing.map(d => `• ${d.replace(/_/g, ' ')}`).join('\n');
-
-    // Notify the client for consumer-side documents
-    const clientDocs = missing.filter(d =>
-        [DOC_TYPES.PAID_UP_LETTERS, DOC_TYPES.COURT_ORDER_GRANTED, DOC_TYPES.NOTICE_OF_MOTION, DOC_TYPES.FOUNDING_AFFIDAVIT].includes(d as any)
-    );
-
-    // Notify staff to prepare DC-side documents (Form 19, Form 17.2(c), etc.)
-    const dcDocs = missing.filter(d =>
-        [DOC_TYPES.CERTIFIED_FORM_19, DOC_TYPES.FORM_17_2C, DOC_TYPES.FORM_17W, DOC_TYPES.FORM_16, DOC_TYPES.FORM_17_2A].includes(d as any)
-    );
-
+    const clientDocs = missing.filter(d => CLIENT_SIDE_DOCS.includes(d));
+    const dcDocs = missing.filter(d => DC_SIDE_DOCS.includes(d));
     const staffIds = await getStaffNotificationTargets();
+    const fingerprint = assessmentFingerprint(assessment);
 
-    if (dcDocs.length > 0) {
-        // Alert staff to prepare these documents (DC prepares them, not client)
-        for (const id of staffIds) {
-            await prisma.inAppNotification.create({
-                data: {
-                    userId: id,
-                    type: 'DEBT_REVIEW_REMOVAL',
-                    title: `📄 Documents to Prepare: ${assessment.fileNumber}`,
-                    message: `The following documents need to be prepared by the Debt Counsellor for case ${assessment.fileNumber}:\n${dcDocs.map(d => d.replace(/_/g, ' ')).join(', ')}`,
-                    caseId: assessment.caseId,
-                    linkUrl: `/cases/${assessment.caseId}`,
-                },
-            });
-        }
-    }
+    const sections: string[] = [];
+    if (dcDocs.length > 0) sections.push(`Debt Counsellor to prepare: ${dcDocs.map(humanise).join(', ')}`);
+    if (clientDocs.length > 0) sections.push(`To obtain from client/attorney: ${clientDocs.map(humanise).join(', ')}`);
 
-    if (clientDocs.length > 0 && (caseRecord.client.email || caseRecord.client.phone)) {
-        // Log a comment so staff can follow up with the client
+    await notifyStaff(staffIds, {
+        caseId: assessment.caseId,
+        title: `📄 Removal documents needed: ${assessment.fileNumber}`,
+        message: `${assessment.clientName} (${assessment.fileNumber}) — removal path ${pathLabel(assessment)}, ${missing.length} document(s) outstanding.\n${sections.join('\n')}`,
+    });
+
+    if (clientDocs.length > 0) {
         await prisma.caseComment.create({
             data: {
                 caseId: assessment.caseId,
                 userId: systemUserId,
-                content: `[Debt Review Removal] Missing documents required from client/attorney:\n${clientDocs.map(d => `• ${d.replace(/_/g, ' ')}`).join('\n')}\n\nPlease contact the client or attorney to obtain these.`,
+                content: `[Debt Review Removal] Missing documents required from client/attorney:\n${clientDocs.map(d => `• ${humanise(d)}`).join('\n')}\n\nPlease contact the client or attorney to obtain these.`,
                 type: 'SYSTEM',
                 isInternal: true,
                 activityType: 'DEBT_REVIEW_REMOVAL_DOCS_REQUESTED',
-                activityData: JSON.stringify({ missingDocs: clientDocs, requestedFrom: 'client/attorney' }),
+                activityData: JSON.stringify({ fingerprint, missingDocs: clientDocs, requestedFrom: 'client/attorney' }),
             },
         });
     }
@@ -373,15 +421,16 @@ async function requestMissingDocuments(assessment: RemovalAssessment, systemUser
         data: {
             caseId: assessment.caseId,
             userId: systemUserId,
-            content: `[Debt Review Removal] Documents required for ${assessment.recommendedPath?.fromStatus} → ${assessment.recommendedPath?.toStatus} transition:\n${docList}\nPresent: ${assessment.presentDocTypes.join(', ') || 'none'}`,
+            content: `[Debt Review Removal] Documents required for ${pathLabel(assessment)} transition:\n${missing.map(d => `• ${humanise(d)}`).join('\n')}\nPresent: ${assessment.presentDocTypes.join(', ') || 'none'}`,
             type: 'SYSTEM',
             isInternal: true,
             activityType: 'DEBT_REVIEW_REMOVAL_CHECK',
             activityData: JSON.stringify({
+                fingerprint,
                 requiredDocTypes: assessment.requiredDocTypes,
                 presentDocTypes: assessment.presentDocTypes,
                 missingDocTypes: assessment.missingDocTypes,
-                path: assessment.recommendedPath ? `${assessment.recommendedPath.fromStatus} → ${assessment.recommendedPath.toStatus}` : null,
+                path: assessment.recommendedPath ? pathLabel(assessment) : null,
             }),
         },
     });
@@ -403,6 +452,7 @@ export async function runDebtReviewRemovalTrigger(): Promise<RemovalTriggerResul
         needsDocs: 0,
         escalated: 0,
         noAction: 0,
+        skippedRecent: 0,
         errors: 0,
         assessments: [],
     };
@@ -425,7 +475,8 @@ export async function runDebtReviewRemovalTrigger(): Promise<RemovalTriggerResul
 
     logger.info(`[DebtReviewRemoval] Found ${eligibleCases.length} eligible cases`);
 
-    const systemUserId = getSystemUserId();
+    // Comments need a real user (FK); fall back to unattributed rather than a fake id.
+    const systemUserId = (await getAutomationUserId()) ?? undefined;
 
     for (const c of eligibleCases) {
         try {
@@ -435,17 +486,19 @@ export async function runDebtReviewRemovalTrigger(): Promise<RemovalTriggerResul
             result.assessed++;
             result.assessments.push(assessment);
 
-            const uid = await systemUserId;
+            if (assessment.action !== 'NO_ACTION' && await wasRecentlyReported(assessment)) {
+                result.skippedRecent++;
+                continue;
+            }
 
             switch (assessment.action) {
                 case 'PROCEED':
-                    await notifyStaffToProcessRemoval(assessment, uid);
+                    await notifyStaffToProcessRemoval(assessment, systemUserId);
                     result.readyForRemoval++;
                     break;
 
                 case 'REQUEST_DOCS':
-                    await requestMissingDocuments(assessment, uid);
-                    await notifyStaffToProcessRemoval(assessment, uid);
+                    await requestMissingDocuments(assessment, systemUserId);
                     result.needsDocs++;
                     break;
 
