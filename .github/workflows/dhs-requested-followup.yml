@@ -1,0 +1,47 @@
+name: DHS Requested Follow-up
+
+on:
+  workflow_dispatch:
+    inputs:
+      fileNumbers:
+        description: 'Comma-separated file numbers to restrict the run to (supervised test). Leave empty for the whole overdue cohort.'
+        required: false
+        default: ''
+      dryRun:
+        description: 'Dry run: no DHS check, no sends, no writes'
+        type: boolean
+        default: true
+      limit:
+        description: 'Max files to process'
+        required: false
+        default: '20'
+  schedule:
+    # TEMPORARY visibility test: hourly, DRY RUN ONLY (no DHS check, no sends, no writes).
+    # Proves the scheduler fires and the endpoint answers. Scheduled runs are always dry
+    # until the supervised test is approved (see the DRY default in the step below).
+    - cron: '0 * * * *'
+    # ONE-TIME test slot (this minute/hour/day/month UTC; only fires again next year).
+    - cron: '46 15 09 10 *'
+    # PRODUCTION (enable after approval, and flip the scheduled default to live):
+    # Weekdays 04:00 UTC = 06:00 SAST, deliberately BEFORE the 07:00 overdue-scan.
+    # - cron: '0 4 * * 1-5'
+
+jobs:
+  followup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call DHS requested follow-up
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FILE_NUMBERS: ${{ inputs.fileNumbers }}
+          DRY_RUN: ${{ inputs.dryRun }}
+          LIMIT: ${{ inputs.limit || '20' }}
+        run: |
+          # Scheduled runs have no inputs: forced DRY RUN until the test is approved.
+          DRY="${DRY_RUN:-true}"
+          URL="https://cases.zenowethu.co.za/api/cron/dhs-requested-followup?dryRun=${DRY}&limit=${LIMIT}&declineMode=review"
+          if [ -n "$FILE_NUMBERS" ]; then
+            URL="${URL}&fileNumbers=$(printf '%s' "$FILE_NUMBERS" | tr -d ' ')"
+          fi
+          curl -sS --fail-with-body -X POST "$URL" -H "x-cron-secret: ${CRON_SECRET}"

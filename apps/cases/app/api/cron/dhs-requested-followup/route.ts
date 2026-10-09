@@ -15,6 +15,8 @@
  *   ?statuses=A,B  — override the cohort statuses (default: both of the above).
  *   ?service=slug  — narrow to one service, e.g. debt_review_flag_removal
  *                    (default: no service filter — all files).
+ *   ?fileNumbers=A,B — restrict to these file numbers (supervised test runs). They must
+ *                    still be in the cohort statuses AND due, or they are skipped.
  *   ?overdueDays=N — fallback overdue window for statuses with no SLA (default 7).
  *   ?declineMode=  — 'review' (DEFAULT — a DECLINED result is classified and flagged
  *                    for staff, nothing is sent) or 'auto' (runs the full
@@ -56,6 +58,10 @@ export async function POST(request: Request) {
         ? statusesParam.split(',').map(s => s.trim()).filter(Boolean)
         : undefined;
     const service = url.searchParams.get('service') || undefined;
+    const fileNumbersParam = url.searchParams.get('fileNumbers');
+    const fileNumbers = fileNumbersParam
+        ? fileNumbersParam.split(',').map(s => s.trim()).filter(Boolean)
+        : undefined;
 
     // Anything other than an explicit 'auto' stays in the safe review mode.
     const declineModeParam = url.searchParams.get('declineMode');
@@ -71,7 +77,7 @@ export async function POST(request: Request) {
     logger.info(`[CRON] Requested-via-DHS follow-up starting (dryRun=${dryRun}, declineMode=${declineMode})...`);
 
     try {
-        const result = await runRequestedViaDhsFollowup({ dryRun, limit, overdueDays, statuses, service, declineMode });
+        const result = await runRequestedViaDhsFollowup({ dryRun, limit, overdueDays, statuses, service, declineMode, fileNumbers });
 
         // A dry run is a read-only preview — don't pollute the AutomationRun history with it.
         if (!dryRun) {

@@ -137,6 +137,24 @@ describe('getRequestedViaDhsCohort', () => {
     });
 });
 
+describe('getRequestedViaDhsCohort — fileNumbers filter', () => {
+    it('restricts to the listed file numbers while keeping the due rules', async () => {
+        findMany.mockResolvedValue([]);
+        await getRequestedViaDhsCohort({ fileNumbers: ['ZDM-1', 'ZDM-2', 'ZDM-3'] });
+        const where = findMany.mock.calls[0][0].where;
+
+        expect(where.fileNumber).toEqual({ in: ['ZDM-1', 'ZDM-2', 'ZDM-3'] });
+        expect(where.status).toEqual({ in: ['REQUESTED_VIA_DHS', 'DHS_REQUESTED'] });
+        expect(where.OR).toHaveLength(2);
+    });
+
+    it('adds no file number filter when none given', async () => {
+        findMany.mockResolvedValue([]);
+        await getRequestedViaDhsCohort({ fileNumbers: [] });
+        expect(findMany.mock.calls[0][0].where.fileNumber).toBeUndefined();
+    });
+});
+
 describe('runRequestedViaDhsFollowup — dry run', () => {
     it('renders previews and performs NO live DHS check, sends, or writes', async () => {
         findMany.mockResolvedValue([cohortRow('c1', 'ZDM-1'), cohortRow('c2', 'ZDM-2')]);
