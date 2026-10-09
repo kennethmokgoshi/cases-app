@@ -1,21 +1,37 @@
 import { PDFDocument, rgb, StandardFonts, PDFFont, PDFPage, RGB } from 'pdf-lib';
+import { type CompanyProfile, formatCompanyAddress } from '../company/profile';
 
 // ---------------------------------------------------------------------------
-// Zenowethu letterhead constants
+// Letterhead details — derived from the tenant's company profile
 // ---------------------------------------------------------------------------
 
-const FIRM = {
-    name:    'Zenowethu Debt Management (PTY) LTD',
-    ncrdc:   'NCRDC3693',
-    dcasa:   '0863',
-    regNo:   '2013/121120/07',
-    address: 'Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190',
-    tel:     '081 747 7616',
-    cell:    '082 363 8207',
-    email:   'info@zenowethu.co.za',
-    web:     'www.zenowethu.co.za',
-    dc:      'Aaron Nzotho',
-};
+interface FirmDetails {
+    name:    string;
+    ncrdc:   string;
+    dcasa:   string;
+    regNo:   string;
+    address: string;
+    tel:     string;
+    cell:    string;
+    email:   string;
+    web:     string;
+    dc:      string;
+}
+
+function firmDetails(company: CompanyProfile): FirmDetails {
+    return {
+        name:    company.legalName,
+        ncrdc:   company.ncrdcNumber ?? '—',
+        dcasa:   company.dcasaNumber ?? '—',
+        regNo:   company.registrationNumber ?? '—',
+        address: formatCompanyAddress(company),
+        tel:     company.phone,
+        cell:    company.cell ?? '',
+        email:   company.email,
+        web:     company.website,
+        dc:      company.debtCounsellorName ?? company.directorName ?? company.tradingName,
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Colours — Zenowethu brand
@@ -73,6 +89,8 @@ export interface CourtDocInput {
     creditAccounts?:       CourtDocAccount[];
     // Who generated
     generatedBy?:          string;
+    /** The firm issuing the document — resolve via getCompanyProfile() in the route. */
+    company:               CompanyProfile;
 }
 
 export type CourtDocType =
@@ -152,17 +170,17 @@ function addPage(doc: PDFDocument): PDFPage {
     return doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
 }
 
-function drawLetterhead(page: PDFPage, bold: PDFFont, reg: PDFFont): number {
+function drawLetterhead(page: PDFPage, bold: PDFFont, reg: PDFFont, firm: FirmDetails): number {
     // Navy header bar
     page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 72, width: PAGE_WIDTH, height: 72, color: NAVY });
     // Amber accent strip
     page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 75, width: PAGE_WIDTH, height: 3, color: AMBER });
 
-    page.drawText(FIRM.name, { x: MARGIN, y: PAGE_HEIGHT - 30, size: 12.5, font: bold, color: WHITE });
-    page.drawText(`NCR Reg: ${FIRM.ncrdc}  |  DCASA: ${FIRM.dcasa}  |  Co. Reg: ${FIRM.regNo}`, {
+    page.drawText(firm.name, { x: MARGIN, y: PAGE_HEIGHT - 30, size: 12.5, font: bold, color: WHITE });
+    page.drawText(`NCR Reg: ${firm.ncrdc}  |  DCASA: ${firm.dcasa}  |  Co. Reg: ${firm.regNo}`, {
         x: MARGIN, y: PAGE_HEIGHT - 46, size: 7.5, font: reg, color: WHITE,
     });
-    page.drawText(`${FIRM.address}  |  Tel: ${FIRM.tel}  |  ${FIRM.email}  |  ${FIRM.web}`, {
+    page.drawText(`${firm.address}  |  Tel: ${firm.tel}  |  ${firm.email}  |  ${firm.web}`, {
         x: MARGIN, y: PAGE_HEIGHT - 60, size: 7, font: reg, color: WHITE,
     });
     return PAGE_HEIGHT - 90;
@@ -272,7 +290,7 @@ function drawAccountsTable(
 // ---------------------------------------------------------------------------
 
 function drawSignature(
-    page: PDFPage, name: string, title: string, y: number, reg: PDFFont, bold: PDFFont,
+    page: PDFPage, name: string, title: string, y: number, reg: PDFFont, bold: PDFFont, firm: FirmDetails,
 ): number {
     y -= 8;
     page.drawText('Yours faithfully / Signed by:', { x: MARGIN, y, size: 9.5, font: reg, color: DARK });
@@ -283,9 +301,9 @@ function drawSignature(
     y -= 12;
     page.drawText(title,            { x: MARGIN, y, size: 8.5, font: reg,   color: MID });
     y -= 12;
-    page.drawText(FIRM.name,        { x: MARGIN, y, size: 8.5, font: reg,   color: MID });
+    page.drawText(firm.name,        { x: MARGIN, y, size: 8.5, font: reg,   color: MID });
     y -= 11;
-    page.drawText(`NCR Reg: ${FIRM.ncrdc}  |  DCASA: ${FIRM.dcasa}`, { x: MARGIN, y, size: 8, font: reg, color: MID });
+    page.drawText(`NCR Reg: ${firm.ncrdc}  |  DCASA: ${firm.dcasa}`, { x: MARGIN, y, size: 8, font: reg, color: MID });
     return y - 10;
 }
 
@@ -295,6 +313,7 @@ function drawSignature(
 
 async function generateNoticeOfMotion(input: CourtDocInput): Promise<Uint8Array> {
     const doc     = await PDFDocument.create();
+    const firm    = firmDetails(input.company);
     const bold    = await doc.embedFont(StandardFonts.HelveticaBold);
     const reg     = await doc.embedFont(StandardFonts.Helvetica);
     const page    = addPage(doc);
@@ -302,7 +321,7 @@ async function generateNoticeOfMotion(input: CourtDocInput): Promise<Uint8Array>
     const caseNo  = input.courtCaseNumber || '________________';
     const ref     = newRef('NOM');
 
-    let y = drawLetterhead(page, bold, reg);
+    let y = drawLetterhead(page, bold, reg, firm);
     y -= 12;
 
     // Court caption
@@ -395,7 +414,7 @@ async function generateNoticeOfMotion(input: CourtDocInput): Promise<Uint8Array>
         MARGIN, y, CONTENT_WIDTH, bold, reg, { size: 9.5 });
     y -= 16;
 
-    y = drawSignature(page, FIRM.dc, `Debt Counsellor — ${FIRM.ncrdc}`, y, reg, bold);
+    y = drawSignature(page, firm.dc, `Debt Counsellor — ${firm.ncrdc}`, y, reg, bold, firm);
 
     page.drawText(`Ref: ${ref}  |  Generated: ${today()}`, { x: MARGIN, y: y - 10, size: 7, font: reg, color: MID });
 
@@ -409,6 +428,7 @@ async function generateNoticeOfMotion(input: CourtDocInput): Promise<Uint8Array>
 
 async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Array> {
     const doc    = await PDFDocument.create();
+    const firm = firmDetails(input.company);
     const bold   = await doc.embedFont(StandardFonts.HelveticaBold);
     const reg    = await doc.embedFont(StandardFonts.Helvetica);
     const pages: PDFPage[] = [];
@@ -424,7 +444,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
     const caseNo = input.courtCaseNumber || '________________';
     const ref    = newRef('FA');
 
-    let y = drawLetterhead(page, bold, reg);
+    let y = drawLetterhead(page, bold, reg, firm);
     y -= 12;
 
     page.drawText('IN THE ' + court, { x: MARGIN, y, size: 11, font: bold, color: NAVY });
@@ -503,7 +523,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
     const hasAccounts = accounts.length > 0;
     const hasPaidUp   = paidUpAccounts.length > 0;
 
-    if (y < 150) { page = np(); y = drawLetterhead(page, bold, reg); y -= 20; }
+    if (y < 150) { page = np(); y = drawLetterhead(page, bold, reg, firm); y -= 20; }
 
     y = sectionHeading(page, '4. Grounds for Removal of Debt Review Flag', y, bold);
     y = textBlock(page,
@@ -523,7 +543,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
     grounds.push(`I am no longer over-indebted within the meaning of Section 79 of the NCA.`);
 
     for (let i = 0; i < grounds.length; i++) {
-        if (y < 100) { page = np(); y = drawLetterhead(page, bold, reg); y -= 20; }
+        if (y < 100) { page = np(); y = drawLetterhead(page, bold, reg, firm); y -= 20; }
         y = textBlock(page, `4.${i + 2}  ${grounds[i]}`, MARGIN + 8, y, CONTENT_WIDTH - 8, bold, reg, { size: 9.5 });
         y -= 4;
     }
@@ -531,7 +551,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
 
     // Para 5 — Accounts table (only if accounts exist)
     if (hasAccounts) {
-        if (y < 200) { page = np(); y = drawLetterhead(page, bold, reg); y -= 20; }
+        if (y < 200) { page = np(); y = drawLetterhead(page, bold, reg, firm); y -= 20; }
         y = sectionHeading(page, '5. Schedule of Credit Accounts (Annexure "D")', y, bold);
         y = textBlock(page,
             `5.1  Attached hereto as Annexure "D" is a full schedule of my credit accounts. The current status of each account is reflected below:`,
@@ -550,7 +570,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
 
     // Para 6 — Paid-up letters detail (only if paid-up accounts exist)
     if (hasPaidUp) {
-        if (y < 150) { page = np(); y = drawLetterhead(page, bold, reg); y -= 20; }
+        if (y < 150) { page = np(); y = drawLetterhead(page, bold, reg, firm); y -= 20; }
         const nextPara = hasAccounts ? 6 : 5;
         y = sectionHeading(page, `${nextPara}. Paid-Up Letters / Settlement Confirmations (Annexure "E")`, y, bold);
         y = textBlock(page,
@@ -559,7 +579,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
         y -= 10;
         for (let i = 0; i < paidUpAccounts.length; i++) {
             const acc = paidUpAccounts[i];
-            if (y < 100) { page = np(); y = drawLetterhead(page, bold, reg); y -= 20; }
+            if (y < 100) { page = np(); y = drawLetterhead(page, bold, reg, firm); y -= 20; }
             y = textBlock(page,
                 `${nextPara}.${i + 2}  ${acc.creditorName}${acc.accountNumber ? ` (Account No. ${acc.accountNumber})` : ''}: Balance R0.00 — Paid-up letter dated ${fmtDate(acc.paidUpDate)}.${acc.letterReference ? ` Ref: ${acc.letterReference}.` : ''}`,
                 MARGIN + 8, y, CONTENT_WIDTH - 8, bold, reg, { size: 9.5 });
@@ -570,7 +590,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
 
     // Concluding paragraph
     const lastPara = hasAccounts && hasPaidUp ? 7 : hasAccounts || hasPaidUp ? 6 : 5;
-    if (y < 150) { page = np(); y = drawLetterhead(page, bold, reg); y -= 20; }
+    if (y < 150) { page = np(); y = drawLetterhead(page, bold, reg, firm); y -= 20; }
     y = sectionHeading(page, `${lastPara}. Conclusion and Relief`, y, bold);
     y = textBlock(page,
         `${lastPara}.1  I respectfully submit that on the basis of the facts set out above, and the supporting documentation annexed hereto, this Honourable Court should grant the relief sought in the Notice of Motion.`,
@@ -621,6 +641,7 @@ async function generateFoundingAffidavit(input: CourtDocInput): Promise<Uint8Arr
 
 async function generateNoticeOfSetDown(input: CourtDocInput): Promise<Uint8Array> {
     const doc   = await PDFDocument.create();
+    const firm = firmDetails(input.company);
     const bold  = await doc.embedFont(StandardFonts.HelveticaBold);
     const reg   = await doc.embedFont(StandardFonts.Helvetica);
     const page  = addPage(doc);
@@ -628,7 +649,7 @@ async function generateNoticeOfSetDown(input: CourtDocInput): Promise<Uint8Array
     const caseNo = input.courtCaseNumber || '________________';
     const ref   = newRef('NSD');
 
-    let y = drawLetterhead(page, bold, reg);
+    let y = drawLetterhead(page, bold, reg, firm);
     y -= 12;
 
     page.drawText('IN THE ' + court, { x: MARGIN, y, size: 11, font: bold, color: NAVY });
@@ -720,7 +741,7 @@ async function generateNoticeOfSetDown(input: CourtDocInput): Promise<Uint8Array
         MARGIN, y, CONTENT_WIDTH, bold, reg);
     y -= 16;
 
-    y = drawSignature(page, FIRM.dc, `Debt Counsellor — ${FIRM.ncrdc}`, y, reg, bold);
+    y = drawSignature(page, firm.dc, `Debt Counsellor — ${firm.ncrdc}`, y, reg, bold, firm);
     page.drawText(`Ref: ${ref}  |  Generated: ${today()}`, { x: MARGIN, y: y - 10, size: 7, font: reg, color: MID });
 
     drawFooter(page, reg, 1, 1);
@@ -733,6 +754,7 @@ async function generateNoticeOfSetDown(input: CourtDocInput): Promise<Uint8Array
 
 async function generateNoticeOfMotionRescission(input: CourtDocInput): Promise<Uint8Array> {
     const doc    = await PDFDocument.create();
+    const firm = firmDetails(input.company);
     const bold   = await doc.embedFont(StandardFonts.HelveticaBold);
     const reg    = await doc.embedFont(StandardFonts.Helvetica);
     const page   = addPage(doc);
@@ -740,7 +762,7 @@ async function generateNoticeOfMotionRescission(input: CourtDocInput): Promise<U
     const caseNo = input.courtCaseNumber || '________________';
     const ref    = newRef('NMR');
 
-    let y = drawLetterhead(page, bold, reg);
+    let y = drawLetterhead(page, bold, reg, firm);
     y -= 12;
 
     page.drawText('IN THE ' + court, { x: MARGIN, y, size: 11, font: bold, color: NAVY });
@@ -819,7 +841,7 @@ async function generateNoticeOfMotionRescission(input: CourtDocInput): Promise<U
         MARGIN, y, CONTENT_WIDTH, bold, reg);
     y -= 16;
 
-    y = drawSignature(page, FIRM.dc, `Debt Counsellor — ${FIRM.ncrdc}`, y, reg, bold);
+    y = drawSignature(page, firm.dc, `Debt Counsellor — ${firm.ncrdc}`, y, reg, bold, firm);
     page.drawText(`Ref: ${ref}  |  Generated: ${today()}`, { x: MARGIN, y: y - 10, size: 7, font: reg, color: MID });
 
     drawFooter(page, reg, 1, 1);
@@ -832,6 +854,7 @@ async function generateNoticeOfMotionRescission(input: CourtDocInput): Promise<U
 
 async function generateCourtOrderGranted(input: CourtDocInput): Promise<Uint8Array> {
     const doc    = await PDFDocument.create();
+    const firm = firmDetails(input.company);
     const bold   = await doc.embedFont(StandardFonts.HelveticaBold);
     const reg    = await doc.embedFont(StandardFonts.Helvetica);
     const page   = addPage(doc);
@@ -841,7 +864,7 @@ async function generateCourtOrderGranted(input: CourtDocInput): Promise<Uint8Arr
     const accounts = input.creditAccounts ?? [];
     const creditProviders = [...new Set(accounts.map(a => a.creditorName))];
 
-    let y = drawLetterhead(page, bold, reg);
+    let y = drawLetterhead(page, bold, reg, firm);
     y -= 12;
 
     page.drawText('IN THE ' + court, { x: MARGIN, y, size: 11, font: bold, color: NAVY });
@@ -931,6 +954,7 @@ async function generateCourtOrderGranted(input: CourtDocInput): Promise<Uint8Arr
 
 async function generateProofOfService(input: CourtDocInput): Promise<Uint8Array> {
     const doc    = await PDFDocument.create();
+    const firm = firmDetails(input.company);
     const bold   = await doc.embedFont(StandardFonts.HelveticaBold);
     const reg    = await doc.embedFont(StandardFonts.Helvetica);
     const page   = addPage(doc);
@@ -938,7 +962,7 @@ async function generateProofOfService(input: CourtDocInput): Promise<Uint8Array>
     const caseNo = input.courtCaseNumber || '________________';
     const ref    = newRef('PS');
 
-    let y = drawLetterhead(page, bold, reg);
+    let y = drawLetterhead(page, bold, reg, firm);
     y -= 12;
 
     page.drawText('IN THE ' + court, { x: MARGIN, y, size: 11, font: bold, color: NAVY });

@@ -32,6 +32,7 @@ import SendQuoteModal from './SendQuoteModal';
 import AssignReferrerModal from './AssignReferrerModal';
 import SendMandateModal from './SendMandateModal';
 import DcFeeInvoiceModal from './DcFeeInvoiceModal';
+import RepossessionEnquiryModal from './RepossessionEnquiryModal';
 import { ConsumerPortalPanel } from '@/app/components/ConsumerPortalPanel';
 import { getCaseHeaderClientAction } from '@/lib/case-header-client-action';
 import CheckInvoiceEmailsButton from '@/components/CheckInvoiceEmailsButton';
@@ -513,6 +514,7 @@ export default function CaseDetailPage() {
     // DC pre-send confirmation
     const [dcConfirmPending, setDcConfirmPending] = useState<'FILE_REQUEST' | 'INVOICE_REQUEST' | null>(null);
     const [isDcFeeInvoiceOpen, setIsDcFeeInvoiceOpen] = useState(false);
+    const [isRepossessionEnquiryOpen, setIsRepossessionEnquiryOpen] = useState(false);
 
     // Tasks & Decline Reason State
     // Tasks & Decline Reason State
@@ -3865,6 +3867,14 @@ export default function CaseDetailPage() {
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>
                                             DC: Generate Fee Invoice / Quote
                                         </button>
+                                        {/* Ask a vehicle financer whether it has court action / a repossession order. */}
+                                        <button
+                                            onClick={() => setIsRepossessionEnquiryOpen(true)}
+                                            className="w-full py-1.5 px-3 bg-rose-600/20 border border-rose-600/40 text-rose-300 rounded text-xs font-semibold hover:bg-rose-600/30 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h8m-8 4h8m-8 4h5M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" /></svg>
+                                            Repossession Enquiry
+                                        </button>
 
                                         {/* Bureau + provider only */}
                                         <button
@@ -5231,7 +5241,7 @@ export default function CaseDetailPage() {
                             )}
                             {activeDetailTab === 'DOCUMENTS' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} />
+                                    <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} showFeeDocuments onCaseUpdated={() => fetchCase({ silent: true })} />
                                     <ConsumerPortalPanel caseId={caseData.id} />
                                 </div>
                             )}
@@ -5649,6 +5659,15 @@ export default function CaseDetailPage() {
                     clientFirstName={caseData.client?.firstName}
                     clientLastName={caseData.client?.lastName}
                     clientIdNumber={caseData.client?.idNumber}
+                />
+            )}
+
+            {/* Repossession Enquiry Modal — asks a vehicle financer about court action */}
+            {caseData && (
+                <RepossessionEnquiryModal
+                    isOpen={isRepossessionEnquiryOpen}
+                    onClose={() => { setIsRepossessionEnquiryOpen(false); setActivityUpdate(prev => prev + 1); }}
+                    caseId={caseData.id}
                 />
             )}
 

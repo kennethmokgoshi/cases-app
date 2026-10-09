@@ -3,7 +3,8 @@ import fs from 'fs';
 import { prisma } from '@zenowethu/database';
 import { logger } from '@zenowethu/shared-lib';
 import { requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
-import { sendManualMessage, getTemplateByStatus, renderTemplate } from '@zenowethu/shared-lib';
+import { sendManualMessage, getTemplateByStatus, renderTemplate, formatCompanyWithNcrdc, getPlatformConfig } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import type { ActionContext, ActionHandler } from '../step-registry';
 import type { ActionType, StepExecutionResult } from '../types';
 
@@ -208,21 +209,26 @@ registerAction(
       );
       
       const clientName = `${caseWithDC.client.firstName} ${caseWithDC.client.lastName}`;
+      const company = await getCompanyProfile();
       const dcTemplate = getTemplateByStatus('REQUEST_FILE_DC');
       const templateVars = {
           dcName:      caseWithDC.debtCounsellorName || 'Debt Counsellor',
           clientName,
           idNumber:    caseWithDC.client.idNumber,
           fileNumber:  caseWithDC.fileNumber,
-          companyName: process.env.COMPANY_NAME || 'Zenowethu Debt Management',
-          phone:       process.env.COMPANY_PHONE || '081 747 7616',
+          companyName: company.tradingName,
+          companyShortName: company.shortName,
+          companyNcrdc: company.ncrdcNumber ?? '',
+          companyWithNcrdc: formatCompanyWithNcrdc(company),
+          phone:       company.phone,
+          platformName: getPlatformConfig().name,
       };
       const emailSubject = dcTemplate
           ? renderTemplate(dcTemplate.emailSubject, templateVars)
           : `File Transfer Request: ${clientName} (ID: ${caseWithDC.client.idNumber}) — Documents Required`;
       const emailBody = dcTemplate
           ? renderTemplate(dcTemplate.emailTemplate, templateVars)
-          : `Dear Debt Counsellor,\n\nWe request the consumer file for ${clientName} (ID: ${caseWithDC.client.idNumber}). We require the Form 17.W, Court Order (if applicable), and Paid Up Letters (if any).\n\nRegards,\nZenowethu Debt Management`;
+          : `Dear Debt Counsellor,\n\nWe request the consumer file for ${clientName} (ID: ${caseWithDC.client.idNumber}). We require the Form 17.W, Court Order (if applicable), and Paid Up Letters (if any).\n\nRegards,\n${company.tradingName}`;
 
       // CC the client so they know we acted on their behalf
       const ccEmails: string[] = caseWithDC.client.email ? [caseWithDC.client.email] : [];

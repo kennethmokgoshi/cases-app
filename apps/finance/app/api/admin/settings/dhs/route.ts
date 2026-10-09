@@ -43,7 +43,7 @@ export async function GET() {
 
         // If no settings in DB, return defaults from env
         if (Object.keys(settings).length === 0) {
-            settings.dhs_username = process.env.DHS_USERNAME || 'NCRDC3693';
+            settings.dhs_username = process.env.DHS_USERNAME || '';
             settings.dhs_password = '••••••••';
         }
 

@@ -1,7 +1,11 @@
-import { Phone, Mail, MessageCircle, MapPin, Clock } from "lucide-react";
+import { Phone, Mail, MessageCircle, MapPin } from "lucide-react";
 import { LandingNav } from "../../components/LandingNav";
+import { getSiteCompany } from "../../lib/company";
+import { addressLines, professionalsLabel, telHref, whatsAppHref } from "../../lib/company-format";
 
-export default function Contact() {
+export default async function Contact() {
+  const company = await getSiteCompany();
+
   return (
     <div className="min-h-screen bg-brand-deep pt-32 pb-24 px-6 text-white">
       <LandingNav />
@@ -22,13 +26,13 @@ export default function Contact() {
             <div className="w-20 h-20 bg-brand-cyan/10 rounded-3xl flex items-center justify-center text-brand-cyan mx-auto mb-10">
               <MessageCircle className="w-10 h-10" />
             </div>
-            <h3 className="text-2xl font-black mb-4">WhatsApp AI</h3>
-            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Get instant status updates and basic legal guidance 24/7 via our AI Assistant.</p>
+            <h3 className="text-2xl font-black mb-4">WhatsApp</h3>
+            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Send us a message on WhatsApp and a consultant will get back to you.</p>
             <a 
-              href="https://wa.me/27817477616" 
+              href={whatsAppHref(company)}
               className="inline-block w-full py-5 bg-brand-cyan text-brand-dark font-black rounded-2xl uppercase tracking-widest text-xs"
             >
-              Start AI Chat
+              Message Us
             </a>
           </div>
 
@@ -38,12 +42,12 @@ export default function Contact() {
               <Phone className="w-10 h-10" />
             </div>
             <h3 className="text-2xl font-black mb-4">Legal Support</h3>
-            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Speak directly with an NCR-registered consultant about your case.</p>
+            <p className="text-slate-500 mb-10 text-sm leading-relaxed">Speak directly with one of our {professionalsLabel(company)} about your case.</p>
             <a 
-              href="tel:+27817477616" 
+              href={telHref(company)}
               className="inline-block w-full py-5 bg-brand-gold text-white font-black rounded-2xl uppercase tracking-widest text-xs shadow-lg shadow-gold-500/20"
             >
-              081 747 7616
+              {company.phone}
             </a>
           </div>
 
@@ -52,15 +56,19 @@ export default function Contact() {
             <div className="w-20 h-20 bg-white/10 rounded-3xl flex items-center justify-center text-white mx-auto mb-10">
               <MapPin className="w-10 h-10" />
             </div>
-            <h3 className="text-2xl font-black mb-4">Johannesburg</h3>
+            <h3 className="text-2xl font-black mb-4">{company.city}</h3>
             <p className="text-slate-500 mb-10 text-sm leading-relaxed">
-              Main Office Suite <br />
-              Sandton Corporate Woods
+              {addressLines(company).map(line => (
+                <span key={line} className="block">{line}</span>
+              ))}
             </p>
-            <div className="text-brand-cyan font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2">
-              <Clock className="w-4 h-4" />
-              Response: &lt; 5 mins
-            </div>
+            <a
+              href={`mailto:${company.email}`}
+              className="text-brand-cyan font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 break-all"
+            >
+              <Mail className="w-4 h-4 shrink-0" />
+              {company.email}
+            </a>
           </div>
         </div>
       </div>

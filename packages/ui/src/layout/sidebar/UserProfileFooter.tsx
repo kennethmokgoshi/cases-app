@@ -51,7 +51,7 @@ export function UserProfileFooter({ session }: UserProfileFooterProps) {
                         {session?.user?.firstName} {session?.user?.lastName}
                     </p>
                     <p className="text-[10px] text-gray-500 truncate uppercase tracking-wider">
-                        {session?.user?.organization || 'Zenowethu'}
+                        {session?.user?.organization || process.env.NEXT_PUBLIC_PLATFORM_NAME || 'Zenowethu'}
                         {getRoleBadge(session)}
                     </p>
                 </div>

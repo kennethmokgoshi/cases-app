@@ -3,6 +3,8 @@ import { auth, logger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
 import { generateInvoicePdf, InvoiceLineItem } from '@/lib/invoice-pdf';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { companyProfileBankingFallback } from '@zenowethu/shared-lib/src/finance/banking-details';
 import path from 'path';
 import fs from 'fs/promises';
 
@@ -87,6 +89,8 @@ export async function POST(request: Request) {
     // Automatically trigger PDF generation
     try {
       const pdfBytes = await generateInvoicePdf({
+        company: await getCompanyProfile(),
+        bankingDetails: await companyProfileBankingFallback(),
         invoiceNumber: invoice.invoiceNumber,
         issuedAt: invoice.issuedAt,
         dueAt: invoice.dueAt,

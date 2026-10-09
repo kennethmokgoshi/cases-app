@@ -28,6 +28,7 @@ import { analyzeDocument } from '@zenowethu/shared-lib/src/openai';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('cron/dhs-recheck');
 
@@ -114,7 +115,7 @@ async function reanalyseIdDocument(caseId: string): Promise<{ idNumber: string |
 
 export async function POST(request: Request) {
     const cronSecret = request.headers.get('x-cron-secret');
-    const isValidCron = cronSecret && cronSecret === process.env.CRON_SECRET;
+    const isValidCron = isValidCronSecret(cronSecret);
 
     if (!isValidCron) {
         const session = await auth();

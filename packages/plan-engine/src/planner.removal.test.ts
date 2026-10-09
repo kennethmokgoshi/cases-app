@@ -15,6 +15,7 @@ vi.mock('@zenowethu/database', () => ({
 }));
 
 vi.mock('@zenowethu/shared-lib', () => ({
+    getPlatformConfig: () => ({ name: 'Zenowethu', url: 'https://cases.zenowethu.co.za', supportEmail: 'notifications@zenowethu.co.za' }),
     logger: {
         info: vi.fn(),
         error: vi.fn(),

@@ -4,6 +4,8 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import busboy from 'busboy';
 import { createLogger } from '@zenowethu/shared-lib';
+import { requireAdmin } from '@zenowethu/shared-lib/src/auth/route-guards';
+import { validateUpload } from '@zenowethu/shared-lib/src/documents/upload-validation';
 
 const logger = createLogger('api/admin/documents/upload');
 
@@ -54,6 +56,8 @@ async function parseForm(request: Request) {
 }
 
 export async function POST(request: Request) {
+    const guard = await requireAdmin();
+    if (guard.response) return guard.response;
     try {
         const { files } = await parseForm(request);
 
@@ -62,6 +66,10 @@ export async function POST(request: Request) {
         }
 
         const file = files[0];
+        const check = validateUpload(file.name, file.buffer);
+        if (!check.ok) {
+            return NextResponse.json({ error: check.error }, { status: 400 });
+        }
         const uploadsDir = join(process.cwd(), 'storage', 'uploads', 'resources');
 
         if (!existsSync(uploadsDir)) {

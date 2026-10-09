@@ -54,7 +54,12 @@ export interface CreditReportExtractedData {
     _occurrences?: { idNumber?: OccurrenceEntry[]; surname?: OccurrenceEntry[]; cellNumber?: OccurrenceEntry[] };
 }
 
-const OWN_NCRDC_NO = 'NCRDC3693';
+/** The firm running this platform — used to tell "our" debt review from another DC's. */
+export interface OwnFirm {
+    /** Own NCRDC number (null for non-DC firms — every registration is then "another DC"). */
+    ncrdcNo: string | null;
+    name: string;
+}
 const PRESCRIPTION_YEARS = 3;
 const JUDGMENT_PRESCRIPTION_YEARS = 30;
 const HIGH_DEBT_TO_INCOME_RATIO = 0.4;
@@ -80,7 +85,8 @@ function normalize(s: string | null | undefined): string {
     return (s ?? '').trim().toUpperCase();
 }
 
-export function buildCreditReportInsights(data: CreditReportExtractedData): InsightItem[] {
+export function buildCreditReportInsights(data: CreditReportExtractedData, own: OwnFirm): InsightItem[] {
+    const ownNcrdc = (own.ncrdcNo || '').trim().toUpperCase() || null;
     const insights: InsightItem[] = [];
     const adverseListings = data.adverseListings || [];
     const accounts = data.accounts || [];
@@ -245,17 +251,17 @@ export function buildCreditReportInsights(data: CreditReportExtractedData): Insi
     // ── Informational context ──
     const ncrdcNo = normalize(data.debtRestructuring?.ncrdcNo);
     if (ncrdcNo && ncrdcNo !== 'NA') {
-        if (ncrdcNo !== OWN_NCRDC_NO) {
+        if (!ownNcrdc || ncrdcNo !== ownNcrdc) {
             insights.push({
                 category: 'info',
                 title: 'Registered under a different debt counsellor',
-                detail: `This report shows an active debt review registration under ${data.debtRestructuring?.ncrdcNo}${data.debtRestructuring?.debtCounsellorName ? ` (${data.debtRestructuring.debtCounsellorName})` : ''} — not Zenowethu (${OWN_NCRDC_NO}). Verify with the consumer/DHS whether this needs to be transferred or updated before proceeding.`,
+                detail: `This report shows an active debt review registration under ${data.debtRestructuring?.ncrdcNo}${data.debtRestructuring?.debtCounsellorName ? ` (${data.debtRestructuring.debtCounsellorName})` : ''} — not ${own.name}${ownNcrdc ? ` (${ownNcrdc})` : ''}. Verify with the consumer/DHS whether this needs to be transferred or updated before proceeding.`,
             });
         } else {
             insights.push({
                 category: 'info',
-                title: 'Debt review registered with Zenowethu',
-                detail: `Registered under ${OWN_NCRDC_NO}${data.debtRestructuring?.debtReviewDate ? ` since ${data.debtRestructuring.debtReviewDate}` : ''}. Status: ${data.debtRestructuring?.dhsStatus || 'unspecified'}.`,
+                title: `Debt review registered with ${own.name}`,
+                detail: `Registered under ${ownNcrdc}${data.debtRestructuring?.debtReviewDate ? ` since ${data.debtRestructuring.debtReviewDate}` : ''}. Status: ${data.debtRestructuring?.dhsStatus || 'unspecified'}.`,
             });
         }
     }

@@ -9,10 +9,11 @@
  *   1. `bankAccount` relation (an org account — FNB/Capitec/etc.) if set
  *   2. `personalBankingUserId` relation (a staff member's own banking) if set
  *   3. The org's default `BankAccount` (isDefault: true)
- *   4. Hard-coded Zenowethu FNB details, if no default org account exists yet
+ *   4. The company profile's bank details, if no default org account exists yet
  */
 
 import { prisma } from '@zenowethu/database';
+import { getCompanyProfile } from '../company/company-profile-service';
 
 export interface ResolvedBankingDetails {
   bankName: string;
@@ -21,13 +22,21 @@ export interface ResolvedBankingDetails {
   branchCode?: string;
 }
 
-/** Last-resort fallback — kept in sync with the invoice-pdf.ts literal defaults. */
-export const ZENOWETHU_FNB_FALLBACK: ResolvedBankingDetails = {
-  bankName: 'FNB',
-  accountHolder: 'Zenowethu Trading Debt Management (PTY) LTD',
-  accountNumber: '62867268635',
-  branchCode: '250655',
-};
+/**
+ * Last-resort fallback: the bank details on the tenant's company profile
+ * (Zenowethu's FNB account until a profile is saved). Returns null when the
+ * profile has no bank block — callers must then refuse to render banking.
+ */
+export async function companyProfileBankingFallback(): Promise<ResolvedBankingDetails | null> {
+  const company = await getCompanyProfile();
+  if (!company.bank) return null;
+  return {
+    bankName: company.bank.bankName,
+    accountHolder: company.bank.accountHolder,
+    accountNumber: company.bank.accountNumber,
+    branchCode: company.bank.branchCode ?? undefined,
+  };
+}
 
 interface BankAccountLike {
   bankName: string;
@@ -53,7 +62,7 @@ function fromBankAccount(account: BankAccountLike): ResolvedBankingDetails {
 export async function resolveInvoiceBankingDetails(invoice: {
   bankAccount?: BankAccountLike | null;
   personalBankingUserId?: string | null;
-}): Promise<ResolvedBankingDetails> {
+}): Promise<ResolvedBankingDetails | null> {
   if (invoice.bankAccount) {
     return fromBankAccount(invoice.bankAccount);
   }
@@ -79,7 +88,7 @@ export async function resolveInvoiceBankingDetails(invoice: {
     return fromBankAccount(defaultBank);
   }
 
-  return ZENOWETHU_FNB_FALLBACK;
+  return companyProfileBankingFallback();
 }
 
 /**

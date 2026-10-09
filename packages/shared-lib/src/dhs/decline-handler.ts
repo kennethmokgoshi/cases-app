@@ -16,6 +16,8 @@ import { prisma } from '@zenowethu/database';
 import { sendManualMessage } from '../notifications/service';
 import { addWorkingDays } from '../statuses/workingDays';
 import { logger } from '../logger';
+import { getCompanyProfile } from '../company/company-profile-service';
+import { type CompanyProfile, formatSignatureBlock } from '../company/profile';
 import { getAutomationUserId } from '../automation/automation-user';
 import { promoteDcEmail, getBestDcEmail } from '../dc/email-priority';
 import { recordDhsOutcome } from '../dc/outcome-events';
@@ -378,6 +380,7 @@ export async function handleDHSDecline(params: {
      */
     forceResend?: boolean;
 }): Promise<DeclineHandlerResult> {
+    const company = await getCompanyProfile();
     // When not triggered by a staff member, attribute actions to the
     // Kenny Mokgoshi system automation user so updates show a name in the UI
     const { caseId, declineReason, forceResend } = params;
@@ -636,10 +639,11 @@ export async function handleDHSDecline(params: {
                     ? [...docAttachments, ncrCertUrl]
                     : docAttachments;
                 const ncrLine = ncrCertUrl
-                    ? '\n• NCR Certificate of Registration (NCRDC3693)'
+                    ? `\n• NCR Certificate of Registration (${company.ncrdcNumber ?? ''})`
                     : '';
                 const subject = `Re: DHS Transfer Request – ${clientName} (ID: ${idNumber})`;
                 const body = buildSendDocsEmail({
+                    company,
                     clientName,
                     idNumber,
                     fileNumber,
@@ -692,6 +696,7 @@ export async function handleDHSDecline(params: {
                             'EMAIL',
                             caseData.client.email,
                             buildSendDocsClientEmail({
+                    company,
                                 clientFirstName,
                                 dcName,
                                 dcFirmName,
@@ -739,6 +744,7 @@ export async function handleDHSDecline(params: {
 
             const dcContactLine = dcEmail ? ` at ${dcEmail}` : '';
             const emailBody = buildConsumerConsentEmail({
+                    company,
                 clientFirstName,
                 dcName,
                 dcFirmName,
@@ -798,6 +804,7 @@ export async function handleDHSDecline(params: {
             }
 
             const feesEmailBody = buildOutstandingFeesEmail({
+                    company,
                 clientFirstName,
                 dcName,
                 dcFirmName,
@@ -812,6 +819,7 @@ export async function handleDHSDecline(params: {
             // If we have a DC email, request the invoice from them and CC the client
             if (dcEmail) {
                 const dcInvoiceEmailBody = buildRequestInvoiceEmail({
+                    company,
                     clientName,
                     idNumber,
                     fileNumber,
@@ -906,6 +914,7 @@ export async function handleDHSDecline(params: {
                     const r = await sendManualMessage(
                         caseId, 'EMAIL', caseData.client.email,
                         buildAttorneyClientEmail({
+                    company,
                             clientFirstName,
                             dcName,
                             dcFirmName,
@@ -928,6 +937,7 @@ export async function handleDHSDecline(params: {
             } else {
                 // Email attorney — CC client
                 const body = buildAttorneyEmail({
+                    company,
                     clientName,
                     idNumber,
                     fileNumber,
@@ -954,6 +964,7 @@ export async function handleDHSDecline(params: {
                         const r = await sendManualMessage(
                             caseId, 'EMAIL', caseData.client.email,
                             buildAttorneyClientEmail({
+                    company,
                                 clientFirstName,
                                 dcName,
                                 dcFirmName,
@@ -1000,6 +1011,7 @@ export async function handleDHSDecline(params: {
                 const r = await sendManualMessage(
                     caseId, 'EMAIL', caseData.client.email,
                     buildResubmitClientEmail({
+                    company,
                         clientFirstName,
                         dcName,
                         dcFirmName,
@@ -1129,14 +1141,10 @@ function dcDisplayPhrase(dcName: string, dcFirmName: string | null): string {
 
 // ─── Email Templates ──────────────────────────────────────────────────────────
 
-const SIGNATURE = `Zenowethu Debt Management
-NCRDC3693
-Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
-Tel: +27 81 747 7616 | Cell: 082 363 8207
-notifications@zenowethu.co.za | www.zenowethu.co.za
-Member of DCASA`;
+const buildSignature = (company: CompanyProfile): string => formatSignatureBlock(company);
 
 function buildSendDocsEmail(p: {
+    company: CompanyProfile;
     clientName: string;
     idNumber: string;
     fileNumber: string;
@@ -1167,7 +1175,7 @@ Please note: our client (${p.clientName}) has been copied on this email for tran
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildConsumerDeclineStatusBlock(p: {
@@ -1187,6 +1195,7 @@ ${p.solutionSummary}`;
 }
 
 function buildSendDocsClientEmail(p: {
+    company: CompanyProfile;
     clientFirstName: string;
     dcName: string;
     dcFirmName: string | null;
@@ -1198,7 +1207,7 @@ function buildSendDocsClientEmail(p: {
 }): string {
     return `Dear ${p.clientFirstName},
 
-We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
+We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to ${p.company.tradingName}.
 
 Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} declined the DHS transfer request.
 
@@ -1213,7 +1222,7 @@ We will monitor the response and follow up until the transfer can proceed. You d
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildSendDocsSms(p: {
@@ -1225,6 +1234,7 @@ function buildSendDocsSms(p: {
 }
 
 function buildConsumerConsentEmail(p: {
+    company: CompanyProfile;
     clientFirstName: string;
     dcName: string;
     dcFirmName: string | null;
@@ -1237,7 +1247,7 @@ function buildConsumerConsentEmail(p: {
 
 We trust this message finds you well.
 
-We are reaching out regarding the transfer of your debt review file to Zenowethu Debt Management.
+We are reaching out regarding the transfer of your debt review file to ${p.company.tradingName}.
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request.
 
@@ -1251,7 +1261,7 @@ ${buildConsumerDeclineStatusBlock({
 ─────────────────────────────────────────
 ACTION REQUIRED
 ─────────────────────────────────────────
-Please contact ${p.dcName}${p.dcContactLine} as soon as possible and confirm that you consent to your file being transferred to Zenowethu Debt Management.
+Please contact ${p.dcName}${p.dcContactLine} as soon as possible and confirm that you consent to your file being transferred to ${p.company.tradingName}.
 
 Once you have given your consent, please reply to this email or call us so we can resubmit the transfer request on your behalf.
 
@@ -1261,7 +1271,7 @@ Thank you for your prompt attention to this matter.
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildConsentSms(p: {
@@ -1273,6 +1283,7 @@ function buildConsentSms(p: {
 }
 
 function buildOutstandingFeesEmail(p: {
+    company: CompanyProfile;
     clientFirstName: string;
     dcName: string;
     dcFirmName: string | null;
@@ -1285,7 +1296,7 @@ function buildOutstandingFeesEmail(p: {
 
 We trust this message finds you well.
 
-We are writing regarding your debt review file (File No: ${p.fileNumber}) and the transfer of your case to Zenowethu Debt Management.
+We are writing regarding your debt review file (File No: ${p.fileNumber}) and the transfer of your case to ${p.company.tradingName}.
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request.
 
@@ -1307,7 +1318,7 @@ We apologise for any inconvenience and thank you for your patience.
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildFeesSms(p: {
@@ -1318,6 +1329,7 @@ function buildFeesSms(p: {
 }
 
 function buildRequestInvoiceEmail(p: {
+    company: CompanyProfile;
     clientName: string;
     idNumber: string;
     fileNumber: string;
@@ -1348,10 +1360,11 @@ We appreciate your cooperation in resolving this matter.
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildAttorneyEmail(p: {
+    company: CompanyProfile;
     clientName: string;
     idNumber: string;
     fileNumber: string;
@@ -1380,10 +1393,11 @@ We look forward to your response.
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildAttorneyClientEmail(p: {
+    company: CompanyProfile;
     clientFirstName: string;
     dcName: string;
     dcFirmName: string | null;
@@ -1398,7 +1412,7 @@ function buildAttorneyClientEmail(p: {
         : `Attorney involvement is required but we were unable to find their contact details in the DHS response. Our team will contact them manually and keep you updated.`;
     return `Dear ${p.clientFirstName},
 
-We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
+We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to ${p.company.tradingName}.
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has declined this request and indicated that a legal matter is involved.
 
@@ -1420,7 +1434,7 @@ You do not need to take any action at this time. We will keep you informed as th
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildAttorneySms(p: { clientFirstName: string }): string {
@@ -1428,6 +1442,7 @@ function buildAttorneySms(p: { clientFirstName: string }): string {
 }
 
 function buildResubmitClientEmail(p: {
+    company: CompanyProfile;
     clientFirstName: string;
     dcName: string;
     dcFirmName: string | null;
@@ -1438,7 +1453,7 @@ function buildResubmitClientEmail(p: {
 }): string {
     return `Dear ${p.clientFirstName},
 
-We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to Zenowethu Debt Management.
+We are writing with an update on the transfer of your debt review file (File No: ${p.fileNumber}) to ${p.company.tradingName}.
 
 We submitted a transfer request on your behalf via the NCR Debt Help System (DHS). Your current Debt Counsellor ${dcDisplayPhrase(p.dcName, p.dcFirmName)} has indicated that the request cannot be processed immediately.
 
@@ -1454,13 +1469,13 @@ WHAT HAPPENS NEXT
 ─────────────────────────────────────────
 This is a temporary delay. We will monitor the DHS and resubmit your transfer request within the next 5–7 working days. You do not need to take any action at this time.
 
-If you have any concerns or questions in the meantime, please do not hesitate to contact us on 081 747 7616 or reply to this email.
+If you have any concerns or questions in the meantime, please do not hesitate to contact us on ${p.company.phone} or reply to this email.
 
 Thank you for your patience — we are working on your behalf.
 
 Yours sincerely,
 
-${SIGNATURE}`;
+${buildSignature(p.company)}`;
 }
 
 function buildResubmitSms(p: { clientFirstName: string }): string {
@@ -1472,7 +1487,7 @@ function buildResubmitSms(p: { clientFirstName: string }): string {
 // EXACT same copy that handleDHSDecline() sends — a single source of truth for
 // every email/SMS body. Do not duplicate these templates elsewhere.
 export {
-    SIGNATURE,
+    buildSignature,
     buildSendDocsEmail,
     buildSendDocsClientEmail,
     buildSendDocsSms,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { RetentionService } from '@zenowethu/shared-lib/src/integrations/retention-service';
 import { createLogger } from '@zenowethu/shared-lib';
+import { isValidCronBearer } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('api/admin/retention/letsatsi-sync');
 
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
         // Only allow admins or internal cron triggers (if we add a secret key)
         const isAdmin = session?.user?.role === 'ADMIN' || session?.user?.isAdmin;
         const authHeader = request.headers.get('authorization');
-        const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+        const isCron = isValidCronBearer(authHeader);
 
         if (!isAdmin && !isCron) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

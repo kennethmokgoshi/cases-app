@@ -12,6 +12,8 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
 import { addWorkingDays } from '../statuses/workingDays';
+import { getCompanyProfile } from '../company/company-profile-service';
+import { type CompanyProfile, formatCompanyWithNcrdc } from '../company/profile';
 
 const logger = createLogger('dhs/consent-service');
 
@@ -35,17 +37,31 @@ const CONSENT_ADVANCE_FROM_STATUSES = new Set([
     'ZDM_CLIENT',
 ]);
 
-/** The exact wording the consumer agrees to — snapshotted onto each consent record. */
-export const DRR_CONSENT_TEXT =
-    'I confirm that I am the consumer named above and I acknowledge that my debt review file ' +
-    'has been transferred to Zenowethu Debt Management (NCRDC3693). I confirm that Zenowethu ' +
-    'Debt Management is the debt counsellor authorised to work on my file from this point ' +
-    'and to continue with the debt review removal process. I authorise Zenowethu to act on ' +
-    'my behalf, manage and communicate about my file, and communicate with the relevant ' +
-    'credit bureaus, the National Credit Regulator, and any relevant debt counsellor where ' +
-    'needed. I understand that this approval creates a clear record that Zenowethu Debt ' +
-    'Management is handling my file. My personal information will be handled in accordance ' +
-    'with the Protection of Personal Information Act (POPIA).';
+/**
+ * The exact wording the consumer agrees to — snapshotted onto each consent
+ * record so later profile edits never change what was actually agreed.
+ */
+export function buildDrrConsentText(company: CompanyProfile): string {
+    const firm = formatCompanyWithNcrdc(company);
+    const name = company.tradingName;
+    const short = company.shortName;
+    return (
+        'I confirm that I am the consumer named above and I acknowledge that my debt review file ' +
+        `has been transferred to ${firm}. I confirm that ${name} ` +
+        'is the debt counsellor authorised to work on my file from this point ' +
+        `and to continue with the debt review removal process. I authorise ${short} to act on ` +
+        'my behalf, manage and communicate about my file, and communicate with the relevant ' +
+        'credit bureaus, the National Credit Regulator, and any relevant debt counsellor where ' +
+        `needed. I understand that this approval creates a clear record that ${name} ` +
+        'is handling my file. My personal information will be handled in accordance ' +
+        'with the Protection of Personal Information Act (POPIA).'
+    );
+}
+
+/** Current consent wording for the active tenant. */
+export async function getDrrConsentText(): Promise<string> {
+    return buildDrrConsentText(await getCompanyProfile());
+}
 
 export function getConsentBaseUrl(): string {
     return (
@@ -108,7 +124,7 @@ export async function createDrrConsentRequest(params: {
 
     const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
     const created = await prisma.debtReviewRemovalConsent.create({
-        data: { caseId, clientId: clientId ?? null, consumerId: consumerId ?? null, channel, expiresAt, consentText: DRR_CONSENT_TEXT },
+        data: { caseId, clientId: clientId ?? null, consumerId: consumerId ?? null, channel, expiresAt, consentText: await getDrrConsentText() },
     });
     logger.info(`[DRR_CONSENT] Created consent request for case ${caseId} (token ${created.token.slice(0, 8)}…)`);
     return { id: created.id, token: created.token, link: buildConsentLink(created.token), expiresAt };
@@ -158,7 +174,7 @@ type ConsentRecordForView = {
     client?: { firstName?: string | null; lastName?: string | null; idNumber?: string | null } | null;
 };
 
-function buildConsentView(c: ConsentRecordForView): ConsentView {
+function buildConsentView(c: ConsentRecordForView, currentConsentText: string): ConsentView {
     const consumerDisplayName = formatConsentConsumerDisplayName(c.client);
     return {
         token: c.token,
@@ -167,7 +183,7 @@ function buildConsentView(c: ConsentRecordForView): ConsentView {
         consumerFirstName: consumerDisplayName,
         consumerDisplayName,
         fileNumber: c.case?.fileNumber ?? null,
-        consentText: c.status === 'PENDING' ? DRR_CONSENT_TEXT : c.consentText ?? DRR_CONSENT_TEXT,
+        consentText: c.status === 'PENDING' ? currentConsentText : c.consentText ?? currentConsentText,
         consentedAt: c.consentedAt,
     };
 }
@@ -188,7 +204,7 @@ export async function getDrrConsentByToken(token: string): Promise<ConsentView |
         include: { case: { select: { fileNumber: true } }, client: { select: { firstName: true, lastName: true } } },
     });
     if (!c) return null;
-    return buildConsentView(c);
+    return buildConsentView(c, await getDrrConsentText());
 }
 
 /** Verify that a public token and typed SA ID number belong to the same consumer. */
@@ -215,7 +231,7 @@ export async function verifyDrrConsentIdentity(params: {
         return { ok: false, error: 'This consent link has expired. Please contact us for a new link.', status: 410 };
     }
 
-    return { ok: true, view: buildConsentView(c) };
+    return { ok: true, view: buildConsentView(c, await getDrrConsentText()) };
 }
 
 export interface RecordConsentResult {
@@ -285,7 +301,7 @@ export async function recordDrrConsent(params: {
         where: { id: c.id },
         data: {
             status: 'CONSENTED',
-            consentText: DRR_CONSENT_TEXT,
+            consentText: await getDrrConsentText(),
             consentType: 'OWNER',
             consentedByRole: 'CONSUMER',
             consentedById: consumerId ?? c.clientId ?? null,
@@ -338,7 +354,7 @@ export async function recordDrrProxyConsent(params: RecordProxyConsentParams): P
                 clientId: existingCase.clientId ?? null,
                 channel: userRole,
                 expiresAt,
-                consentText: DRR_CONSENT_TEXT,
+                consentText: await getDrrConsentText(),
             },
         });
     }

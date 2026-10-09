@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
+vi.mock('@zenowethu/shared-lib/src/company/company-profile-service', async () => {
+    const { ZENOWETHU_COMPANY_PROFILE } = await import('@zenowethu/shared-lib/src/company/profile');
+    return { getCompanyProfile: vi.fn().mockResolvedValue(ZENOWETHU_COMPANY_PROFILE) };
+});
+
 vi.mock('@zenowethu/shared-lib', () => ({
     createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
 }));
@@ -46,7 +51,12 @@ describe('GET /api/consent/debt-review-removal/[token]', () => {
         const json = await res.json();
 
         expect(res.status).toBe(200);
-        expect(json).toEqual({ requiresVerification: true, token: 'tok123' });
+        // The firm block is public identity (name/NCRDC/contact), never consumer data.
+        expect(json).toEqual({
+            requiresVerification: true,
+            token: 'tok123',
+            firm: { name: 'Zenowethu Debt Management', shortName: 'Zenowethu', ncrdc: 'NCRDC3693', phone: '081 747 7616', email: 'notifications@zenowethu.co.za' },
+        });
         expect(json.consumerDisplayName).toBeUndefined();
         expect(json.fileNumber).toBeUndefined();
         expect(json.consentText).toBeUndefined();

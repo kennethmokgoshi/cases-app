@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { NCTService } from '@zenowethu/shared-lib/src/nct';
 import { createLogger } from '@zenowethu/shared-lib';
+import { requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 const logger = createLogger('api/nct/status');
 
 
 export async function GET(request: Request) {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
     const { searchParams } = new URL(request.url);
     const identifier = searchParams.get('identifier') || searchParams.get('identityNo') || searchParams.get('idNumber') || searchParams.get('caseNumber');
 

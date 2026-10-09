@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildConsentReminderEmail, CONSENT_REMINDER_SUBJECT } from './consent-reminder-email';
+import { ZENOWETHU_COMPANY_PROFILE } from '../company/profile';
 
 describe('CONSENT_REMINDER_SUBJECT', () => {
     it('is a reminder subject, not the acceptance "Good News" subject', () => {
@@ -14,6 +15,7 @@ describe('CONSENT_REMINDER_SUBJECT', () => {
 
 describe('buildConsentReminderEmail', () => {
     const base = {
+        company: ZENOWETHU_COMPANY_PROFILE,
         clientFirstName: 'Letlhogonolo',
         fileNumber: 'ZDM-2026-1022-2T7',
         consentLink: 'https://crediva.zenowethu.co.za/consent/tok123',

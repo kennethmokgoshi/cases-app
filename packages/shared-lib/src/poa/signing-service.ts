@@ -13,6 +13,8 @@
 
 import { prisma } from '@zenowethu/database';
 import { generateStandardPoa } from './poa-generator';
+import { getCompanyProfile } from '../company/company-profile-service';
+import { formatCompanyAddress } from '../company/profile';
 import { createLogger } from '../logger';
 import { writeFile, mkdir } from 'fs/promises';
 import { join, resolve } from 'path';
@@ -147,7 +149,7 @@ export async function resolveSigningToken(
       where: { token },
       data:  { status: 'EXPIRED' },
     });
-    return { error: 'This signing link has expired. Please ask Zenowethu to resend the POA.', status: 410 };
+    return { error: `This signing link has expired. Please ask ${(await getCompanyProfile()).shortName} to resend the POA.`, status: 410 };
   }
 
   if (record.status === 'SIGNED')     return { error: 'This POA has already been signed.', status: 409 };
@@ -198,9 +200,11 @@ export async function completePoaSigning(
   const email       = record.client?.email       ?? record.consumer?.email       ?? '';
 
   let pdfBuffer: Buffer;
+  const company = await getCompanyProfile();
 
   if (record.poaType === 'STANDARD') {
     pdfBuffer = await generateStandardPoa({
+      company,
       fullName:       `${firstName} ${lastName}`,
       idNumber:       cleanId,
       dateOfBirth:    cleanId ? idToDateOfBirth(cleanId) : '',
@@ -219,12 +223,13 @@ export async function completePoaSigning(
     // Fall back to unsigned generation; staff still see the request as SIGNED.
     const { generateWesbankPoa } = await import('./poa-generator');
     pdfBuffer = await generateWesbankPoa({
+      company,
       clientFullName: `${firstName} ${lastName}`,
       clientIdNumber: cleanId,
       clientAddress:  address,
-      agentFullName:  'Aaron Nzotho',
-      agentIdNumber:  '7809065687086',
-      agentAddress:   'Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0190',
+      agentFullName:  company.directorName ?? company.debtCounsellorName ?? company.tradingName,
+      agentIdNumber:  company.directorIdNumber ?? '',
+      agentAddress:   formatCompanyAddress(company),
       signedAtCity:   'Pretoria',
       signedDate:     today,
     });

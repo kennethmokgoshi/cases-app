@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth } from '@zenowethu/shared-lib';
 import { generateInvoicePdf, InvoiceData } from '@/lib/invoice-pdf';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { companyProfileBankingFallback } from '@zenowethu/shared-lib/src/finance/banking-details';
 import { parsePartnerUsageReport } from '@/lib/partner-usage-parser';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { randomBytes } from 'crypto';
@@ -54,13 +56,16 @@ export async function POST(
         const dueAt = new Date();
         dueAt.setDate(dueAt.getDate() + 14); // Net 14
 
+        const company = await getCompanyProfile();
         const invoiceData: InvoiceData = {
+            company,
+            bankingDetails: await companyProfileBankingFallback(),
             invoiceNumber,
             issuedAt,
             dueAt,
             status: 'DRAFT',
             clientName: project.name,
-            clientEmail: project.billingEmail || 'accounts@zenowethu.co.za',
+            clientEmail: project.billingEmail || company.email,
             lineItems,
             subtotal,
             vatRate,

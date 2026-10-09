@@ -13,6 +13,11 @@ vi.mock('@zenowethu/database', () => ({
     },
 }));
 
+vi.mock('../company/company-profile-service', async () => {
+    const { ZENOWETHU_COMPANY_PROFILE } = await import('../company/profile');
+    return { getCompanyProfile: vi.fn().mockResolvedValue(ZENOWETHU_COMPANY_PROFILE) };
+});
+
 vi.mock('../automation/automation-user', () => ({
     getAutomationUserId: vi.fn().mockResolvedValue('auto-user'),
 }));
@@ -27,11 +32,12 @@ import {
     getDrrConsentVerificationState,
     recordDrrConsent,
     recordDrrProxyConsent,
-    DRR_CONSENT_TEXT,
+    buildDrrConsentText,
     DRR_CONSENT_VERIFY_ERROR,
     verifyDrrConsentIdentity,
     type RecordConsentResult,
 } from './consent-service';
+import { ZENOWETHU_COMPANY_PROFILE } from '../company/profile';
 
 type ConsentFailure = RecordConsentResult & { status: number };
 
@@ -64,10 +70,18 @@ describe('buildCredoConsentLink', () => {
     });
 });
 
+const DRR_CONSENT_TEXT = buildDrrConsentText(ZENOWETHU_COMPANY_PROFILE);
+
 describe('createDrrConsentRequest', () => {
-    it('makes the Zenowethu file-handling acknowledgement explicit', () => {
+    it('makes the file-handling acknowledgement explicit, naming the tenant firm', () => {
+        expect(DRR_CONSENT_TEXT).toContain('transferred to Zenowethu Debt Management (NCRDC3693)');
         expect(DRR_CONSENT_TEXT).toContain('Zenowethu Debt Management is the debt counsellor authorised to work on my file');
         expect(DRR_CONSENT_TEXT).toContain('creates a clear record that Zenowethu Debt Management is handling my file');
+
+        const other = buildDrrConsentText({ ...ZENOWETHU_COMPANY_PROFILE, tradingName: 'Mokgoshi Empire', shortName: 'Mokgoshi', ncrdcNumber: null });
+        expect(other).toContain('transferred to Mokgoshi Empire. I confirm that Mokgoshi Empire');
+        expect(other).toContain('I authorise Mokgoshi to act on');
+        expect(other).not.toContain('Zenowethu');
     });
 
     it('reuses an existing un-expired PENDING request', async () => {

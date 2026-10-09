@@ -26,6 +26,11 @@ vi.mock('@zenowethu/shared-lib/src/finance/r350-admin-fee-invoice', () => ({
   createR350AdminFeeInvoice: vi.fn(),
 }));
 
+vi.mock('@zenowethu/shared-lib/src/company/company-profile-service', async () => {
+  const { ZENOWETHU_COMPANY_PROFILE } = await import('@zenowethu/shared-lib/src/company/profile');
+  return { getCompanyProfile: vi.fn().mockResolvedValue(ZENOWETHU_COMPANY_PROFILE) };
+});
+
 vi.mock('@/lib/invoice-pdf', () => ({
   generateInvoicePdf: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
 }));

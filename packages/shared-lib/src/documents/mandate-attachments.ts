@@ -29,6 +29,7 @@
 
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
+import { appBaseUrl, contentTypeFor, readOwnUpload } from './upload-paths';
 
 const logger = createLogger('documents/mandate-attachments');
 
@@ -69,11 +70,7 @@ export interface MandateAttachments {
  * absolute URL the sending provider can fetch.
  */
 export function mandateBaseUrl(): string {
-    return (
-        process.env.NEXT_PUBLIC_APP_URL ||
-        process.env.APP_URL ||
-        'https://cases.zenowethu.co.za'
-    ).replace(/\/$/, '');
+    return appBaseUrl();
 }
 
 function toAbsoluteUrl(fileUrl: string, baseUrl: string): string {
@@ -243,4 +240,54 @@ export async function resolveMandateAttachments(
             summary: 'POA/ID lookup failed — nothing attached',
         };
     }
+}
+
+export interface MandateFile {
+    filename: string;
+    content: Buffer;
+    contentType: string;
+}
+
+export interface MandateFiles {
+    files: MandateFile[];
+    /** How the attached files should be named in the email body, or null when none. */
+    label: string | null;
+    /** One line for the case timeline / API response — honest about what is attached. */
+    summary: string;
+    missing: MandateKind[];
+}
+
+/**
+ * The case's signed POA and ID copy as file bytes, for senders that attach
+ * buffers rather than URLs (e.g. the DC fee invoice email). Files are read from
+ * this app's uploads on disk. A document that is on the case but whose file
+ * cannot be read counts as missing, so the email never claims it.
+ */
+export async function loadMandateFiles(caseId: string): Promise<MandateFiles> {
+    const mandate = await resolveMandateAttachments(caseId);
+    const files: MandateFile[] = [];
+    const loaded: { poa: MandateDocument | null; id: MandateDocument | null } = { poa: null, id: null };
+
+    for (const kind of ['poa', 'id'] as const) {
+        const doc = mandate[kind];
+        if (!doc) continue;
+        const content = await readOwnUpload(doc.fileUrl).catch(() => null);
+        if (!content) {
+            logger.warn({ caseId, fileUrl: doc.fileUrl }, `[Mandate] ${kind.toUpperCase()} file could not be read from disk`);
+            continue;
+        }
+        files.push({ filename: doc.fileName, content, contentType: contentTypeFor(doc.fileName) });
+        loaded[kind] = doc;
+    }
+
+    const missing: MandateKind[] = [];
+    if (!loaded.poa) missing.push('POA');
+    if (!loaded.id) missing.push('ID');
+
+    return {
+        files,
+        label: mandateAttachedLabel(loaded),
+        summary: describeMandateAttachments(loaded.poa, loaded.id, missing),
+        missing,
+    };
 }

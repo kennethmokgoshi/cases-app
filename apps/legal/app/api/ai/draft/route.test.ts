@@ -16,6 +16,11 @@ vi.mock('@zenowethu/shared-lib', () => ({
     sendManualMessage: vi.fn(),
 }));
 
+vi.mock('@zenowethu/shared-lib/src/company/company-profile-service', async () => {
+    const { ZENOWETHU_COMPANY_PROFILE } = await import('@zenowethu/shared-lib/src/company/profile');
+    return { getCompanyProfile: vi.fn().mockResolvedValue(ZENOWETHU_COMPANY_PROFILE) };
+});
+
 import type { NextRequest } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, draftLegalDocument, getAutonomyDecision, sendManualMessage } from '@zenowethu/shared-lib';

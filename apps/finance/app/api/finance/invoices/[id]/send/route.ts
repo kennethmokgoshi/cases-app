@@ -1,9 +1,11 @@
 import { logger, renderBrandedEmail } from '@zenowethu/shared-lib';
+import { type CompanyProfile } from '@zenowethu/shared-lib/src/company/profile';
 import { auth } from '@zenowethu/shared-lib'
 import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details'
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { z } from 'zod'
 import { sendEmail } from '@/lib/email'
 
@@ -14,7 +16,8 @@ const SendInvoiceSchema = z.object({
 
 function buildEmailHtml(
   invoice: { invoiceNumber: string; total: unknown; type?: string; publicToken?: string | null },
-  message?: string,
+  message: string | undefined,
+  company: CompanyProfile,
 ): string {
   const totalFormatted = new Intl.NumberFormat('en-ZA', {
     style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(Number(invoice.total))
@@ -35,13 +38,14 @@ function buildEmailHtml(
     </div>
     
     <p style="margin-top: 20px; font-size: 14px; color: #666;">
-        This is an automated financial notification from Zenowethu Debt Management.
+        This is an automated financial notification from ${company.tradingName}.
     </p>
   `;
 
   return renderBrandedEmail(content, {
       title: `${docLabel} ${invoice.invoiceNumber}`,
-      previewText: `Your ${docLabel.toLowerCase()} from Zenowethu is ready for review.`,
+      previewText: `Your ${docLabel.toLowerCase()} from ${company.shortName} is ready for review.`,
+    company,
       button: viewLink ? {
           text: `View & Download ${docLabel} Online`,
           url: viewLink
@@ -93,6 +97,7 @@ export async function POST(
       ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
       : undefined
 
+    const company = await getCompanyProfile()
     const bankingDetails = await resolveInvoiceBankingDetails(invoice)
 
     const invoiceData: InvoiceData = {
@@ -115,6 +120,7 @@ export async function POST(
       reference:           invoice.reference ?? undefined,
       createdByName,
       bankingDetails,
+      company,
     }
 
     const pdfBytes = await generateInvoicePdf(invoiceData)
@@ -123,10 +129,11 @@ export async function POST(
       to:        input.to,
       fromName:  session.user.name || undefined,
       fromEmail: session.user.email || undefined,
-      subject:   input.subject ?? `${invoice.type === 'QUOTE' ? 'Quotation' : 'Invoice'} ${invoice.invoiceNumber} from Zenowethu`,
+      subject:   input.subject ?? `${invoice.type === 'QUOTE' ? 'Quotation' : 'Invoice'} ${invoice.invoiceNumber} from ${company.shortName}`,
       html:      buildEmailHtml(
         { invoiceNumber: invoice.invoiceNumber, total: invoice.total, type: invoice.type, publicToken: invoice.publicToken },
         input.message,
+        company,
       ),
       attachments: [{
         filename:    `${invoice.invoiceNumber}.pdf`,

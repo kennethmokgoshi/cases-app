@@ -3,7 +3,7 @@
  *
  * Sent to the consumer when a "check request status" run finds their debt review
  * file transfer has been ACCEPTED — i.e. the file has moved from their previous
- * debt counsellor on record to Zenowethu Debt Management (NCRDC3693). It confirms
+ * debt counsellor on record to the tenant firm (named from its company profile). It confirms
  * the transfer and asks the consumer to consent before we begin the debt review
  * flag removal.
  *
@@ -17,17 +17,15 @@
  * not cite any NCA section we cannot stand behind.
  */
 
+import { type CompanyProfile, formatSignatureBlock } from '../company/profile';
+
 /**
  * Signature for the accepted-transfer email. Intentionally omits the personal
  * counsellor name (per request) — it leads with the NCRDC registration number.
- * Scoped to this email; other emails keep the shared `SIGNATURE`.
  */
-export const ACCEPTED_SIGNATURE = `Zenowethu Debt Management
-NCRDC3693
-Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
-Tel: +27 81 747 7616 | Cell: 082 363 8207
-notifications@zenowethu.co.za | www.zenowethu.co.za
-Member of DCASA`;
+export function buildAcceptedSignature(company: CompanyProfile): string {
+    return formatSignatureBlock(company);
+}
 
 /**
  * Build a human-readable label for the previous debt counsellor the file is being
@@ -74,6 +72,8 @@ After verification you will see your consent page. Please read it and press "I A
 }
 
 export function buildAcceptedViaDhsEmail(p: {
+    /** The firm the file was transferred TO — resolve via getCompanyProfile(). */
+    company: CompanyProfile;
     clientFirstName: string;
     fileNumber: string;
     /** Link the consumer clicks to consent to debt review removal. */
@@ -90,7 +90,7 @@ export function buildAcceptedViaDhsEmail(p: {
 
     return `Dear ${firstName},
 
-We are pleased to let you know that your request to transfer your debt review file from ${fromDc} to Zenowethu Debt Management has been accepted. Your file is now formally with us, and from this point forward we will be acting as your debt counsellor.
+We are pleased to let you know that your request to transfer your debt review file from ${fromDc} to ${p.company.tradingName} has been accepted. Your file is now formally with us, and from this point forward we will be acting as your debt counsellor.
 
   File Number:  ${p.fileNumber}
   Status:       Transfer accepted
@@ -118,13 +118,13 @@ IF WE DO NOT HEAR FROM YOU
 ─────────────────────────────────────────
 Please understand, kindly, that until your consent is received we are unable to begin. Without it your file will simply be parked and cannot be attended to, which would delay the removal of the debt review flag. We would not want anything to hold back your progress, so we gently encourage you to confirm your consent at your earliest convenience.
 
-If you have any questions in the meantime, please reply to this email or contact us on 081 747 7616. We are here to help.
+If you have any questions in the meantime, please reply to this email or contact us on ${p.company.phone}. We are here to help.
 
-Thank you for choosing Zenowethu Debt Management — we look forward to assisting you.
+Thank you for choosing ${p.company.tradingName} — we look forward to assisting you.
 
 Yours sincerely,
 
-${ACCEPTED_SIGNATURE}`;
+${buildAcceptedSignature(p.company)}`;
 }
 
 export const ACCEPTED_VIA_DHS_SUBJECT = (fileNumber: string): string =>

@@ -1,14 +1,23 @@
 import Link from "next/link";
+import { getSiteCompany } from "../lib/company";
+import { monogram } from "../lib/company-format";
 
-export function LandingNav() {
+export async function LandingNav() {
+  const company = await getSiteCompany();
+
   return (
     <nav className="fixed top-0 w-full z-50 glass border-b border-white/5 py-6 px-6 md:px-12 flex justify-between items-center transition-all duration-300 hover:bg-white/[0.02]">
       <Link href="/" className="flex items-center gap-3 group">
-        <div className="w-12 h-12 bg-brand-gold rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-500/20 group-hover:scale-110 transition-transform">
-          <span className="text-brand-dark font-black text-2xl tracking-tighter">Z</span>
-        </div>
+        {company.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- tenant logo URL, dimensions unknown
+          <img src={company.logoUrl} alt={company.tradingName} className="w-12 h-12 rounded-2xl object-contain" />
+        ) : (
+          <div className="w-12 h-12 bg-brand-gold rounded-2xl flex items-center justify-center shadow-2xl shadow-gold-500/20 group-hover:scale-110 transition-transform">
+            <span className="text-brand-dark font-black text-2xl tracking-tighter">{monogram(company)}</span>
+          </div>
+        )}
         <div className="flex flex-col">
-          <span className="text-2xl font-black tracking-tighter text-white leading-none">Zenowethu</span>
+          <span className="text-2xl font-black tracking-tighter text-white leading-none">{company.shortName}</span>
           <span className="text-[10px] font-black uppercase tracking-[0.3em] text-brand-cyan mt-1">Legal Tech</span>
         </div>
       </Link>

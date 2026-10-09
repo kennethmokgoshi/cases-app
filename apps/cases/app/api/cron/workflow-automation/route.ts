@@ -50,6 +50,9 @@ import {
 import { checkTransferStatus, requestTransfer, closeBrowser, handleDhsAccepted } from '@zenowethu/shared-lib/src/dhs';
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { sendManualMessage } from '@zenowethu/shared-lib/src/notifications/service';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { formatCompanyWithNcrdc, formatSignatureBlock } from '@zenowethu/shared-lib/src/company/profile';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('cron/workflow-automation');
 const LETSATSI_REPORT_EMAIL = 'mmamy@letsatsifinance.co.za';
@@ -59,11 +62,13 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.zenowethu.co.za'
 
 export async function POST(request: Request) {
     const cronSecret = request.headers.get('x-cron-secret');
-    if (!cronSecret || cronSecret !== process.env.CRON_SECRET) {
+    if (!isValidCronSecret(cronSecret)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const startedAt = new Date();
+    const company = await getCompanyProfile();
+    const signature = formatSignatureBlock(company);
     const adminUser = await prisma.user.findFirst({ where: { isAdmin: true }, select: { id: true } });
     const adminId = adminUser?.id;
 
@@ -139,7 +144,7 @@ export async function POST(request: Request) {
                     } else {
                         // Nothing received — send reminder to consumer
                         const missing = [...(!hasId ? ['ID document'] : []), ...(!hasPoa ? ['Power of Attorney / Consent form'] : [])];
-                        const msg = `Hi ${c.client.firstName}, we are still waiting for your outstanding documents: ${missing.join(' and ')}. Please submit these as soon as possible so we can proceed with your file. — Zenowethu Debt Management`;
+                        const msg = `Hi ${c.client.firstName}, we are still waiting for your outstanding documents: ${missing.join(' and ')}. Please submit these as soon as possible so we can proceed with your file. — ${company.tradingName}`;
                         await sendConsumerMessage(c.id, c, msg, 'Outstanding Documents Reminder');
                         await setNextUpdate(c.id, 3, adminId);
                         await addSystemComment(c.id, `[AUTO] Outstanding Docs: Documents not yet received (missing: ${missing.join(', ')}). Reminder sent to consumer. Next update +3 working days.`, adminId);
@@ -192,7 +197,7 @@ export async function POST(request: Request) {
                 const missing = [...(!idPath ? ['ID'] : []), ...(!poaPath ? ['POA'] : [])];
                 // Missing docs — move to OUTSTANDING_DOCS and notify consumer
                 await updateCaseStatus(c.id, 'OUTSTANDING_DOCS', adminId);
-                const msg = `Hi ${c.client.firstName}, we need your ${missing.join(' and ')} document(s) to proceed with your debt review removal request. Please send them as soon as possible. — Zenowethu Debt Management`;
+                const msg = `Hi ${c.client.firstName}, we need your ${missing.join(' and ')} document(s) to proceed with your debt review removal request. Please send them as soon as possible. — ${company.tradingName}`;
                 await sendConsumerMessage(c.id, c, msg, 'Documents Required');
                 await addSystemComment(c.id, `[AUTO] Not Requested via DHS: Missing ${missing.join(', ')}. Status changed to OUTSTANDING_DOCS. Consumer notified. Next update +3 working days.`, adminId);
                 return { actioned: true, comment: `Missing docs: ${missing.join(', ')}` };
@@ -205,7 +210,7 @@ export async function POST(request: Request) {
                 const clientName = `${c.client.firstName} ${c.client.lastName}`.trim();
                 const dcName = c.debtCounsellorName || c.dcTradingName || 'Debt Counsellor';
                 const subject = `Transfer Request — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                const body = `Dear ${dcName},\n\nWe hereby request the transfer of the above-mentioned consumer's debt review file to Zenowethu Debt Management (NCRDC3693).\n\nPlease find attached:\n- Signed Power of Attorney / Consumer Consent\n- Copy of Consumer Identity Document\n\nKindly process this transfer request via the NCR Debt Help System (ncrdebthelp.co.za) at your earliest convenience.\n\nShould you require any additional documentation, please do not hesitate to contact us.\n\nThank you,\nZenowethu Debt Management\nNCRDC3693\nSuite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190\nTel: +27 81 747 7616 | Cell: 082 363 8207\nnotifications@zenowethu.co.za | www.zenowethu.co.za\nMember of DCASA`;
+                const body = `Dear ${dcName},\n\nWe hereby request the transfer of the above-mentioned consumer's debt review file to ${formatCompanyWithNcrdc(company)}.\n\nPlease find attached:\n- Signed Power of Attorney / Consumer Consent\n- Copy of Consumer Identity Document\n\nKindly process this transfer request via the NCR Debt Help System (ncrdebthelp.co.za) at your earliest convenience.\n\nShould you require any additional documentation, please do not hesitate to contact us.\n\nThank you,\n${signature}`;
                 const attachments: string[] = [];
                 if (poaUrl) attachments.push(poaUrl);
                 if (idUrl) attachments.push(idUrl);
@@ -299,7 +304,7 @@ export async function POST(request: Request) {
                     if (hasInvoice || hasInboundInvoice) {
                         // Invoice received — send to consumer
                         const appUrl = `${APP_URL}/cases/${c.id}`;
-                        const consumerMsg = `Hi ${c.client.firstName}, we have received the invoice from your Debt Counsellor. Please log in to view and action it at ${appUrl} or contact us for assistance. — Zenowethu Debt Management`;
+                        const consumerMsg = `Hi ${c.client.firstName}, we have received the invoice from your Debt Counsellor. Please log in to view and action it at ${appUrl} or contact us for assistance. — ${company.tradingName}`;
                         await sendConsumerMessage(c.id, c, consumerMsg, `Invoice Received — ${c.fileNumber}`);
                         await updateCaseStatus(c.id, 'INVOICE_SENT_CONSUMER', adminId);
                         await addSystemComment(c.id, `[AUTO] Invoice Requested DC: Invoice found in case records. Consumer notified. Status → INVOICE_SENT_CONSUMER. Next update +3 working days.`, adminId);
@@ -308,12 +313,12 @@ export async function POST(request: Request) {
                         // No invoice — re-request from DC, CC consumer
                         const dcName = c.debtCounsellorName || c.dcTradingName || 'Debt Counsellor';
                         const subject = `Request for Invoice — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                        const body = `Dear ${dcName},\n\nWe are following up on our invoice request for the consumer file of ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nKindly provide the outstanding invoice/statement of fees so that we may resolve this matter and proceed with the file transfer.\n\nPlease reply to this email with the invoice attached.\n\nThank you,\nZenowethu Debt Management\nNCRDC3693\nSuite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190\nTel: +27 81 747 7616 | Cell: 082 363 8207\nnotifications@zenowethu.co.za | www.zenowethu.co.za\nMember of DCASA`;
+                        const body = `Dear ${dcName},\n\nWe are following up on our invoice request for the consumer file of ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nKindly provide the outstanding invoice/statement of fees so that we may resolve this matter and proceed with the file transfer.\n\nPlease reply to this email with the invoice attached.\n\nThank you,\n${signature}`;
                         const emailSent = await sendDCEmail(c.id, c, subject, body);
 
                         // CC consumer on follow-up
                         if (c.client.email) {
-                            const ccBody = `Dear ${c.client.firstName},\n\nWe have sent a follow-up request to your Debt Counsellor (${dcName}) for the outstanding invoice on your file.\n\nWe will update you as soon as we receive a response.\n\nZenowethu Debt Management`;
+                            const ccBody = `Dear ${c.client.firstName},\n\nWe have sent a follow-up request to your Debt Counsellor (${dcName}) for the outstanding invoice on your file.\n\nWe will update you as soon as we receive a response.\n\n${company.tradingName}`;
                             await sendManualMessage(c.id, 'EMAIL', c.client.email, ccBody, `Follow-up on DC Invoice — ${c.fileNumber}`);
                         }
 
@@ -353,7 +358,7 @@ export async function POST(request: Request) {
                 return { actioned: true, comment: 'PoP found, manager notified' };
             } else {
                 // No PoP — remind consumer
-                const msg = `Hi ${c.client.firstName}, we are following up on the invoice we sent you for your file (${c.fileNumber}). Have you settled the outstanding amount? If yes, please send us your proof of payment so we can proceed. — Zenowethu Debt Management`;
+                const msg = `Hi ${c.client.firstName}, we are following up on the invoice we sent you for your file (${c.fileNumber}). Have you settled the outstanding amount? If yes, please send us your proof of payment so we can proceed. — ${company.tradingName}`;
                 await sendConsumerMessage(c.id, c, msg, `Proof of Payment Required — ${c.fileNumber}`);
                 await setNextUpdate(c.id, 3, adminId);
                 await addSystemComment(c.id, `[AUTO] Invoice Sent to Consumer: No proof of payment received. Reminder sent to consumer. Next update +3 working days.`, adminId);
@@ -388,7 +393,7 @@ export async function POST(request: Request) {
                 try {
                     processed++;
                     const dcName = c.debtCounsellorName || c.dcTradingName || 'your current Debt Counsellor';
-                    const msg = `Hi ${c.client.firstName}, your debt review removal request was declined because your current Debt Counsellor (${dcName}) has not yet received your consent. Please contact ${dcName} directly and give your written consent for the file transfer. Once done, please let us know. — Zenowethu Debt Management`;
+                    const msg = `Hi ${c.client.firstName}, your debt review removal request was declined because your current Debt Counsellor (${dcName}) has not yet received your consent. Please contact ${dcName} directly and give your written consent for the file transfer. Once done, please let us know. — ${company.tradingName}`;
                     await sendConsumerMessage(c.id, c, msg, `Action Required: Consent Needed — ${c.fileNumber}`);
                     await setNextUpdate(c.id, 3, adminId);
                     await addSystemComment(c.id, `[AUTO] Rejected Not Consent: Consumer informed to contact DC and provide consent. Reminder sent via ${c.client.whatsappNumber ? 'WhatsApp' : c.client.phone ? 'SMS' : 'email'}. Next update +3 working days.`, adminId);
@@ -412,7 +417,7 @@ export async function POST(request: Request) {
                     const clientName = `${c.client.firstName} ${c.client.lastName}`.trim();
                     const dcName = c.debtCounsellorName || c.dcTradingName || 'Debt Counsellor';
                     const subject = `Invoice Request — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                    const body = `Dear ${dcName},\n\nThe transfer request for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}) was declined due to outstanding fees.\n\nKindly provide an invoice/statement of the outstanding amount so that we may assist our client in settling this and proceed with the transfer.\n\nPlease reply with the invoice attached.\n\nThank you,\nZenowethu Debt Management\nNCRDC3693\nSuite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190\nTel: +27 81 747 7616 | Cell: 082 363 8207\nnotifications@zenowethu.co.za | www.zenowethu.co.za\nMember of DCASA`;
+                    const body = `Dear ${dcName},\n\nThe transfer request for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}) was declined due to outstanding fees.\n\nKindly provide an invoice/statement of the outstanding amount so that we may assist our client in settling this and proceed with the transfer.\n\nPlease reply with the invoice attached.\n\nThank you,\n${signature}`;
 
                     const sent = await sendDCEmail(c.id, c, subject, body);
                     await updateCaseStatus(c.id, 'INVOICE_REQUESTED_DC', adminId);
@@ -449,7 +454,7 @@ export async function POST(request: Request) {
 
                         if (hasInvoice || hasInboundInvoice) {
                             // Invoice received — send to consumer
-                            const msg = `Hi ${c.client.firstName}, we have received the invoice from your Debt Counsellor. Please review it and let us know once you have settled the outstanding amount by sending proof of payment. — Zenowethu Debt Management`;
+                            const msg = `Hi ${c.client.firstName}, we have received the invoice from your Debt Counsellor. Please review it and let us know once you have settled the outstanding amount by sending proof of payment. — ${company.tradingName}`;
                             await sendConsumerMessage(c.id, c, msg, `Invoice Received — ${c.fileNumber}`);
                             await updateCaseStatus(c.id, 'INVOICE_SENT_CONSUMER', adminId);
                             await addSystemComment(c.id, `[AUTO] ${status}: Invoice found after ${months} month(s). Consumer notified. Status → INVOICE_SENT_CONSUMER. Next update +3 working days.`, adminId);
@@ -458,7 +463,7 @@ export async function POST(request: Request) {
                             // Still no invoice — re-request with escalation note
                             const urgency = months >= 3 ? 'URGENT: ' : '';
                             const subject = `${urgency}${months}-Month Follow-up: Invoice Request — ${clientName} (${c.client.idNumber}) — ${c.fileNumber}`;
-                            const body = `Dear ${dcName},\n\nThis is our ${months === 1 ? 'first' : months === 2 ? 'second' : months === 3 ? 'third' : 'fourth+'} follow-up request for an invoice/statement for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nThis request was first submitted ${months} month(s) ago. Kindly provide the outstanding invoice so we may resolve this matter.\n\n${months >= 3 ? 'Please be advised that further delays may require formal escalation.\n\n' : ''}Thank you,\nZenowethu Debt Management\nNCRDC3693\nSuite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190\nTel: +27 81 747 7616 | Cell: 082 363 8207\nnotifications@zenowethu.co.za | www.zenowethu.co.za\nMember of DCASA`;
+                            const body = `Dear ${dcName},\n\nThis is our ${months === 1 ? 'first' : months === 2 ? 'second' : months === 3 ? 'third' : 'fourth+'} follow-up request for an invoice/statement for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}).\n\nThis request was first submitted ${months} month(s) ago. Kindly provide the outstanding invoice so we may resolve this matter.\n\n${months >= 3 ? 'Please be advised that further delays may require formal escalation.\n\n' : ''}Thank you,\n${signature}`;
 
                             await sendDCEmail(c.id, c, subject, body);
                             await updateCaseStatus(c.id, nextStatus[status], adminId);
@@ -511,7 +516,7 @@ export async function POST(request: Request) {
                         } else {
                             // No PoP — remind consumer, escalate
                             const urgency = m >= 3 ? '⚠️ FINAL REMINDER: ' : '';
-                            const msg = `Hi ${c.client.firstName}, this is our ${m === 1 ? 'first' : m === 2 ? 'second' : m === 3 ? 'third' : 'final'} follow-up. ${urgency}We are still awaiting your proof of payment for the invoice on your file (${c.fileNumber}). Please settle the outstanding amount and send us proof of payment to continue. — Zenowethu Debt Management`;
+                            const msg = `Hi ${c.client.firstName}, this is our ${m === 1 ? 'first' : m === 2 ? 'second' : m === 3 ? 'third' : 'final'} follow-up. ${urgency}We are still awaiting your proof of payment for the invoice on your file (${c.fileNumber}). Please settle the outstanding amount and send us proof of payment to continue. — ${company.tradingName}`;
                             await sendConsumerMessage(c.id, c, msg, `Proof of Payment Required (${m} Month Follow-up) — ${c.fileNumber}`);
                             await updateCaseStatus(c.id, nextStatus[status], adminId);
                             await addSystemComment(c.id, `[AUTO] ${status}: No proof of payment after ${m} month(s). Follow-up sent to consumer. Status → ${nextStatus[status]}. Next update +3 working days.`, adminId);
@@ -552,7 +557,7 @@ export async function POST(request: Request) {
                     for (const mgr of managerUsers) {
                         if (mgr.email) {
                             const subject = `✅ DHS Transfer Accepted: ${c.fileNumber} — ${clientName}`;
-                            const body = `Good day,\n\nThe DHS transfer request for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}) has been accepted.\n\n${hasForm177 ? '✅ Form 17.7 is on file.' : '⚠️ Form 17.7 has not been received yet. Please follow up with the Debt Counsellor.'}\n\nView case: ${APP_URL}/cases/${c.id}\n\nZenowethu Debt Management Automation`;
+                            const body = `Good day,\n\nThe DHS transfer request for ${clientName} (ID: ${c.client.idNumber}, File: ${c.fileNumber}) has been accepted.\n\n${hasForm177 ? '✅ Form 17.7 is on file.' : '⚠️ Form 17.7 has not been received yet. Please follow up with the Debt Counsellor.'}\n\nView case: ${APP_URL}/cases/${c.id}\n\n${company.tradingName} Automation`;
                             await sendManualMessage(c.id, 'EMAIL', mgr.email, body, subject);
                         }
                     }
@@ -594,7 +599,7 @@ export async function POST(request: Request) {
                         const html = `
                             <div style="font-family:Inter,Arial,sans-serif;max-width:800px;margin:0 auto">
                                 <div style="background:#0B1D35;padding:20px;text-align:center">
-                                    <h2 style="color:#C4953A;margin:0">Zenowethu Debt Management</h2>
+                                    <h2 style="color:#C4953A;margin:0">${company.tradingName}</h2>
                                     <p style="color:#fff;margin:4px 0">Weekly Completed Files Report — ${today.toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                                 </div>
                                 <div style="padding:20px">
@@ -613,10 +618,10 @@ export async function POST(request: Request) {
                                         <tbody>${rows}</tbody>
                                     </table>
                                     <p style="margin-top:20px"><strong>Total files: ${cases.length}</strong></p>
-                                    <p style="color:#666;font-size:13px">This is an automated weekly report from Zenowethu Debt Management.</p>
+                                    <p style="color:#666;font-size:13px">This is an automated weekly report from ${company.tradingName}.</p>
                                 </div>
                                 <div style="background:#0B1D35;padding:16px;text-align:center">
-                                    <p style="color:#C4953A;margin:0;font-size:12px">Zenowethu Debt Management | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190 | Tel: +27 81 747 7616 | Cell: 082 363 8207 | notifications@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA</p>
+                                    <p style="color:#C4953A;margin:0;font-size:12px">${signature.split('\n').join(' | ')}</p>
                                 </div>
                             </div>`;
 
@@ -625,7 +630,7 @@ export async function POST(request: Request) {
                             'EMAIL',
                             LETSATSI_REPORT_EMAIL,
                             html,
-                            `Zenowethu — Completed Letsatsi Files — ${today.toLocaleDateString('en-ZA')}`
+                            `${company.shortName} — Completed Letsatsi Files — ${today.toLocaleDateString('en-ZA')}`
                         );
 
                         // Update all to SUBMITTED

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@zenowethu/database';
 import { generateDisputeLetter, DisputeLetterType, logAuditAction } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
 
         // Generate the PDF
         const pdfBytes = await generateDisputeLetter(type as DisputeLetterType, {
+            company: await getCompanyProfile(),
             clientFullName: `${consumer.firstName} ${consumer.lastName}`,
             clientIdNumber: consumer.idNumber || 'Not Provided',
             creditorName,

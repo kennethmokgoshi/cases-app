@@ -102,7 +102,7 @@ describe('POST /api/admin/referrers/[id]/portal-access', () => {
         }));
     });
 
-    it('creates a new referrer portal user and returns Agent@1 as the default password', async () => {
+    it('creates a new referrer portal user and returns a random temporary password', async () => {
         vi.mocked(auth).mockResolvedValueOnce(adminSession as never);
         vi.mocked(prisma.referrer.findUnique).mockResolvedValueOnce({
             id: 'ref-1',
@@ -126,8 +126,9 @@ describe('POST /api/admin/referrers/[id]/portal-access', () => {
         const json = await res.json();
 
         expect(res.status).toBe(201);
-        expect(json.temporaryPassword).toBe('Agent@1');
-        expect(bcrypt.hash).toHaveBeenCalledWith('Agent@1', 10);
+        expect(json.temporaryPassword).toMatch(/^[A-Za-z0-9]{12}$/);
+        expect(json.temporaryPassword).not.toBe('Agent@1');
+        expect(bcrypt.hash).toHaveBeenCalledWith(json.temporaryPassword, 10);
         expect(prisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({
                 username: '8001015009087',

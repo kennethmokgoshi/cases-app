@@ -13,6 +13,7 @@ import {
     buildProjectUrl,
 } from '@zenowethu/shared-lib';
 import { auth, createLogger } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { CaseStatusSchema, parseBody } from '@/lib/schemas';
 import { z } from 'zod';
 
@@ -157,7 +158,7 @@ export async function PATCH(
         // Send notification (async, don't block response)
         if (!skipNotification) {
             // Get main source from project hierarchy
-            let mainSource = currentCase.partnerName || 'Zenowethu Debt Management';
+            let mainSource = currentCase.partnerName || (await getCompanyProfile()).tradingName;
             const primaryProject = currentCase.projects[0]?.project;
             if (primaryProject) {
                 let currentProject = primaryProject;

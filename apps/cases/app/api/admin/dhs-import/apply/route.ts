@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger, provisionConsumerForClient } from '@zenowethu/shared-lib';
 import { flagCaseIfFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag-db';
 import { prisma } from '@zenowethu/database';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { maxZdmSequence, buildZdmFileNumber } from '../../../../../lib/file-number';
 
 const logger = createLogger('api/admin/dhs-import/apply');
@@ -104,10 +105,11 @@ export async function POST(request: Request) {
 
         const body = await request.json();
         const actions: ApplyAction[] = body.actions ?? [];
+        const company = await getCompanyProfile();
         const dc: DcOwner = body.dc ?? {
-            ncrdcNo: 'NCRDC3693',
-            debtCounsellorName: 'Aaron Nzotho',
-            dcTradingName: 'Zenowethu Debt Management',
+            ncrdcNo: company.ncrdcNumber ?? '',
+            debtCounsellorName: company.debtCounsellorName ?? '',
+            dcTradingName: company.tradingName,
         };
         // isPortalOwner = true when the uploader confirmed this is their own DHS data.
         // When true, statuses A/C/D3/D4 are stored as requestedDhsStatus

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createLogger } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { toFirmSummary } from '@zenowethu/shared-lib/src/company/profile';
 import {
     getDrrConsentVerificationState,
     recordDrrConsent,
@@ -25,8 +27,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     try {
         const { token } = await params;
         const state = await getDrrConsentVerificationState(token);
-        if (!state) return NextResponse.json({ error: 'This consent link is not valid.' }, { status: 404 });
-        return NextResponse.json(state);
+        const firm = toFirmSummary(await getCompanyProfile());
+        if (!state) return NextResponse.json({ error: 'This consent link is not valid.', firm }, { status: 404 });
+        return NextResponse.json({ ...state, firm });
     } catch (error) {
         logger.error('[DRR_CONSENT] GET error', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -80,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({
             success: true,
             alreadyConsented: result.alreadyConsented,
-            message: 'Thank you. Your approval has been recorded and Zenowethu Debt Management is confirmed as the team authorised to continue working on your file.',
+            message: `Thank you. Your approval has been recorded and ${(await getCompanyProfile()).tradingName} is confirmed as the team authorised to continue working on your file.`,
         });
     } catch (error) {
         logger.error('[DRR_CONSENT] POST error', error);

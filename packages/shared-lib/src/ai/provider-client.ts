@@ -42,55 +42,96 @@ const DEFAULT_MODELS: Record<AiTask, string> = {
 };
 
 // ─── Direct build of OpenAI client from environment variables ─────────────────
-function buildClientFromEnv(modelId: string): { client: OpenAI, name: string } {
+
+/** Read an env var, treating blank or whitespace-only values as absent. */
+function envKey(name: string): string | undefined {
+    const value = process.env[name]?.trim();
+    return value ? value : undefined;
+}
+
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const OPENROUTER_NAME = 'OpenRouter (Env)';
+
+let _failoverLogged = false;
+
+function openRouterClient(apiKey: string): OpenAI {
+    return new OpenAI({
+        apiKey,
+        baseURL: OPENROUTER_BASE_URL,
+        defaultHeaders: { 'HTTP-Referer': 'https://zenowethu.co.za', 'X-Title': 'Zenowethu Cases' },
+        timeout: 120 * 1000,
+    });
+}
+
+/**
+ * Resolve a model id to a concrete client. The provider is chosen from the shape
+ * of the model id: `google/…` or `…gemini…` → Google, `anthropic/…` or `claude…`
+ * → Anthropic, anything else containing a `/` → OpenRouter, a bare name → OpenAI.
+ *
+ * When a bare OpenAI model is requested but OPENAI_API_KEY is absent, the call
+ * fails over to OpenRouter, which serves the same models under an `openai/`
+ * namespace. Setting a working OPENAI_API_KEY restores direct OpenAI calls with
+ * no code change. The resolved model id is returned because failover rewrites it.
+ */
+function buildClientFromEnv(modelId: string): { client: OpenAI; name: string; model: string } {
     const isGoogle = modelId.startsWith('google/') || modelId.includes('gemini');
     const isAnthropic = modelId.startsWith('anthropic/') || modelId.startsWith('claude');
-    const isOpenRouter = modelId.includes('/'); // Generic fallback for OR
+    const isNamespaced = modelId.includes('/');
 
-    // Google Gemini (Direct)
-    if (isGoogle && process.env.GOOGLE_AI_API_KEY) {
+    const googleKey = envKey('GOOGLE_AI_API_KEY');
+    const anthropicKey = envKey('ANTHROPIC_API_KEY');
+    const openRouterKey = envKey('OPENROUTER_API_KEY');
+    const openAiKey = envKey('OPENAI_API_KEY');
+
+    // Google Gemini (direct)
+    if (isGoogle && googleKey) {
         return {
             name: 'Google Gemini (Env)',
+            model: modelId,
             client: new OpenAI({
-                apiKey: process.env.GOOGLE_AI_API_KEY,
+                apiKey: googleKey,
                 baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
                 timeout: 120 * 1000,
-            })
+            }),
         };
     }
 
-    // Anthropic Claude (Direct)
-    if (isAnthropic && process.env.ANTHROPIC_API_KEY) {
+    // Anthropic Claude (direct)
+    if (isAnthropic && anthropicKey) {
         return {
             name: 'Anthropic Claude (Env)',
+            model: modelId,
             client: new OpenAI({
-                apiKey: process.env.ANTHROPIC_API_KEY,
-                baseURL: 'https://api.anthropic.com/v1/messages/openai-compat', // Use shim if needed or specialized client
+                apiKey: anthropicKey,
+                baseURL: 'https://api.anthropic.com/v1/messages/openai-compat',
                 timeout: 120 * 1000,
-            })
+            }),
         };
     }
 
-    // OpenRouter fallback
-    if (isOpenRouter && process.env.OPENROUTER_API_KEY) {
+    // Already namespaced (e.g. `openai/gpt-4o-mini`) → OpenRouter
+    if (isNamespaced && openRouterKey) {
+        return { name: OPENROUTER_NAME, model: modelId, client: openRouterClient(openRouterKey) };
+    }
+
+    // Bare OpenAI model with no usable OpenAI key → fail over to OpenRouter.
+    if (!isNamespaced && !openAiKey && openRouterKey) {
+        if (!_failoverLogged) {
+            _failoverLogged = true;
+            logger.warn('OPENAI_API_KEY is not set — failing AI calls over to OpenRouter');
+        }
         return {
-            name: 'OpenRouter (Env)',
-            client: new OpenAI({
-                apiKey: process.env.OPENROUTER_API_KEY,
-                baseURL: 'https://openrouter.ai/api/v1',
-                defaultHeaders: { 'HTTP-Referer': 'https://zenowethu.co.za', 'X-Title': 'Zenowethu Cases' },
-                timeout: 120 * 1000,
-            })
+            name: OPENROUTER_NAME,
+            model: `openai/${modelId}`,
+            client: openRouterClient(openRouterKey),
         };
     }
 
-    // Default OpenAI
+    // Default: OpenAI direct
     return {
         name: 'OpenAI (Env)',
-        client: new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY ?? 'missing_key',
-            timeout: 120 * 1000,
-        })
+        model: modelId,
+        client: new OpenAI({ apiKey: openAiKey ?? 'missing_key', timeout: 120 * 1000 }),
     };
 }
 
@@ -136,10 +177,10 @@ export async function getAiClientForTask(task: AiTask, customModelId?: string): 
     }
 
     // 2. Direct ENV resolution (Primary for Gemini/Claude)
-    const { client, name } = buildClientFromEnv(targetModel);
+    const { client, name, model } = buildClientFromEnv(targetModel);
     return {
         client,
-        model: targetModel,
+        model,
         providerName: name,
     };
 }
@@ -153,20 +194,28 @@ export async function getAiClientChainForTask(task: AiTask): Promise<AiClientCon
     const chain: AiClientConfig[] = [primary];
     const seen = new Set<string>([`${primary.providerName}:${primary.model}`]);
 
+    const openAiKey = envKey('OPENAI_API_KEY');
+    const openRouterKey = envKey('OPENROUTER_API_KEY');
+    const googleKey = envKey('GOOGLE_AI_API_KEY');
+
+    // A bare OpenAI model is still reachable when only OpenRouter is configured,
+    // because buildClientFromEnv fails it over and rewrites the model id.
     const candidates: Array<{ enabled: boolean; model: string }> = [
-        { enabled: !!process.env.OPENAI_API_KEY,     model: 'gpt-4o' },
-        { enabled: !!process.env.OPENAI_API_KEY,     model: 'gpt-4o-mini' },
-        { enabled: !!process.env.OPENROUTER_API_KEY, model: 'openai/gpt-4o-mini' },
-        { enabled: !!process.env.GOOGLE_AI_API_KEY,  model: 'gemini-1.5-flash' },
+        { enabled: !!openAiKey || !!openRouterKey, model: 'gpt-4o' },
+        { enabled: !!openAiKey || !!openRouterKey, model: 'gpt-4o-mini' },
+        { enabled: !!openRouterKey,                model: 'openai/gpt-4o-mini' },
+        { enabled: !!googleKey,                    model: 'gemini-1.5-flash' },
     ];
 
     for (const c of candidates) {
         if (!c.enabled) continue;
-        const { client, name } = buildClientFromEnv(c.model);
-        const key = `${name}:${c.model}`;
+        const { client, name, model } = buildClientFromEnv(c.model);
+        // Dedupe on the *resolved* model so failover cannot queue the same
+        // OpenRouter model twice.
+        const key = `${name}:${model}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        chain.push({ client, model: c.model, providerName: name });
+        chain.push({ client, model, providerName: name });
     }
 
     return chain;

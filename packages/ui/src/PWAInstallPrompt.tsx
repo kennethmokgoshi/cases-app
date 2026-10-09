@@ -81,7 +81,7 @@ export function PWAInstallPrompt() {
                 </svg>
             </div>
             <div className="install-prompt-content">
-                <p className="install-prompt-title">Install Zenowethu</p>
+                <p className="install-prompt-title">Install {process.env.NEXT_PUBLIC_PLATFORM_NAME || 'Zenowethu'}</p>
                 <p className="install-prompt-description">Add to your home screen for quick access</p>
             </div>
             <div className="install-prompt-buttons">

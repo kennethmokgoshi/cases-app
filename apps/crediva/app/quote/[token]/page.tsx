@@ -1,4 +1,5 @@
 import { prisma } from '@zenowethu/database'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service'
 import { notFound } from 'next/navigation'
 
 interface LineItem {
@@ -26,6 +27,7 @@ function formatDate(d: Date) {
 
 export default async function PublicQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
+  const company = await getCompanyProfile()
 
   const invoice = await prisma.invoice.findUnique({
     where: { publicToken: token },
@@ -208,7 +210,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             Download {docLabel} PDF
           </a>
           <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '12px 0 0' }}>
-            Powered by Zenowethu Debt Management · 081 747 7616
+            Powered by {company.tradingName} · {company.phone}
           </p>
         </div>
       </div>

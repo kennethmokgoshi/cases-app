@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { runOverdueScan } from '@zenowethu/shared-lib/src/automation/overdue-scan';
 import { logAutomationRun } from '@zenowethu/shared-lib/src/automation/run-logger';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('cron/overdue-scan');
 
 export async function POST(request: Request) {
     const cronSecret = request.headers.get('x-cron-secret');
-    const isValidCron = cronSecret && cronSecret === process.env.CRON_SECRET;
+    const isValidCron = isValidCronSecret(cronSecret);
 
     if (!isValidCron) {
         const session = await auth();

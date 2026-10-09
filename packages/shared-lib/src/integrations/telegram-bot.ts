@@ -17,12 +17,13 @@ import { createLogger } from '../logger';
 import { generateOtpCode, isValidOtpFormat, sendOtpEmail } from '../notifications/otp-service';
 import { generateAutoReply } from '../ai/auto-reply';
 import { formatStatus } from '../statuses/statuses';
+import { getCompanyProfile } from '../company/company-profile-service';
+import type { CompanyProfile } from '../company/profile';
 
 const logger = createLogger('telegram-bot');
 
 const OTP_TTL_MIN = 15;
 const MAX_ATTEMPTS = 5;
-const COMPANY_PHONE = process.env.COMPANY_PHONE || '081 747 7616';
 
 export interface TelegramInbound {
     chatId: string;
@@ -41,14 +42,14 @@ function maskEmail(email: string): string {
     return email.replace(/(^.).*(@.*$)/, '$1***$2');
 }
 
-const MSG = {
+const buildMessages = (company: CompanyProfile) => ({
     welcome:
-        '👋 Welcome to the Zenowethu Assistant.\n\n' +
+        `👋 Welcome to the ${company.shortName} Assistant.\n\n` +
         'I can give you updates on your case file. First I need to verify your identity.\n\n' +
         'Please reply with your 13-digit South African ID number.',
     askId: 'Please reply with your 13-digit South African ID number to continue.',
-    idNotFound: `I couldn't find a file linked to that ID number. Please check and try again, or call our office on ${COMPANY_PHONE}.`,
-    noEmail: `I found your file, but there's no email address on record to send a verification code to. Please call our office on ${COMPANY_PHONE} so we can verify you.`,
+    idNotFound: `I couldn't find a file linked to that ID number. Please check and try again, or call our office on ${company.phone}.`,
+    noEmail: `I found your file, but there's no email address on record to send a verification code to. Please call our office on ${company.phone} so we can verify you.`,
     otpSent: (masked: string) =>
         `✅ I've emailed a 6-digit verification code to ${masked}.\n\nPlease reply with the code to confirm it's you. It expires in ${OTP_TTL_MIN} minutes.`,
     otpInvalid: "That code doesn't match. Please re-enter the 6-digit code from your email.",
@@ -57,17 +58,18 @@ const MSG = {
     verified: (name: string) =>
         `🎉 Thanks ${name}, you're verified.\n\n` +
         'You can now ask me about your file — for example "What\'s the status of my case?" or "What documents are still outstanding?".',
-    tooManyAttempts: `Too many incorrect attempts. For your security I've paused verification. Please call our office on ${COMPANY_PHONE}.`,
-    escalated: `Thanks for your message. I've passed this to a team member who will follow up with you within 1–2 business days. For anything urgent, call ${COMPANY_PHONE}.`,
-    noCase: `You're verified, but I can't find an active case on your profile right now. A team member will be in touch — or call us on ${COMPANY_PHONE}.`,
+    tooManyAttempts: `Too many incorrect attempts. For your security I've paused verification. Please call our office on ${company.phone}.`,
+    escalated: `Thanks for your message. I've passed this to a team member who will follow up with you within 1–2 business days. For anything urgent, call ${company.phone}.`,
+    noCase: `You're verified, but I can't find an active case on your profile right now. A team member will be in touch — or call us on ${company.phone}.`,
     loggedOut: 'You have been logged out. Reply with your ID number any time to verify again.',
-};
+});
 
 /**
  * Process one inbound Telegram message and return the bot's reply.
  * Pure of transport: callers send `reply` back to the chat and handle logging.
  */
 export async function handleTelegramMessage(input: TelegramInbound): Promise<TelegramReply> {
+    const MSG = buildMessages(await getCompanyProfile());
     const chatId = String(input.chatId);
     const text = (input.text || '').trim();
     const firstName = input.firstName || 'there';
@@ -111,6 +113,7 @@ async function handleIdNumber(
     text: string,
     _firstName: string,
 ): Promise<TelegramReply> {
+    const MSG = buildMessages(await getCompanyProfile());
     const id = text.replace(/\D/g, '');
     if (id.length !== 13) {
         return { reply: MSG.askId, state: 'AWAITING_ID' };
@@ -154,6 +157,7 @@ async function handleOtp(
     },
     text: string,
 ): Promise<TelegramReply> {
+    const MSG = buildMessages(await getCompanyProfile());
     const code = text.replace(/\D/g, '');
     if (!isValidOtpFormat(code)) {
         return { reply: MSG.otpFormat, state: 'AWAITING_OTP' };
@@ -197,6 +201,8 @@ async function handleOtp(
 }
 
 async function answerQuestion(clientId: string, text: string): Promise<TelegramReply> {
+    const company = await getCompanyProfile();
+    const MSG = buildMessages(company);
     const ctx = await loadCaseContext(clientId);
     if (!ctx) {
         return { reply: MSG.noCase, state: 'VERIFIED', clientId, escalated: true };
@@ -207,7 +213,7 @@ async function answerQuestion(clientId: string, text: string): Promise<TelegramR
         channel: 'TELEGRAM',
         senderType: 'CLIENT',
         caseContext: ctx,
-        companyPhone: COMPANY_PHONE,
+        companyPhone: company.phone,
     });
 
     if (ai.shouldSend && ai.body?.trim()) {

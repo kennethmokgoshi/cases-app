@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { ShieldAlert, PiggyBank, HeartPulse, FileCheck, CheckCircle2 } from "lucide-react";
+import { PiggyBank, HeartPulse, CheckCircle2 } from "lucide-react";
 import { LandingNav } from "../../components/LandingNav";
+import { getSiteCompany } from "../../lib/company";
 
-export default function Insurance() {
+export default async function Insurance() {
+  const company = await getSiteCompany();
+
   return (
     <div className="min-h-screen bg-brand-deep pt-32 pb-24 px-6">
       <LandingNav />
@@ -25,7 +28,7 @@ export default function Insurance() {
               {[
                 { icon: PiggyBank, title: "Cost Efficiency", desc: "Our policies often cost half of what banks charge for the same loan amount." },
                 { icon: HeartPulse, title: "Comprehensive Cover", desc: "Includes Death, Disability, and Retrenchment benefits as standard." },
-                { icon: CheckCircle2, title: "NCR Approved", desc: "All our insurance partners are FSCA regulated and bank-approved." }
+                { icon: CheckCircle2, title: "FSCA Regulated", desc: "We only work with insurers regulated by the Financial Sector Conduct Authority." }
               ].map(item => (
                 <div key={item.title} className="flex gap-6">
                   <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex-shrink-0 flex items-center justify-center text-brand-cyan">
@@ -67,7 +70,7 @@ export default function Insurance() {
 
                   <div className="flex justify-between items-end">
                     <div>
-                      <div className="text-sm font-bold text-brand-gold mb-2 uppercase tracking-tighter">Zenowethu Policy</div>
+                      <div className="text-sm font-bold text-brand-gold mb-2 uppercase tracking-tighter">{company.shortName} Policy</div>
                       <div className="text-5xl font-black text-brand-gold">R168.00</div>
                     </div>
                     <div className="w-32 h-32 bg-brand-gold rounded-t-xl shadow-[0_0_40px_rgba(196,149,58,0.3)]" />

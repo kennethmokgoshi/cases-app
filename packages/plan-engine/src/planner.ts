@@ -1,4 +1,5 @@
 import { prisma } from '@zenowethu/database';
+import { getPlatformConfig } from '@zenowethu/shared-lib';
 import { logger, getAiClientForTask } from '@zenowethu/shared-lib';
 import type { GeneratedPlan, PlanStepDefinition } from './types';
 
@@ -165,7 +166,7 @@ export async function generatePlan(caseId: string, userGuidance?: string): Promi
     })
     .join('\n') || 'None uploaded';
 
-  const systemPrompt = `You are an AI orchestration engine for Zenowethu, a South African debt counselling platform. Generate a precise, context-aware action plan spanning multiple departments: Cases (DHS portal, documents), Legal (prescription letters, bureau disputes), Insurance (assessment, cancellation), Forensic (reckless lending), Finance (invoicing).
+  const systemPrompt = `You are an AI orchestration engine for ${getPlatformConfig().name}, a South African debt counselling platform. Generate a precise, context-aware action plan spanning multiple departments: Cases (DHS portal, documents), Legal (prescription letters, bureau disputes), Insurance (assessment, cancellation), Forensic (reckless lending), Finance (invoicing).
 
 SA Law: Prescription Act — debts >3 years unpaid are prescribed (NCA Section 126B). Form 17.7 = DC notice to bureaux. DHS = NCR Debt Help System (government portal).
 

@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../logger';
+import { readOwnUpload } from '../documents/upload-paths';
 
 // SMS and Email Provider Interfaces
 // Abstraction layer for different notification providers
@@ -93,6 +94,16 @@ export async function resolveUrlAttachments(
 
     for (const a of (attachments ?? [])) {
         if (a.url && (!a.content || a.content === '')) {
+            // Our own /uploads files need a signed-in session over HTTP, so a
+            // server-side fetch gets 401 — read them from disk instead.
+            const local = await readOwnUpload(a.url).catch((err) => {
+                logger.warn(`[${providerLabel}] Could not read local upload ${a.url}:`, err);
+                return null;
+            });
+            if (local) {
+                resolved.push({ filename: a.filename, content: local, contentType: a.contentType });
+                continue;
+            }
             try {
                 const res = await fetch(a.url);
                 if (res.ok) {

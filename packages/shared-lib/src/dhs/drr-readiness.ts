@@ -35,6 +35,8 @@ import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { getAutomationUserId } from '../automation/automation-user';
 import { sendManualMessage } from '../notifications/service';
+import { getCompanyProfile } from '../company/company-profile-service';
+import { formatSignatureBlock } from '../company/profile';
 import { identifyDocumentPages, splitPdf } from '../openai/pdf-process';
 import { addWorkingDays } from '../statuses/workingDays';
 import { runManageConsumersClearance, type ClearanceRunResult } from './clearance-automation';
@@ -435,12 +437,13 @@ async function requestCreditReportFromReferrer(
         return;
     }
 
+    const company = await getCompanyProfile();
     const clientName = `${caseData.client.firstName} ${caseData.client.lastName}`.trim();
     const idLine = caseData.client.idNumber ? `\n  ID Number:    ${caseData.client.idNumber}` : '';
     const subject = `Credit report needed — ${clientName} (File: ${caseData.fileNumber})`;
     const body = `Dear ${recipientName || 'Partner'},
 
-We are busy processing the debt review removal for the consumer below, whom you referred to Zenowethu Debt Management. To proceed we need a copy of the consumer's credit report, which is not on the file you sent us.
+We are busy processing the debt review removal for the consumer below, whom you referred to ${company.tradingName}. To proceed we need a copy of the consumer's credit report, which is not on the file you sent us.
 
   Consumer:     ${clientName}${idLine}
   File Number:  ${caseData.fileNumber}
@@ -451,12 +454,7 @@ Thank you for your assistance.
 
 Yours sincerely,
 
-Zenowethu Debt Management
-NCRDC3693
-Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190
-Tel: +27 81 747 7616 | Cell: 082 363 8207
-notifications@zenowethu.co.za | www.zenowethu.co.za
-Member of DCASA`;
+${formatSignatureBlock(company)}`;
 
     const sendResult = await sendManualMessage(caseId, 'EMAIL', recipient, body, subject);
     if (sendResult.emailSuccess) {

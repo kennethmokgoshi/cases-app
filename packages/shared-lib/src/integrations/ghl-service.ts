@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'fs/promises';
+import { getCompanyProfile } from '../company/company-profile-service';
 import { join } from 'path';
 import { prisma } from '@zenowethu/database';
 import { getGHLCredentials } from './ghl-config';
@@ -868,6 +869,7 @@ export class GhlService {
      * CCs the client on the email and sends them a WhatsApp/SMS to keep them informed.
      */
     static async requestFileFromDC(caseId: string) {
+        const company = await getCompanyProfile();
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
             include: { client: true },
@@ -894,7 +896,7 @@ export class GhlService {
 
         if (result.success) {
             // Notify the client via WhatsApp or SMS
-            const clientMsg = `Hi ${client.firstName}, we have submitted a file transfer request to your Debt Counsellor on your behalf. We will update you as soon as we receive your file. — Zenowethu Debt Management`;
+            const clientMsg = `Hi ${client.firstName}, we have submitted a file transfer request to your Debt Counsellor on your behalf. We will update you as soon as we receive your file. — ${company.tradingName}`;
             const notifChannel: 'WHATSAPP' | 'SMS' | null =
                 client.whatsappNumber ? 'WHATSAPP' :
                 client.phone ? 'SMS' : null;

@@ -4,6 +4,7 @@ import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/
 import { prisma } from '@zenowethu/database'
 import { NextResponse } from 'next/server'
 import { generateInvoicePdf, InvoiceLineItem } from '@/lib/invoice-pdf'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { z } from 'zod'
 import fs from 'fs/promises'
 import path from 'path'
@@ -90,10 +91,8 @@ export async function GET(
       notes:                invoice.notes     ?? undefined,
       reference:            invoice.reference ?? undefined,
       createdByName:        invoice.createdBy ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}` : undefined,
-      bankName:             bankingDetails.bankName,
-      bankAccountName:      bankingDetails.accountHolder,
-      bankAccountNumber:    bankingDetails.accountNumber,
-      branchCode:           bankingDetails.branchCode,
+      bankingDetails,
+      company: await getCompanyProfile(),
     })
 
     // Cache to disk

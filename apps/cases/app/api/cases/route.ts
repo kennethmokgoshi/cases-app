@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { calculateSlaDeadline, sendStatusChangeNotification, auth, createLogger, WORKFLOW_STATUSES } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { flagCaseIfFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag-db';
 import { CaseCreateSchema, parseBody } from '@/lib/schemas';
 import { buildProjectDisplayName } from '@/lib/project-path';
@@ -507,6 +508,7 @@ export async function POST(request: Request) {
                 ? (Array.isArray(data.services) ? data.services : JSON.parse(data.services as string)).join(', ')
                 : '';
 
+            const company = await getCompanyProfile();
             sendStatusChangeNotification({
                 caseId:            newCase.id,
                 clientName:        `${client.firstName} ${client.lastName}`,
@@ -520,8 +522,8 @@ export async function POST(request: Request) {
                 isB2B,
                 isCreatedByPartner,
                 services:          servicesText,
-                senderName:        session?.user?.name || 'Zenowethu Debt Management',
-                senderEmail:       'updates@zenowethu.co.za',
+                senderName:        session?.user?.name || company.tradingName,
+                senderEmail:       company.email,
             }).then(result => {
                 logger.info(`Welcome notification sent for ${newCase.fileNumber}: Email=${result.emailSuccess}, SMS=${result.smsSuccess}, WA=${result.whatsappSuccess}`);
             }).catch(err => {

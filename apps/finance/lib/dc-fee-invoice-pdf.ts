@@ -3,7 +3,7 @@
  *
  * Loads a persisted DC_FEE_INVOICE / DC_FEE_QUOTE `Invoice` row, maps it onto the
  * Finance `InvoiceData` shape (bill-to = debt counsellor, "RE:" = consumer the
- * fees relate to) and renders the branded Zenowethu PDF. Shared by the Finance
+ * fees relate to) and renders the branded PDF for the tenant firm. Shared by the Finance
  * download + email routes. Mirrors the Cases-app helper of the same name.
  */
 
@@ -15,6 +15,8 @@ import {
 import fs from 'fs/promises'
 import path from 'path'
 import { generateInvoicePdf, type InvoiceData, type InvoiceLineItem } from './invoice-pdf'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service'
+import { companyProfileBankingFallback } from '@zenowethu/shared-lib/src/finance/banking-details'
 
 export interface DcFeeInvoiceSummary {
   id: string
@@ -88,7 +90,8 @@ export async function generateDcFeeInvoicePdf(invoiceId: string): Promise<Genera
           accountNumber: invoice.bankAccount.accountNumber,
           branchCode: invoice.bankAccount.branchCode ?? undefined,
         }
-      : undefined,
+      : await companyProfileBankingFallback(),
+    company: await getCompanyProfile(),
   }
 
   const bytes = await generateInvoicePdf(data)

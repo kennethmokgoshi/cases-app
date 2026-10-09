@@ -43,6 +43,7 @@ interface ReportEntry {
 
 interface InsightsResponse {
     reports: ReportEntry[];
+    own?: OwnFirm;
     unanalyzedReports: { id: string; fileName: string; type: string }[];
     hasCreditReports: boolean;
 }
@@ -78,15 +79,15 @@ function InsightColumn({ category, items }: { category: InsightItem['category'];
     );
 }
 
-const OWN_NCRDC_NO = 'NCRDC3693';
+type OwnFirm = { ncrdcNo: string | null; name: string };
 
-function ReportCard({ report }: { report: ReportEntry }) {
+function ReportCard({ report, own }: { report: ReportEntry; own: OwnFirm }) {
     const byCategory = (cat: InsightItem['category']) => report.insights.filter(i => i.category === cat);
     const score = report.data.creditScore;
     const prescribedCount = report.insights.filter(i => i.category === 'dispute' && i.title.startsWith('Possible prescription')).length;
     const ncrdcNo = (report.data.debtRestructuring?.ncrdcNo || '').trim();
     const hasDebtReview = ncrdcNo && ncrdcNo.toUpperCase() !== 'NA';
-    const isOwnDebtReview = hasDebtReview && ncrdcNo.toUpperCase() === OWN_NCRDC_NO;
+    const isOwnDebtReview = hasDebtReview && !!own.ncrdcNo && ncrdcNo.toUpperCase() === own.ncrdcNo.toUpperCase();
 
     const allAccountRows = [
         ...(report.data.accounts || []).map(a => ({
@@ -153,7 +154,7 @@ function ReportCard({ report }: { report: ReportEntry }) {
                 <div className="rounded-lg bg-zinc-800/50 p-2">
                     <p className="text-[10px] text-zinc-500 uppercase">Debt Review</p>
                     <p className={`text-sm font-semibold ${!hasDebtReview ? 'text-zinc-100' : isOwnDebtReview ? 'text-emerald-300' : 'text-amber-300'}`}>
-                        {!hasDebtReview ? 'None found' : isOwnDebtReview ? 'Zenowethu' : ncrdcNo}
+                        {!hasDebtReview ? 'None found' : isOwnDebtReview ? own.name : ncrdcNo}
                     </p>
                 </div>
             </div>
@@ -287,7 +288,7 @@ export function CreditReportInsightsTab({ caseId }: { caseId: string }) {
                     {data.reports.length > 0 && (
                         <div className="space-y-4">
                             {data.reports.map(report => (
-                                <ReportCard key={report.documentId} report={report} />
+                                <ReportCard key={report.documentId} report={report} own={data?.own ?? { ncrdcNo: null, name: 'us' }} />
                             ))}
                         </div>
                     )}

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'crypto';
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { renderBrandedEmail } from '../notifications/templates';
+import { getCompanyProfile } from '../company/company-profile-service';
 import { sendTransactionalEmail } from '../notifications/service';
 import { getDefaultPasswordHash } from './password-policy';
 
@@ -120,11 +121,12 @@ export async function sendActivationInvite(params: {
     return { sent: false, reason: 'no-email-on-file' };
   }
   const link = `${CREDO_URL}/reset-password?token=${params.rawToken}`;
+  const company = await getCompanyProfile();
   const html = renderBrandedEmail(
     `
       <h2 style="margin:0 0 15px;color:#0B1D35;font-size:22px;">Your Crediva profile is ready, ${params.firstName}</h2>
       <p style="margin:0 0 20px;color:#475569;font-size:16px;line-height:1.6">
-        Zenowethu has created a secure Crediva profile for you. Crediva lets you track your case,
+        ${company.shortName} has created a secure Crediva profile for you. Crediva lets you track your case,
         upload required documents, view quotes and chat with our AI Credit Coach — all in one place.
       </p>
       <p style="margin:0 0 20px;color:#475569;font-size:16px;line-height:1.6">
@@ -137,7 +139,8 @@ export async function sendActivationInvite(params: {
       title: 'Activate your Crediva profile',
       previewText: 'Set your password to access your Crediva profile.',
       button: { text: 'Set my password →', url: link },
-      companyName: 'Zenowethu Consulting (Crediva)',
+      company,
+      companyName: `${company.tradingName} (Crediva)`,
     },
   );
 

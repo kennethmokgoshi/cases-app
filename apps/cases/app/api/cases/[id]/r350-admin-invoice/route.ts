@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { auth, createLogger, renderBrandedEmail } from '@zenowethu/shared-lib';
+import { type CompanyProfile } from '@zenowethu/shared-lib/src/company/profile';
 import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details';
 import { createR350AdminFeeInvoice } from '@zenowethu/shared-lib/src/finance/r350-admin-fee-invoice';
 import { prisma } from '@zenowethu/database';
 import { generateInvoicePdf, InvoiceLineItem, InvoiceData } from '@/lib/invoice-pdf';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { z } from 'zod';
 
@@ -18,7 +20,7 @@ function formatZAR(n: number): string {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(n);
 }
 
-function buildEmailHtml(invoiceNumber: string, total: number, publicToken: string | null): string {
+function buildEmailHtml(invoiceNumber: string, total: number, publicToken: string | null, company: CompanyProfile): string {
   const totalFormatted = formatZAR(total);
   const credoUrl = process.env.CREDO_APP_URL || 'https://crediva.zenowethu.co.za';
   const viewLink = publicToken ? `${credoUrl}/quote/${publicToken}` : null;
@@ -30,12 +32,13 @@ function buildEmailHtml(invoiceNumber: string, total: number, publicToken: strin
       <p style="margin: 0; font-size: 13px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Total Due</p>
       <p style="margin: 5px 0 0; font-size: 28px; font-weight: bold; color: #0d3870;">${totalFormatted}</p>
     </div>
-    <p style="margin-top: 20px; font-size: 14px; color: #666;">This is an automated financial notification from Zenowethu Debt Management.</p>
+    <p style="margin-top: 20px; font-size: 14px; color: #666;">This is an automated financial notification from ${company.tradingName}.</p>
   `;
 
   return renderBrandedEmail(content, {
     title: `Invoice ${invoiceNumber}`,
-    previewText: 'Your R350 admin fee invoice from Zenowethu is ready for review.',
+    previewText: `Your R350 admin fee invoice from ${company.shortName} is ready for review.`,
+    company,
     button: viewLink ? { text: 'View & Download Invoice Online', url: viewLink } : undefined,
   });
 }
@@ -138,6 +141,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invoice could not be created' }, { status: 500 });
     }
 
+    const company = await getCompanyProfile();
     const bankingDetails = await resolveInvoiceBankingDetails(invoice);
     const lineItems = invoice.lineItems as unknown as InvoiceLineItem[];
 
@@ -159,18 +163,16 @@ export async function POST(
       total: Number(invoice.total),
       reference: invoice.reference ?? undefined,
       createdByName: invoice.createdBy ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}` : undefined,
-      bankName: bankingDetails.bankName,
-      bankAccountName: bankingDetails.accountHolder,
-      bankAccountNumber: bankingDetails.accountNumber,
-      branchCode: bankingDetails.branchCode,
+      bankingDetails,
+      company,
     };
 
     const pdfBytes = await generateInvoicePdf(invoiceData);
 
     const emailResult = await sendEmailWithAttachments({
       to: invoice.client!.email!,
-      subject: `Invoice ${invoice.invoiceNumber} — R350 Admin Fee — Zenowethu`,
-      html: buildEmailHtml(invoice.invoiceNumber, Number(invoice.total), invoice.publicToken),
+      subject: `Invoice ${invoice.invoiceNumber} — R350 Admin Fee — ${company.shortName}`,
+      html: buildEmailHtml(invoice.invoiceNumber, Number(invoice.total), invoice.publicToken, company),
       attachments: [{
         filename: `${invoice.invoiceNumber}.pdf`,
         content: Buffer.from(pdfBytes),

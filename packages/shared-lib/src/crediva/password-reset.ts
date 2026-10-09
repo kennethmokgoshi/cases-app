@@ -1,6 +1,7 @@
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { renderBrandedEmail } from '../notifications/templates';
+import { getCompanyProfile } from '../company/company-profile-service';
 import { sendTransactionalEmail } from '../notifications/service';
 import { createPasswordResetTokenForConsumer, hashResetToken } from './consumer-provisioning';
 import { setConsumerPassword } from './password-policy';
@@ -65,6 +66,7 @@ export async function requestPasswordReset(idNumber: string): Promise<RequestRes
   const rawToken = await createPasswordResetTokenForConsumer(consumer.id);
   const link = `${CREDO_URL}/reset-password?token=${rawToken}`;
 
+  const company = await getCompanyProfile();
   const html = renderBrandedEmail(
     `
       <h2 style="margin:0 0 15px;color:#0B1D35;font-size:22px;">Reset your Crediva password</h2>
@@ -81,7 +83,8 @@ export async function requestPasswordReset(idNumber: string): Promise<RequestRes
       title: 'Reset your Crediva password',
       previewText: 'Choose a new password for your Crediva profile.',
       button: { text: 'Reset my password →', url: link },
-      companyName: 'Zenowethu Consulting (Crediva)',
+      company,
+      companyName: `${company.tradingName} (Crediva)`,
     },
   );
 

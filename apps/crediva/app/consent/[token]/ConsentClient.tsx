@@ -5,6 +5,14 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getCredoSupportContact } from "@/lib/support-contact";
 
+export interface ConsentFirm {
+  name: string;
+  shortName: string;
+  ncrdc: string | null;
+  phone: string;
+  email: string;
+}
+
 interface ConsentView {
   token: string;
   status: string;
@@ -55,7 +63,7 @@ const secondaryContactLink: React.CSSProperties = {
   border: "1px solid #CBD5E1",
 };
 
-export default function ConsentClient({ token }: { token: string }) {
+export default function ConsentClient({ token, firm }: { token: string; firm: ConsentFirm }) {
   const [view, setView] = useState<ConsentView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +75,8 @@ export default function ConsentClient({ token }: { token: string }) {
   const [verifiedIdNumber, setVerifiedIdNumber] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const consumerDisplayName = view?.consumerDisplayName ?? view?.consumerFirstName ?? null;
-  const supportContact = getCredoSupportContact();
-  const expiredSupportContact = getCredoSupportContact("expired-consent-link");
+  const supportContact = getCredoSupportContact("consent-link", firm);
+  const expiredSupportContact = getCredoSupportContact("expired-consent-link", firm);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -180,8 +188,8 @@ export default function ConsentClient({ token }: { token: string }) {
             </svg>
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "#0B1D35" }}>Zenowethu Debt Management</div>
-            <div style={{ fontSize: "0.75rem", color: "#94A3B8", fontWeight: 600, letterSpacing: "0.03em" }}>NCRDC3693 · Credo Portal</div>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "#0B1D35" }}>{firm.name}</div>
+            <div style={{ fontSize: "0.75rem", color: "#94A3B8", fontWeight: 600, letterSpacing: "0.03em" }}>{firm.ncrdc ? `${firm.ncrdc} · ` : ""}Credo Portal</div>
           </div>
         </div>
 
@@ -330,14 +338,14 @@ export default function ConsentClient({ token }: { token: string }) {
                 href={supportContact.whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Contact Zenowethu staff on WhatsApp"
+                aria-label={`Contact ${firm.shortName} staff on WhatsApp`}
                 style={primaryContactLink}
               >
                 WhatsApp us
               </a>
               <a
                 href={supportContact.supportHref}
-                aria-label="Email Zenowethu support"
+                aria-label={`Email ${firm.shortName} support`}
                 style={secondaryContactLink}
               >
                 Support
@@ -371,7 +379,7 @@ export default function ConsentClient({ token }: { token: string }) {
               </a>
               <a
                 href={expiredSupportContact.supportHref}
-                aria-label="Email Zenowethu support for a new consent link"
+                aria-label={`Email ${firm.shortName} support for a new consent link`}
                 style={secondaryContactLink}
               >
                 Support
@@ -384,8 +392,8 @@ export default function ConsentClient({ token }: { token: string }) {
               {consumerDisplayName ? `${consumerDisplayName}, your` : "Your"} approval is needed
             </h1>
             <p style={{ fontSize: "0.9375rem", color: "#475569", lineHeight: 1.6, marginBottom: 20 }}>
-              Your debt review file{view.fileNumber ? ` (${view.fileNumber})` : ""} has been transferred to Zenowethu
-              Debt Management. This approval confirms that you know Zenowethu is now working on your file, so there is
+              Your debt review file{view.fileNumber ? ` (${view.fileNumber})` : ""} has been transferred to {firm.name}.
+              This approval confirms that you know {firm.shortName} is now working on your file, so there is
               a clear record before our team continues.
             </p>
 
@@ -423,7 +431,7 @@ export default function ConsentClient({ token }: { token: string }) {
                 style={{ marginTop: 3, width: 16, height: 16, accentColor: "#0B1D35" }}
               />
               <span>
-                I have read and understood the consent above, and I confirm Zenowethu Debt Management is authorised to
+                I have read and understood the consent above, and I confirm {firm.name} is authorised to
                 continue working on my file.
               </span>
             </label>
@@ -441,7 +449,7 @@ export default function ConsentClient({ token }: { token: string }) {
                 boxShadow: !agreed || submitting ? "none" : "0 4px 14px rgba(11,29,53,0.2)",
               }}
             >
-              {submitting ? "Recording your approval..." : "I Approve - Zenowethu may continue"}
+              {submitting ? "Recording your approval..." : `I Approve - ${firm.shortName} may continue`}
             </button>
 
             <p style={{ textAlign: "center", marginTop: 18, fontSize: "0.75rem", color: "#94A3B8", lineHeight: 1.6 }}>

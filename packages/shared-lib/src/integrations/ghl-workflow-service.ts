@@ -1,6 +1,7 @@
 import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
 import { GhlService } from './ghl-service';
+import { getCompanyProfile } from '../company/company-profile-service';
 
 export class GhlWorkflowService {
     /**
@@ -17,6 +18,7 @@ export class GhlWorkflowService {
      * Notifies the client via SMS + Email and records a system comment.
      */
     static async onDebtCounsellorRejection(caseId: string, reason: string): Promise<void> {
+        const company = await getCompanyProfile();
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
             include: { client: true },
@@ -30,7 +32,7 @@ export class GhlWorkflowService {
 <p>Your debt review transfer has been rejected by your current Debt Counsellor with the following reason:</p>
 <blockquote style="border-left:3px solid #e53e3e;padding-left:12px;color:#c53030;">${reason}</blockquote>
 <p>Our team will contact you shortly to discuss the next steps.</p>
-<p>Regards,<br/>Zenowethu Debt Management<br/>081 747 7616</p>
+<p>Regards,<br/>${company.tradingName}<br/>${company.phone}</p>
         `.trim();
 
         await Promise.allSettled([
@@ -59,6 +61,7 @@ export class GhlWorkflowService {
      * Confirms receipt to the client, forwards PoP to the DC, and applies tags.
      */
     static async onConsumerPayment(caseId: string, proofUrl: string): Promise<void> {
+        const company = await getCompanyProfile();
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
             include: { client: true },
@@ -69,7 +72,7 @@ export class GhlWorkflowService {
 
         const dcEmailHtml = `
 <p>Please find the attached proof of payment for <strong>${caseRecord.client.firstName} ${caseRecord.client.lastName}</strong> (ID: ${caseRecord.client.idNumber}) regarding case <strong>${caseRecord.fileNumber}</strong>.</p>
-<p>Regards,<br/>Zenowethu Debt Management</p>
+<p>Regards,<br/>${company.tradingName}</p>
         `.trim();
 
         const tasks: Promise<unknown>[] = [
@@ -112,13 +115,14 @@ export class GhlWorkflowService {
      * Notifies the client via WhatsApp and SMS.
      */
     static async onDHSTransferApproved(caseId: string): Promise<void> {
+        const company = await getCompanyProfile();
         const caseRecord = await prisma.case.findUnique({
             where: { id: caseId },
             include: { client: true },
         });
         if (!caseRecord) throw new Error(`Case not found: ${caseId}`);
 
-        const message = `Great news, ${caseRecord.client.firstName}! Your debt review transfer to Zenowethu has been approved by the NCR. We will be in touch shortly with your restructured repayment plan.`;
+        const message = `Great news, ${caseRecord.client.firstName}! Your debt review transfer to ${company.shortName} has been approved by the NCR. We will be in touch shortly with your restructured repayment plan.`;
 
         await Promise.allSettled([
             GhlService.sendMessage(caseId, 'WHATSAPP', message),

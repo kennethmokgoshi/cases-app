@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, generateCaseStrategy, createLogger } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 
 const logger = createLogger('api/ai/strategy');
 
@@ -71,7 +72,7 @@ export async function POST(
         };
 
         // 3. Generate Strategy
-        const strategy = await generateCaseStrategy(strategyRequest);
+        const strategy = await generateCaseStrategy({ ...strategyRequest, companyName: (await getCompanyProfile()).tradingName });
 
         // 4. Log the activity
         await prisma.caseComment.create({

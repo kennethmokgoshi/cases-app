@@ -5,12 +5,13 @@ import { checkTransferStatus, closeBrowser } from '@zenowethu/shared-lib/src/dhs
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { logAutomationRun } from '@zenowethu/shared-lib/src/automation/run-logger';
 import { getAutomationUserId } from '@zenowethu/shared-lib/src/automation/automation-user';
+import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('cron/check-not-requested');
 
 export async function POST(request: Request) {
     const cronSecret = request.headers.get('x-cron-secret');
-    if (!cronSecret || cronSecret !== process.env.CRON_SECRET) {
+    if (!isValidCronSecret(cronSecret)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

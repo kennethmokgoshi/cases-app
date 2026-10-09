@@ -3,7 +3,7 @@
  *
  * Loads a persisted DC_FEE_INVOICE `Invoice` row, maps it onto the shared
  * `InvoiceData` shape (bill-to = debt counsellor, "RE:" = consumer the fees
- * relate to) and renders the branded Zenowethu PDF. Shared by the download
+ * relate to) and renders the branded PDF for the tenant firm. Shared by the download
  * (`/api/dc-fee-invoices/[id]/pdf`) and email (`/api/dc-fee-invoices/[id]/send`)
  * routes so both produce byte-identical documents.
  */
@@ -16,6 +16,9 @@ import {
 import fs from 'fs/promises';
 import path from 'path';
 import { generateInvoicePdf, type InvoiceData, type InvoiceLineItem } from './invoice-pdf';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { companyProfileBankingFallback } from '@zenowethu/shared-lib/src/finance/banking-details';
+
 
 /** Minimal invoice fields the PDF/send routes need — kept small so the result
  *  union below stays a clean discriminated union (Prisma payload types are too
@@ -95,10 +98,15 @@ export async function generateDcFeeInvoicePdf(invoiceId: string): Promise<Genera
     createdByName: invoice.createdBy
       ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}`
       : undefined,
-    bankName: invoice.bankAccount?.bankName,
-    bankAccountName: invoice.bankAccount?.accountName,
-    bankAccountNumber: invoice.bankAccount?.accountNumber,
-    branchCode: invoice.bankAccount?.branchCode ?? undefined,
+    bankingDetails: invoice.bankAccount
+      ? {
+          bankName: invoice.bankAccount.bankName,
+          accountHolder: invoice.bankAccount.accountName,
+          accountNumber: invoice.bankAccount.accountNumber,
+          branchCode: invoice.bankAccount.branchCode ?? undefined,
+        }
+      : await companyProfileBankingFallback(),
+    company: await getCompanyProfile(),
   };
 
   const bytes = await generateInvoicePdf(data);

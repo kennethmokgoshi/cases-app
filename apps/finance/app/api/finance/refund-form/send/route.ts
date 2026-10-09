@@ -1,5 +1,7 @@
 import { auth } from '@zenowethu/shared-lib'
 import { logger, renderBrandedEmail } from '@zenowethu/shared-lib'
+import type { CompanyProfile } from '@zenowethu/shared-lib/src/company/profile'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import path from 'path'
@@ -39,7 +41,7 @@ const TYPE_LABELS: Record<(typeof OVERCHARGE_TYPES)[number], string> = {
   other:                  'Other Overcharge / Billing Error',
 }
 
-function buildRefundEmailHtml(input: SendRefundFormInput): string {
+function buildRefundEmailHtml(input: SendRefundFormInput, company: CompanyProfile): string {
   const typeList = input.overchargeTypes
     .map(t => `<li style="margin-bottom:4px;">${TYPE_LABELS[t]}</li>`)
     .join('')
@@ -53,7 +55,7 @@ function buildRefundEmailHtml(input: SendRefundFormInput): string {
     ${input.message
       ? `<p style="margin:0 0 20px;color:#374151;line-height:1.7;">${input.message.replace(/\n/g, '<br/>')}</p>`
       : `<p style="margin:0 0 20px;color:#374151;line-height:1.7;">
-          We have attached the <strong>Zenowethu Consumer Overcharge Refund Request Form</strong> to this email.
+          We have attached the <strong>${company.shortName} Consumer Overcharge Refund Request Form</strong> to this email.
           Please complete all sections in full, sign the declaration, and return the completed form to us at
           <a href="mailto:info@zenowethu.co.za" style="color:#C4953A;">info@zenowethu.co.za</a>
           or hand-deliver it to our office.
@@ -89,7 +91,8 @@ function buildRefundEmailHtml(input: SendRefundFormInput): string {
 
   return renderBrandedEmail(content, {
     title:       'Overcharge Refund Request Form',
-    previewText: `Your refund request form from Zenowethu is attached — please complete and return it.`,
+    previewText: `Your refund request form from ${company.shortName} is attached — please complete and return it.`,
+    company,
   })
 }
 
@@ -124,18 +127,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Refund form PDF not found on server.' }, { status: 500 })
     }
     const pdfBuffer = fs.readFileSync(pdfPath)
+    const company = await getCompanyProfile()
 
     const subject =
-      `Refund Request Form${input.caseRef ? ` — Ref: ${input.caseRef}` : ''} | Zenowethu`
+      `Refund Request Form${input.caseRef ? ` — Ref: ${input.caseRef}` : ''} | ${company.shortName}`
 
     const result = await sendEmail({
       to:          input.email,
-      fromName:    session.user.name ?? 'Zenowethu Finance',
+      fromName:    session.user.name ?? `${company.shortName} Finance`,
       fromEmail:   session.user.email ?? undefined,
       subject,
-      html:        buildRefundEmailHtml(input),
+      html:        buildRefundEmailHtml(input, company),
       attachments: [{
-        filename:    'Zenowethu_Refund_Request_Form.pdf',
+        filename:    `${company.shortName}_Refund_Request_Form.pdf`,
         content:     pdfBuffer,
         contentType: 'application/pdf',
       }],

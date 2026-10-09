@@ -26,6 +26,11 @@ vi.mock('@zenowethu/shared-lib/src/poa/poa-generator', () => ({
     generateWesbankPoa:  vi.fn().mockResolvedValue(Buffer.from('wesbank-pdf')),
 }));
 
+vi.mock('@zenowethu/shared-lib/src/company/company-profile-service', async () => {
+    const { ZENOWETHU_COMPANY_PROFILE } = await import('@zenowethu/shared-lib/src/company/profile');
+    return { getCompanyProfile: vi.fn().mockResolvedValue(ZENOWETHU_COMPANY_PROFILE) };
+});
+
 vi.mock('@zenowethu/shared-lib/src/poa/signing-service', () => ({
     createPoaSigningToken: vi.fn().mockResolvedValue('tok_123'),
 }));

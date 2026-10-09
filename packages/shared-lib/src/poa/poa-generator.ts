@@ -1,6 +1,6 @@
 /**
  * POA Generator — builds pre-filled Power of Attorney PDFs from scratch,
- * using the Zenowethu branded letterhead as the background on every page.
+ * using the firm's branded letterhead as the background on every page.
  *
  * Coordinate system: PDF points, origin = bottom-left of page.
  * A4: 595.28 × 841.89 pt.
@@ -9,12 +9,15 @@
  */
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont } from 'pdf-lib';
 import { readFile } from 'fs/promises';
+import { type CompanyProfile, formatCompanyAddress } from '../company/profile';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface StandardPoaInput {
+    /** The firm being appointed — resolve via getCompanyProfile() in the caller. */
+    company:     CompanyProfile;
     fullName:    string;
     idNumber:    string;
     dateOfBirth: string;   // DD/MM/YYYY
@@ -31,6 +34,8 @@ export interface StandardPoaInput {
 }
 
 export interface WesbankPoaInput {
+    /** The firm being appointed — resolve via getCompanyProfile() in the caller. */
+    company:        CompanyProfile;
     clientFullName: string;
     clientIdNumber: string;
     clientAddress:  string;
@@ -224,7 +229,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     let y = 710;
     y = drawWrapped(
         p1,
-        'I, the undersigned (the "Principal"), do hereby nominate, constitute and appoint Zenowethu Debt Management (PTY) LTD and its authorised representatives, including DC Credit Protect (Pty) Ltd (FSP No. 51550), underwritten by African Unity Life (Pty) Ltd (FSP No. 8447), as my true and lawful agents to act on my behalf in all matters set out herein.',
+        `I, the undersigned (the "Principal"), do hereby nominate, constitute and appoint ${input.company.legalName} and its authorised representatives, including DC Credit Protect (Pty) Ltd (FSP No. 51550), underwritten by African Unity Life (Pty) Ltd (FSP No. 8447), as my true and lawful agents to act on my behalf in all matters set out herein.`,
         regular, 10, ML, y, CW, 14,
     );
 
@@ -298,7 +303,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     y -= 6;
     y = drawWrapped(
         p2,
-        'I consent that the Debt Counsellor may request my debt review file from my current debt counsellor in order to transfer my file to Zenowethu Debt Management. Please complete the details of your current debt counsellor below:',
+        `I consent that the Debt Counsellor may request my debt review file from my current debt counsellor in order to transfer my file to ${input.company.tradingName}. Please complete the details of your current debt counsellor below:`,
         regular, 10, ML, y, CW, 14,
     );
     y -= 4;
@@ -309,7 +314,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
     y -= 10;
     y = drawWrapped(
         p2,
-        'Note: Complete this section only if you are currently under debt review with another debt counsellor and wish to transfer your file to Zenowethu Debt Management.',
+        `Note: Complete this section only if you are currently under debt review with another debt counsellor and wish to transfer your file to ${input.company.tradingName}.`,
         italic, 9, ML + 4, y, CW - 8, 13, DGRAY,
     );
 
@@ -401,6 +406,15 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
 //   Page 1 — Main content (company intro, client/agent details, signatures)
 //   Page 2 — Witness signatures
 
+/** Preamble naming the appointed company, its director and registration. */
+function wesbankPreamble(company: CompanyProfile): string {
+    const director = company.directorName
+        ? `, a company managed by a sole director ${company.directorName}${company.directorIdNumber ? `, ID No: ${company.directorIdNumber}` : ''}`
+        : '';
+    const reg = company.registrationNumber ? ` with registration number ${company.registrationNumber}` : '';
+    return `This Power of Attorney (the "Agreement") is made BETWEEN: ${company.legalName}${director}, registered under the laws of the Republic of South Africa${reg}, having its registered head office at ${formatCompanyAddress(company)}.`;
+}
+
 export async function generateWesbankPoa(input: WesbankPoaInput): Promise<Buffer> {
     const lhBytes = await loadLetterhead();
     const pdfDoc  = await PDFDocument.create();
@@ -427,7 +441,7 @@ export async function generateWesbankPoa(input: WesbankPoaInput): Promise<Buffer
     let y = 710;
     y = drawWrapped(
         p1,
-        'This Power of Attorney (the "Agreement") is made BETWEEN: Zenowethu Debt Management (PTY) LTD, a company managed by a sole director Aaron Nzotho, ID No: 7809065687086, registered under the laws of the Republic of South Africa with registration number 2013/121120/07, having its registered head office at Suite 2, Second Floor, Central House, 17 Central Road, Mabopane, 0199.',
+        wesbankPreamble(input.company),
         regular, 10, ML, y, CW, 14,
     );
 

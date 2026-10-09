@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { createLogger, sendStatusChangeNotification, provisionConsumerForClient } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { flagCaseIfFlaggedDC } from '@zenowethu/shared-lib/src/dc/counsellor-flag-db';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { CasePatchSchema, parseBody, isProvisionalIdNumber } from '@/lib/schemas';
@@ -910,10 +911,11 @@ export async function PATCH(
                 where: { caseId: id, statusCode: 'NEW_LEAD', success: true }
             });
             if (!existingNotification) {
-                const notifSource = updatedCase.partnerName || 'Zenowethu Debt Management';
+                const company = await getCompanyProfile();
+                const notifSource = updatedCase.partnerName || company.tradingName;
                 const creatorName = updatedCase.createdBy
                     ? `${updatedCase.createdBy.firstName} ${updatedCase.createdBy.lastName}`
-                    : 'Zenowethu Team';
+                    : `${company.shortName} Team`;
                 // Parse services from stored JSON and format for display
                 let servicesText = '';
                 if ((updatedCase as any).services) {
@@ -941,7 +943,7 @@ export async function PATCH(
                     services: servicesText,
                     mainSource: notifSource,
                     senderName: creatorName,
-                    senderEmail: 'updates@zenowethu.co.za'
+                    senderEmail: company.email
                 }).then(result => {
                     logger.info(`Welcome notification sent (PATCH) for ${updatedCase.fileNumber}: Email=${result.emailSuccess}, SMS=${result.smsSuccess}`);
                 }).catch(err => {

@@ -6,6 +6,7 @@ import {
   GhlEmailProvider,
   GhlWhatsAppProvider,
 } from '@zenowethu/shared-lib';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import type { ActionContext, ActionHandler } from '../step-registry';
 import type { ActionType, StepExecutionResult } from '../types';
 
@@ -31,6 +32,7 @@ async function sendViaGhl(
   subject?: string,
 ): Promise<StepExecutionResult> {
   const { caseId, caseRecord } = ctx;
+  const company = await getCompanyProfile();
 
   const client = await prisma.client.findUnique({
     where: { id: caseRecord.clientId },
@@ -60,7 +62,7 @@ async function sendViaGhl(
     sendResult = await provider.send(to, message);
   } else if (channel === 'EMAIL') {
     const provider = new GhlEmailProvider(ghl.apiKey, ghl.locationId);
-    sendResult = await provider.send(to, subject ?? 'Update from Zenowethu Debt Counsellors', message);
+    sendResult = await provider.send(to, subject ?? `Update from ${company.tradingName}`, message);
   } else {
     const provider = new GhlWhatsAppProvider(ghl.apiKey, ghl.locationId);
     sendResult = await provider.send(to, message);
@@ -109,7 +111,8 @@ async function sendViaGhl(
 
 registerAction('GHL_SEND_SMS', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
-    const message = (ctx.actionParams.message as string) || 'Message from Zenowethu Debt Counsellors.';
+    const company = await getCompanyProfile();
+    const message = (ctx.actionParams.message as string) || `Message from ${company.tradingName}.`;
     return await sendViaGhl(ctx, 'SMS', message);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -119,8 +122,9 @@ registerAction('GHL_SEND_SMS', async (ctx: ActionContext): Promise<StepExecution
 
 registerAction('GHL_SEND_EMAIL', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
-    const message = (ctx.actionParams.message as string) || 'Email from Zenowethu Debt Counsellors.';
-    const subject = (ctx.actionParams.subject as string) || 'Update from Zenowethu Debt Counsellors';
+    const company = await getCompanyProfile();
+    const message = (ctx.actionParams.message as string) || `Email from ${company.tradingName}.`;
+    const subject = (ctx.actionParams.subject as string) || `Update from ${company.tradingName}`;
     return await sendViaGhl(ctx, 'EMAIL', message, subject);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -130,7 +134,8 @@ registerAction('GHL_SEND_EMAIL', async (ctx: ActionContext): Promise<StepExecuti
 
 registerAction('GHL_SEND_WHATSAPP', async (ctx: ActionContext): Promise<StepExecutionResult> => {
   try {
-    const message = (ctx.actionParams.message as string) || 'WhatsApp from Zenowethu Debt Counsellors.';
+    const company = await getCompanyProfile();
+    const message = (ctx.actionParams.message as string) || `WhatsApp from ${company.tradingName}.`;
     return await sendViaGhl(ctx, 'WHATSAPP', message);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

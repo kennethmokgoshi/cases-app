@@ -41,7 +41,7 @@ Your job is to turn this monorepo into a production-grade business machine witho
 
 | App | Domain | Port | URL |
 |-----|--------|------|-----|
-| `apps/cases` | Operations core — case management, DHS, AI documents, B2B portal | 3000 | app.zenowethu.co.za |
+| `apps/cases` | Operations core — case management, DHS, AI documents, B2B portal | 3000 | cases.zenowethu.co.za |
 | `apps/insurance` | Insurance assessment, DCCP, policy issuance | 3001 | insurance.zenowethu.co.za |
 | `apps/legal` | Legal matters, prescription, court docs, rescission, disputes | 3002 | legal.zenowethu.co.za |
 | `apps/forensic-audit` | Reckless lending, affordability analysis, forensic reports | 3003 | forensic.zenowethu.co.za |

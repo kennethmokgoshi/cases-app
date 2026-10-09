@@ -1,10 +1,12 @@
 import { generateStandardPoa } from '../src/poa/poa-generator';
+import { ZENOWETHU_COMPANY_PROFILE } from '../src/company/profile';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
 async function main() {
     console.log('Generating blank POA...');
     const buffer = await generateStandardPoa({
+        company: ZENOWETHU_COMPANY_PROFILE,
         fullName: ' ',
         idNumber: ' ',
         dateOfBirth: ' ',

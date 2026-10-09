@@ -63,6 +63,14 @@ async function parseFormRobust(request: Request) {
 
 export async function POST(request: Request) {
     try {
+        // Uploads write into a consumer's case file and trigger paid AI analysis,
+        // so the caller must be a signed-in staff or partner user. Reject before
+        // reading the multipart body — never do the expensive work for a stranger.
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         logger.info('[UPLOAD_TRACE] 🏁 Starting Robust Upload');
         const { fields, files } = await parseFormRobust(request);
         const caseId = fields.caseId;
@@ -72,9 +80,8 @@ export async function POST(request: Request) {
         }
 
         // --- NEW BULLETPROOF BYPASS LOGIC ---
-        // 1. Get Session
-        const session = await auth();
-        const userType = session?.user?.userType;
+        // 1. Session user type
+        const userType = session.user.userType;
         const isB2BPartner = userType === 'B2B_PARTNER';
 
         // 2. Fetch Case Record to verify acquisitionType (The source of truth)
@@ -205,7 +212,7 @@ export async function POST(request: Request) {
                     fileUrl,
                     fileSize: buffer.length,
                     mimeType: file.type,
-                    uploadedById: session?.user?.id || null, // Track who uploaded the document
+                    uploadedById: session.user.id, // Track who uploaded the document
                 }
             });
 
@@ -273,7 +280,7 @@ export async function POST(request: Request) {
                                     extractedDoc.type === 'POA' ? JSON.stringify(extraction.analysis.poa) :
                                         extractedDoc.type === 'CREDIT_REPORT' || extractedDoc.type === 'CREDIT_REPORT_OTHER' ? JSON.stringify(extraction.analysis.creditReport) : null,
                                 analyzedAt: new Date(),
-                                uploadedById: session?.user?.id || null, // Track who uploaded the document
+                                uploadedById: session.user.id, // Track who uploaded the document
                             }
                         });
 
@@ -386,9 +393,10 @@ export async function POST(request: Request) {
         }, { status: 201 });
 
     } catch (error) {
-        logger.error('❌ Error uploading documents:', error);
+        // Log the full error server-side; never echo Prisma/internal messages to the client.
+        logger.error({ err: error }, '❌ Error uploading documents');
         return NextResponse.json(
-            { error: 'Failed to upload documents', details: error instanceof Error ? error.message : 'Unknown error' },
+            { error: 'Failed to upload documents' },
             { status: 500 }
         );
     }

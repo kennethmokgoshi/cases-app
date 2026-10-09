@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { auth, logger, WORKFLOW_STATUSES } from '@zenowethu/shared-lib';
+import { formatSignatureBlock } from '@zenowethu/shared-lib/src/company/profile';
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import * as XLSX from 'xlsx';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { getWeekStart } from '../route';
@@ -11,6 +13,7 @@ export async function POST() {
         if (!session?.user?.id) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        const company = await getCompanyProfile();
 
         const userId = session.user.id;
         const userEmail = session.user.email;
@@ -136,7 +139,7 @@ export async function POST() {
         const html = `
         <div style="font-family:Inter,Arial,sans-serif;max-width:700px;margin:0 auto;background:#fff;">
             <div style="background:#0B1D35;padding:28px 32px;">
-                <h1 style="color:#fff;margin:0;font-size:22px;">Zenowethu Debt Counselling</h1>
+                <h1 style="color:#fff;margin:0;font-size:22px;">${company.tradingName}</h1>
                 <p style="color:#C4953A;margin:4px 0 0;font-size:14px;">Completed Cases — Week Report</p>
             </div>
             <div style="padding:28px 32px;">
@@ -160,8 +163,7 @@ export async function POST() {
             </div>
             <div style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
                 <p style="color:#6b7280;font-size:12px;margin:0;">
-                    Zenowethu Debt Management | NCRDC3693 | Suite 2, 2nd Floor, Central House, 17 Central Road, Mabopane, 0190<br>
-                    Tel: +27 81 747 7616 | Cell: 082 363 8207 | notifications@zenowethu.co.za | www.zenowethu.co.za | Member of DCASA
+                    ${formatSignatureBlock(company).replace(/\n/g, '<br>')}
                 </p>
             </div>
         </div>`;
@@ -171,7 +173,7 @@ export async function POST() {
             to: userEmail,
             subject: `Completed Cases This Week — ${todayLabel}`,
             html,
-            fromName: 'Zenowethu Debt Counselling',
+            fromName: company.tradingName,
             attachments: [{ filename, content: xlsBuffer, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
         });
 

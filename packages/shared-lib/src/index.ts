@@ -12,6 +12,11 @@ export * from './statuses';
 // import { ... } from '@zenowethu/shared-lib/src/openai'
 // import { ... } from '@zenowethu/shared-lib/src/xds'
 
+// Company (tenant) identity + platform (operator) config — pure formatters and
+// Zenowethu defaults. The Prisma resolver `getCompanyProfile()` is deep-imported
+// from './company/company-profile-service' by server code only.
+export * from './company';
+
 export * from './notifications';
 // NOTE: './dc' (DC priority emails + outcome events) is NOT exported here — it
 // imports @zenowethu/database (Prisma), which must never reach client bundles.
@@ -44,6 +49,11 @@ export * from './finance/document-number';
 // The Prisma-backed persistence lives in './finance/dc-fee-invoice-service' and is
 // imported directly by server routes — it is intentionally NOT re-exported here.
 export * from './finance/dc-fee-invoice';
+
+// Finance — invoice / proof-of-payment document types and the case statuses they
+// drive (browser-safe). The Prisma-backed transition lives in
+// './finance/fee-document-status' and is imported directly by server routes.
+export * from './finance/fee-document-workflow';
 
 // Demo Data
 export * from './demo-data';

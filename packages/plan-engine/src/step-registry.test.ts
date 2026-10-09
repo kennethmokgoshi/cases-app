@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 // mock them so this test only exercises registration wiring.
 vi.mock('@zenowethu/database', () => ({ prisma: {} }));
 vi.mock('@zenowethu/shared-lib', () => ({
+    getPlatformConfig: () => ({ name: 'Zenowethu', url: 'https://cases.zenowethu.co.za', supportEmail: 'notifications@zenowethu.co.za' }),
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
   sendManualMessage: vi.fn(),
   getTemplateByStatus: vi.fn(),

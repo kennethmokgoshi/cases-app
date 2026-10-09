@@ -4,6 +4,7 @@ import { createLogger } from '@zenowethu/shared-lib';
 import { auth } from '@zenowethu/shared-lib/src/auth';
 import { runDrrDocumentReadiness } from '@zenowethu/shared-lib/src/dhs/drr-readiness';
 import { prisma } from '@zenowethu/database';
+import { secretsMatch } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
 const logger = createLogger('api/internal/drr-readiness');
 
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
         // ── Auth: internal shared secret OR a staff session ─────────────────
         const secret = process.env.INTERNAL_API_SECRET;
         const headerSecret = request.headers.get('x-internal-secret');
-        const internalCall = Boolean(secret && headerSecret && headerSecret === secret);
+        const internalCall = secretsMatch(headerSecret, secret);
 
         let triggeredByUserId: string | undefined;
         if (!internalCall) {

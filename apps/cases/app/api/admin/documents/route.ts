@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '@zenowethu/shared-lib';
+import { requireAdmin, requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 const logger = createLogger('api/admin/documents');
 
 
 export async function GET(request: Request) {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
     try {
         const { searchParams } = new URL(request.url);
         const acquisitionType = searchParams.get('acquisitionType'); // Optional filter
@@ -33,6 +36,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+    const guard = await requireAdmin();
+    if (guard.response) return guard.response;
     try {
         const body = await request.json();
         const { name, fileUrl, fileSize, mimeType, category, acquisitionType, projectIds } = body;

@@ -7,11 +7,13 @@ function yearsAgo(years: number): string {
     return d.toISOString().slice(0, 10);
 }
 
+const OWN = { ncrdcNo: 'NCRDC3693', name: 'Zenowethu' };
+
 describe('buildCreditReportInsights — dispute candidates', () => {
     it('flags an ordinary adverse listing with no payment in 3+ years as a prescription candidate', () => {
         const insights = buildCreditReportInsights({
             adverseListings: [{ creditor: 'Lewis Stores', accountNumber: '123', adverseCode: 'Written Off', lastPaymentDate: yearsAgo(4) }],
-        });
+        }, OWN);
         const item = insights.find(i => i.category === 'dispute' && i.title.includes('prescription'));
         expect(item).toBeDefined();
         expect(item?.detail).toContain('Prescription Act');
@@ -20,19 +22,19 @@ describe('buildCreditReportInsights — dispute candidates', () => {
     it('does not flag an adverse listing with a payment less than 3 years ago', () => {
         const insights = buildCreditReportInsights({
             adverseListings: [{ creditor: 'Lewis Stores', accountNumber: '123', lastPaymentDate: yearsAgo(1) }],
-        });
+        }, OWN);
         expect(insights.find(i => i.title.includes('prescription'))).toBeUndefined();
     });
 
     it('uses the 30-year judgment prescription threshold instead of 3 years for judgment debt', () => {
         const notYetJudgment = buildCreditReportInsights({
             adverseListings: [{ creditor: 'ABC Attorneys', accountNumber: '1', adverseCode: 'Judgment', lastPaymentDate: yearsAgo(5) }],
-        });
+        }, OWN);
         expect(notYetJudgment.find(i => i.title.includes('prescription'))).toBeUndefined();
 
         const oldJudgment = buildCreditReportInsights({
             adverseListings: [{ creditor: 'ABC Attorneys', accountNumber: '1', adverseCode: 'Judgment', lastPaymentDate: yearsAgo(31) }],
-        });
+        }, OWN);
         const item = oldJudgment.find(i => i.title.includes('prescription'));
         expect(item).toBeDefined();
         expect(item?.detail).toContain('judgment');
@@ -44,21 +46,21 @@ describe('buildCreditReportInsights — dispute candidates', () => {
                 { creditor: 'African Bank', accountNumber: '999' },
                 { creditor: 'African Bank', accountNumber: '999' },
             ],
-        });
+        }, OWN);
         expect(insights.find(i => i.category === 'dispute' && i.title.includes('Duplicate'))).toBeDefined();
     });
 
     it('flags inconsistent ID number occurrences', () => {
         const insights = buildCreditReportInsights({
             _occurrences: { idNumber: [{ value: '8908305317089', count: 1 }, { value: '8908035317089', count: 1 }] },
-        });
+        }, OWN);
         expect(insights.find(i => i.category === 'dispute' && i.title.includes('ID number'))).toBeDefined();
     });
 
     it('flags excessive enquiries', () => {
         const insights = buildCreditReportInsights({
             enquirySummary: { totalLast12Months: 9, excessiveFlag: true },
-        });
+        }, OWN);
         expect(insights.find(i => i.category === 'dispute' && i.title.includes('enquiries'))).toBeDefined();
     });
 });
@@ -67,7 +69,7 @@ describe('buildCreditReportInsights — adverse listing visibility', () => {
     it('surfaces a non-prescribed adverse listing as an info item so it is never silently hidden', () => {
         const insights = buildCreditReportInsights({
             adverseListings: [{ creditor: 'LEWIS STORES', accountNumber: '0903150', adverseCode: 'Written Off', openBalance: 33330, status: 'WRITTEN OFF', lastPaymentDate: yearsAgo(2) }],
-        });
+        }, OWN);
         const item = insights.find(i => i.category === 'info' && i.title.includes('LEWIS STORES'));
         expect(item).toBeDefined();
         expect(item?.detail).toContain(`R${new Intl.NumberFormat('en-ZA').format(33330)}`);
@@ -77,7 +79,7 @@ describe('buildCreditReportInsights — adverse listing visibility', () => {
     it('does not duplicate an adverse listing as both a dispute candidate and an info item', () => {
         const insights = buildCreditReportInsights({
             adverseListings: [{ creditor: 'Old Debt Co', accountNumber: '1', lastPaymentDate: yearsAgo(4) }],
-        });
+        }, OWN);
         const infoItems = insights.filter(i => i.category === 'info' && i.title.includes('Old Debt Co'));
         const disputeItems = insights.filter(i => i.category === 'dispute' && i.title.includes('Old Debt Co'));
         expect(disputeItems).toHaveLength(1);
@@ -89,7 +91,7 @@ describe('buildCreditReportInsights — improve candidates', () => {
     it('surfaces each credit score suppressor', () => {
         const insights = buildCreditReportInsights({
             creditScore: { score: 500, band: 'Below Average', suppressors: ['High utilisation', 'Recent enquiries'] },
-        });
+        }, OWN);
         const items = insights.filter(i => i.category === 'improve' && i.title === 'Credit score suppressor');
         expect(items).toHaveLength(2);
     });
@@ -97,7 +99,7 @@ describe('buildCreditReportInsights — improve candidates', () => {
     it('flags an account with arrears', () => {
         const insights = buildCreditReportInsights({
             accounts: [{ creditor: 'Capfin', arrearsAmount: 500 }],
-        });
+        }, OWN);
         expect(insights.find(i => i.category === 'improve' && i.title.includes('arrears'))).toBeDefined();
     });
 
@@ -105,7 +107,7 @@ describe('buildCreditReportInsights — improve candidates', () => {
         const insights = buildCreditReportInsights({
             income: { netSalary: 10000 },
             summary: { totalInstallment: 5000 },
-        });
+        }, OWN);
         const item = insights.find(i => i.category === 'improve' && i.title.includes('debt-to-income'));
         expect(item).toBeDefined();
         expect(item?.detail).toContain('Affordability Check');
@@ -115,36 +117,36 @@ describe('buildCreditReportInsights — improve candidates', () => {
         const insights = buildCreditReportInsights({
             income: { netSalary: 10000 },
             summary: { totalInstallment: 1000 },
-        });
+        }, OWN);
         expect(insights.find(i => i.title.includes('debt-to-income'))).toBeUndefined();
     });
 });
 
 describe('buildCreditReportInsights — positive signals', () => {
     it('flags no adverse listings as positive', () => {
-        const insights = buildCreditReportInsights({ adverseListings: [] });
+        const insights = buildCreditReportInsights({ adverseListings: [] }, OWN);
         expect(insights.find(i => i.category === 'positive' && i.title.includes('No adverse'))).toBeDefined();
     });
 
     it('flags a Good or Great score band as positive', () => {
-        const insights = buildCreditReportInsights({ creditScore: { score: 700, band: 'Good' } });
+        const insights = buildCreditReportInsights({ creditScore: { score: 700, band: 'Good' } }, OWN);
         expect(insights.find(i => i.category === 'positive' && i.title.includes('Good credit score'))).toBeDefined();
     });
 
     it('flags non-excessive enquiries as positive', () => {
-        const insights = buildCreditReportInsights({ enquirySummary: { totalLast12Months: 1, excessiveFlag: false } });
+        const insights = buildCreditReportInsights({ enquirySummary: { totalLast12Months: 1, excessiveFlag: false } }, OWN);
         expect(insights.find(i => i.category === 'positive' && i.title.includes('normal range'))).toBeDefined();
     });
 
     it('flags consistent identity data as positive when there is no conflict', () => {
-        const insights = buildCreditReportInsights({ _occurrences: { idNumber: [{ value: '123', count: 3 }] } });
+        const insights = buildCreditReportInsights({ _occurrences: { idNumber: [{ value: '123', count: 3 }] } }, OWN);
         expect(insights.find(i => i.category === 'positive' && i.title.includes('Consistent identity'))).toBeDefined();
     });
 
     it('does not flag consistent identity data as positive when there is a conflict', () => {
         const insights = buildCreditReportInsights({
             _occurrences: { idNumber: [{ value: '123', count: 1 }, { value: '456', count: 1 }] },
-        });
+        }, OWN);
         expect(insights.find(i => i.category === 'positive' && i.title.includes('Consistent identity'))).toBeUndefined();
     });
 });
@@ -153,7 +155,7 @@ describe('buildCreditReportInsights — informational context', () => {
     it('flags registration under a different debt counsellor', () => {
         const insights = buildCreditReportInsights({
             debtRestructuring: { ncrdcNo: 'NCRDC2967', debtCounsellorName: 'Semar Muhammad' },
-        });
+        }, OWN);
         const item = insights.find(i => i.category === 'info' && i.title.includes('different debt counsellor'));
         expect(item).toBeDefined();
         expect(item?.detail).toContain('NCRDC2967');
@@ -162,7 +164,7 @@ describe('buildCreditReportInsights — informational context', () => {
     it('flags registration under Zenowethu\'s own NCRDC number without the "different" warning', () => {
         const insights = buildCreditReportInsights({
             debtRestructuring: { ncrdcNo: 'NCRDC3693', dhsStatus: 'D4' },
-        });
+        }, OWN);
         expect(insights.find(i => i.title.includes('different debt counsellor'))).toBeUndefined();
         expect(insights.find(i => i.category === 'info' && i.title.includes('registered with Zenowethu'))).toBeDefined();
     });
@@ -170,7 +172,7 @@ describe('buildCreditReportInsights — informational context', () => {
     it('surfaces the automated bureau decision outcome and reason', () => {
         const insights = buildCreditReportInsights({
             codixResult: { outcome: 'Decline', reason: 'CLIENT IS LISTED UNDER DEBT COUNSELLING' },
-        });
+        }, OWN);
         const item = insights.find(i => i.category === 'info' && i.title.includes('Decline'));
         expect(item).toBeDefined();
         expect(item?.detail).toBe('CLIENT IS LISTED UNDER DEBT COUNSELLING');
@@ -201,7 +203,7 @@ describe('buildCreditReportInsights — real-world shape (Stephen Rampai Experia
             accounts: [],
             enquirySummary: { totalLast12Months: 9, excessiveFlag: true },
             _occurrences: { idNumber: [{ value: '8908035317089', count: 2 }] },
-        });
+        }, OWN);
 
         expect(insights.some(i => i.category === 'dispute' && i.title.includes('enquiries'))).toBe(true);
         expect(insights.some(i => i.category === 'info' && i.title.includes('different debt counsellor'))).toBe(true);

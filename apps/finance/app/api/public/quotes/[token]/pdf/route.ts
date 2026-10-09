@@ -1,6 +1,7 @@
 import { prisma } from '@zenowethu/database'
 import { resolveInvoiceBankingDetails } from '@zenowethu/shared-lib/src/finance/banking-details'
 import { generateInvoicePdf, InvoiceLineItem } from '@/lib/invoice-pdf'
+import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { NextResponse } from 'next/server'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
@@ -36,6 +37,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     notes:          invoice.notes ?? undefined,
     reference:      invoice.reference ?? undefined,
     bankingDetails,
+    company: await getCompanyProfile(),
   })
 
   return new Response(Buffer.from(pdfBytes), {

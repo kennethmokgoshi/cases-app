@@ -3,6 +3,11 @@
 // Same header set as the authenticated apps, minus frame-ancestors strictness
 // differences — the public website has no auth but still should not be framed
 // or MIME-sniffed. CSP allows Next.js inline styles/scripts and same-origin API.
+// The OPSGENTY (GHL) chat widget is only loaded when a widget ID is configured
+// (see app/layout.tsx); its domains are allowed in the CSP under the same condition.
+const ghlWidget = Boolean(process.env.NEXT_PUBLIC_GHL_CHAT_WIDGET_ID?.trim());
+const ghlSrc = ghlWidget ? " https://*.leadconnectorhq.com https://*.msgsndr.com" : "";
+
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "on" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
@@ -14,7 +19,7 @@ const securityHeaders = [
   {
     key: "Content-Security-Policy",
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.zenowethu.co.za; font-src 'self' data:; connect-src 'self' https://*.zenowethu.co.za; frame-src 'self'; object-src 'none'; upgrade-insecure-requests;",
+      `default-src 'self'; script-src 'self' 'unsafe-inline'${ghlSrc}; style-src 'self' 'unsafe-inline'${ghlSrc}; img-src 'self' blob: data: https://*.zenowethu.co.za${ghlSrc}; font-src 'self' data:${ghlSrc}; connect-src 'self' https://*.zenowethu.co.za${ghlSrc}${ghlWidget ? " wss://*.leadconnectorhq.com" : ""}; frame-src 'self'${ghlSrc}; object-src 'none'; upgrade-insecure-requests;`,
   },
 ];
 

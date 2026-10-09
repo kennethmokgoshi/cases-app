@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@zenowethu/database";
+import { requireStaff } from '@zenowethu/shared-lib/src/auth/route-guards';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await requireStaff();
+    if (guard.response) return guard.response;
   try {
     const { id: requestId } = await params;
 
