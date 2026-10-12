@@ -166,6 +166,13 @@ export interface CompletePoaSigningInput {
   signatureImage: string;   // base64 PNG data URL
   ipAddress:      string;
   userAgent:      string;
+  /** What the signer ticked for Sections 5 (checklist) and 6 (declaration). */
+  confirmations?: { checklist: boolean; declarations: boolean };
+  /**
+   * When true, a STANDARD POA is refused unless both sections were confirmed.
+   * Off by default so other channels (Crediva) keep working until their UI asks.
+   */
+  requireConfirmations?: boolean;
 }
 
 export interface CompletePoaSigningResult {
@@ -184,6 +191,17 @@ export async function completePoaSigning(
   if ('error' in resolved) return resolved;
 
   const { record } = resolved;
+
+  const confirmedSections = input.confirmations?.checklist && input.confirmations.declarations
+    ? input.confirmations
+    : undefined;
+
+  if (input.requireConfirmations && record.poaType === 'STANDARD' && !confirmedSections) {
+    return {
+      error: 'Please confirm Section 5 (Required Documents Checklist) and Section 6 (Declaration) before signing.',
+      status: 400,
+    };
+  }
 
   // ── Build POA data ───────────────────────────────────────────────────────
   const today = new Date().toLocaleDateString('en-ZA', {
@@ -217,6 +235,7 @@ export async function completePoaSigning(
       dcNcrdcNo:      record.case?.ncrdcNo            ?? '',
       dcPhone:        record.case?.dcMobile           ?? '',
       signatureImage: input.signatureImage,
+      confirmedSections,
     });
   } else {
     // Wesbank POA — signature embedding not supported (requires agent details)

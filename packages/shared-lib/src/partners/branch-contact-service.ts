@@ -8,8 +8,8 @@
 
 import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
-import { resolveContact } from './branch-contact';
-import type { BranchContactInput, ReferrerContactInput, ResolvedContact } from './branch-contact';
+import { resolveContact, resolveEmailRecipients } from './branch-contact';
+import type { BranchContactInput, EmailRecipients, ReferrerContactInput, ResolvedContact } from './branch-contact';
 
 const BRANCH_CONTACT_SELECT = {
     id: true,
@@ -61,6 +61,122 @@ export async function getCaseBranch(caseId: string): Promise<(BranchContactInput
             name: { equals: branchName, mode: 'insensitive' },
             partnerProject: { name: { equals: leadingWord, mode: 'insensitive' } } },
         select: BRANCH_CONTACT_SELECT });
+}
+
+export type ReferrerEmailSource = 'referrer' | 'branch' | 'partner';
+
+export interface ReferrerEmailResult {
+    email: string | null;
+    /** Cell number from the same source as the email (partners carry none). */
+    phone: string | null;
+    source: ReferrerEmailSource | null;
+    /** Display name of whoever the email belongs to (referrer, branch or partner). */
+    label: string | null;
+}
+
+const EMPTY_REFERRER_EMAIL: ReferrerEmailResult = { email: null, phone: null, source: null, label: null };
+
+function cleanEmail(value: string | null | undefined): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+}
+
+/**
+ * The email a new lead/case form should pre-fill as the primary contact for a
+ * selected project (sub-project / branch). Works for every partner and for B2C
+ * referrers alike. Priority:
+ *   1. the registered referrer linked to the project
+ *   2. the partner branch contact (linked to the project, else matched by name
+ *      under the parent partner)
+ *   3. the parent partner's billing email
+ * Returns an empty result when nothing is on file — i.e. the consumer was not
+ * referred, so there is nothing to pre-fill.
+ */
+export async function resolveReferrerEmailForProject(projectId: string): Promise<ReferrerEmailResult> {
+    const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: {
+            name: true,
+            parentId: true,
+            referrer: { select: { firstName: true, lastName: true, email: true, cellNumber: true, isActive: true } },
+            branchProfile: { select: { name: true, email: true, phone: true, isActive: true } },
+            billingEmail: true,
+            parent: { select: { billingEmail: true, name: true } } } });
+    if (!project) return EMPTY_REFERRER_EMAIL;
+
+    const referrer = project.referrer?.isActive ? project.referrer : null;
+    const referrerEmail = cleanEmail(referrer?.email);
+    const referrerPhone = cleanEmail(referrer?.cellNumber);
+    if (referrer && (referrerEmail || referrerPhone)) {
+        return {
+            email: referrerEmail,
+            phone: referrerPhone,
+            source: 'referrer',
+            label: `${referrer.firstName} ${referrer.lastName}`.trim() };
+    }
+
+    let branch = project.branchProfile;
+    if (!branch && project.parentId) {
+        branch = await prisma.partnerBranch.findFirst({
+            where: {
+                partnerProjectId: project.parentId,
+                name: { equals: project.name.trim(), mode: 'insensitive' } },
+            select: { name: true, email: true, phone: true, isActive: true } });
+    }
+    const activeBranch = branch?.isActive ? branch : null;
+    const branchEmail = cleanEmail(activeBranch?.email);
+    const branchPhone = cleanEmail(activeBranch?.phone);
+    if (activeBranch && (branchEmail || branchPhone)) {
+        // A branch with only a phone still supplies it; the email can then come
+        // from the partner's billing address below.
+        const partnerEmail = branchEmail ?? cleanEmail(project.parent?.billingEmail);
+        return { email: partnerEmail, phone: branchPhone, source: 'branch', label: activeBranch.name };
+    }
+
+    // A top-level partner project is its own partner.
+    const partnerEmail = cleanEmail(project.parent?.billingEmail ?? project.billingEmail);
+    if (partnerEmail) {
+        return { email: partnerEmail, phone: null, source: 'partner', label: project.parent?.name ?? project.name };
+    }
+
+    return EMPTY_REFERRER_EMAIL;
+}
+
+/**
+ * Who should receive a case's email: the referring referrer/branch as the main
+ * contact, with the consumer copied. Never throws — a failed lookup degrades to
+ * the consumer's own address so a send is never blocked.
+ */
+export async function resolveCaseEmailRecipients(
+    caseId: string,
+    payloadConsumerEmail?: string | null
+): Promise<EmailRecipients> {
+    try {
+        const caseRecord = await prisma.case.findUnique({
+            where: { id: caseId },
+            select: {
+                client: { select: { email: true, alternativeEmail: true } },
+                referrer: { select: { email: true, isActive: true } } } });
+
+        const referrerEmail = caseRecord?.referrer?.isActive === false
+            ? null
+            : cleanEmail(caseRecord?.referrer?.email);
+
+        let referralEmail = referrerEmail;
+        if (!referralEmail) {
+            const branch = await getCaseBranch(caseId);
+            referralEmail = branch && branch.isActive !== false ? cleanEmail(branch.email) : null;
+        }
+
+        return resolveEmailRecipients(
+            payloadConsumerEmail ?? caseRecord?.client?.email,
+            caseRecord?.client?.alternativeEmail,
+            referralEmail
+        );
+    } catch (error) {
+        logger.error({ err: error, caseId }, 'Failed to resolve case email recipients — using the consumer address');
+        return resolveEmailRecipients(payloadConsumerEmail, null, null);
+    }
 }
 
 /**

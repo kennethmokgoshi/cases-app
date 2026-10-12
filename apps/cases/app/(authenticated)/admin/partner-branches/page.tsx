@@ -49,7 +49,7 @@ const EDITABLE_FIELDS = [
     { key: 'code', label: 'Code', type: 'text' },
     { key: 'contactPerson', label: 'Contact person', type: 'text' },
     { key: 'email', label: 'Email', type: 'email' },
-    { key: 'phone', label: 'Phone', type: 'tel' },
+    { key: 'phone', label: 'Cell number', type: 'tel' },
     { key: 'alternatePhone', label: 'Alternate phone', type: 'tel' },
     { key: 'whatsappNumber', label: 'WhatsApp', type: 'tel' },
     { key: 'addressLine', label: 'Address', type: 'text' },
@@ -80,6 +80,8 @@ export default function PartnerBranchesPage() {
     const [missingOnly, setMissingOnly] = useState(false);
 
     const [editingId, setEditingId] = useState<string | null>(null);
+    // Set while the modal is adding a branch (value = chosen partner id, '' = none yet).
+    const [createPartnerId, setCreatePartnerId] = useState<string | null>(null);
     const [form, setForm] = useState<EditForm | null>(null);
     const [saving, setSaving] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null);
@@ -121,7 +123,40 @@ export default function PartnerBranchesPage() {
         setForm(toForm(branch));
     };
 
+    const startCreate = (partnerId: string) => {
+        setEditingId(null);
+        setCreatePartnerId(partnerId);
+        setForm(toForm({ name: '', isActive: true } as Branch));
+    };
+
+    const closeModal = () => {
+        setEditingId(null);
+        setCreatePartnerId(null);
+        setForm(null);
+    };
+
     const saveEdit = async () => {
+        if (createPartnerId !== null && form) {
+            if (!createPartnerId) { toast.error('Choose a partner for this branch'); return; }
+            if (!form.name.trim()) { toast.error('Enter the branch name'); return; }
+            setSaving(true);
+            try {
+                const res = await fetch('/api/admin/partner-branches', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...form, partnerProjectId: createPartnerId }) });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error ?? 'Could not add branch');
+                toast.success(`${form.name} added — it now appears in the case form's Branch/Subproject list`);
+                closeModal();
+                await load();
+            } catch (error) {
+                toast.error((error as Error).message);
+            } finally {
+                setSaving(false);
+            }
+            return;
+        }
         if (!editingId || !form) return;
         setSaving(true);
         try {
@@ -224,7 +259,7 @@ export default function PartnerBranchesPage() {
                     {[
                         { label: 'Branches', value: summary.total, tone: 'text-white' },
                         { label: 'With email', value: summary.withEmail, tone: 'text-emerald-400' },
-                        { label: 'With phone', value: summary.withPhone, tone: 'text-emerald-400' },
+                        { label: 'With cell number', value: summary.withPhone, tone: 'text-emerald-400' },
                         { label: 'No contact at all', value: summary.unreachable, tone: summary.unreachable > 0 ? 'text-amber-400' : 'text-gray-400' },
                     ].map((stat) => (
                         <div key={stat.label} className="bg-zeno-navy border border-white/10 rounded-lg px-4 py-3">
@@ -260,6 +295,12 @@ export default function PartnerBranchesPage() {
                 </label>
 
                 <button
+                    onClick={() => startCreate(partnerFilter)}
+                    className="px-3 py-2 text-sm rounded-lg bg-zeno-cyan text-zeno-navy font-semibold"
+                >
+                    + Add branch
+                </button>
+                <button
                     onClick={downloadTemplate}
                     className="px-3 py-2 text-sm rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/5"
                 >
@@ -278,14 +319,14 @@ export default function PartnerBranchesPage() {
                     <h2 className="text-sm font-semibold text-white mb-2">Bulk import contact details</h2>
                     <p className="text-xs text-gray-400 mb-3">
                         Pick a partner above, then paste the contact list. Columns are matched by heading —
-                        <span className="text-gray-300"> Branch, Code, Contact Person, Email, Phone, Alternate Phone, WhatsApp, Address, City, Province, Postal Code, Notes</span>.
+                        <span className="text-gray-300"> Branch, Code, Contact Person, Email, Cell Number, Alternate Phone, WhatsApp, Address, City, Province, Postal Code, Notes</span>.
                         Blank cells leave the stored value alone. Nothing is written until you review the preview.
                     </p>
                     <textarea
                         value={csv}
                         onChange={(e) => { setCsv(e.target.value); setPreview(null); }}
                         rows={8}
-                        placeholder={'Branch,Contact Person,Email,Phone\nMthata,Nomsa Dlamini,mthata@example.co.za,047 000 0000'}
+                        placeholder={'Branch,Contact Person,Email,Cell Number\nMthata,Nomsa Dlamini,mthata@example.co.za,047 000 0000'}
                         className="w-full bg-zeno-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono"
                     />
                     <div className="flex gap-3 mt-3">
@@ -369,9 +410,17 @@ export default function PartnerBranchesPage() {
 
             {!loading && !loadError && grouped.map(([partnerName, rows]) => (
                 <section key={partnerName} className="mb-8">
-                    <h2 className="text-sm font-semibold text-zeno-cyan uppercase tracking-wide mb-2">
-                        {partnerName} <span className="text-gray-500 normal-case">({rows.length})</span>
-                    </h2>
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-sm font-semibold text-zeno-cyan uppercase tracking-wide">
+                            {partnerName} <span className="text-gray-500 normal-case">({rows.length})</span>
+                        </h2>
+                        <button
+                            onClick={() => startCreate(rows[0].partnerProject.id)}
+                            className="text-xs text-zeno-cyan hover:underline"
+                        >
+                            + Add branch to {partnerName}
+                        </button>
+                    </div>
                     <div className="overflow-x-auto border border-white/10 rounded-lg">
                         <table className="w-full text-sm min-w-[900px]">
                             <thead className="bg-white/5 text-gray-400 text-xs uppercase">
@@ -379,7 +428,7 @@ export default function PartnerBranchesPage() {
                                     <th className="text-left px-3 py-2">Branch</th>
                                     <th className="text-left px-3 py-2">Contact person</th>
                                     <th className="text-left px-3 py-2">Email</th>
-                                    <th className="text-left px-3 py-2">Phone</th>
+                                    <th className="text-left px-3 py-2">Cell number</th>
                                     <th className="text-left px-3 py-2">City</th>
                                     <th className="text-right px-3 py-2">Cases</th>
                                     <th className="text-right px-3 py-2">Actions</th>
@@ -413,10 +462,25 @@ export default function PartnerBranchesPage() {
                 </section>
             ))}
 
-            {editingId && form && (
+            {(editingId || createPartnerId !== null) && form && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
                     <div className="bg-zeno-navy border border-white/10 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <h2 className="text-lg font-semibold text-white mb-4">Edit branch</h2>
+                        <h2 className="text-lg font-semibold text-white mb-4">{createPartnerId !== null ? 'Add branch' : 'Edit branch'}</h2>
+                        {createPartnerId !== null && (
+                            <div className="mb-4">
+                                <label className="block text-xs text-gray-400 mb-1">Partner</label>
+                                <select
+                                    value={createPartnerId}
+                                    onChange={(e) => setCreatePartnerId(e.target.value)}
+                                    className="w-full bg-zeno-dark border border-white/10 rounded-lg px-3 py-2 text-sm text-white [color-scheme:dark]"
+                                >
+                                    <option value="">Choose partner...</option>
+                                    {partners.map((p) => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {EDITABLE_FIELDS.map((field) => (
                                 <div key={field.key}>
@@ -449,7 +513,7 @@ export default function PartnerBranchesPage() {
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
                             <button
-                                onClick={() => { setEditingId(null); setForm(null); }}
+                                onClick={closeModal}
                                 className="px-4 py-2 text-sm rounded-lg border border-white/10 text-gray-300 hover:bg-white/5"
                             >
                                 Cancel
@@ -459,7 +523,7 @@ export default function PartnerBranchesPage() {
                                 disabled={saving}
                                 className="px-4 py-2 text-sm rounded-lg bg-zeno-cyan text-zeno-navy font-semibold disabled:opacity-50"
                             >
-                                {saving ? 'Saving...' : 'Save branch'}
+                                {saving ? 'Saving...' : createPartnerId !== null ? 'Add branch' : 'Save branch'}
                             </button>
                         </div>
                     </div>
@@ -472,6 +536,7 @@ export default function PartnerBranchesPage() {
                     onClose={() => setDeleteTarget(null)}
                     onConfirm={confirmDelete}
                     title="Remove branch"
+                    confirmText="Yes, remove"
                     message={
                         deleteTarget._count.cases > 0
                             ? `${deleteTarget.name} has ${deleteTarget._count.cases} linked case(s), so it will be deactivated rather than deleted.`

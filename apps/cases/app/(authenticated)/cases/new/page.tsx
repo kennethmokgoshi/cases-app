@@ -161,6 +161,9 @@ function NewCaseWithAIComponent() {
     // Auto-detected referrerId from selected sub-project (when sub-project is a registered Referrer)
     const [autoDetectedReferrerId, setAutoDetectedReferrerId] = useState<string | null>(null);
     const [autoDetectedReferrerName, setAutoDetectedReferrerName] = useState<string | null>(null);
+    // Email pre-filled from the referrer/branch; tracked so a user edit is never overwritten
+    const autoFilledEmailRef = useRef<string | null>(null);
+    const [referrerEmailHint, setReferrerEmailHint] = useState<{ email: string; label: string | null } | null>(null);
     const [selectedYear, setSelectedYear] = useState(String(currentYearVal));
     const [selectedMonth, setSelectedMonth] = useState(currentMonthVal);
     const [finalProjectId, setFinalProjectId] = useState('');
@@ -489,6 +492,42 @@ function NewCaseWithAIComponent() {
         setAutoDetectedReferrerName(null);
         // REMOVED: Reseting Year/Month
     }, [selectedParentId]);
+
+    // Pre-fill the primary email from the referrer / partner branch for referred
+    // cases. Never overwrites an email the user typed themselves.
+    useEffect(() => {
+        const sourceProjectId = selectedSubprojectId || selectedParentId;
+        if (!sourceProjectId) return;
+        let cancelled = false;
+
+        (async () => {
+            let email: string | null = null;
+            let label: string | null = null;
+            try {
+                const res = await fetch(`/api/projects/${sourceProjectId}/referrer-email`);
+                if (res.ok) {
+                    const data = await res.json() as { email: string | null; label: string | null };
+                    email = data.email;
+                    label = data.label;
+                }
+            } catch (error) {
+                logger.error('Failed to load referrer email', error);
+            }
+            if (cancelled) return;
+
+            const previousAuto = autoFilledEmailRef.current;
+            setFormData(prev => {
+                const current = prev.email?.trim() ?? '';
+                const untouched = !current || current === previousAuto;
+                if (!untouched) return prev;
+                return { ...prev, email: email ?? '' };
+            });
+            autoFilledEmailRef.current = email;
+            setReferrerEmailHint(email ? { email, label } : null);
+        })();
+
+        return () => { cancelled = true; };
+    }, [selectedParentId, selectedSubprojectId]);
 
     const handleFileChange = (type: 'id' | 'poa' | 'bankStatement' | 'payslip' | 'por' | 'form16' | 'form171' | 'form172' | 'form177' | 'clearance' | 'allCombined' | 'optional', file: File | null) => {
         if (type === 'optional' && file) {
@@ -966,8 +1005,14 @@ function NewCaseWithAIComponent() {
                 idNumber: naStr(result.extractedData?.id?.idNumber || result.extractedData?.poa?.idNumber),
                 cellNumber: naStr(result.extractedData?.poa?.cellNumber),
                 whatsappNumber: naStr(result.extractedData?.poa?.whatsappNumber),
-                email: naStr(result.extractedData?.poa?.email),
-                alternativeEmail: '',
+                // Referred cases keep the referrer/branch email as the primary contact;
+                // the consumer's own extracted email becomes the alternative.
+                email: autoFilledEmailRef.current
+                    ? (formData.email?.trim() || autoFilledEmailRef.current)
+                    : naStr(result.extractedData?.poa?.email),
+                alternativeEmail: autoFilledEmailRef.current
+                    ? (naStr(result.extractedData?.poa?.email) === 'NA' ? '' : naStr(result.extractedData?.poa?.email))
+                    : '',
                 alternativePhone: '',
                 address: naStr(result.extractedData?.poa?.address),
                 employer: employer || naStr(result.extractedData?.poa?.employer),
@@ -1791,6 +1836,11 @@ function NewCaseWithAIComponent() {
                                 />
                                 {!formData.email && (
                                     <div className="text-[10px] text-red-400 mt-1">Email is required</div>
+                                )}
+                                {referrerEmailHint && formData.email === referrerEmailHint.email && (
+                                    <div className="text-[10px] text-purple-400 mt-1">
+                                        Pre-filled from {referrerEmailHint.label ?? 'the referrer'} — you can change it before creating the case
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -2661,6 +2711,11 @@ function NewCaseWithAIComponent() {
                                     />
                                     {!formData.email && (
                                         <div className="text-[10px] text-red-400 mt-1">Email is required</div>
+                                    )}
+                                    {referrerEmailHint && formData.email === referrerEmailHint.email && (
+                                        <div className="text-[10px] text-purple-400 mt-1">
+                                            Pre-filled from {referrerEmailHint.label ?? 'the referrer'} — you can change it before creating the case
+                                        </div>
                                     )}
                                 </div>
                             </div>

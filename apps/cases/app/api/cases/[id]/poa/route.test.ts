@@ -180,6 +180,59 @@ describe('POST /api/cases/[id]/poa', () => {
         expect(json.missingFields).toEqual(['ID Number', 'Residential Address', 'Phone Number']);
     });
 
+    describe('flag-removal DHS gate', () => {
+        const FLAG_REMOVAL_NO_DC = {
+            ...CASE_RECORD,
+            services: '["Debt Review Flag Removal"]',
+            debtCounsellorName: null,
+            ncrdcNo: null,
+            dcMobile: null,
+        };
+
+        it('refuses to send a Standard POA until DHS has captured the counsellor', async () => {
+            vi.mocked(prisma.case.findUnique).mockResolvedValueOnce(FLAG_REMOVAL_NO_DC as never);
+
+            const res = await POST(makeRequest({ type: 'STANDARD', mode: 'SEND', channel: 'EMAIL' }), params);
+            const json = await res.json();
+
+            expect(res.status).toBe(422);
+            expect(json.error).toBe('dhs_check_required');
+            expect(sendEmailWithAttachments).not.toHaveBeenCalled();
+        });
+
+        it('still lets staff save the POA without sending', async () => {
+            vi.mocked(prisma.case.findUnique).mockResolvedValueOnce(FLAG_REMOVAL_NO_DC as never);
+
+            const res = await POST(makeRequest({ type: 'STANDARD', mode: 'SAVE' }), params);
+
+            expect(res.status).toBe(200);
+        });
+
+        it('does not apply the gate to the Wesbank POA', async () => {
+            vi.mocked(prisma.case.findUnique).mockResolvedValueOnce(FLAG_REMOVAL_NO_DC as never);
+            vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+                firstName: 'Staff', lastName: 'Member', phone: '0820000000', idNumber: '8001015009087', address: '1 Road',
+            } as never);
+            vi.mocked(sendEmailWithAttachments).mockResolvedValueOnce({ success: true, messageId: 'm1' });
+
+            const res = await POST(makeRequest({ type: 'WESBANK', mode: 'SEND', channel: 'EMAIL' }), params);
+
+            expect(res.status).toBe(200);
+            expect(sendEmailWithAttachments).toHaveBeenCalled();
+        });
+
+        it('sends once the DC details are on file', async () => {
+            vi.mocked(prisma.case.findUnique).mockResolvedValueOnce({
+                ...CASE_RECORD, services: '["Debt Review Flag Removal"]',
+            } as never);
+            vi.mocked(sendEmailWithAttachments).mockResolvedValueOnce({ success: true, messageId: 'm1' });
+
+            const res = await POST(makeRequest({ type: 'STANDARD', mode: 'SEND', channel: 'EMAIL' }), params);
+
+            expect(res.status).toBe(200);
+        });
+    });
+
     it('returns 404 for an unknown case', async () => {
         vi.mocked(prisma.case.findUnique).mockResolvedValueOnce(null as never);
 

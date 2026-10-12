@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { checkPoaReadiness } from '@zenowethu/shared-lib/src/poa/poa-readiness';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,11 +65,14 @@ export function interpretPoaResponse(
 
     if (!httpOk || data.success === false || (sent.length === 0 && saved.length === 0)) {
         const isProfileError = data.error === 'incomplete_staff_profile';
+        const isDhsRequired  = data.error === 'dhs_check_required';
         return {
             ok: false,
             message: isProfileError
                 ? (data.message ?? 'Your staff profile is incomplete.')
-                : (data.error ?? 'The POA could not be processed. Please try again.'),
+                : isDhsRequired
+                    ? (data.message ?? 'Run the DHS check before sending this POA.')
+                    : (data.error ?? 'The POA could not be processed. Please try again.'),
             missingFields: isProfileError ? (data.missingFields ?? []) : [],
             sent: [],
             saved: [],
@@ -236,6 +240,7 @@ interface SendPoaModalProps {
     services?:   string | null;   // JSON array string, e.g. '["Debt Review Flag Removal"]'
     dcName?:     string | null;
     dcNcrdcNo?:  string | null;
+    dcPhone?:    string | null;
     /** Called after a POA is saved to case Documents, so the parent can refresh. */
     onSaved?:    () => void;
 }
@@ -257,6 +262,7 @@ export function SendPoaModal({
     services,
     dcName,
     dcNcrdcNo,
+    dcPhone,
     onSaved,
 }: SendPoaModalProps) {
     const [poaType,    setPoaType]    = useState<PoaType>('STANDARD');
@@ -284,13 +290,12 @@ export function SendPoaModal({
     const channelLabel = channel === 'EMAIL' ? 'Email' : 'WhatsApp';
 
     // ── DRR awareness ────────────────────────────────────────────────────────
-    const serviceList: string[] = (() => {
-        try { return JSON.parse(services ?? '[]'); } catch { return []; }
-    })();
-    const isDRR = serviceList.some(s => s.toLowerCase().includes('flag removal'));
-    const dcMissing = isDRR && (!dcName || !dcNcrdcNo);
-    // Block send when Standard POA is selected for a DRR case with no DC details
-    const sendBlocked = poaType === 'STANDARD' && dcMissing;
+    // Same rules the API enforces. The Wesbank POA is exempt (no Section 4).
+    const readiness = checkPoaReadiness({ type: poaType, services, dcName, dcNcrdcNo, dcPhone });
+    const isDRR = readiness.isFlagRemoval;
+    const dcMissing = isDRR && readiness.blocked;
+    // Block *sending* (saving a copy is still allowed) until DHS has captured the DC.
+    const sendBlocked = wantsSend && readiness.blocked;
     // Saving needs no contact details — only sending does.
     const noContactOnFile = wantsSend && !clientEmail && !clientPhone;
 
@@ -471,7 +476,7 @@ export function SendPoaModal({
                                                 </p>
                                                 <p className="text-xs text-amber-200 mt-1.5 leading-relaxed">
                                                     Please run <strong>DHS Auto-Fill</strong> on this case first (use the DHS Lookup button),
-                                                    then return here to send the POA.
+                                                    then return here to send the POA. You can still use <strong>Save only</strong>.
                                                 </p>
                                             </>
                                         ) : (
@@ -482,6 +487,26 @@ export function SendPoaModal({
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Non flag-removal: Section 4 may legitimately be blank */}
+                        {!isDRR && poaType === 'STANDARD' && readiness.warnings.length > 0 && (
+                            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                                {readiness.warnings.map(w => (
+                                    <p key={w} className="text-xs text-amber-200 leading-relaxed">{w}</p>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Sections 5 & 6 reminder — clients routinely skip these */}
+                        {poaType === 'STANDARD' && wantsSend && (
+                            <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3">
+                                <p className="text-xs text-blue-200 leading-relaxed">
+                                    The message sent to the consumer tells them that <strong>Sections 5 (documents checklist)
+                                    and 6 (declaration)</strong> are compulsory. If they sign online they must tick every box
+                                    before the signature box unlocks, and the boxes are ticked on the signed PDF.
+                                </p>
                             </div>
                         )}
 

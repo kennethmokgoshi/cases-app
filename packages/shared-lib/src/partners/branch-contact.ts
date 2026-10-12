@@ -155,6 +155,40 @@ export function resolveContact(
         usedFallback: used.length > 0 };
 }
 
+export interface EmailRecipients {
+    to: string | null;
+    cc: string[];
+}
+
+/**
+ * Who receives a case's email. For a referred case the referrer (or referring
+ * branch) is the main contact and the consumer is copied on their own
+ * address(es). For a case with no referral email on file the consumer keeps
+ * receiving it directly and nobody is copied.
+ *
+ * Addresses are compared case-insensitively so a consumer whose email was
+ * pre-filled with the referrer's address is not copied on their own message.
+ */
+export function resolveEmailRecipients(
+    consumerEmail: string | null | undefined,
+    consumerAlternativeEmail: string | null | undefined,
+    referralEmail: string | null | undefined
+): EmailRecipients {
+    const consumer = clean(consumerEmail);
+    const referral = clean(referralEmail);
+    if (!referral) return { to: consumer, cc: [] };
+
+    const seen = new Set([referral.toLowerCase()]);
+    const cc: string[] = [];
+    for (const address of [consumer, clean(consumerAlternativeEmail)]) {
+        if (address && !seen.has(address.toLowerCase())) {
+            seen.add(address.toLowerCase());
+            cc.push(address);
+        }
+    }
+    return { to: referral, cc };
+}
+
 /**
  * Human-readable summary of what the fallback did, for audit logs and the
  * notification history so staff can see a message went to a branch or referrer

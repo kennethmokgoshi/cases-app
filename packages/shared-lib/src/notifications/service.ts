@@ -38,7 +38,7 @@ import { getCompanyProfile } from '../company/company-profile-service';
 import { type CompanyProfile, formatCompanyWithNcrdc, getPlatformConfig } from '../company/profile';
 import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
-import { resolveCaseContact } from '../partners/branch-contact-service';
+import { resolveCaseContact, resolveCaseEmailRecipients } from '../partners/branch-contact-service';
 import { describeContactFallback } from '../partners/branch-contact';
 import { withAuthorityLine } from '../documents/mandate-attachments';
 import { applyFeeDocumentStatus } from '../finance/fee-document-status';
@@ -219,6 +219,8 @@ export interface NotificationPayload {
     clientName: string;
     clientPhone?: string | null;
     clientEmail?: string | null;
+    /** Copied on the client email — the consumer, when a referrer is the main contact. */
+    ccEmails?: string[];
     clientWhatsApp?: string | null;
     clientTelegram?: string | null;
     fileNumber: string;
@@ -337,16 +339,23 @@ export async function sendStatusChangeNotification(
  * needs nothing skips the database entirely.
  */
 async function withFallbackContact(payload: NotificationPayload): Promise<NotificationPayload> {
-    const missingEmail = !payload.clientEmail?.trim();
+    if (!payload.caseId) return payload;
+
+    // Email: on a referred case the referrer/branch is the main contact and the
+    // consumer is copied. Never throws.
+    const recipients = await resolveCaseEmailRecipients(payload.caseId, payload.clientEmail);
+    const withEmail: NotificationPayload = {
+        ...payload,
+        clientEmail: recipients.to ?? payload.clientEmail,
+        ccEmails: [...(payload.ccEmails ?? []), ...recipients.cc] };
+
     const missingPhone = !payload.clientPhone?.trim();
     const missingWhatsApp = !payload.clientWhatsApp?.trim();
-
-    if (!missingEmail && !missingPhone && !missingWhatsApp) return payload;
-    if (!payload.caseId) return payload;
+    if (!missingPhone && !missingWhatsApp) return withEmail;
 
     try {
         const resolved = await resolveCaseContact(payload.caseId);
-        if (!resolved.usedFallback) return payload;
+        if (!resolved.usedFallback) return withEmail;
 
         logger.info(
             `📮 Contact fallback for case ${payload.caseId}: ${describeContactFallback(resolved)}`
@@ -355,15 +364,14 @@ async function withFallbackContact(payload: NotificationPayload): Promise<Notifi
         const fellBack = (source: string) => source === 'BRANCH' || source === 'REFERRER';
 
         return {
-            ...payload,
-            clientEmail: missingEmail && fellBack(resolved.emailSource) ? resolved.email : payload.clientEmail,
+            ...withEmail,
             clientPhone: missingPhone && fellBack(resolved.phoneSource) ? resolved.phone : payload.clientPhone,
             clientWhatsApp:
                 missingWhatsApp && fellBack(resolved.whatsappSource) ? resolved.whatsapp : payload.clientWhatsApp };
     } catch (error) {
         // A fallback lookup must never block a send that would otherwise work.
         logger.error(`Contact fallback failed for case ${payload.caseId}: ${(error as Error).message}`);
-        return payload;
+        return withEmail;
     }
 }
 
@@ -538,7 +546,10 @@ async function sendNotificationByTemplate(
                 emailSubject,
                 brandedHtml,
                 emailBody, // textBody
-                addBccToOptions({ fromName: payload.senderName, fromEmail: payload.senderEmail })
+                addBccToOptions({
+                    fromName: payload.senderName,
+                    fromEmail: payload.senderEmail,
+                    cc: payload.ccEmails?.length ? payload.ccEmails : undefined })
             );
 
             result.emailSuccess = emailResult.success;

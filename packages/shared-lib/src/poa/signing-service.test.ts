@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createPoaSigningToken,
   resolveSigningToken,
+  completePoaSigning,
   POA_TOKEN_TTL_HOURS,
 } from './signing-service';
 import { prisma } from '@zenowethu/database';
@@ -199,6 +200,39 @@ describe('POA Signing Service', () => {
         expect(result.status).toBe(409);
         expect(result.error).toContain('already been signed');
       }
+    });
+  });
+
+  describe('completePoaSigning — Sections 5 & 6 confirmation', () => {
+    const pendingStandard = {
+      id: 'sig-1', token: 'tok', status: 'PENDING', poaType: 'STANDARD', channel: 'EMAIL',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), signedAt: null,
+      caseId: 'case-1', clientId: 'client-1', consumerId: null,
+      client: null, consumer: null, case: null,
+    };
+
+    it('refuses a Standard POA with no confirmations when they are required', async () => {
+      vi.mocked(prisma.poaSigningRequest.findUnique).mockResolvedValueOnce(pendingStandard as never);
+
+      const result = await completePoaSigning({
+        token: 'tok', signatureImage: 'data:image/png;base64,AAAA',
+        ipAddress: '1.1.1.1', userAgent: 'ua', requireConfirmations: true,
+      });
+
+      expect('error' in result && result.status).toBe(400);
+      expect(prisma.poaSigningRequest.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses when only one of the two sections was confirmed', async () => {
+      vi.mocked(prisma.poaSigningRequest.findUnique).mockResolvedValueOnce(pendingStandard as never);
+
+      const result = await completePoaSigning({
+        token: 'tok', signatureImage: 'data:image/png;base64,AAAA',
+        ipAddress: '1.1.1.1', userAgent: 'ua', requireConfirmations: true,
+        confirmations: { checklist: true, declarations: false },
+      });
+
+      expect('error' in result && result.status).toBe(400);
     });
   });
 

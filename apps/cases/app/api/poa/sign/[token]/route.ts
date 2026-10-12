@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { completePoaSigning } from '@zenowethu/shared-lib/src/poa/signing-service';
 import { createLogger } from '@zenowethu/shared-lib';
 
 const logger = createLogger('api/poa/sign/[token]');
+
+const signBodySchema = z.object({
+    signatureImage: z.string().min(1),
+    confirmations: z.object({
+        checklist:    z.boolean(),
+        declarations: z.boolean(),
+    }).optional(),
+});
 
 /**
  * POST /api/poa/sign/[token]
@@ -13,6 +22,8 @@ const logger = createLogger('api/poa/sign/[token]');
  * Body:
  * {
  *   signatureImage: "data:image/png;base64,..." (from canvas.toDataURL())
+ *   confirmations: { checklist: boolean, declarations: boolean }
+ *     — Sections 5 and 6; required (both true) for a Standard POA.
  * }
  */
 export async function POST(
@@ -21,14 +32,15 @@ export async function POST(
 ) {
     try {
         const { token } = await params;
-        const { signatureImage } = await request.json() as { signatureImage?: string };
+        const parsed = signBodySchema.safeParse(await request.json().catch(() => null));
 
-        if (!signatureImage) {
+        if (!parsed.success) {
             return NextResponse.json(
                 { error: 'No signature provided' },
                 { status: 400 },
             );
         }
+        const { signatureImage, confirmations } = parsed.data;
 
         // Capture IP + user-agent for ECTA audit trail
         const ipAddress = request.headers.get('x-forwarded-for')
@@ -42,6 +54,8 @@ export async function POST(
             signatureImage,
             ipAddress,
             userAgent,
+            confirmations,
+            requireConfirmations: true,
         });
 
         if ('error' in result) {

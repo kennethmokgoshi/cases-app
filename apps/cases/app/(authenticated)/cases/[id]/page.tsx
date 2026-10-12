@@ -5241,7 +5241,7 @@ export default function CaseDetailPage() {
                             )}
                             {activeDetailTab === 'DOCUMENTS' && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} showFeeDocuments onCaseUpdated={() => fetchCase({ silent: true })} />
+                                    <DocumentsTab caseId={caseData.id} refreshTrigger={documentsRefreshKey} showFeeDocuments showImagesToPdf onCaseUpdated={() => fetchCase({ silent: true })} />
                                     <ConsumerPortalPanel caseId={caseData.id} />
                                 </div>
                             )}
@@ -5619,6 +5619,7 @@ export default function CaseDetailPage() {
                     services={caseData.services}
                     dcName={caseData.debtCounsellorName}
                     dcNcrdcNo={caseData.ncrdcNo}
+                    dcPhone={caseData.dcMobile}
                     onSaved={() => { void fetchCase({ silent: true }); }}
                 />
             )}

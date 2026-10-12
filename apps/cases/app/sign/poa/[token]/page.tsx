@@ -10,7 +10,22 @@ interface PoaData {
   poaType: string;
   channel: string;
   expiryHours: number;
+  transferApplicable?: boolean;
 }
+
+const CHECKLIST_ITEMS = [
+  'Valid Proof of Residential Address (not older than 3 months)',
+  'Certified copy of Identity Document (ID / Smart Card / Passport)',
+];
+
+const DECLARATION_ITEMS = [
+  'This Power of Attorney was signed by me personally and not by any other person.',
+  'I am signing freely, voluntarily and not under any duress or undue influence.',
+  'I understand the full extent of the powers I am granting to the Agent herein.',
+];
+
+const TRANSFER_DECLARATION =
+  'I consent to the transfer of my debt review file as detailed in Section 4.';
 
 export default function SignPoaPage() {
   const params = useParams();
@@ -23,6 +38,9 @@ export default function SignPoaPage() {
   const [success, setSuccess] = useState(false);
   const [poaData, setPoaData] = useState<PoaData | null>(null);
   const [firm, setFirm] = useState<{ name: string; shortName: string; phone: string } | null>(null);
+  // Sections 5 & 6 — individual ticks, so every item is consciously confirmed.
+  const [checklistTicks, setChecklistTicks] = useState<boolean[]>(CHECKLIST_ITEMS.map(() => false));
+  const [declarationTicks, setDeclarationTicks] = useState<boolean[]>([]);
 
   // Validate token on mount
   useEffect(() => {
@@ -39,6 +57,9 @@ export default function SignPoaPage() {
         }
 
         setPoaData(data);
+        setDeclarationTicks(
+          [...DECLARATION_ITEMS, ...(data.transferApplicable ? [TRANSFER_DECLARATION] : [])].map(() => false),
+        );
       } catch (err) {
         setError('Failed to load signing page. Please try again.');
       } finally {
@@ -49,7 +70,21 @@ export default function SignPoaPage() {
     validateToken();
   }, [token]);
 
+  // The Wesbank POA has no Sections 5/6, so nothing needs confirming there.
+  const needsConfirmations = poaData?.poaType !== 'WESBANK';
+  const allConfirmed =
+    !needsConfirmations || (checklistTicks.every(Boolean) && declarationTicks.every(Boolean));
+
+  const toggleTick = (
+    setter: (fn: (prev: boolean[]) => boolean[]) => void,
+    index: number,
+  ) => setter((prev) => prev.map((v, i) => (i === index ? !v : v)));
+
   const handleSaveSignature = async (signatureDataUrl: string) => {
+    if (!allConfirmed) {
+      setError('Please tick every box in Section 5 and Section 6 before signing.');
+      return;
+    }
     setLoading(true);
     setError('');
 
@@ -57,7 +92,10 @@ export default function SignPoaPage() {
       const res = await fetch(`/api/poa/sign/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signatureImage: signatureDataUrl }),
+        body: JSON.stringify({
+          signatureImage: signatureDataUrl,
+          ...(needsConfirmations ? { confirmations: { checklist: true, declarations: true } } : {}),
+        }),
       });
 
       const data = await res.json();
@@ -203,11 +241,74 @@ export default function SignPoaPage() {
               </div>
             )}
 
-            <SignaturePad
-              onSave={handleSaveSignature}
-              title="Your Signature"
-              description="Draw your signature using your finger, mouse, or stylus. Keep it within the box."
-            />
+            {needsConfirmations && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-amber-300">
+                    Important — Sections 5 and 6 must be confirmed
+                  </p>
+                  <p className="text-xs text-amber-200/80 mt-1 leading-relaxed">
+                    These sections are compulsory. We cannot process your Power of Attorney if they are not
+                    ticked. Please read and tick each box below; they will be ticked for you on your signed document.
+                  </p>
+                </div>
+
+                <fieldset className="space-y-2">
+                  <legend className="text-xs font-semibold text-white uppercase tracking-wider mb-1">
+                    5. Required documents checklist
+                  </legend>
+                  <p className="text-xs text-gray-400">
+                    Certified copies must be sent to us. Email them to notifications@zenowethu.co.za after signing.
+                  </p>
+                  {CHECKLIST_ITEMS.map((item, i) => (
+                    <label key={item} className="flex items-start gap-3 text-sm text-gray-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
+                        checked={checklistTicks[i] ?? false}
+                        onChange={() => toggleTick(setChecklistTicks, i)}
+                      />
+                      <span>{item}</span>
+                    </label>
+                  ))}
+                </fieldset>
+
+                <fieldset className="space-y-2">
+                  <legend className="text-xs font-semibold text-white uppercase tracking-wider mb-1">
+                    6. Declaration — I, the Principal, hereby confirm that:
+                  </legend>
+                  {[...DECLARATION_ITEMS, ...(poaData.transferApplicable ? [TRANSFER_DECLARATION] : [])].map((item, i) => (
+                    <label key={item} className="flex items-start gap-3 text-sm text-gray-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
+                        checked={declarationTicks[i] ?? false}
+                        onChange={() => toggleTick(setDeclarationTicks, i)}
+                      />
+                      <span>{item}</span>
+                    </label>
+                  ))}
+                </fieldset>
+
+                {!allConfirmed && (
+                  <p className="text-xs text-amber-300">
+                    Tick every box above to unlock the signature box.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {allConfirmed ? (
+              <SignaturePad
+                onSave={handleSaveSignature}
+                title="Your Signature"
+                description="Draw your signature using your finger, mouse, or stylus. Keep it within the box."
+              />
+            ) : (
+              <div className="rounded-xl border border-dashed border-white/20 bg-white/5 p-6 text-center text-sm text-gray-400">
+                Signature box locked — confirm Sections 5 and 6 first.
+              </div>
+            )}
 
             {/* Legal notice */}
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 space-y-2">

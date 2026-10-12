@@ -3,6 +3,7 @@ import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
 import { parseBranchCsv } from '@/lib/partner-branch-csv';
+import { ensureBranchProject } from '@/lib/partner-branch-project';
 import type { BranchCsvField } from '@/lib/partner-branch-csv';
 import { syncPartnerContacts } from '@zenowethu/shared-lib/src/partners/contact-sync';
 
@@ -140,14 +141,19 @@ export async function POST(request: Request) {
 
         // Apply. Rows with errors were never queued, so a bad row does not stop
         // the good ones — the response reports exactly what was skipped.
-        await prisma.$transaction(
-            writes.map((write) =>
-                write.id
-                    ? prisma.partnerBranch.update({ where: { id: write.id }, data: write.data })
-                    : prisma.partnerBranch.create({
-                        data: { partnerProjectId, name: write.name, ...write.data } })
-            )
-        );
+        // New branches also get a Project folder so they appear in the case
+        // form's Branch/Subproject dropdown.
+        await prisma.$transaction(async (tx) => {
+            for (const write of writes) {
+                if (write.id) {
+                    await tx.partnerBranch.update({ where: { id: write.id }, data: write.data });
+                } else {
+                    const projectId = await ensureBranchProject(tx, partnerProjectId, write.name);
+                    await tx.partnerBranch.create({
+                        data: { partnerProjectId, projectId, name: write.name, ...write.data } });
+                }
+            }
+        }, { timeout: 60_000 });
 
         // Push the imported contact details onto each branch's Referrer record
         // so a bulk import populates both sides in one pass.
