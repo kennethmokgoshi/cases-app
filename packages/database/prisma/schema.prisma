@@ -2272,6 +2272,31 @@ model AutomationRun {
   @@index([clientId])
 }
 
+// ─── AI usage ledger ───────────────────────────────────────────────────────────
+// One row per chat-completion call. `app` comes from AI_USAGE_APP, so spend can
+// be attributed to an app and a feature (AiTask name) even across shared code.
+model AiUsage {
+  id               String   @id @default(cuid())
+  app              String
+  feature          String
+  provider         String
+  model            String
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  environment      String   @default("production") // production | local | staging (AI_USAGE_ENV)
+  streamed         Boolean  @default(false)
+  success          Boolean  @default(true)
+  errorCode        String?
+  durationMs       Int
+  createdAt        DateTime @default(now())
+
+  @@index([app, createdAt])
+  @@index([environment, app, createdAt])
+  @@index([feature, createdAt])
+  @@index([createdAt])
+}
+
 // ─── POA Online Signing ────────────────────────────────────────────────────────
 // Tracks every POA sent via email, WhatsApp, or Credo that has an online
 // signing link. Status: PENDING → SIGNED (or EXPIRED / CANCELLED).

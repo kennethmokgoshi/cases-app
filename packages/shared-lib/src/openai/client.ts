@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { logger } from '../logger';
+import { trackAiUsage } from '../ai/usage-tracker';
 
 let _openai: OpenAI | null = null;
 
@@ -16,10 +17,13 @@ export const getOpenAI = (): OpenAI => {
             logger.info('✅ OpenAI env key loaded (fallback client).');
         }
 
-        _openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY || 'missing_key',
-            timeout: 120 * 1000
-        });
+        _openai = trackAiUsage(
+            new OpenAI({
+                apiKey: process.env.OPENAI_API_KEY || 'missing_key',
+                timeout: 120 * 1000
+            }),
+            { feature: 'legacy_env_client', provider: 'OpenAI (Env)' },
+        );
     }
     return _openai;
 };

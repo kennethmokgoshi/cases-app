@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { prisma } from '@zenowethu/database';
 import { logger } from '../logger';
+import { trackAiUsage } from './usage-tracker';
 
 // ─── Task types ────────────────────────────────────────────────────────────────
 export type AiTask =
@@ -160,7 +161,7 @@ export async function getAiClientForTask(task: AiTask, customModelId?: string): 
                 const assignments = (provider.taskAssignments ?? {}) as Record<string, string>;
                 for (const [taskKey, modelId] of Object.entries(assignments)) {
                     _cache.set(taskKey as AiTask, {
-                        client: buildClientFromDb(provider),
+                        client: trackAiUsage(buildClientFromDb(provider), { feature: taskKey, provider: provider.name }),
                         model: modelId,
                         providerName: provider.name,
                     });
@@ -179,7 +180,7 @@ export async function getAiClientForTask(task: AiTask, customModelId?: string): 
     // 2. Direct ENV resolution (Primary for Gemini/Claude)
     const { client, name, model } = buildClientFromEnv(targetModel);
     return {
-        client,
+        client: trackAiUsage(client, { feature: task, provider: name }),
         model,
         providerName: name,
     };
@@ -215,7 +216,7 @@ export async function getAiClientChainForTask(task: AiTask): Promise<AiClientCon
         const key = `${name}:${model}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        chain.push({ client, model, providerName: name });
+        chain.push({ client: trackAiUsage(client, { feature: task, provider: name }), model, providerName: name });
     }
 
     return chain;
