@@ -405,8 +405,11 @@ export async function POST(request: Request) {
                     message: scrapeResult.message || 'This ID number was not found on the NCR Debt Help System. Please verify the ID number is correct.',
                 };
 
-                // Also update case status to NOT_LINKED in DB if caseId exists
-                if (caseId) {
+                if (!scrapeResult.notFound) {
+                    // Inconclusive (timeout/login/DHS error) — report it, but don't mark the case NOT_LINKED
+                    result.status = 'ERROR';
+                } else if (caseId) {
+                    // Genuine "No records found" — update case status to NOT_LINKED
                     await prisma.case.update({
                         where: { id: caseId },
                         data: {
@@ -598,8 +601,8 @@ export async function POST(request: Request) {
                 }
 
                 logger.info(`[DHS API] Updated case ${caseId} with DHS info`);
-            } else if (!result.found && caseId) {
-                // Automation: If search returns no records, set status to NOT_LINKED
+            } else if (!result.found && caseId && result.notFound) {
+                // Automation: only when DHS positively returned no records (not on timeouts/errors), set NOT_LINKED
                 await prisma.case.update({
                     where: { id: caseId },
                     data: {

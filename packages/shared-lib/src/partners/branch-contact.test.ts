@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveContact, describeContactFallback } from './branch-contact';
+import { resolveContact, describeContactFallback, resolveEmailRecipients } from './branch-contact';
 
 const branch = {
     name: 'Mthata',
@@ -172,5 +172,29 @@ describe('describeContactFallback', () => {
 
         expect(described).toContain('sent to Bree instead');
         expect(described).toContain('sent to Nomsa Dlamini instead');
+    });
+});
+
+describe('resolveEmailRecipients', () => {
+    it('makes the referrer the main contact and copies the consumer', () => {
+        expect(resolveEmailRecipients('client@example.com', 'alt@example.com', 'branch@partner.co.za')).toEqual({
+            to: 'branch@partner.co.za',
+            cc: ['client@example.com', 'alt@example.com'] });
+    });
+
+    it('does not copy the consumer on an address equal to the referrer email (case-insensitive)', () => {
+        expect(resolveEmailRecipients('Branch@Partner.co.za', null, 'branch@partner.co.za')).toEqual({
+            to: 'branch@partner.co.za',
+            cc: [] });
+    });
+
+    it('sends straight to the consumer when no referral email exists', () => {
+        expect(resolveEmailRecipients('client@example.com', 'alt@example.com', '  ')).toEqual({
+            to: 'client@example.com',
+            cc: [] });
+    });
+
+    it('returns no recipient when nothing is on file', () => {
+        expect(resolveEmailRecipients(null, null, null)).toEqual({ to: null, cc: [] });
     });
 });

@@ -39,6 +39,7 @@ export * from './ai/savings-engine';
 
 // AI Provider Management
 export * from './ai/provider-client';
+export * from './ai/usage-tracker';
 
 export * from './metrics';
 

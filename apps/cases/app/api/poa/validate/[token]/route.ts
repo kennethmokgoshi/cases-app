@@ -43,6 +43,8 @@ export async function GET(
       poaType: record.poaType,
       channel: record.channel,
       expiryHours: Math.max(expiryHours, 0),
+      // Section 6's transfer-consent item only applies when a current counsellor is on the form.
+      transferApplicable: !!record.case?.debtCounsellorName?.trim(),
       firm,
     });
 

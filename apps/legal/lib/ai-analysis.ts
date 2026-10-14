@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { logger } from '@zenowethu/shared-lib';
+import { logger, trackAiUsage } from '@zenowethu/shared-lib';
 
 // Define the shape of the analysis result
 export interface AgreementAnalysis {
@@ -14,8 +14,10 @@ export interface AgreementAnalysis {
 }
 
 export async function analyzeAgreementText(text: string): Promise<AgreementAnalysis> {
-    const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY });
+    const openai = trackAiUsage(
+        new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+        { feature: 'contract_analysis', provider: 'OpenAI (Env)' },
+    );
 
     const prompt = `
     You are an expert legal AI assistant. Analyze the following contract text and extract key information.

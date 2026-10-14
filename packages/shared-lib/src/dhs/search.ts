@@ -20,6 +20,8 @@ export async function searchConsumer(idNumber: string): Promise<{
     consumer?: DHSConsumerInfo;
     debtCounsellor?: DHSDebtCounsellorInfo;
     message?: string;
+    /** true only when DHS positively returned "No records found" for the ID */
+    notFound?: boolean;
 }> {
     const browserInstance = await getBrowser();
     const page = await browserInstance.newPage();
@@ -143,41 +145,47 @@ export async function searchConsumer(idNumber: string): Promise<{
             await page.keyboard.press('Enter');
         }
 
-        // Wait for results
-        logger.info('[DHS search] Waiting 6s for results...');
-        await delay(6000);
-        await takeScreenshot('After Filter Clicked');
-
-        // RE-CHECK: If we see "No records found", wait another 2s and check again
-        // DHS AJAX can be extremely slow to clear the previous state
-        const initialNoRecords = await target.evaluate(() => document.body.innerText.includes('No records found'));
-        if (initialNoRecords) {
-            logger.info('[DHS search] "No records found" detected, waiting 2s for potential AJAX update...');
-            await delay(2000);
+        // DHS filters via slow AJAX and the "No records found" placeholder can show while the real
+        // result is still loading. Poll for a row containing the ID (also looking in every frame);
+        // declare "not found" only once the placeholder has persisted 8s with no matching row.
+        const cleanId = idNumber.replace(/\s/g, '');
+        const MAX_WAIT_MS = 25000;
+        const CONFIRM_NOT_FOUND_MS = 8000;
+        let rowFound = false;
+        let noRecordsSince: number | null = null;
+        let notFoundConfirmed = false;
+        const pollStart = Date.now();
+        while (Date.now() - pollStart < MAX_WAIT_MS) {
+            await delay(1000);
+            let noRecordsAnywhere = false;
+            for (const fr of page.frames()) {
+                try {
+                    const state = await fr.evaluate((id) => ({
+                        rowHit: Array.from(document.querySelectorAll('tr'))
+                            .some(r => (r as HTMLElement).innerText.replace(/\s/g, '').includes(id)),
+                        noRecords: document.body.innerText.includes('No records found'),
+                    }), cleanId);
+                    if (state.rowHit) { rowFound = true; target = fr; break; }
+                    if (state.noRecords) noRecordsAnywhere = true;
+                } catch { /* frame navigating — ignore */ }
+            }
+            if (rowFound) break;
+            if (noRecordsAnywhere) {
+                noRecordsSince ??= Date.now();
+                if (Date.now() - noRecordsSince >= CONFIRM_NOT_FOUND_MS) { notFoundConfirmed = true; break; }
+            } else {
+                noRecordsSince = null;
+            }
         }
+        await takeScreenshot('After Filter Clicked');
+        logger.info(`[DHS search] rowFound=${rowFound} notFoundConfirmed=${notFoundConfirmed}`);
 
-        // Robust results check
-        const resultsInfo = await target.evaluate((targetId) => {
-            const bodyText = document.body.innerText;
-            const noRecords = bodyText.includes('No records found');
-            
-            // Check for record indicator
-            const displayingMatch = bodyText.match(/Displaying\s+(?:records?\s+)?(\d+)(?:\s*-\s*(\d+))?/i);
-            const hasRecordInText = bodyText.includes(targetId);
-            
-            return {
-                noRecords,
-                hasDisplayingRecords: !!(displayingMatch && parseInt(displayingMatch[1]) > 0),
-                hasIdInText: hasRecordInText,
-                bodySnippet: bodyText.substring(0, 1000).replace(/\n/g, ' ')
-            };
-        }, idNumber);
-
-        logger.info('[DHS search] Results Info:', JSON.stringify(resultsInfo));
-
-        if (resultsInfo.noRecords || (!resultsInfo.hasDisplayingRecords && !resultsInfo.hasIdInText)) {
-            logger.info('[DHS search] Record not found in search results');
-            return { found: false, message: 'This ID number was not found on DHS. Please verify if the ID number is correct.' };
+        if (!rowFound) {
+            if (notFoundConfirmed) {
+                logger.info('[DHS search] Record not found in search results');
+                return { found: false, notFound: true, message: 'This ID number was not found on DHS. Please verify if the ID number is correct.' };
+            }
+            return { found: false, message: 'DHS did not return a result in time. The ID could not be verified — please retry.' };
         }
 
         logger.info('[DHS search] Record found! Extracting...');
@@ -226,7 +234,7 @@ export async function searchConsumer(idNumber: string): Promise<{
  * Scrape detailed consumer and debt counsellor info for Auto-fill
  * Targeted Page: dhs_RequestNewTransfer.aspx
  */
-export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ success: boolean; data?: DHSDetailedInfo; message?: string }> {
+export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ success: boolean; data?: DHSDetailedInfo; message?: string; /** true only when DHS positively returned "No records found" for the ID */ notFound?: boolean }> {
     const browserInstance = await getBrowser();
     const page = await browserInstance.newPage();
 
@@ -355,15 +363,39 @@ export async function scrapeDetailedConsumerInfo(idNumber: string): Promise<{ su
             await page.keyboard.press('Enter');
         }
 
-        // Wait for table
-        await delay(3000);
+        // DHS filters via slow AJAX and the "No records found" placeholder can be on screen
+        // while the real result is still loading. Poll for the ID row; only declare "not found"
+        // once the placeholder has persisted for several seconds with no matching row.
+        const cleanId = idNumber.replace(/\s/g, '');
+        const POLL_MS = 1000;
+        const MAX_WAIT_MS = 20000;
+        const CONFIRM_NOT_FOUND_MS = 8000;
+        let rowFound = false;
+        let noRecordsSince: number | null = null;
+        let notFoundConfirmed = false;
+        const pollStart = Date.now();
+        while (Date.now() - pollStart < MAX_WAIT_MS) {
+            await delay(POLL_MS);
+            const state = await page.evaluate((id) => {
+                const rowHit = Array.from(document.querySelectorAll('tr'))
+                    .some(r => (r as HTMLElement).innerText.replace(/\s/g, '').includes(id));
+                return { rowHit, noRecords: document.body.innerText.includes('No records found') };
+            }, cleanId);
+            if (state.rowHit) { rowFound = true; break; }
+            if (state.noRecords) {
+                noRecordsSince ??= Date.now();
+                if (Date.now() - noRecordsSince >= CONFIRM_NOT_FOUND_MS) { notFoundConfirmed = true; break; }
+            } else {
+                noRecordsSince = null;
+            }
+        }
         await takeDebugScreenshot('4_results_table');
 
-        // Check if results exist
-        const noResults = await page.evaluate(() => document.body.innerText.includes('No records found'));
-        if (noResults) {
+        if (!rowFound) {
             await page.close();
-            return { success: false, message: 'This ID number was not found on DHS. Please verify if the ID number is correct.' };
+            return notFoundConfirmed
+                ? { success: false, notFound: true, message: 'This ID number was not found on DHS. Please verify if the ID number is correct.' }
+                : { success: false, message: 'DHS did not return a result in time. The ID could not be verified — please retry the check.' };
         }
 
         // Extract Main Table Data (Row 1)

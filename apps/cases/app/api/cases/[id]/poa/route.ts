@@ -7,6 +7,7 @@ import { auth, createLogger, renderBrandedEmail, touchCaseAction } from '@zenowe
 import { generateStandardPoa, generateWesbankPoa } from '@zenowethu/shared-lib/src/poa/poa-generator';
 import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
 import { createPoaSigningToken } from '@zenowethu/shared-lib/src/poa/signing-service';
+import { checkPoaReadiness } from '@zenowethu/shared-lib/src/poa/poa-readiness';
 import { sendEmailWithAttachments } from '@/lib/email-with-attachments';
 import { GhlService } from '@zenowethu/shared-lib/src/integrations/ghl-service';
 
@@ -153,6 +154,22 @@ export async function POST(
         const dcName    = caseRecord.debtCounsellorName ?? '';
         const dcNcrdcNo = caseRecord.ncrdcNo ?? '';
         const dcPhone   = caseRecord.dcMobile ?? '';
+
+        // Enforce server-side (the modal only mirrors this): a flag-removal Standard POA
+        // must not reach the consumer until DHS has captured the current counsellor.
+        // The Wesbank POA has no Section 4, so it is exempt. Saving is never blocked.
+        if (wantsSend) {
+            const readiness = checkPoaReadiness({
+                type, services: caseRecord.services, dcName, dcNcrdcNo, dcPhone,
+            });
+            if (readiness.blocked) {
+                return NextResponse.json({
+                    error: 'dhs_check_required',
+                    message: readiness.blockReason,
+                    missingFields: readiness.missingDcFields,
+                }, { status: 422 });
+            }
+        }
 
         const clientFullName = `${client.firstName} ${client.lastName}`;
         const today = new Date().toLocaleDateString('en-ZA', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -495,6 +512,16 @@ function buildEmailHtml(clientName: string, type: string, downloadUrl: string, s
             </ol>
         </div>
 
+        ${type === 'WESBANK' ? '' : `<div style="background-color: #fff8e1; border-left: 4px solid #d9701a; padding: 16px 20px; border-radius: 4px; margin: 25px 0;">
+            <strong style="color: #8a4b0f; display: block; margin-bottom: 8px;">⚠ Please don't skip Sections 5 and 6</strong>
+            <p style="margin: 0; color: #5d4037;">
+                <strong>Section 5 (Required Documents Checklist)</strong> and <strong>Section 6 (Declaration)</strong> are
+                compulsory. They must be ticked, or we cannot process your Power of Attorney.
+                If you sign online you will be asked to confirm them before you sign; if you sign manually, tick every box yourself
+                and attach a certified copy of your ID and proof of residence (not older than 3 months).
+            </p>
+        </div>`}
+
         <p style="font-size: 12px; color: #888;">Your digital signature is legally binding under the Electronic Communications and Transactions Act (ECTA, Act 25 of 2002). Your IP address and timestamp will be recorded.</p>
         <p>Questions? Call us at <strong>${companyPhone}</strong> or reply to this email.</p>
         <p>Kind regards,<br/><strong>${companyName} Team</strong></p>
@@ -520,13 +547,16 @@ ${companyName} has sent you a *${docLabel}* — ready for your signature. 📝
 ✅ *Sign Online (easiest — takes 1 min):*
 ${signUrl}
 
-Just tap the link, draw your signature, and submit. Done! No printing needed.
+Just tap the link, confirm the checklist, draw your signature, and submit. No printing needed.
 
 _Link valid for 72 hours._
 
 📄 *Or download the PDF manually:*
 ${downloadUrl}
 
+${type === 'WESBANK' ? '' : `⚠ *Important:* Sections 5 (Required Documents Checklist) and 6 (Declaration) are compulsory and must be ticked — otherwise we cannot process your POA. Signing online? You will be asked to confirm them before you sign. Signing manually? Tick every box and attach your certified ID and proof of residence (not older than 3 months).
+
+`}
 Questions? Call us: *${companyPhone}*
 
 _Your signature is legally valid under the Electronic Communications and Transactions Act (ECTA)._

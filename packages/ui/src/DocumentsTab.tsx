@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { FEE_DOCUMENT_TYPES, formatStatus } from '@zenowethu/shared-lib';
 import { FeeDocumentsPanel } from './FeeDocumentsPanel';
+import { ImagesToPdfModal } from './ImagesToPdfModal';
 
 // Client-side logger (avoid importing server-only modules from shared-lib)
 const logger = {
@@ -118,9 +119,11 @@ function withStatusChange(base: string, change?: FeeStatusChange): string {
     return change.message ? `${base} (${change.message})` : base;
 }
 
-export function DocumentsTab({ caseId, refreshTrigger, onCaseUpdated, showFeeDocuments = false }: {
+export function DocumentsTab({ caseId, refreshTrigger, onCaseUpdated, showFeeDocuments = false, showImagesToPdf = false }: {
     caseId: string;
     refreshTrigger?: number;
+    /** Show the "Images → PDF" tool. Only the Cases app has the API route behind it. */
+    showImagesToPdf?: boolean;
     /**
      * Show the invoice / proof-of-payment types and the Invoices & Payments panel.
      * Only the Cases app has the fee-document API routes behind it.
@@ -145,6 +148,7 @@ export function DocumentsTab({ caseId, refreshTrigger, onCaseUpdated, showFeeDoc
     const [extractionMessage, setExtractionMessage] = useState('');
     const [mounted, setMounted] = useState(false);
     const [uploadAdminOnly, setUploadAdminOnly] = useState(false);
+    const [imagesToPdfOpen, setImagesToPdfOpen] = useState(false);
     const [accessModal, setAccessModal] = useState<{ doc: Document } | null>(null);
     const [accessEmail, setAccessEmail] = useState('');
     const [accessLoading, setAccessLoading] = useState(false);
@@ -755,6 +759,17 @@ export function DocumentsTab({ caseId, refreshTrigger, onCaseUpdated, showFeeDoc
                         <input type="file" accept=".pdf" onChange={handleExtract} disabled={extracting} className="sr-only" />
                     </label>
 
+                    {/* Images → PDF */}
+                    {showImagesToPdf && (
+                        <button
+                            type="button"
+                            onClick={() => setImagesToPdfOpen(true)}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 cursor-pointer transition-colors flex items-center gap-1 whitespace-nowrap"
+                        >
+                            🖼️ Images → PDF
+                        </button>
+                    )}
+
                     {/* DHS Extraction Button */}
                     <div className="relative group">
                         <button
@@ -888,8 +903,16 @@ export function DocumentsTab({ caseId, refreshTrigger, onCaseUpdated, showFeeDoc
                 )}
             </div>
 
+            {imagesToPdfOpen && (
+                <ImagesToPdfModal
+                    caseId={caseId}
+                    onClose={() => setImagesToPdfOpen(false)}
+                    onCreated={(message) => { setError(''); setSuccess(message); fetchDocuments(); }}
+                />
+            )}
+
             {/* Messages */}
-            {error && <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>}
+            {error &&<div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>}
             {success && <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">{success}</div>}
 
             {/* Credit Bureau Reports Section */}

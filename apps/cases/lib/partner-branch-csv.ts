@@ -212,7 +212,7 @@ export function parseBranchCsv(text: string): ParsedBranchCsv {
 
 /** A CSV template staff can download, fill in and paste back. */
 export function branchCsvTemplate(branchNames: string[] = []): string {
-    const header = 'Branch,Code,Contact Person,Email,Phone,Alternate Phone,WhatsApp,Address,City,Province,Postal Code,Notes';
+    const header = 'Branch,Code,Contact Person,Email,Cell Number,Alternate Phone,WhatsApp,Address,City,Province,Postal Code,Notes';
     const quote = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
     const body = branchNames.map((name) => `${quote(name)},,,,,,,,,,,`);
     return [header, ...body].join('\n');

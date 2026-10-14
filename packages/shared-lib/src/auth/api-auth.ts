@@ -1,6 +1,12 @@
 import { prisma } from '@zenowethu/database';
 import { NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import { logger } from '../logger';
+
+/** SHA-256 hex digest used to store and look up API keys. */
+export function hashApiKey(key: string): string {
+    return createHash('sha256').update(key).digest('hex');
+}
 
 export type ApiKeyData = {
     id: string;
@@ -37,12 +43,19 @@ export async function validateApiKey(request: Request): Promise<{
         };
     }
 
-    const apiKeyRecord = await prisma.apiKey.findUnique({
-        where: { key },
-        include: {
-            project: { select: { id: true, name: true } }
+    // Keys are stored as SHA-256 hashes. Fall back to a plaintext match for keys
+    // issued before hashing, and upgrade them to a hash on first successful use.
+    const keyHash = hashApiKey(key);
+    const include = { project: { select: { id: true, name: true } } };
+    let apiKeyRecord = await prisma.apiKey.findUnique({ where: { key: keyHash }, include });
+    if (!apiKeyRecord) {
+        apiKeyRecord = await prisma.apiKey.findUnique({ where: { key }, include });
+        if (apiKeyRecord && apiKeyRecord.isActive) {
+            await prisma.apiKey
+                .update({ where: { id: apiKeyRecord.id }, data: { key: keyHash } })
+                .catch((err: unknown) => logger.error({ err }, 'Failed to upgrade legacy API key to hash'));
         }
-    });
+    }
 
     if (!apiKeyRecord) {
         return { valid: false, apiKey: null as any, error: 'Invalid API key.', status: 401 };

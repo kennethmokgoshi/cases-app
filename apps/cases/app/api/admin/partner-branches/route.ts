@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth, createLogger } from '@zenowethu/shared-lib';
 import { prisma } from '@zenowethu/database';
 import { z } from 'zod';
+import { ensureBranchProject } from '@/lib/partner-branch-project';
 
 const logger = createLogger('api/admin/partner-branches');
 
@@ -153,24 +154,29 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'This partner already has a branch with that name' }, { status: 409 });
         }
 
-        const branch = await prisma.partnerBranch.create({
-            data: {
-                partnerProjectId: data.partnerProjectId,
-                projectId: data.projectId ?? null,
-                name: data.name,
-                code: data.code ?? null,
-                contactPerson: data.contactPerson ?? null,
-                email: data.email ?? null,
-                phone: data.phone ?? null,
-                alternatePhone: data.alternatePhone ?? null,
-                whatsappNumber: data.whatsappNumber ?? null,
-                addressLine: data.addressLine ?? null,
-                city: data.city ?? null,
-                province: data.province ?? null,
-                postalCode: data.postalCode ?? null,
-                notes: data.notes ?? null,
-                isActive: data.isActive ?? true },
-            include: { partnerProject: { select: { id: true, name: true } } } });
+        // The branch also needs a Project folder so it appears in the case form's
+        // Branch/Subproject dropdown.
+        const branch = await prisma.$transaction(async (tx) => {
+            const projectId = data.projectId ?? await ensureBranchProject(tx, data.partnerProjectId, data.name);
+            return tx.partnerBranch.create({
+                data: {
+                    partnerProjectId: data.partnerProjectId,
+                    projectId,
+                    name: data.name,
+                    code: data.code ?? null,
+                    contactPerson: data.contactPerson ?? null,
+                    email: data.email ?? null,
+                    phone: data.phone ?? null,
+                    alternatePhone: data.alternatePhone ?? null,
+                    whatsappNumber: data.whatsappNumber ?? null,
+                    addressLine: data.addressLine ?? null,
+                    city: data.city ?? null,
+                    province: data.province ?? null,
+                    postalCode: data.postalCode ?? null,
+                    notes: data.notes ?? null,
+                    isActive: data.isActive ?? true },
+                include: { partnerProject: { select: { id: true, name: true } } } });
+        });
 
         logger.info({ branchId: branch.id, userId: session.user.id }, 'Partner branch created');
         return NextResponse.json({ branch }, { status: 201 });

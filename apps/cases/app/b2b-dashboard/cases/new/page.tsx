@@ -2,7 +2,7 @@
 import { toast } from '@zenowethu/ui';
 
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '@zenowethu/ui';
 import Link from 'next/link';
@@ -275,6 +275,44 @@ function PartnerNewCaseComponent() {
             setSelectedSubprojectId('');
         }
     }, [selectedParentId, parentProjects]);
+
+    // Pre-fill cell + email from the selected sub project's referrer / branch
+    // contact. Blank when nothing is on record, and never overwrites a value the
+    // user typed themselves.
+    const autoFilledContactRef = useRef<{ email: string | null; phone: string | null }>({ email: null, phone: null });
+    const [contactHint, setContactHint] = useState<string | null>(null);
+
+    useEffect(() => {
+        const sourceProjectId = selectedSubprojectId || selectedParentId;
+        if (!sourceProjectId) return;
+        let cancelled = false;
+
+        (async () => {
+            let email: string | null = null;
+            let phone: string | null = null;
+            let label: string | null = null;
+            try {
+                const res = await fetch(`/api/projects/${sourceProjectId}/referrer-email`);
+                if (res.ok) {
+                    const data = await res.json() as { email: string | null; phone: string | null; label: string | null };
+                    email = data.email;
+                    phone = data.phone;
+                    label = data.label;
+                }
+            } catch (error) {
+                logger.error('Failed to load sub project contact details', error);
+            }
+            if (cancelled) return;
+
+            const previous = autoFilledContactRef.current;
+            setEmail(prev => (!prev.trim() || prev === previous.email ? (email ?? '') : prev));
+            setCellNumber(prev => (!prev.trim() || prev === previous.phone ? (phone ?? '') : prev));
+            autoFilledContactRef.current = { email, phone };
+            setContactHint(email || phone ? (label ?? 'the selected sub project') : null);
+        })();
+
+        return () => { cancelled = true; };
+    }, [selectedParentId, selectedSubprojectId]);
 
     // Reset Joint Application if services change and none are Debt Review
     useEffect(() => {
@@ -920,6 +958,11 @@ function PartnerNewCaseComponent() {
                                     className="w-full bg-zeno-navy border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-zeno-cyan"
                                     placeholder="email@example.com"
                                 />
+                                {contactHint && (
+                                    <p className="mt-1 text-xs text-gray-400">
+                                        Contact details pre-filled from {contactHint} — replace them with the consumer&apos;s own if you have them.
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>

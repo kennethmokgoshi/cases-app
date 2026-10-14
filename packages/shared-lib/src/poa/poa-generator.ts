@@ -31,6 +31,13 @@ export interface StandardPoaInput {
     dcNcrdcNo?: string;
     dcPhone?:   string;
     signatureImage?: string; // Base64 string of the signature PNG
+    /**
+     * Set only for online signing, where the principal confirmed Sections 5 and 6
+     * on the signing page. The matching boxes are ticked on the signed PDF.
+     * Section 6's transfer item is "where applicable", so it is ticked only when
+     * a current debt counsellor (dcName) is present.
+     */
+    confirmedSections?: { checklist: boolean; declarations: boolean };
 }
 
 export interface WesbankPoaInput {
@@ -176,8 +183,13 @@ function drawFieldPair(
 }
 
 /** Draw an empty checkbox square. */
-function drawCheckbox(page: PDFPage, x: number, y: number) {
+function drawCheckbox(page: PDFPage, x: number, y: number, checked = false) {
     page.drawRectangle({ x, y: y - 9, width: 9, height: 9, borderColor: DGRAY, borderWidth: 0.7, color: WHITE });
+    if (checked) {
+        // Tick drawn as two strokes so it needs no glyph from the embedded font.
+        page.drawLine({ start: { x: x + 1.8, y: y - 4.8 }, end: { x: x + 3.9, y: y - 7.2 }, thickness: 1.3, color: NAVY });
+        page.drawLine({ start: { x: x + 3.9, y: y - 7.2 }, end: { x: x + 7.8, y: y - 1.8 }, thickness: 1.3, color: NAVY });
+    }
 }
 
 /**
@@ -330,7 +342,7 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
         'Certified copy of Identity Document (ID / Smart Card / Passport)',
     ];
     for (const item of checklist) {
-        drawCheckbox(p2, ML, y);
+        drawCheckbox(p2, ML, y, !!input.confirmedSections?.checklist);
         p2.drawText(item, { x: ML + 14, y: y - 8, size: 10, font: regular, color: BLACK });
         y -= 20;
     }
@@ -348,8 +360,10 @@ export async function generateStandardPoa(input: StandardPoaInput): Promise<Buff
         'I understand the full extent of the powers I am granting to the Agent herein.',
         'Where applicable, I consent to the transfer of my debt review file as detailed in Section 4.',
     ];
-    for (const item of declarations) {
-        drawCheckbox(p2, ML, y);
+    for (const [i, item] of declarations.entries()) {
+        const transferItem = i === declarations.length - 1;
+        const ticked = !!input.confirmedSections?.declarations && (!transferItem || !!input.dcName?.trim());
+        drawCheckbox(p2, ML, y, ticked);
         p2.drawText(item, { x: ML + 14, y: y - 8, size: 10, font: regular, color: BLACK });
         y -= 20;
     }

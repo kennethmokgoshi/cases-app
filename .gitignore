@@ -68,3 +68,6 @@ pnpm_check.txt
 /Excel/
 /Invoices/
 **/DCCP_System_User_Information*.xlsx
+
+# Generated
+apps/cases/api-debug-error.log
