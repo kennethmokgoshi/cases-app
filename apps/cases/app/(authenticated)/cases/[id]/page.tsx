@@ -1818,9 +1818,13 @@ export default function CaseDetailPage() {
                 setCaseData(updatedCase);
                 setActivityUpdate(prev => prev + 1);
                 
-                let text = result.found 
+                // Only a positive "No records found" from DHS means not linked; login failures
+                // and timeouts are inconclusive and must not be reported as "not linked".
+                let text = result.found
                     ? `Linked to DHS. DC: ${result.debtCounsellor?.fullName || 'Unknown'}`
-                    : 'Not linked to DHS.';
+                    : result.notFound
+                        ? 'Not linked to DHS.'
+                        : `DHS check inconclusive: ${result.message || 'could not verify this ID'}. Please retry.`;
                 
                 if (result.declineReason) {
                     text += ` Reason: ${result.declineReason}`;

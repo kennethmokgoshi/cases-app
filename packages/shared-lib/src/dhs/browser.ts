@@ -152,6 +152,15 @@ export async function loginToDHS(page: Page, credentials: { username: string; pa
         // If we're no longer on the login page, assume success
         const isLoggedIn = !currentUrl.includes('Login');
 
+        if (!isLoggedIn) {
+            // Surface why DHS rejected the login (bad password, locked account, session limit, ...)
+            try {
+                const pageText: string = await page.evaluate(() => document.body.innerText || '');
+                const snippet = pageText.replace(/\s+/g, ' ').trim().slice(0, 400);
+                logger.error(`DHS login rejected for ${credentials.username}. Page says: ${snippet}`);
+            } catch { /* page may be navigating — diagnostics only */ }
+        }
+
         return isLoggedIn;
     } catch (error) {
         logger.error('DHS Login failed:', error);

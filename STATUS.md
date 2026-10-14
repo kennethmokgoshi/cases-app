@@ -448,6 +448,12 @@
 
 ---
 
+### Fixed: false "Not Linked on DHS" on B2B cases (2026-10-14)
+- `scrapeDetailedConsumerInfo` (`shared-lib/src/dhs/search.ts`) waited a fixed 3s and treated any "No records found" text (the AJAX placeholder) or any failure as "not on DHS". Callers (`case-automation-trigger.ts`, `api/dhs/lookup` auto_fill) then set `NOT_LINKED`. It now polls up to 20s for the ID row, returns `notFound: true` only after the placeholder persists 8s, and callers leave status unchanged (with a comment/error) on inconclusive results. No migration. No new tests (Puppeteer path). Same pattern still present in the copied `dhs/lookup` routes of insurance/legal/forensic-audit/finance — not yet changed.
+
+### Fixed: idNumber unique-constraint error on AI Upload & Split / DHS Extraction (2026-10-13)
+- `documents/extract`, `documents/extract-dhs` and `case-automation-trigger.ts` updated `Client` with the extracted ID number unguarded; if another client already owned that ID, Prisma threw P2002 and the whole extraction failed. Each now retries the update without `idNumber` on P2002 (as `reanalyze` and `apply-updates` already did). No migration. No new tests added (inline fix in streaming routes).
+
 ### Added: "Images → PDF" on the Case Documents Tab (2026-10-10)
 
 - Staff upload photos/scans and get one PDF in the document vault. **ID — front and back** puts both on a single A4 page; **POA / payslip / bank statement / etc.** make one A4 page per image in the chosen order. Preview with reorder, rotate and remove before creating.

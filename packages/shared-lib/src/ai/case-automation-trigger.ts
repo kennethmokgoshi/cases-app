@@ -182,6 +182,16 @@ export async function runCaseAutomationTrigger(
                         logger.warn(`[CASE_AUTOMATION] GHL tag sync failed for ${caseId}:`, err);
                     });
                 }
+            } else if (!dhsScrape.notFound) {
+                // Inconclusive (login failure, timeout, DHS error, unreadable table) — this is NOT
+                // proof the consumer is absent, so never flip the case to NOT_LINKED.
+                logger.warn(`[CASE_AUTOMATION] ${caseData.fileNumber}: DHS check inconclusive: ${dhsScrape.message}`);
+                await saveAIComment(caseId, adminId, {
+                    service: serviceLabels,
+                    triggeredBy,
+                    assessment: `DHS auto-check for ID ${idNumber} was inconclusive: ${dhsScrape.message || 'unknown error'}.`,
+                    action: 'Status left unchanged. Please run "Check DHS" manually from the case page.'
+                });
             } else {
                 // Scenario 1: Consumer Not Linked on DHS
                 // TRIGGER: One-time Re-Analyse (GPT-4o) if not found, to catch extraction errors.
@@ -576,10 +586,26 @@ async function performAutoDhsExtraction(
         }
 
         if (Object.keys(updateData).length > 0) {
-            await prisma.client.update({
-                where: { id: caseData.clientId },
-                data: updateData
-            });
+            try {
+                await prisma.client.update({
+                    where: { id: caseData.clientId },
+                    data: updateData
+                });
+            } catch (e) {
+                // Another client already owns this ID number: keep the rest of the update
+                if ((e as { code?: string }).code === 'P2002' && updateData.idNumber) {
+                    logger.warn(`[CASE_AUTOMATION] ID number already belongs to another client, skipping idNumber update for ${caseData.clientId}`);
+                    const { idNumber: _skipped, ...safeUpdateData } = updateData;
+                    if (Object.keys(safeUpdateData).length > 0) {
+                        await prisma.client.update({
+                            where: { id: caseData.clientId },
+                            data: safeUpdateData
+                        });
+                    }
+                } else {
+                    throw e;
+                }
+            }
             logger.info(`[CASE_AUTOMATION] Updated client ${caseData.clientId} data from auto-extraction`);
         }
     }

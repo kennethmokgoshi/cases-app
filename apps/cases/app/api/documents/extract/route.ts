@@ -265,10 +265,26 @@ export async function POST(request: Request) {
                         }
 
                         if (Object.keys(updateData).length > 0) {
-                            await prisma.client.update({
-                                where: { id: caseRecord.clientId },
-                                data: updateData
-                            });
+                            try {
+                                await prisma.client.update({
+                                    where: { id: caseRecord.clientId },
+                                    data: updateData
+                                });
+                            } catch (e) {
+                                // Another client already owns this ID number: keep the rest of the update
+                                if ((e as { code?: string }).code === 'P2002' && updateData.idNumber) {
+                                    logger.warn('ID number already belongs to another client, skipping idNumber update');
+                                    const { idNumber: _skipped, ...safeUpdateData } = updateData;
+                                    if (Object.keys(safeUpdateData).length > 0) {
+                                        await prisma.client.update({
+                                            where: { id: caseRecord.clientId },
+                                            data: safeUpdateData
+                                        });
+                                    }
+                                } else {
+                                    throw e;
+                                }
+                            }
                             logger.info('📝 Updated client data');
                         }
                     }
