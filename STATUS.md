@@ -454,6 +454,11 @@
 
 ---
 
+### Added: Easy partner-branch creation (2026-10-15)
+- New Case form (`apps/cases/app/(authenticated)/cases/new/page.tsx`): inline "+ Add a new branch" under Branch/Subproject — creates the branch via `POST /api/admin/partner-branches` and auto-selects it. Works for partners with no branches yet (e.g. Mafori Group).
+- Partner Branches admin page: partners with zero branches now show a section with "Add the first … branch".
+- Not done: same quick-add on the b2b-dashboard / partner case forms and other apps' forms. No new tests (UI only).
+
 ### Fixed: false "Not Linked on DHS" on B2B cases (2026-10-14)
 - `scrapeDetailedConsumerInfo` (`shared-lib/src/dhs/search.ts`) waited a fixed 3s and treated any "No records found" text (the AJAX placeholder) or any failure as "not on DHS". Callers (`case-automation-trigger.ts`, `api/dhs/lookup` auto_fill) then set `NOT_LINKED`. It now polls up to 20s for the ID row, returns `notFound: true` only after the placeholder persists 8s, and callers leave status unchanged (with a comment/error) on inconclusive results. No migration. No new tests (Puppeteer path). Same pattern still present in the copied `dhs/lookup` routes of insurance/legal/forensic-audit/finance — not yet changed.
 

@@ -240,8 +240,18 @@ export default function PartnerBranchesPage() {
             const key = branch.partnerProject.name;
             map.set(key, [...(map.get(key) ?? []), branch]);
         }
-        return [...map.entries()];
-    }, [branches]);
+        // Partners with no branches yet (e.g. a newly added partner) still get a
+        // section, otherwise there is nowhere to click "Add branch".
+        if (!search.trim() && !missingOnly) {
+            for (const partner of partners) {
+                if (partnerFilter && partner.id !== partnerFilter) continue;
+                if (!map.has(partner.name)) map.set(partner.name, []);
+            }
+        }
+        return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+    }, [branches, partners, partnerFilter, search, missingOnly]);
+
+    const partnerIdByName = useMemo(() => new Map(partners.map((p) => [p.name, p.id])), [partners]);
 
     return (
         <div className="p-6 max-w-[1400px] mx-auto">
@@ -402,7 +412,7 @@ export default function PartnerBranchesPage() {
                 </div>
             )}
 
-            {!loading && !loadError && branches.length === 0 && (
+            {!loading && !loadError && grouped.length === 0 && (
                 <div className="border border-white/10 rounded-lg p-8 text-center text-gray-400 text-sm">
                     No branches match these filters.
                 </div>
@@ -415,12 +425,23 @@ export default function PartnerBranchesPage() {
                             {partnerName} <span className="text-gray-500 normal-case">({rows.length})</span>
                         </h2>
                         <button
-                            onClick={() => startCreate(rows[0].partnerProject.id)}
+                            onClick={() => startCreate(rows[0]?.partnerProject.id ?? partnerIdByName.get(partnerName) ?? '')}
                             className="text-xs text-zeno-cyan hover:underline"
                         >
                             + Add branch to {partnerName}
                         </button>
                     </div>
+                    {rows.length === 0 ? (
+                        <div className="border border-dashed border-white/10 rounded-lg p-6 text-center text-sm text-gray-400">
+                            No branches yet.{' '}
+                            <button
+                                onClick={() => startCreate(partnerIdByName.get(partnerName) ?? '')}
+                                className="text-zeno-cyan hover:underline"
+                            >
+                                Add the first {partnerName} branch
+                            </button>
+                        </div>
+                    ) : (
                     <div className="overflow-x-auto border border-white/10 rounded-lg">
                         <table className="w-full text-sm min-w-[900px]">
                             <thead className="bg-white/5 text-gray-400 text-xs uppercase">
@@ -459,6 +480,7 @@ export default function PartnerBranchesPage() {
                             </tbody>
                         </table>
                     </div>
+                    )}
                 </section>
             ))}
 

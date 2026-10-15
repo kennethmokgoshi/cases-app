@@ -388,6 +388,45 @@ function NewCaseWithAIComponent() {
         ? getSubprojects(selectedParentId, allFlatProjects) as Project[]
         : [];
 
+    const [showAddBranch, setShowAddBranch] = useState(false);
+    const [newBranchName, setNewBranchName] = useState('');
+    const [addingBranch, setAddingBranch] = useState(false);
+
+    const handleQuickAddBranch = async () => {
+        const name = newBranchName.trim();
+        if (!name || !selectedParentId) return;
+        setAddingBranch(true);
+        try {
+            const res = await fetch('/api/admin/partner-branches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ partnerProjectId: selectedParentId, name }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 403) throw new Error('Only managers can add branches — ask a manager to add it');
+            if (!res.ok) throw new Error(data.error ?? 'Could not add branch');
+
+            // Reload the project list so the new branch appears in the dropdown
+            const listRes = await fetch('/api/projects?memberOnly=true');
+            const list = await listRes.json();
+            const flat = flattenProjectResponse(list.hierarchy, list.independent) as Project[];
+            setParentProjects(flat.filter((p) => p.type === 'ACQUISITION_SOURCE'));
+            setAllFlatProjects(flat);
+
+            const branchProjectId: string | null = data.branch?.projectId ?? null;
+            if (branchProjectId && flat.some((p) => p.id === branchProjectId)) {
+                setSelectedSubprojectId(branchProjectId);
+            }
+            toast.success(`${name} added to ${selectedParent?.name ?? 'partner'}`);
+            setNewBranchName('');
+            setShowAddBranch(false);
+        } catch (error) {
+            toast.error((error as Error).message);
+        } finally {
+            setAddingBranch(false);
+        }
+    };
+
     // Helper functions to get partner and branch names from selected projects
     const getPartnerNameFromProject = (): string | null => {
         if (!selectedParent) return null;
@@ -1567,6 +1606,44 @@ function NewCaseWithAIComponent() {
                                     <option key={project.id} value={project.id}>{project.name}</option>
                                 ))}
                             </select>
+                            {/* Quick-add a branch without leaving the case form */}
+                            {showAddBranch ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    <input
+                                        autoFocus
+                                        value={newBranchName}
+                                        onChange={(e) => setNewBranchName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleQuickAddBranch(); } }}
+                                        placeholder={`New ${selectedParent?.name ?? 'partner'} branch name`}
+                                        className="flex-1 min-w-[200px] px-3 py-2 bg-zeno-navy border border-white/10 rounded-lg text-white text-sm focus:border-zeno-cyan focus:outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleQuickAddBranch()}
+                                        disabled={addingBranch || !newBranchName.trim()}
+                                        className="px-4 py-2 text-sm rounded-lg bg-zeno-cyan text-zeno-navy font-semibold disabled:opacity-50"
+                                    >
+                                        {addingBranch ? 'Adding...' : 'Add & select'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowAddBranch(false); setNewBranchName(''); }}
+                                        className="px-3 py-2 text-sm rounded-lg border border-white/10 text-gray-300 hover:bg-white/5"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddBranch(true)}
+                                    className="mt-2 text-xs text-zeno-cyan hover:underline"
+                                >
+                                    {subprojects.length === 0
+                                        ? `+ ${selectedParent?.name ?? 'This partner'} has no branches yet — add the first one`
+                                        : '+ Add a new branch'}
+                                </button>
+                            )}
                             {/* Referrer auto-detected badge */}
                             {autoDetectedReferrerName && (
                                 <p className="mt-1.5 text-xs text-purple-400">
