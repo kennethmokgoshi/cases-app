@@ -30,6 +30,7 @@
 import { prisma } from '@zenowethu/database';
 import { createLogger } from '../logger';
 import { appBaseUrl, contentTypeFor, readOwnUpload } from './upload-paths';
+import { getAutomationUserId } from '../automation/automation-user';
 
 const logger = createLogger('documents/mandate-attachments');
 
@@ -289,5 +290,78 @@ export async function loadMandateFiles(caseId: string): Promise<MandateFiles> {
         label: mandateAttachedLabel(loaded),
         summary: describeMandateAttachments(loaded.poa, loaded.id, missing),
         missing,
+    };
+}
+
+/** An email attachment reference — the sending providers fetch the URL. */
+export interface MandateEmailAttachment {
+    filename: string;
+    content: string;
+    url: string;
+}
+
+export interface ThirdPartyMandate {
+    mandate: MandateAttachments;
+    /** Absolute URLs, POA first then ID. */
+    urls: string[];
+    /** Provider-ready attachment objects for the same files. */
+    emailAttachments: MandateEmailAttachment[] | undefined;
+    /** Names the files in the body, or null when nothing is attached. */
+    label: string | null;
+    /** Add the "proof of our authority" sentence to a body — no-op when nothing attached. */
+    withAuthority: (body: string) => string;
+}
+
+export function toMandateEmailAttachments(urls: string[]): MandateEmailAttachment[] | undefined {
+    if (urls.length === 0) return undefined;
+    return urls.map(url => ({
+        filename: url.split('/').pop()?.split('?')[0] || 'document',
+        content: '',
+        url,
+    }));
+}
+
+/**
+ * Standing rule: anything we send to a THIRD PARTY on behalf of a consumer —
+ * debt counsellor, credit bureau, credit provider, creditor — carries the
+ * consumer's signed POA and ID copy. Every such send path calls this so the
+ * rule cannot be forgotten per-route.
+ *
+ * A missing document never blocks the send, but it is never silent: it is
+ * logged and written to the case timeline so staff can chase it.
+ */
+export async function prepareThirdPartyMandate(
+    caseId: string,
+    recipientLabel: string
+): Promise<ThirdPartyMandate> {
+    const mandate = await resolveMandateAttachments(caseId);
+    const label = mandateAttachedLabel(mandate);
+
+    if (!mandate.complete) {
+        logger.warn({ caseId, recipientLabel, missing: mandate.missing }, `[Mandate] ${recipientLabel} email sent with incomplete mandate: ${mandate.summary}`);
+        try {
+            const userId = await getAutomationUserId();
+            if (userId) {
+                await prisma.caseComment.create({
+                    data: {
+                        caseId,
+                        userId,
+                        content: `[SYSTEM] ⚠ Email to ${recipientLabel} sent with incomplete mandate — ${mandate.summary}. Upload the missing document and re-send if needed.`,
+                        type: 'SYSTEM',
+                        isInternal: true,
+                    },
+                });
+            }
+        } catch (error) {
+            logger.error({ error, caseId }, '[Mandate] Could not record missing-mandate comment');
+        }
+    }
+
+    return {
+        mandate,
+        urls: mandate.attachments,
+        emailAttachments: toMandateEmailAttachments(mandate.attachments),
+        label,
+        withAuthority: (body: string) => withAuthorityLine(body, label),
     };
 }
