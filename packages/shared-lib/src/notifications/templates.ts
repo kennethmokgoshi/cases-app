@@ -812,7 +812,7 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
         img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
         table { border-collapse: collapse !important; }
         .container { width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-        .content { padding: 40px 30px; color: #333333; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; position: relative; }
+        .content { padding: 40px 30px; word-wrap: break-word; color: #333333; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.6; position: relative; }
         .header { background-color: ${BRAND_NAVY}; padding: 35px 30px; text-align: left; }
         .footer { background-color: #f8f9fa; padding: 30px; text-align: center; font-family: Arial, sans-serif; font-size: 12px; color: #6c757d; border-top: 1px solid #eeeeee; }
         .footer a { color: ${BRAND_ORANGE}; text-decoration: none; }
@@ -829,7 +829,7 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
     <table border="0" cellpadding="0" cellspacing="0" width="100%">
         <tr>
             <td align="center" style="background-color: ${BRAND_GRAY}; padding: 20px 0;">
-                <table border="0" cellpadding="0" cellspacing="0" class="container" style="border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" class="container" style="width: 100%; max-width: 600px; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
                     <!-- Header -->
                     <tr>
                         <td class="header">
@@ -862,20 +862,11 @@ export function renderBrandedEmail(contentHtml: string, options: EmailLayoutOpti
                     </tr>
                     <!-- Main Body with Watermark -->
                     <tr>
-                        <td class="content" style="background-image: url('${watermarkUrl}'); background-repeat: no-repeat; background-position: center; background-size: contain;">
-                            <!--[if gte mso 9]>
-                            <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:400px;">
-                                <v:fill type="frame" src="${watermarkUrl}" color="#ffffff" />
-                                <v:textbox inset="0,0,0,0">
-                            <![endif]-->
+                        <td class="content" bgcolor="#ffffff" style="background-color: #ffffff; background-image: url('${watermarkUrl}'); background-repeat: no-repeat; background-position: center; background-size: contain;">
                             <div style="position: relative; z-index: 1;">
                                 ${formattedContent}
                                 ${ctaButton}
                             </div>
-                            <!--[if gte mso 9]>
-                                </v:textbox>
-                            </v:rect>
-                            <![endif]-->
                         </td>
                     </tr>
                     <!-- Footer -->
