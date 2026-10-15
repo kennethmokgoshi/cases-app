@@ -5,6 +5,7 @@ import { logger } from '@zenowethu/shared-lib';
 import { requestTransfer, closeBrowser } from '@zenowethu/shared-lib/src/dhs';
 import { sendManualMessage, getTemplateByStatus, renderTemplate, formatCompanyWithNcrdc, getPlatformConfig } from '@zenowethu/shared-lib';
 import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { prepareThirdPartyMandate } from '@zenowethu/shared-lib/src/documents/mandate-attachments';
 import type { ActionContext, ActionHandler } from '../step-registry';
 import type { ActionType, StepExecutionResult } from '../types';
 
@@ -233,20 +234,32 @@ registerAction(
       // CC the client so they know we acted on their behalf
       const ccEmails: string[] = caseWithDC.client.email ? [caseWithDC.client.email] : [];
 
-      await sendManualMessage(
+      // The DC has no other proof of our mandate: the consumer's signed POA and ID
+      // travel with every request we make on their behalf.
+      const mandate = await prepareThirdPartyMandate(caseId, 'debt counsellor');
+
+      const sendResult = await sendManualMessage(
           caseId,
           'EMAIL',
           resolvedEmail,
-          emailBody,
+          mandate.withAuthority(emailBody),
           emailSubject,
-          { cc: ccEmails }
+          { cc: ccEmails, attachments: mandate.urls, thirdParty: true }
       );
+
+      if (!sendResult.emailSuccess) {
+        return { success: false, error: sendResult.errors.join(', ') || 'File request email failed to send' };
+      }
+
+      const attachmentNote = sendResult.attachmentErrors?.length
+        ? `. ⚠ Attachment delivery failed: ${sendResult.attachmentErrors.join('; ')}`
+        : `. ${mandate.mandate.summary}`;
 
       await prisma.caseComment.create({
         data: {
           caseId,
           userId: caseRecord.assignedToId || 'system',
-          content: `[AI Plan] File request email sent successfully to DC: ${caseWithDC.debtCounsellorName || 'Unknown'} (${resolvedEmail})`,
+          content: `[AI Plan] File request email sent successfully to DC: ${caseWithDC.debtCounsellorName || 'Unknown'} (${resolvedEmail})${attachmentNote}`,
           type: 'AI_PLAN',
           isInternal: true,
           activityType: 'REQUEST_FILE_FROM_DC',

@@ -97,7 +97,8 @@ export async function POST(
                 'EMAIL',
                 recipient,
                 draft.content,
-                draft.subject
+                draft.subject,
+                { thirdParty: recipient !== caseRecord.client.email }
             );
         }
 

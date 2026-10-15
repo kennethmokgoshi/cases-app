@@ -12,6 +12,7 @@ import { checkTransferStatus, searchConsumer, closeBrowser, requestTransfer, scr
 import { addWorkingDays } from '@zenowethu/shared-lib/src/statuses/workingDays';
 import { prisma } from '@zenowethu/database';
 import { getCompanyProfile } from '@zenowethu/shared-lib/src/company/company-profile-service';
+import { prepareThirdPartyMandate } from '@zenowethu/shared-lib/src/documents/mandate-attachments';
 import { formatCompanyWithNcrdc, getPlatformConfig } from '@zenowethu/shared-lib/src/company/profile';
 import path, { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
@@ -950,11 +951,10 @@ export async function POST(request: Request) {
                     ? renderTemplate(dcTemplate.emailTemplate, templateVars)
                     : `Dear Debt Counsellor,\n\nWe request the consumer file for ${clientName} (ID: ${caseData.client.idNumber}).\n\nRegards,\n${company.tradingName}`;
 
-                // Collect ID/POA document URLs to attach — DC sees the actual signed documents
-                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://cases.zenowethu.co.za';
-                const attachmentUrls = (caseData.documents ?? [])
-                    .filter(d => ['ID', 'POA', 'ZENOWETHU_POA'].includes(d.type))
-                    .map(d => `${baseUrl}${d.fileUrl}`);
+                // The DC has no other proof of our mandate — the consumer's best signed
+                // POA and ID copy go with the request (never a mismatched ID).
+                const mandate = await prepareThirdPartyMandate(caseId, 'debt counsellor');
+                const attachmentUrls = mandate.urls;
 
                 // CC the client so they know we acted on their behalf
                 const ccEmails: string[] = caseData.client.email ? [caseData.client.email] : [];
@@ -963,9 +963,9 @@ export async function POST(request: Request) {
                     caseId,
                     'EMAIL',
                     resolvedEmail,
-                    emailBody,
+                    mandate.withAuthority(emailBody),
                     emailSubject,
-                    { attachments: attachmentUrls, cc: ccEmails }
+                    { attachments: attachmentUrls, cc: ccEmails, thirdParty: true }
                 );
 
                 if (emailResult.emailSuccess) {

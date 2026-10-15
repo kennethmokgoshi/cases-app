@@ -43,7 +43,7 @@ import { draftLegalDocument } from '../ai/legal-secretary';
 import type { DraftingAccount } from '../ai/legal-secretary';
 import { resolveCaseContact, resolveCaseEmailRecipients } from '../partners/branch-contact-service';
 import { describeContactFallback } from '../partners/branch-contact';
-import { withAuthorityLine } from '../documents/mandate-attachments';
+import { withAuthorityLine, prepareThirdPartyMandate, toMandateEmailAttachments } from '../documents/mandate-attachments';
 import { applyFeeDocumentStatus } from '../finance/fee-document-status';
 
 // Configuration — default all channels to ENABLED; set to 'false' to explicitly disable
@@ -380,6 +380,28 @@ async function withFallbackContact(payload: NotificationPayload): Promise<Notifi
     }
 }
 
+/** True when `recipient` is one of the addresses we hold for the case's debt counsellor. */
+async function isCaseDebtCounsellorEmail(caseId: string, recipient: string): Promise<boolean> {
+    try {
+        const c = await prisma.case.findUnique({
+            where: { id: caseId },
+            select: {
+                dcEmail: true, preferredDcEmail: true, lastKnownEmail: true,
+                debtCounsellor: { select: { email: true, preferredEmail: true, lastKnownEmail: true } },
+            },
+        });
+        if (!c) return false;
+        const wanted = recipient.trim().toLowerCase();
+        return [
+            c.dcEmail, c.preferredDcEmail, c.lastKnownEmail,
+            c.debtCounsellor?.email, c.debtCounsellor?.preferredEmail, c.debtCounsellor?.lastKnownEmail,
+        ].some(e => !!e && e.trim().toLowerCase() === wanted);
+    } catch (error) {
+        logger.error(`DC address check failed for case ${caseId}: ${(error as Error).message}`);
+        return false;
+    }
+}
+
 /**
  * Send a custom manual message (not from a template).
  * For EMAIL: supports `options.attachments` (public URLs) and `options.cc` (copied recipients).
@@ -394,6 +416,13 @@ export async function sendManualMessage(
         cc?: string[];
         attachments?: string[];  // public URLs — each provider resolves them appropriately
         senderId?: string;
+        /**
+         * The recipient is a third party acting on the consumer's file (debt
+         * counsellor, bureau, credit provider, creditor). The signed POA and ID
+         * are then attached automatically. A recipient matching the case's debt
+         * counsellor is treated as third party even when this is not set.
+         */
+        thirdParty?: boolean;
         /**
          * Set when the email carries an invoice / proof of payment. Stored with a
          * failed send so a later successful retry still moves the case status.
@@ -427,19 +456,26 @@ export async function sendManualMessage(
         } else if (channel === 'EMAIL') {
             const provider = await getEmailProvider();
 
-            const emailAttachments = options?.attachments?.length
-                ? options.attachments.map(url => ({
-                    filename: url.split('/').pop()?.split('?')[0] || 'document',
-                    content:  '' as string,
-                    url,
-                  }))
-                : undefined;
+            // Standing rule: anything to a third party on the consumer's behalf
+            // carries the signed POA + ID. Merge them with whatever the caller sent.
+            let attachmentUrls = options?.attachments ?? [];
+            let outboundMessage = message;
+            if (options?.thirdParty || await isCaseDebtCounsellorEmail(caseId, recipient)) {
+                const tp = await prepareThirdPartyMandate(caseId, recipient);
+                const extra = tp.urls.filter(u => !attachmentUrls.includes(u));
+                if (extra.length) {
+                    attachmentUrls = [...tp.urls, ...attachmentUrls.filter(u => !tp.urls.includes(u))];
+                    outboundMessage = tp.withAuthority(message);
+                }
+            }
+
+            const emailAttachments = toMandateEmailAttachments(attachmentUrls);
 
             const res = await provider.send(
                 recipient,
                 subject || 'Message from Zeno',
-                message.replace(/\n/g, '<br>'),
-                message,
+                outboundMessage.replace(/\n/g, '<br>'),
+                outboundMessage,
                 addBccToOptions({ attachments: emailAttachments, cc: options?.cc })
             );
             result.emailSuccess = res.success;
@@ -454,7 +490,7 @@ export async function sendManualMessage(
             if (!res.success) {
                 await enqueueFailedNotification({
                     caseId, channel, recipient, subject, body: message, htmlBody: message.replace(/\n/g, '<br>'),
-                    optionsJson: options ? JSON.stringify(options) : undefined, error: res.error
+                    optionsJson: (options || attachmentUrls.length) ? JSON.stringify({ ...options, attachments: attachmentUrls }) : undefined, error: res.error
                 });
             }
             // Log each CC recipient so they appear in notification history
@@ -650,9 +686,18 @@ async function sendNotificationByTemplate(
         const emailSubject = renderTemplate(template.emailSubject, variables);
         // Templates carry no attachment wording of their own — the sentence is
         // added only when a mandate document is actually going with the email.
+        // Standing rule: a caller that did not supply the mandate gets it resolved
+        // here, so no DC-bound template email can go out without POA + ID.
+        let dcAttachmentUrls = payload.attachments;
+        let dcAttachmentsLabel = payload.attachmentsLabel ?? null;
+        if (!dcAttachmentUrls?.length && payload.caseId) {
+            const tp = await prepareThirdPartyMandate(payload.caseId, 'debt counsellor');
+            dcAttachmentUrls = tp.urls;
+            dcAttachmentsLabel = tp.label;
+        }
         const rawDcBody = withAuthorityLine(
             renderTemplate(template.emailTemplate, variables),
-            payload.attachments?.length ? (payload.attachmentsLabel ?? null) : null
+            dcAttachmentUrls?.length ? dcAttachmentsLabel : null
         );
         const emailBody = stripMarkdownBold(rawDcBody);
         const htmlBody = emailTextToHtml(rawDcBody);
@@ -669,8 +714,8 @@ async function sendNotificationByTemplate(
 
             // The consumer's signed POA and ID travel with every request we make
             // on their behalf — the DC has no other proof of our mandate.
-            const dcAttachments = payload.attachments?.length
-                ? payload.attachments.map(url => ({
+            const dcAttachments = dcAttachmentUrls?.length
+                ? dcAttachmentUrls.map(url => ({
                     filename: url.split('/').pop()?.split('?')[0] || 'document',
                     content:  '' as string,
                     url,
@@ -789,6 +834,8 @@ export async function sendFileRequestEmails(payload: {
     const providerTemplate = getTemplateByStatus('REQUEST_FILE_CREDIT_PROVIDER');
 
     const emailProvider = await getEmailProvider();
+    // Requests to bureaus and credit providers carry the consumer's signed POA + ID.
+    const tp = await prepareThirdPartyMandate(payload.caseId, 'credit bureaus and credit providers');
 
     const bureauResults: FileRequestResult['bureauResults'] = [];
     const providerResults: FileRequestResult['providerResults'] = [];
@@ -846,13 +893,13 @@ export async function sendFileRequestEmails(payload: {
 
     if (bureauSubject) {
         for (const bureauEmail of payload.creditBureauEmails) {
-            const brandedHtml = renderBrandedEmail(bureauBody.replace(/\n/g, '<br>'), {
+            const brandedHtml = renderBrandedEmail(tp.withAuthority(bureauBody).replace(/\n/g, '<br>'), {
                 title: bureauSubject,
                 previewText: bureauBody.substring(0, 100) + '...',
                 company
             });
 
-            const res = await emailProvider.send(bureauEmail, bureauSubject, brandedHtml, bureauBody, addBccToOptions({}));
+            const res = await emailProvider.send(bureauEmail, bureauSubject, brandedHtml, tp.withAuthority(bureauBody), addBccToOptions({ attachments: tp.emailAttachments }));
 
             bureauResults.push({ email: bureauEmail, success: res.success, error: res.error });
 
@@ -871,7 +918,7 @@ export async function sendFileRequestEmails(payload: {
 
             if (!res.success) {
                 logger.error(`[FileRequest] Failed to email bureau ${bureauEmail}: ${res.error}`);
-                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: bureauEmail, subject: bureauSubject, body: bureauBody, htmlBody: brandedHtml, error: res.error });
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: bureauEmail, subject: bureauSubject, body: bureauBody, htmlBody: brandedHtml, optionsJson: JSON.stringify({ attachments: tp.urls }), error: res.error });
             }
         }
     }
@@ -922,13 +969,13 @@ export async function sendFileRequestEmails(payload: {
 
         if (!subject) continue;
 
-        const brandedHtml = renderBrandedEmail(body.replace(/\n/g, '<br>'), {
+        const brandedHtml = renderBrandedEmail(tp.withAuthority(body).replace(/\n/g, '<br>'), {
             title: subject,
             previewText: body.substring(0, 100) + '...',
             company
         });
 
-        const res = await emailProvider.send(cp.email, subject, brandedHtml, body, addBccToOptions({}));
+        const res = await emailProvider.send(cp.email, subject, brandedHtml, tp.withAuthority(body), addBccToOptions({ attachments: tp.emailAttachments }));
 
         providerResults.push({ name: cp.name, email: cp.email, success: res.success, error: res.error });
 
@@ -947,7 +994,7 @@ export async function sendFileRequestEmails(payload: {
 
         if (!res.success) {
             logger.error(`[FileRequest] Failed to email provider ${cp.name} (${cp.email}): ${res.error}`);
-            await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: cp.email, subject: subject, body: body, htmlBody: brandedHtml, error: res.error });
+            await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: cp.email, subject: subject, body: body, htmlBody: brandedHtml, optionsJson: JSON.stringify({ attachments: tp.urls }), error: res.error });
         }
     }
 
@@ -977,6 +1024,8 @@ export async function sendDrrRequestEmails(payload: {
 }): Promise<FileRequestResult & { dcSent: boolean }> {
     const company = await getCompanyProfile();
     const emailProvider = await getEmailProvider();
+    // Every request goes to a third party on the consumer's behalf — POA + ID travel with all of them.
+    const tp = await prepareThirdPartyMandate(payload.caseId, 'debt counsellor, bureaus and credit providers');
     const clientParts = payload.clientName.split(' ');
     const draftingClient = {
         firstName: clientParts[0] || payload.clientName,
@@ -1001,7 +1050,7 @@ export async function sendDrrRequestEmails(payload: {
                 companyPhone: company.phone,
             });
 
-            const res = await emailProvider.send(payload.dcEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
+            const res = await emailProvider.send(payload.dcEmail, draft.subject, tp.withAuthority(draft.content).replace(/\n/g, '<br>'), tp.withAuthority(draft.content), addBccToOptions({ attachments: tp.emailAttachments }));
             dcSent = res.success;
 
             await logNotification({
@@ -1017,7 +1066,7 @@ export async function sendDrrRequestEmails(payload: {
                 provider: res.provider,
             });
             if (!res.success) {
-                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: payload.dcEmail, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), error: res.error });
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: payload.dcEmail, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), optionsJson: JSON.stringify({ attachments: tp.urls }), error: res.error });
             }
         } catch (err) {
             logger.error(`[DRRRequest] Failed to draft or send DC letter for case ${payload.caseId}:`, err);
@@ -1038,7 +1087,7 @@ export async function sendDrrRequestEmails(payload: {
                 companyPhone: company.phone,
             });
 
-            const res = await emailProvider.send(bureauEmail, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
+            const res = await emailProvider.send(bureauEmail, draft.subject, tp.withAuthority(draft.content).replace(/\n/g, '<br>'), tp.withAuthority(draft.content), addBccToOptions({ attachments: tp.emailAttachments }));
             bureauResults.push({ email: bureauEmail, success: res.success, error: res.error });
 
             await logNotification({
@@ -1054,7 +1103,7 @@ export async function sendDrrRequestEmails(payload: {
                 provider: res.provider,
             });
             if (!res.success) {
-                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: bureauEmail, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), error: res.error });
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: bureauEmail, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), optionsJson: JSON.stringify({ attachments: tp.urls }), error: res.error });
             }
         } catch (err) {
             bureauResults.push({ email: bureauEmail, success: false, error: 'Drafting failed' });
@@ -1081,7 +1130,7 @@ export async function sendDrrRequestEmails(payload: {
                 companyPhone: company.phone,
             });
 
-            const res = await emailProvider.send(cp.email, draft.subject, draft.content.replace(/\n/g, '<br>'), draft.content, addBccToOptions({}));
+            const res = await emailProvider.send(cp.email, draft.subject, tp.withAuthority(draft.content).replace(/\n/g, '<br>'), tp.withAuthority(draft.content), addBccToOptions({ attachments: tp.emailAttachments }));
             providerResults.push({ name: cp.name, email: cp.email, success: res.success, error: res.error });
 
             await logNotification({
@@ -1097,7 +1146,7 @@ export async function sendDrrRequestEmails(payload: {
                 provider: res.provider,
             });
             if (!res.success) {
-                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: cp.email, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), error: res.error });
+                await enqueueFailedNotification({ caseId: payload.caseId, channel: 'EMAIL', recipient: cp.email, subject: draft.subject, body: draft.content, htmlBody: draft.content.replace(/\n/g, '<br>'), optionsJson: JSON.stringify({ attachments: tp.urls }), error: res.error });
             }
         } catch (err) {
             providerResults.push({ name: cp.name, email: cp.email, success: false, error: 'Drafting failed' });
