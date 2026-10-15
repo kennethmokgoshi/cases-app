@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger, sendInternalNotification, findManagersForCase } from '@zenowethu/shared-lib';
+import { auth, createLogger, sendInternalNotification, findManagersForCase, humaniseServices } from '@zenowethu/shared-lib';
 import { logAutomationRun } from '@zenowethu/shared-lib/src/automation/run-logger';
 import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
         for (const c of casesWithOldDocs) {
             try {
-                const expiredDocNames = [...new Set(c.documents.map(d => d.type))].join(', ');
+                const expiredDocNames = humaniseServices([...new Set(c.documents.map(d => d.type))].join(', '), true);
                 const managers = await findManagersForCase(c.id);
 
                 if (managers.length === 0) continue;

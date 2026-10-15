@@ -1,5 +1,9 @@
 # ZenoCasesSystem — Project Status
 
+> Last updated: 2026-10-15 (**Raw keys removed from staff alert emails**): stale-case alert `{status}` now uses `formatStatus()`; document-expiry alert `{expiredDocs}` now humanised (e.g. "Bank Statement"). `humaniseServices(…, true)` lower-cases before title-casing. 6 tests pass in `templates.humanise.test.ts`.
+
+> Last updated: 2026-10-15 (**B2B welcome email reworded**): `NEW_LEAD_B2B` now reads personally ("I'm happy to let you know…") and shows services as plain words ("debt review flag removal") instead of the raw key `debt_review_flag_removal`; every status email now humanises `{services}` via `humaniseServices()`. Literal `**bold**` markers are now rendered as `<strong>` in HTML and stripped from the plain-text part (client and DC sends). New vars `{servicesLower}`, `{servicesTitle}`. 5 new tests in `templates.humanise.test.ts` pass; `otp-service.test.ts` has 2 pre-existing timeout failures (also fail without these changes).
+
 > Last updated: 2026-10-13 (**Images-to-PDF is staff-only**): `POST /api/cases/[id]/documents/images-to-pdf` now uses `requireStaff()` (fail-closed), so B2B-partner/referrer portal users get 403 and cannot write into cases by ID; the UI button is only enabled on the staff case page. Route test extended (portal user types -> 403); 7 tests pass, Cases typecheck clean. Still uncommitted with the rest of the in-progress POA / partner-branch / images-to-PDF work.
 
 > Last updated: 2026-10-12 (**AiUsage environment column**): `AiUsage.environment` (migration `20261012120000_add_ai_usage_environment`) separates production from local rows; set by `AI_USAGE_ENV`, defaulting to production for production builds and local otherwise. `AI_USAGE_ENV` documented in each app `.env.example`. Keep `AI_USAGE_APP` identical in local and prod.
