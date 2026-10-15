@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@zenowethu/database';
-import { auth, createLogger, sendInternalNotification, findManagersForCase } from '@zenowethu/shared-lib';
+import { auth, createLogger, sendInternalNotification, findManagersForCase, formatStatus } from '@zenowethu/shared-lib';
 import { logAutomationRun } from '@zenowethu/shared-lib/src/automation/run-logger';
 import { isValidCronSecret } from '@zenowethu/shared-lib/src/auth/cron-secret';
 
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
                             fileNumber: c.fileNumber,
                             daysStale: String(daysStale),
                             lastUpdate: c.updatedAt.toLocaleDateString('en-ZA'),
-                            status: c.status,
+                            status: formatStatus(c.status),
                             caseUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/cases/${c.id}`,
                         },
                     });

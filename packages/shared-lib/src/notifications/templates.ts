@@ -44,19 +44,19 @@ const TEMPLATES: NotificationTemplate[] = [
         emailSubject: 'Welcome to {mainSource} - Application Received',
         emailTemplate: `Dear {clientName},
 
-Hi This is {partnerUserName} from {mainSource} Head Office
+Hi, this is {partnerUserName} from {mainSource} Head Office.
 
-This email serves to confirm that your application for **{services}** has been successfully referred to our trusted service partner, **{companyName}**.
+I'm happy to let you know that your application for {servicesLower} has been referred to {companyName}, a service partner we trust to look after our clients.
 
-{companyShortName} provides specialized credit repair services and will be handling your detailed case assessment and resolution.
+{companyShortName} specialises in credit repair and will take care of assessing your case and seeing it through to resolution.
 
-**Case Details:**
-• Reference Number: {fileNumber}
-• Service Requested: {services}
+**Your case details**
+• Reference number: {fileNumber}
+• Service requested: {servicesTitle}
 
-The {companyShortName} team has received your file and is currently reviewing it. They will contact you directly within 7 working days if any further information is required.
+The {companyShortName} team has received your file and is busy reviewing it. If they need anything more from you, they will contact you directly within 7 working days.
 
-If you have any immediate questions, you may contact them at {phone}.
+Have a question in the meantime? You are welcome to call them on {phone}.
 
 Kind Regards,
 {partnerUserName}
@@ -722,6 +722,33 @@ export function renderTemplate(
     }
     return result;
 
+}
+
+/**
+ * Turn stored service keys ("debt_review_flag_removal") into reading text
+ * ("debt review flag removal"). Already-readable text passes through unchanged.
+ * Pass `titleCase` for labels (e.g. "Service Requested: Debt Review Flag Removal").
+ */
+export function humaniseServices(raw: string, titleCase = false): string {
+    const text = (raw || '')
+        .split(',')
+        .map(s => s.trim().replace(/_/g, ' ').replace(/\s+/g, ' '))
+        .filter(Boolean)
+        .map(s => (titleCase ? s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : s.toLowerCase()));
+    if (text.length <= 1) return text[0] ?? '';
+    return `${text.slice(0, -1).join(', ')} and ${text[text.length - 1]}`;
+}
+
+/** Templates use **bold**; email clients don't render markdown, so convert it. */
+export function emailTextToHtml(text: string): string {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+}
+
+/** Plain-text alternative: drop the **bold** markers. */
+export function stripMarkdownBold(text: string): string {
+    return text.replace(/\*\*(.+?)\*\*/g, '$1');
 }
 
 // ─── Branded Email Layout ──────────────────────────────────────────────────

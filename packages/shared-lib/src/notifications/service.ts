@@ -30,7 +30,10 @@ import type { EmailOptions } from './providers';
 import {
     getTemplateByStatus,
     renderTemplate,
-    renderBrandedEmail
+    renderBrandedEmail,
+    humaniseServices,
+    emailTextToHtml,
+    stripMarkdownBold
 } from './templates';
 import { getGHLCredentials, getSMTPCredentials, isGhlEnabled } from '../integrations';
 import { logger } from '../logger';
@@ -315,7 +318,9 @@ export async function sendStatusChangeNotification(
         ...companyVariables(company),
         partnerName: payload.partnerName || '',
         virtualAssistantName: VIRTUAL_ASSISTANT_NAME,
-        services: payload.services || '',
+        services: humaniseServices(payload.services || '', true),
+        servicesLower: humaniseServices(payload.services || ''),
+        servicesTitle: humaniseServices(payload.services || '', true),
         mainSource: payload.mainSource || payload.partnerName || company.tradingName,
         dcName: payload.dcName || 'Debt Counsellor',
         idNumber: payload.idNumber || '',
@@ -528,12 +533,12 @@ async function sendNotificationByTemplate(
     // 2. Send Email to client
     if (template.sendToClient && payload.clientEmail) {
         const emailSubject = renderTemplate(template.emailSubject, variables);
-        const emailBody = renderTemplate(template.emailTemplate, variables);
-        const htmlBody = emailBody.replace(/\n/g, '<br>');
+        const emailBody = stripMarkdownBold(renderTemplate(template.emailTemplate, variables));
+        const htmlBody = emailTextToHtml(renderTemplate(template.emailTemplate, variables));
 
         if (EMAIL_ENABLED) {
             const emailProvider = await getEmailProvider();
-            
+
             // Wrap in branded template
             const brandedHtml = renderBrandedEmail(htmlBody, {
                 title: emailSubject,
@@ -645,11 +650,12 @@ async function sendNotificationByTemplate(
         const emailSubject = renderTemplate(template.emailSubject, variables);
         // Templates carry no attachment wording of their own — the sentence is
         // added only when a mandate document is actually going with the email.
-        const emailBody = withAuthorityLine(
+        const rawDcBody = withAuthorityLine(
             renderTemplate(template.emailTemplate, variables),
             payload.attachments?.length ? (payload.attachmentsLabel ?? null) : null
         );
-        const htmlBody = emailBody.replace(/\n/g, '<br>');
+        const emailBody = stripMarkdownBold(rawDcBody);
+        const htmlBody = emailTextToHtml(rawDcBody);
         const dcCcEmails = payload.dcCcEmails?.filter(Boolean);
 
         if (EMAIL_ENABLED) {
